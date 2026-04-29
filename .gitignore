@@ -7,6 +7,8 @@ build/
 build.*/
 build-debug
 build-release
+vcproj/.vs/
+vcpkg_installed/
 CMakeLists.txt.user*
 
 # RME
