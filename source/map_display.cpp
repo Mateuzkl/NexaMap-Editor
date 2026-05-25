@@ -401,6 +401,7 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 		} else if (tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
 			ss << (tile->creature->isNpc() ? "NPC" : "Monster");
 			ss << " \"" << wxstr(tile->creature->getName()) << "\" spawntime: " << tile->creature->getSpawnTime();
+			ss << " weight: " << tile->creature->getWeight();
 		} else if (Item* item = tile->getTopItem()) {
 			ss << "Item \"" << wxstr(item->getName()) << "\"";
 			ss << " id:" << item->getID();

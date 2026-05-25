@@ -48,6 +48,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	ObjectPropertiesWindowBase(win_parent, "Item Properties", map, tile_parent, item, pos),
 	count_field(nullptr),
 	direction_field(nullptr),
+	creature_weight_field(nullptr),
 	action_id_field(nullptr),
 	unique_id_field(nullptr),
 	door_id_field(nullptr),
@@ -481,6 +482,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	ObjectPropertiesWindowBase(win_parent, "Creature Properties", map, tile_parent, creature, pos),
 	count_field(nullptr),
 	direction_field(nullptr),
+	creature_weight_field(nullptr),
 	action_id_field(nullptr),
 	unique_id_field(nullptr),
 	door_id_field(nullptr),
@@ -514,6 +516,10 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	direction_field->SetSelection(edit_creature->getDirection());
 	subsizer->Add(direction_field, wxSizerFlags(1).Expand());
 
+	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Weight"));
+	creature_weight_field = newd wxSpinCtrl(this, wxID_ANY, i2ws(edit_creature->getWeight()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, edit_creature->getWeight());
+	subsizer->Add(creature_weight_field, wxSizerFlags(1).Expand());
+
 	boxsizer->Add(subsizer, wxSizerFlags(1).Expand());
 
 	topsizer->Add(boxsizer, wxSizerFlags(3).Expand().Border(wxALL, 20));
@@ -532,6 +538,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	ObjectPropertiesWindowBase(win_parent, "Spawn Properties", map, tile_parent, spawn, pos),
 	count_field(nullptr),
 	direction_field(nullptr),
+	creature_weight_field(nullptr),
 	action_id_field(nullptr),
 	unique_id_field(nullptr),
 	door_id_field(nullptr),
@@ -848,6 +855,9 @@ void OldPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 	} else if (edit_creature) {
 		int new_spawntime = count_field->GetValue();
 		edit_creature->setSpawnTime(new_spawntime);
+		if (creature_weight_field) {
+			edit_creature->setWeight(creature_weight_field->GetValue());
+		}
 
 		int* new_dir = reinterpret_cast<int*>(direction_field->GetClientData(
 			direction_field->GetSelection()

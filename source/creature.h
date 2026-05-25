@@ -72,6 +72,13 @@ public:
 		this->spawntime = spawntime;
 	}
 
+	int getWeight() const {
+		return weight;
+	}
+	void setWeight(int weight) {
+		this->weight = static_cast<uint8_t>(std::max(0, std::min(weight, 100)));
+	}
+
 	Direction getDirection() const {
 		return direction;
 	}
@@ -83,6 +90,7 @@ protected:
 	std::string type_name;
 	Direction direction;
 	int spawntime;
+	uint8_t weight;
 	bool saved;
 	bool selected;
 };

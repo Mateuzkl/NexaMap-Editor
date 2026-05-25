@@ -25,6 +25,17 @@
 
 class SpawnBrush : public Brush {
 public:
+	struct CreatureEntry {
+		CreatureBrush* brush = nullptr;
+		uint8_t weight = 0;
+	};
+
+	struct CreaturePlacement {
+		Position position;
+		CreatureBrush* brush = nullptr;
+		uint8_t weight = 0;
+	};
+
 	SpawnBrush(); // Create a RAWBrush of the specified type
 	virtual ~SpawnBrush();
 
@@ -50,6 +61,17 @@ public:
 	virtual bool oneSizeFitsAll() const {
 		return true;
 	}
+
+	void setCreatures(const std::vector<CreatureEntry>& creatures);
+	bool hasCreatures() const;
+	std::vector<CreaturePlacement> getCreaturePlacements(BaseMap* map, const Position& center, int size) const;
+	bool canDrawCreature(Tile* tile, CreatureBrush* brush) const;
+	void drawCreature(Tile* tile, CreatureBrush* brush, uint8_t weight) const;
+
+private:
+	CreatureEntry pickCreatureForTile(Tile* tile) const;
+
+	std::vector<CreatureEntry> creatures;
 };
 
 #endif

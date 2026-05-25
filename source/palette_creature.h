@@ -20,6 +20,11 @@
 
 #include "palette_common.h"
 
+#include <map>
+
+class CreatureBrush;
+class wxCheckListBox;
+
 class CreaturePalettePanel : public PalettePanel {
 public:
 	CreaturePalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY);
@@ -52,22 +57,43 @@ public:
 	// Event handling
 	void OnChangeSpawnTime(wxSpinEvent& event);
 	void OnChangeSpawnSize(wxSpinEvent& event);
+	void OnChangeSpawnDensity(wxSpinEvent& event);
+	void OnChangeDefaultWeight(wxSpinEvent& event);
 
 	void OnTilesetChange(wxCommandEvent& event);
 	void OnListBoxChange(wxCommandEvent& event);
+	void OnCheckCreature(wxCommandEvent& event);
 	void OnClickCreatureBrushButton(wxCommandEvent& event);
 	void OnClickSpawnBrushButton(wxCommandEvent& event);
+	void OnSetFocus(wxFocusEvent& event);
+	void OnKillFocus(wxFocusEvent& event);
+	void OnChangeCreatureNameSearch(wxCommandEvent& event);
 
 protected:
 	void SelectCreatureBrush();
 	void SelectSpawnBrush();
+	void RefreshCreatureList(const std::string& preferredSelection = "");
+	std::vector<CreatureBrush*> GetCurrentCreatureBrushes() const;
+	CreatureBrush* GetCreatureBrush(size_t index) const;
+	wxString GetCreatureLabel(CreatureBrush* brush) const;
+	int GetCreatureWeight(CreatureBrush* brush) const;
+	void UpdateCreatureWeight(CreatureBrush* brush, int weight);
+	void UpdateVisibleCreatureLabel(size_t index);
+	std::string GetSearchText() const;
 
 	wxChoice* tileset_choice;
-	SortableListBox* creature_list;
+	wxTextCtrl* creature_name_text;
+	wxButton* creature_search_button;
+	wxCheckListBox* creature_list;
 	wxToggleButton* creature_brush_button;
 	wxToggleButton* spawn_brush_button;
 	wxSpinCtrl* creature_spawntime_spin;
 	wxSpinCtrl* spawn_size_spin;
+	wxSpinCtrl* spawn_density_spin;
+	wxSpinCtrl* default_weight_spin;
+
+	std::vector<CreatureBrush*> all_creature_brushes;
+	std::map<CreatureBrush*, int> creature_weights;
 
 	bool handling_event;
 

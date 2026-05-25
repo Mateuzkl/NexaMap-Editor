@@ -1512,7 +1512,29 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 			param = g_gui.GetBrushSize();
 		}
 		if (dodraw) {
-			brush->draw(&map, new_tile, &param);
+			if (brush->isSpawn() && brush->asSpawn()->hasCreatures()) {
+				SpawnBrush* spawnBrush = brush->asSpawn();
+				spawnBrush->draw(&map, new_tile, &param);
+
+				const auto placements = spawnBrush->getCreaturePlacements(&map, offset, param);
+				for (const SpawnBrush::CreaturePlacement& placement : placements) {
+					if (placement.position == offset) {
+						spawnBrush->drawCreature(new_tile, placement.brush, placement.weight);
+						continue;
+					}
+
+					Tile* creature_tile = map.getTile(placement.position);
+					if (!creature_tile) {
+						continue;
+					}
+
+					Tile* new_creature_tile = creature_tile->deepCopy(map);
+					spawnBrush->drawCreature(new_creature_tile, placement.brush, placement.weight);
+					action->addChange(newd Change(new_creature_tile));
+				}
+			} else {
+				brush->draw(&map, new_tile, &param);
+			}
 		} else {
 			brush->undraw(&map, new_tile);
 		}

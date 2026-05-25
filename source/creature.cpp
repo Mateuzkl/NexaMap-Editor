@@ -20,14 +20,14 @@
 #include "creature.h"
 
 Creature::Creature(CreatureType* ctype) :
-	direction(SOUTH), spawntime(0), saved(false), selected(false) {
+	direction(SOUTH), spawntime(0), weight(0), saved(false), selected(false) {
 	if (ctype) {
 		type_name = ctype->name;
 	}
 }
 
 Creature::Creature(std::string ctype_name) :
-	type_name(ctype_name), direction(SOUTH), spawntime(0), saved(false), selected(false) {
+	type_name(ctype_name), direction(SOUTH), spawntime(0), weight(0), saved(false), selected(false) {
 	////
 }
 
@@ -70,6 +70,7 @@ uint16_t Creature::DirName2ID(std::string dir) {
 Creature* Creature::deepCopy() const {
 	Creature* copy = newd Creature(type_name);
 	copy->spawntime = spawntime;
+	copy->weight = weight;
 	copy->direction = direction;
 	copy->selected = selected;
 	copy->saved = saved;

@@ -75,6 +75,7 @@ protected:
 
 	// podium and creature
 	wxChoice* direction_field;
+	wxSpinCtrl* creature_weight_field;
 
 	// container
 	std::vector<ContainerItemButton*> container_items;

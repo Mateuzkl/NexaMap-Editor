@@ -1155,6 +1155,11 @@ bool IOMapOTBM::loadSpawns(Map& map, pugi::xml_document& doc) {
 				spawntime = g_settings.getInteger(Config::DEFAULT_SPAWNTIME);
 			}
 
+			uint8_t weight = static_cast<uint8_t>(creatureNode.attribute("weight").as_uint());
+			if (weight == 0) {
+				weight = static_cast<uint8_t>(g_settings.getInteger(Config::MONSTER_DEFAULT_WEIGHT));
+			}
+
 			Direction direction = NORTH;
 			int dir = creatureNode.attribute("direction").as_int(-1);
 			if (dir >= DIRECTION_FIRST && dir <= DIRECTION_LAST) {
@@ -1208,6 +1213,7 @@ bool IOMapOTBM::loadSpawns(Map& map, pugi::xml_document& doc) {
 			Creature* creature = newd Creature(type);
 			creature->setDirection(direction);
 			creature->setSpawnTime(spawntime);
+			creature->setWeight(weight);
 			creatureTile->creature = creature;
 
 			if (creatureTile->getLocation()->getSpawnCount() == 0) {
@@ -1703,6 +1709,7 @@ bool IOMapOTBM::saveSpawns(Map& map, pugi::xml_document& doc) {
 						creatureNode.append_attribute("y") = y;
 						creatureNode.append_attribute("z") = spawnPosition.z;
 						creatureNode.append_attribute("spawntime") = creature->getSpawnTime();
+						creatureNode.append_attribute("weight") = creature->getWeight() > 0 ? creature->getWeight() : g_settings.getInteger(Config::MONSTER_DEFAULT_WEIGHT);
 						if (creature->getDirection() != NORTH) {
 							creatureNode.append_attribute("direction") = creature->getDirection();
 						}

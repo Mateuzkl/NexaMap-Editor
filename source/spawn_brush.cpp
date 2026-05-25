@@ -19,7 +19,13 @@
 
 #include "spawn_brush.h"
 #include "basemap.h"
+#include "creature.h"
+#include "creature_brush.h"
+#include "gui.h"
+#include "settings.h"
 #include "spawn.h"
+
+#include <cmath>
 
 //=============================================================================
 // Spawn brush
@@ -62,4 +68,111 @@ void SpawnBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	if (tile->spawn == nullptr) {
 		tile->spawn = newd Spawn(max(1, *(int*)parameter));
 	}
+}
+
+void SpawnBrush::setCreatures(const std::vector<CreatureEntry>& creatures) {
+	this->creatures = creatures;
+}
+
+bool SpawnBrush::hasCreatures() const {
+	return !creatures.empty();
+}
+
+std::vector<SpawnBrush::CreaturePlacement> SpawnBrush::getCreaturePlacements(BaseMap* map, const Position& center, int size) const {
+	std::vector<CreaturePlacement> placements;
+	if (!map || creatures.empty()) {
+		return placements;
+	}
+
+	size = std::max(1, size);
+	const int side = size * 2 + 1;
+	const int density = g_settings.getInteger(Config::SPAWN_MONSTER_DENSITY);
+	const int toSpawn = std::min(side * side, static_cast<int>(std::ceil((side * side) * (density / 100.0))));
+	if (toSpawn <= 0) {
+		return placements;
+	}
+
+	std::vector<Position> positions;
+	positions.reserve(side * side);
+	for (int x = -size; x <= size; ++x) {
+		for (int y = -size; y <= size; ++y) {
+			positions.push_back(center + Position(x, y, 0));
+		}
+	}
+
+	while (!positions.empty() && static_cast<int>(placements.size()) < toSpawn) {
+		const size_t index = static_cast<size_t>(rand()) % positions.size();
+		const Position position = positions[index];
+		positions[index] = positions.back();
+		positions.pop_back();
+
+		Tile* tile = map->getTile(position);
+		if (!tile) {
+			continue;
+		}
+
+		const CreatureEntry entry = pickCreatureForTile(tile);
+		if (!entry.brush) {
+			continue;
+		}
+
+		placements.push_back({ position, entry.brush, entry.weight });
+	}
+
+	return placements;
+}
+
+bool SpawnBrush::canDrawCreature(Tile* tile, CreatureBrush* brush) const {
+	if (!tile || !brush || !brush->getType() || tile->isBlocking()) {
+		return false;
+	}
+
+	if (tile->isPZ() && !brush->getType()->isNpc) {
+		return false;
+	}
+
+	return true;
+}
+
+void SpawnBrush::drawCreature(Tile* tile, CreatureBrush* brush, uint8_t weight) const {
+	if (!canDrawCreature(tile, brush)) {
+		return;
+	}
+
+	delete tile->creature;
+	tile->creature = newd Creature(brush->getType());
+	tile->creature->setSpawnTime(g_gui.GetSpawnTime());
+	tile->creature->setWeight(weight);
+}
+
+SpawnBrush::CreatureEntry SpawnBrush::pickCreatureForTile(Tile* tile) const {
+	std::vector<CreatureEntry> validCreatures;
+	int totalWeight = 0;
+
+	for (const CreatureEntry& entry : creatures) {
+		if (!canDrawCreature(tile, entry.brush)) {
+			continue;
+		}
+
+		validCreatures.push_back(entry);
+		totalWeight += entry.weight;
+	}
+
+	if (validCreatures.empty()) {
+		return CreatureEntry();
+	}
+
+	if (totalWeight <= 0) {
+		return validCreatures[static_cast<size_t>(rand()) % validCreatures.size()];
+	}
+
+	int roll = rand() % totalWeight;
+	for (const CreatureEntry& entry : validCreatures) {
+		if (roll < entry.weight) {
+			return entry;
+		}
+		roll -= entry.weight;
+	}
+
+	return validCreatures.back();
 }
