@@ -32,7 +32,6 @@
 
 #include "common_windows.h"
 #include "result_window.h"
-#include "duplicated_items_window.h"
 #include "minimap_window.h"
 #include "palette_window.h"
 #include "map_display.h"
@@ -55,7 +54,6 @@ GUI::GUI() :
 	minimap(nullptr),
 	gem(nullptr),
 	search_result_window(nullptr),
-	duplicated_items_window(nullptr),
 	secondary_map(nullptr),
 	doodad_buffer_map(nullptr),
 
@@ -667,10 +665,6 @@ void GUI::CloseCurrentEditor() {
 	RefreshPalettes();
 	tabbook->DeleteTab(tabbook->GetSelection());
 	root->UpdateMenubar();
-
-	if (duplicated_items_window) {
-		duplicated_items_window->Clear();
-	}
 }
 
 bool GUI::CloseAllEditors() {
@@ -692,10 +686,6 @@ bool GUI::CloseAllEditors() {
 	}
 	if (root) {
 		root->UpdateMenubar();
-	}
-
-	if (duplicated_items_window) {
-		duplicated_items_window->Clear();
 	}
 	return true;
 }
@@ -836,33 +826,16 @@ void GUI::HideSearchWindow() {
 	}
 }
 
-SearchResultWindow* GUI::ShowSearchWindow() {
+SearchResultWindow* GUI::ShowSearchWindow(wxString caption /* = "Search Results" */, bool duplicateItems /* = false */) {
 	if (search_result_window == nullptr) {
 		search_result_window = newd SearchResultWindow(root);
-		aui_manager->AddPane(search_result_window, wxAuiPaneInfo().Caption("Search Results"));
+		aui_manager->AddPane(search_result_window, wxAuiPaneInfo().Caption(caption));
 	} else {
-		aui_manager->GetPane(search_result_window).Show();
+		aui_manager->GetPane(search_result_window).Caption(caption).Show();
 	}
+	search_result_window->SetDuplicateMode(duplicateItems);
 	aui_manager->Update();
 	return search_result_window;
-}
-
-DuplicatedItemsWindow* GUI::ShowDuplicatedItemsWindow() {
-	if (duplicated_items_window == nullptr) {
-		duplicated_items_window = newd DuplicatedItemsWindow(root);
-		aui_manager->AddPane(duplicated_items_window, wxAuiPaneInfo().Caption("Duplicated Items"));
-	} else {
-		aui_manager->GetPane(duplicated_items_window).Show();
-	}
-	aui_manager->Update();
-	return duplicated_items_window;
-}
-
-void GUI::HideDuplicatedItemsWindow() {
-	if (duplicated_items_window) {
-		aui_manager->GetPane(duplicated_items_window).Show(false);
-		aui_manager->Update();
-	}
 }
 
 //=============================================================================
@@ -1045,10 +1018,6 @@ void GUI::RefreshView() {
 
 	for (EditorTab* editorTab : editorTabs) {
 		editorTab->GetWindow()->Refresh();
-	}
-
-	if (duplicated_items_window) {
-		duplicated_items_window->UpdateButtons();
 	}
 }
 

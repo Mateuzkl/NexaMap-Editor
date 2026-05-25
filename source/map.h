@@ -27,6 +27,24 @@
 #include "waypoints.h"
 #include "templates.h"
 
+#include <unordered_set>
+
+inline bool IsRemovableDuplicatedItem(const Item* item) {
+	if (!item || item->isGroundTile()) {
+		return false;
+	}
+
+	if (item->isMoveable() && item->hasElevation()) {
+		return false;
+	}
+
+	if (item->getActionID() > 0 || item->getUniqueID() > 0) {
+		return false;
+	}
+
+	return true;
+}
+
 class Map : public BaseMap {
 public:
 	// ctor and dtor
@@ -272,6 +290,39 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 		for (auto iit = tile->items.begin(); iit != tile->items.end();) {
 			Item* item = *iit;
 			if (condition(map, item, removed, done)) {
+				iit = tile->items.erase(iit);
+				delete item;
+				++removed;
+			} else {
+				++iit;
+			}
+		}
+		++it;
+	}
+	return removed;
+}
+
+template <typename RemoveIfType>
+inline int64_t RemoveItemDuplicateOnMap(Map& map, RemoveIfType& condition, bool selectedOnly) {
+	int64_t done = 0;
+	int64_t removed = 0;
+
+	MapIterator it = map.begin();
+	MapIterator end = map.end();
+
+	while (it != end) {
+		++done;
+		Tile* tile = (*it)->get();
+		if (selectedOnly && !tile->isSelected()) {
+			++it;
+			continue;
+		}
+
+		std::unordered_set<uint16_t> seenItemIDs;
+		for (auto iit = tile->items.begin(); iit != tile->items.end();) {
+			Item* item = *iit;
+			const bool duplicated = !seenItemIDs.insert(item->getID()).second;
+			if (duplicated && condition(map, tile, item, removed, done)) {
 				iit = tile->items.erase(iit);
 				delete item;
 				++removed;

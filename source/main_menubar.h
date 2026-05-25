@@ -159,6 +159,10 @@ namespace MenuBar {
 		ABOUT,
 
 		EXPERIMENTAL_FOG,
+		REMOVE_ON_MAP_DUPLICATED_ITEMS,
+		REMOVE_ON_SELECTION_DUPLICATED_ITEMS,
+		SEARCH_ON_MAP_WALLS_UPON_WALLS,
+		SEARCH_ON_SELECTION_WALLS_UPON_WALLS,
 	};
 }
 
@@ -238,6 +242,8 @@ public:
 	void OnSearchForContainerOnMap(wxCommandEvent& event);
 	void OnSearchForWriteableOnMap(wxCommandEvent& event);
 	void OnSearchForDuplicatedItemsOnMap(wxCommandEvent& event);
+	void OnRemoveDuplicatedItemsOnMap(wxCommandEvent& event);
+	void OnSearchForWallsUponWallsOnMap(wxCommandEvent& event);
 
 	// Select menu
 	void OnSearchForStuffOnSelection(wxCommandEvent& event);
@@ -248,6 +254,8 @@ public:
 	void OnSearchForWriteableOnSelection(wxCommandEvent& event);
 	void OnSearchForItemOnSelection(wxCommandEvent& event);
 	void OnSearchForDuplicatedItemsOnSelection(wxCommandEvent& event);
+	void OnRemoveDuplicatedItemsOnSelection(wxCommandEvent& event);
+	void OnSearchForWallsUponWallsOnSelection(wxCommandEvent& event);
 	void OnReplaceItemsOnSelection(wxCommandEvent& event);
 	void OnRemoveItemOnSelection(wxCommandEvent& event);
 
@@ -297,7 +305,9 @@ protected:
 	// Checks the items in the menus according to the settings (in config)
 	void LoadValues();
 	void SearchItems(bool unique, bool action, bool container, bool writable, bool zones, bool onSelection = false);
-	void SearchDuplicatedItems(bool selection);
+	void SearchDuplicatedItems(bool onSelection = false);
+	void RemoveDuplicatedItems(bool onSelection = false);
+	void SearchWallsUponWalls(bool onSelection = false);
 
 protected:
 	MainFrame* frame;

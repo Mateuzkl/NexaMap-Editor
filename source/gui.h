@@ -50,7 +50,6 @@ class MapWindow;
 class MapCanvas;
 
 class SearchResultWindow;
-class DuplicatedItemsWindow;
 class MinimapWindow;
 class PaletteWindow;
 class OldPropertiesWindow;
@@ -208,11 +207,8 @@ public:
 	wxGLContext* GetGLContext(wxGLCanvas* win);
 
 	// Search Results
-	SearchResultWindow* ShowSearchWindow();
+	SearchResultWindow* ShowSearchWindow(wxString caption = "Search Results", bool duplicateItems = false);
 	void HideSearchWindow();
-
-	DuplicatedItemsWindow* ShowDuplicatedItemsWindow();
-	void HideDuplicatedItemsWindow();
 
 	// Minimap
 	void CreateMinimap();
@@ -402,7 +398,6 @@ public:
 	MinimapWindow* minimap;
 	DCButton* gem; // The small gem in the lower-right corner
 	SearchResultWindow* search_result_window;
-	DuplicatedItemsWindow* duplicated_items_window;
 	GraphicManager gfx;
 
 	BaseMap* secondary_map; // A buffer map

@@ -102,7 +102,8 @@
 		<item name="Find Action" action="SEARCH_ON_MAP_ACTION" help="Find all items with an action ID on map."/>
 		<item name="Find Container" action="SEARCH_ON_MAP_CONTAINER" help="Find all containers on map."/>
 		<item name="Find Writeable" action="SEARCH_ON_MAP_WRITEABLE" help="Find all writeable items on map."/>
-		<item name="Find Duplicated" action="SEARCH_ON_MAP_DUPLICATED_ITEMS" help="Find duplicated items on map."/>
+		<item name="Find Duplicated Items" action="SEARCH_ON_MAP_DUPLICATED_ITEMS" help="Find all positions where there are duplicated items on the map."/>
+		<item name="Find Walls Upon Walls" action="SEARCH_ON_MAP_WALLS_UPON_WALLS" help="Find all positions where there are walls or doors on walls or doors on the map."/>
 		<separator/>
 		<item name="Find Everything" action="SEARCH_ON_MAP_EVERYTHING" help="Find all unique/action/text/container items."/>
 	</menu>
@@ -114,6 +115,7 @@
 		-->
 		<separator/>
 		<item name="Cleanup..." action="MAP_CLEANUP" help="Removes all items that do not exist in the OTB file (red tiles the server can't load)."/>
+		<item name="Remove Duplicated Items..." action="REMOVE_ON_MAP_DUPLICATED_ITEMS" help="Removes duplicated items from the map."/>
 		<item name="Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
 		<item name="Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
 	</menu>
@@ -121,6 +123,7 @@
 		<item name="Replace Items on Selection" action="REPLACE_ON_SELECTION_ITEMS" help="Replace items on selected area."/>
 		<item name="Find Item on Selection" action="SEARCH_ON_SELECTION_ITEM" help="Find items on selected area."/>
 		<item name="Remove Item on Selection" action="REMOVE_ON_SELECTION_ITEM" help="Remove item on selected area."/>
+		<item name="Remove Duplicated Items on Selection" action="REMOVE_ON_SELECTION_DUPLICATED_ITEMS" help="Removes duplicated items from the selected area."/>
 		<separator/>
 		<menu name="Find on Selection">
 			<item name="Find Everything" action="SEARCH_ON_SELECTION_EVERYTHING" help="Find all unique/action/text/container items."/>
@@ -130,7 +133,8 @@
 			<item name="Find Action" action="SEARCH_ON_SELECTION_ACTION" help="Find all items with an action ID on selected area."/>
 			<item name="Find Container" action="SEARCH_ON_SELECTION_CONTAINER" help="Find all containers on selected area."/>
 			<item name="Find Writeable" action="SEARCH_ON_SELECTION_WRITEABLE" help="Find all writeable items on selected area."/>
-			<item name="Find Duplicated" hotkey="Ctrl+R" action="SEARCH_ON_SELECTION_DUPLICATED_ITEMS" help="Find duplicated items on selected area."/>
+			<item name="Find Duplicated Items" hotkey="Ctrl+R" action="SEARCH_ON_SELECTION_DUPLICATED_ITEMS" help="Find all positions where there are duplicated items on selected area."/>
+			<item name="Find Walls Upon Walls" action="SEARCH_ON_SELECTION_WALLS_UPON_WALLS" help="Find all positions where there are walls or doors on walls or doors on selected area."/>
 		</menu>
 		<separator/>
 		<menu name="Selection Mode">

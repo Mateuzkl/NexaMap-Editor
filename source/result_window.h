@@ -20,20 +20,40 @@
 
 #include "main.h"
 
+class Tile;
+
 class SearchResultWindow : public wxPanel {
 public:
 	SearchResultWindow(wxWindow* parent);
 	virtual ~SearchResultWindow();
 
 	void Clear();
+	void SetDuplicateMode(bool duplicateMode);
 	void AddPosition(wxString description, Position pos);
+	void AddDuplicateItem(const Position& pos, uint16_t itemId, uint16_t count);
 
 	void OnClickResult(wxCommandEvent&);
 	void OnClickExport(wxCommandEvent&);
 	void OnClickClear(wxCommandEvent&);
+	void OnClickRemove(wxCommandEvent&);
+	void OnClickRemoveAll(wxCommandEvent&);
 
 protected:
+	struct ResultData;
+
+	void DeleteResultData(uint32_t index);
+	ResultData* GetResultData(int32_t index) const;
+	void UpdateButtons();
+	void UpdateDuplicateLabel(int32_t index, ResultData* data);
+	bool RemoveDuplicateItem(ResultData* data, uint16_t amount);
+	uint16_t RemoveDuplicateItemsFromTile(Tile* tile, uint16_t itemId, uint16_t amount);
+
 	wxListBox* result_list;
+	wxButton* export_button;
+	wxButton* clear_button;
+	wxButton* remove_button;
+	wxButton* remove_all_button;
+	bool duplicate_mode;
 
 	DECLARE_EVENT_TABLE()
 };

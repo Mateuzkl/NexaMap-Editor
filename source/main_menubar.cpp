@@ -26,10 +26,11 @@
 #include "result_window.h"
 #include "extension_window.h"
 #include "find_item_window.h"
-#include "duplicated_items_window.h"
 #include "settings.h"
 
 #include "gui.h"
+
+#include <unordered_set>
 
 #include <wx/chartype.h>
 
@@ -79,6 +80,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SEARCH_ON_MAP_CONTAINER, wxITEM_NORMAL, OnSearchForContainerOnMap);
 	MAKE_ACTION(SEARCH_ON_MAP_WRITEABLE, wxITEM_NORMAL, OnSearchForWriteableOnMap);
 	MAKE_ACTION(SEARCH_ON_MAP_DUPLICATED_ITEMS, wxITEM_NORMAL, OnSearchForDuplicatedItemsOnMap);
+	MAKE_ACTION(REMOVE_ON_MAP_DUPLICATED_ITEMS, wxITEM_NORMAL, OnRemoveDuplicatedItemsOnMap);
+	MAKE_ACTION(SEARCH_ON_MAP_WALLS_UPON_WALLS, wxITEM_NORMAL, OnSearchForWallsUponWallsOnMap);
 	MAKE_ACTION(SEARCH_ON_SELECTION_EVERYTHING, wxITEM_NORMAL, OnSearchForStuffOnSelection);
 	MAKE_ACTION(SEARCH_ON_SELECTION_ZONES, wxITEM_NORMAL, OnSearchForZonesOnSelection);
 	MAKE_ACTION(SEARCH_ON_SELECTION_UNIQUE, wxITEM_NORMAL, OnSearchForUniqueOnSelection);
@@ -87,6 +90,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SEARCH_ON_SELECTION_WRITEABLE, wxITEM_NORMAL, OnSearchForWriteableOnSelection);
 	MAKE_ACTION(SEARCH_ON_SELECTION_ITEM, wxITEM_NORMAL, OnSearchForItemOnSelection);
 	MAKE_ACTION(SEARCH_ON_SELECTION_DUPLICATED_ITEMS, wxITEM_NORMAL, OnSearchForDuplicatedItemsOnSelection);
+	MAKE_ACTION(REMOVE_ON_SELECTION_DUPLICATED_ITEMS, wxITEM_NORMAL, OnRemoveDuplicatedItemsOnSelection);
+	MAKE_ACTION(SEARCH_ON_SELECTION_WALLS_UPON_WALLS, wxITEM_NORMAL, OnSearchForWallsUponWallsOnSelection);
 	MAKE_ACTION(REPLACE_ON_SELECTION_ITEMS, wxITEM_NORMAL, OnReplaceItemsOnSelection);
 	MAKE_ACTION(REMOVE_ON_SELECTION_ITEM, wxITEM_NORMAL, OnRemoveItemOnSelection);
 	MAKE_ACTION(SELECT_MODE_COMPENSATE, wxITEM_RADIO, OnSelectionTypeChange);
@@ -342,6 +347,8 @@ void MainMenuBar::Update() {
 	EnableItem(SEARCH_ON_MAP_CONTAINER, is_host);
 	EnableItem(SEARCH_ON_MAP_WRITEABLE, is_host);
 	EnableItem(SEARCH_ON_MAP_DUPLICATED_ITEMS, is_host);
+	EnableItem(REMOVE_ON_MAP_DUPLICATED_ITEMS, is_local);
+	EnableItem(SEARCH_ON_MAP_WALLS_UPON_WALLS, is_host);
 	EnableItem(SEARCH_ON_SELECTION_EVERYTHING, has_selection && is_host);
 	EnableItem(SEARCH_ON_SELECTION_UNIQUE, has_selection && is_host);
 	EnableItem(SEARCH_ON_SELECTION_ACTION, has_selection && is_host);
@@ -349,6 +356,8 @@ void MainMenuBar::Update() {
 	EnableItem(SEARCH_ON_SELECTION_WRITEABLE, has_selection && is_host);
 	EnableItem(SEARCH_ON_SELECTION_ITEM, has_selection && is_host);
 	EnableItem(SEARCH_ON_SELECTION_DUPLICATED_ITEMS, has_selection && is_host);
+	EnableItem(REMOVE_ON_SELECTION_DUPLICATED_ITEMS, has_selection && is_local);
+	EnableItem(SEARCH_ON_SELECTION_WALLS_UPON_WALLS, has_selection && is_host);
 	EnableItem(REPLACE_ON_SELECTION_ITEMS, has_selection && is_host);
 	EnableItem(REMOVE_ON_SELECTION_ITEM, has_selection && is_host);
 
@@ -1032,6 +1041,14 @@ void MainMenuBar::OnSearchForDuplicatedItemsOnMap(wxCommandEvent& WXUNUSED(event
 	SearchDuplicatedItems(false);
 }
 
+void MainMenuBar::OnRemoveDuplicatedItemsOnMap(wxCommandEvent& WXUNUSED(event)) {
+	RemoveDuplicatedItems(false);
+}
+
+void MainMenuBar::OnSearchForWallsUponWallsOnMap(wxCommandEvent& WXUNUSED(event)) {
+	SearchWallsUponWalls(false);
+}
+
 void MainMenuBar::OnSearchForStuffOnSelection(wxCommandEvent& WXUNUSED(event)) {
 	SearchItems(true, true, true, true, false, true);
 }
@@ -1058,6 +1075,14 @@ void MainMenuBar::OnSearchForWriteableOnSelection(wxCommandEvent& WXUNUSED(event
 
 void MainMenuBar::OnSearchForDuplicatedItemsOnSelection(wxCommandEvent& WXUNUSED(event)) {
 	SearchDuplicatedItems(true);
+}
+
+void MainMenuBar::OnRemoveDuplicatedItemsOnSelection(wxCommandEvent& WXUNUSED(event)) {
+	RemoveDuplicatedItems(true);
+}
+
+void MainMenuBar::OnSearchForWallsUponWallsOnSelection(wxCommandEvent& WXUNUSED(event)) {
+	SearchWallsUponWalls(true);
 }
 
 void MainMenuBar::OnSearchForItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
@@ -2011,11 +2036,194 @@ void MainMenuBar::SearchItems(bool unique, bool action, bool container, bool wri
 	}
 }
 
-void MainMenuBar::SearchDuplicatedItems(bool selection) {
+namespace SearchDuplicatedItems {
+	std::vector<std::pair<uint16_t, uint16_t>> findDuplicatedItems(const Tile* tile) {
+		std::vector<std::pair<uint16_t, uint16_t>> duplicatedItems;
+		if (!tile) {
+			return duplicatedItems;
+		}
+
+		std::unordered_set<uint16_t> itemIDs;
+		for (const Item* item : tile->items) {
+			if (!item) {
+				continue;
+			}
+
+			if (itemIDs.count(item->getID()) > 0 && !item->hasElevation()) {
+				auto duplicate = std::find_if(duplicatedItems.begin(), duplicatedItems.end(), [item](const auto& entry) {
+					return entry.first == item->getID();
+				});
+				if (duplicate == duplicatedItems.end()) {
+					duplicatedItems.emplace_back(item->getID(), 1);
+				} else {
+					++duplicate->second;
+				}
+			}
+			itemIDs.insert(item->getID());
+		}
+		return duplicatedItems;
+	}
+}
+
+void MainMenuBar::SearchDuplicatedItems(bool onSelection /* = false */) {
 	if (!g_gui.IsEditorOpen()) {
 		return;
 	}
 
-	auto dialog = g_gui.ShowDuplicatedItemsWindow();
-	dialog->StartSearch(g_gui.GetCurrentMapTab(), selection);
+	Map& map = g_gui.GetCurrentMap();
+	const auto searchType = onSelection ? "selected area" : "map";
+	g_gui.CreateLoadBar(wxString::Format("Searching on %s...", searchType));
+
+	struct DuplicateSearchResult {
+		Position position;
+		uint16_t itemId;
+		uint16_t count;
+	};
+
+	std::vector<DuplicateSearchResult> foundItems;
+	foundItems.reserve(128);
+
+	long long done = 0;
+	for (MapIterator it = map.begin(), end = map.end(); it != end; ++it) {
+		++done;
+		Tile* tile = (*it)->get();
+		if (onSelection && !tile->isSelected()) {
+			continue;
+		}
+		if (done % 0x8000 == 0) {
+			g_gui.SetLoadDone(static_cast<unsigned int>(100 * done / map.getTileCount()));
+		}
+
+		for (const auto& duplicatedItem : SearchDuplicatedItems::findDuplicatedItems(tile)) {
+			foundItems.push_back({ tile->getPosition(), duplicatedItem.first, duplicatedItem.second });
+		}
+	}
+
+	g_gui.DestroyLoadBar();
+
+	g_gui.PopupDialog("Search completed", wxString::Format("%zu duplicated item groups found.", foundItems.size()), wxOK);
+
+	SearchResultWindow* result = g_gui.ShowSearchWindow("Duplicate Items", true);
+	result->Clear();
+	for (const DuplicateSearchResult& item : foundItems) {
+		result->AddDuplicateItem(item.position, item.itemId, item.count);
+	}
+}
+
+namespace RemoveDuplicatedItems {
+	struct condition {
+		bool operator()(Map& map, Tile* tile, Item* item, long long removed, long long done) {
+			if (done % 0x8000 == 0) {
+				g_gui.SetLoadDone(static_cast<unsigned int>(100 * done / map.getTileCount()));
+			}
+
+			return tile && IsRemovableDuplicatedItem(item);
+		}
+	};
+}
+
+void MainMenuBar::RemoveDuplicatedItems(bool onSelection /* = false */) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	const auto removalType = onSelection ? "selected area" : "map";
+	const auto dialogResult = g_gui.PopupDialog(
+		"Remove Duplicated Items",
+		wxString::Format("Do you want to remove all duplicated items from the %s?", removalType),
+		wxYES | wxNO
+	);
+	if (dialogResult != wxID_YES) {
+		return;
+	}
+
+	if (!onSelection) {
+		g_gui.GetCurrentEditor()->selection.clear();
+	}
+	g_gui.GetCurrentEditor()->actionQueue->clear();
+
+	RemoveDuplicatedItems::condition condition;
+	g_gui.CreateLoadBar(wxString::Format("Searching on %s for items to remove...", removalType));
+	const int64_t removedAmount = RemoveItemDuplicateOnMap(g_gui.GetCurrentMap(), condition, onSelection);
+	g_gui.DestroyLoadBar();
+
+	g_gui.PopupDialog("Search completed", wxString::Format("%lld duplicated items removed.", removedAmount), wxOK);
+	g_gui.GetCurrentMap().doChange();
+	g_gui.RefreshView();
+}
+
+namespace SearchWallsUponWalls {
+	bool hasDifferentID(const std::unordered_set<uint16_t>& itemIDs, uint16_t itemID) {
+		return itemIDs.size() > (itemIDs.count(itemID) > 0 ? 1u : 0u);
+	}
+
+	bool hasWallsUponWalls(const Tile* tile) {
+		if (!tile) {
+			return false;
+		}
+
+		std::unordered_set<uint16_t> wallOrDoorIDs;
+		std::unordered_set<uint16_t> blockingWallOrDoorIDs;
+
+		for (const Item* item : tile->items) {
+			if (!item || (!item->isWall() && !item->isDoor())) {
+				continue;
+			}
+
+			const uint16_t itemID = item->getID();
+			if (hasDifferentID(blockingWallOrDoorIDs, itemID)) {
+				return true;
+			}
+
+			if (item->isBlockMissiles()) {
+				if (hasDifferentID(wallOrDoorIDs, itemID)) {
+					return true;
+				}
+				blockingWallOrDoorIDs.insert(itemID);
+			}
+
+			wallOrDoorIDs.insert(itemID);
+		}
+
+		return false;
+	}
+}
+
+void MainMenuBar::SearchWallsUponWalls(bool onSelection /* = false */) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	Map& map = g_gui.GetCurrentMap();
+	const auto searchType = onSelection ? "selected area" : "map";
+	g_gui.CreateLoadBar(wxString::Format("Searching on %s...", searchType));
+
+	std::vector<const Tile*> foundTiles;
+	foundTiles.reserve(128);
+
+	long long done = 0;
+	for (MapIterator it = map.begin(), end = map.end(); it != end; ++it) {
+		++done;
+		Tile* tile = (*it)->get();
+		if (onSelection && !tile->isSelected()) {
+			continue;
+		}
+		if (done % 0x8000 == 0) {
+			g_gui.SetLoadDone(static_cast<unsigned int>(100 * done / map.getTileCount()));
+		}
+
+		if (SearchWallsUponWalls::hasWallsUponWalls(tile)) {
+			foundTiles.push_back(tile);
+		}
+	}
+
+	g_gui.DestroyLoadBar();
+
+	g_gui.PopupDialog("Search completed", wxString::Format("%zu tiles with walls upon walls found.", foundTiles.size()), wxOK);
+
+	SearchResultWindow* result = g_gui.ShowSearchWindow();
+	result->Clear();
+	for (const Tile* tile : foundTiles) {
+		result->AddPosition("Walls upon walls", tile->getPosition());
+	}
 }

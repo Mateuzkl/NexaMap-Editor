@@ -20,24 +20,66 @@
 #include "result_window.h"
 #include "gui.h"
 #include "position.h"
+#include "editor.h"
+#include "map.h"
+#include "tile.h"
+#include "item.h"
 
 BEGIN_EVENT_TABLE(SearchResultWindow, wxPanel)
 EVT_LISTBOX(wxID_ANY, SearchResultWindow::OnClickResult)
 EVT_BUTTON(wxID_FILE, SearchResultWindow::OnClickExport)
 EVT_BUTTON(wxID_CLEAR, SearchResultWindow::OnClickClear)
+EVT_BUTTON(wxID_DELETE, SearchResultWindow::OnClickRemove)
+EVT_BUTTON(wxID_APPLY, SearchResultWindow::OnClickRemoveAll)
 END_EVENT_TABLE()
 
+struct SearchResultWindow::ResultData {
+	ResultData(const Position& position) :
+		position(position),
+		itemId(0),
+		count(0),
+		duplicate(false) {
+	}
+
+	ResultData(const Position& position, uint16_t itemId, uint16_t count) :
+		position(position),
+		itemId(itemId),
+		count(count),
+		duplicate(true) {
+	}
+
+	Position position;
+	uint16_t itemId;
+	uint16_t count;
+	bool duplicate;
+};
+
 SearchResultWindow::SearchResultWindow(wxWindow* parent) :
-	wxPanel(parent, wxID_ANY) {
+	wxPanel(parent, wxID_ANY),
+	export_button(nullptr),
+	clear_button(nullptr),
+	remove_button(nullptr),
+	remove_all_button(nullptr),
+	duplicate_mode(false) {
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
 	result_list = newd wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(200, 330), 0, nullptr, wxLB_SINGLE | wxLB_ALWAYS_SB);
 	sizer->Add(result_list, wxSizerFlags(1).Expand());
 
 	wxSizer* buttonsSizer = newd wxBoxSizer(wxHORIZONTAL);
-	buttonsSizer->Add(newd wxButton(this, wxID_FILE, "Export"), wxSizerFlags(0).Center());
-	buttonsSizer->Add(newd wxButton(this, wxID_CLEAR, "Clear"), wxSizerFlags(0).Center());
+	export_button = newd wxButton(this, wxID_FILE, "Export");
+	clear_button = newd wxButton(this, wxID_CLEAR, "Clear");
+	remove_button = newd wxButton(this, wxID_DELETE, "Remove");
+	remove_all_button = newd wxButton(this, wxID_APPLY, "Remove All");
+
+	buttonsSizer->Add(export_button, wxSizerFlags(0).Center());
+	buttonsSizer->Add(clear_button, wxSizerFlags(0).Center());
+	buttonsSizer->Add(remove_button, wxSizerFlags(0).Center());
+	buttonsSizer->AddSpacer(10);
+	buttonsSizer->Add(remove_all_button, wxSizerFlags(0).Center());
 	sizer->Add(buttonsSizer, wxSizerFlags(0).Center().DoubleBorder());
 	SetSizerAndFit(sizer);
+
+	SetDuplicateMode(false);
 }
 
 SearchResultWindow::~SearchResultWindow() {
@@ -46,20 +88,41 @@ SearchResultWindow::~SearchResultWindow() {
 
 void SearchResultWindow::Clear() {
 	for (uint32_t n = 0; n < result_list->GetCount(); ++n) {
-		delete reinterpret_cast<Position*>(result_list->GetClientData(n));
+		DeleteResultData(n);
 	}
 	result_list->Clear();
+	UpdateButtons();
+}
+
+void SearchResultWindow::SetDuplicateMode(bool duplicateMode) {
+	duplicate_mode = duplicateMode;
+
+	export_button->Show(!duplicate_mode);
+	clear_button->Show(!duplicate_mode);
+	remove_button->Show(duplicate_mode);
+	remove_all_button->Show(duplicate_mode);
+
+	UpdateButtons();
+	Layout();
 }
 
 void SearchResultWindow::AddPosition(wxString description, Position pos) {
-	result_list->Append(description << " (" << pos.x << "," << pos.y << "," << pos.z << ")", newd Position(pos));
+	result_list->Append(description << " (" << pos.x << "," << pos.y << "," << pos.z << ")", newd ResultData(pos));
+	UpdateButtons();
+}
+
+void SearchResultWindow::AddDuplicateItem(const Position& pos, uint16_t itemId, uint16_t count) {
+	ResultData* data = newd ResultData(pos, itemId, count);
+	result_list->Append(wxString::Format("item: %d, count: %d, pos: (%d,%d,%d)", itemId, count, pos.x, pos.y, pos.z), data);
+	UpdateButtons();
 }
 
 void SearchResultWindow::OnClickResult(wxCommandEvent& event) {
-	Position* pos = reinterpret_cast<Position*>(event.GetClientData());
-	if (pos) {
-		g_gui.SetScreenCenterPosition(*pos);
+	ResultData* data = reinterpret_cast<ResultData*>(event.GetClientData());
+	if (data) {
+		g_gui.SetScreenCenterPosition(data->position);
 	}
+	UpdateButtons();
 }
 
 void SearchResultWindow::OnClickExport(wxCommandEvent& WXUNUSED(event)) {
@@ -86,4 +149,189 @@ void SearchResultWindow::OnClickExport(wxCommandEvent& WXUNUSED(event)) {
 
 void SearchResultWindow::OnClickClear(wxCommandEvent& WXUNUSED(event)) {
 	Clear();
+}
+
+void SearchResultWindow::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {
+	const int32_t index = result_list->GetSelection();
+	ResultData* data = GetResultData(index);
+	if (!data || !data->duplicate) {
+		UpdateButtons();
+		return;
+	}
+
+	if (!RemoveDuplicateItem(data, 1)) {
+		DeleteResultData(index);
+		result_list->Delete(index);
+		UpdateButtons();
+		return;
+	}
+
+	if (data->count > 1) {
+		--data->count;
+		UpdateDuplicateLabel(index, data);
+		result_list->SetSelection(index);
+	} else {
+		DeleteResultData(index);
+		result_list->Delete(index);
+		if (static_cast<uint32_t>(index) < result_list->GetCount()) {
+			result_list->SetSelection(index);
+		} else if (result_list->GetCount() > 0) {
+			result_list->SetSelection(result_list->GetCount() - 1);
+		}
+	}
+
+	g_gui.RefreshView();
+	UpdateButtons();
+}
+
+void SearchResultWindow::OnClickRemoveAll(wxCommandEvent& WXUNUSED(event)) {
+	if (!duplicate_mode || result_list->GetCount() == 0 || !g_gui.IsEditorOpen()) {
+		UpdateButtons();
+		return;
+	}
+
+	Map& map = g_gui.GetCurrentMap();
+	Editor* editor = g_gui.GetCurrentEditor();
+	ActionQueue* history = editor->actionQueue;
+	BatchAction* batch = history->createBatch(ACTION_DELETE_TILES);
+	Action* action = history->createAction(batch);
+
+	std::map<Position, std::vector<ResultData>> groupedResults;
+	for (uint32_t i = 0; i < result_list->GetCount(); ++i) {
+		ResultData* data = GetResultData(i);
+		if (data && data->duplicate && data->count > 0) {
+			groupedResults[data->position].push_back(*data);
+		}
+	}
+
+	uint64_t removed = 0;
+	for (auto& groupedResult : groupedResults) {
+		Tile* tile = map.getTile(groupedResult.first);
+		if (!tile) {
+			continue;
+		}
+
+		Tile* newTile = tile->deepCopy(map);
+		uint64_t removedOnTile = 0;
+		for (const ResultData& data : groupedResult.second) {
+			removedOnTile += RemoveDuplicateItemsFromTile(newTile, data.itemId, data.count);
+		}
+
+		if (removedOnTile > 0) {
+			removed += removedOnTile;
+			action->addChange(newd Change(newTile));
+		} else {
+			delete newTile;
+		}
+	}
+
+	batch->addAndCommitAction(action);
+	editor->addBatch(batch);
+
+	Clear();
+	g_gui.RefreshView();
+
+	wxString msg;
+	msg << removed << " duplicated item" << (removed == 1 ? "" : "s") << " removed.";
+	g_gui.SetStatusText(msg);
+}
+
+void SearchResultWindow::DeleteResultData(uint32_t index) {
+	delete reinterpret_cast<ResultData*>(result_list->GetClientData(index));
+}
+
+SearchResultWindow::ResultData* SearchResultWindow::GetResultData(int32_t index) const {
+	if (index == wxNOT_FOUND || index < 0 || static_cast<uint32_t>(index) >= result_list->GetCount()) {
+		return nullptr;
+	}
+	return reinterpret_cast<ResultData*>(result_list->GetClientData(index));
+}
+
+void SearchResultWindow::UpdateButtons() {
+	if (!export_button || !clear_button || !remove_button || !remove_all_button) {
+		return;
+	}
+
+	const bool hasResults = result_list->GetCount() > 0;
+	export_button->Enable(hasResults);
+	clear_button->Enable(hasResults);
+	remove_button->Enable(duplicate_mode && GetResultData(result_list->GetSelection()) != nullptr);
+	remove_all_button->Enable(duplicate_mode && hasResults);
+}
+
+void SearchResultWindow::UpdateDuplicateLabel(int32_t index, ResultData* data) {
+	result_list->SetString(
+		index,
+		wxString::Format(
+			"item: %d, count: %d, pos: (%d,%d,%d)",
+			data->itemId,
+			data->count,
+			data->position.x,
+			data->position.y,
+			data->position.z
+		)
+	);
+}
+
+bool SearchResultWindow::RemoveDuplicateItem(ResultData* data, uint16_t amount) {
+	if (!data || !g_gui.IsEditorOpen()) {
+		return false;
+	}
+
+	Map& map = g_gui.GetCurrentMap();
+	Tile* tile = map.getTile(data->position);
+	if (!tile) {
+		return false;
+	}
+
+	Tile* newTile = tile->deepCopy(map);
+	const uint16_t removed = RemoveDuplicateItemsFromTile(newTile, data->itemId, amount);
+	if (removed == 0) {
+		delete newTile;
+		return false;
+	}
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	ActionQueue* history = editor->actionQueue;
+	BatchAction* batch = history->createBatch(ACTION_DELETE_TILES);
+	Action* action = history->createAction(batch);
+
+	action->addChange(newd Change(newTile));
+	batch->addAndCommitAction(action);
+	editor->addBatch(batch);
+
+	return true;
+}
+
+uint16_t SearchResultWindow::RemoveDuplicateItemsFromTile(Tile* tile, uint16_t itemId, uint16_t amount) {
+	if (!tile || amount == 0) {
+		return 0;
+	}
+
+	bool foundKeptItem = false;
+	uint16_t removed = 0;
+	for (auto it = tile->items.begin(); it != tile->items.end() && removed < amount;) {
+		Item* item = *it;
+		if (!item || item->getID() != itemId) {
+			++it;
+			continue;
+		}
+
+		if (!foundKeptItem) {
+			foundKeptItem = true;
+			++it;
+			continue;
+		}
+
+		if (!IsRemovableDuplicatedItem(item)) {
+			++it;
+			continue;
+		}
+
+		delete item;
+		it = tile->items.erase(it);
+		++removed;
+	}
+
+	return removed;
 }
