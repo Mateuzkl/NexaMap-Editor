@@ -47,6 +47,11 @@ using Color = std::tuple<int, int, int>;
 
 static std::vector<Color> colors;
 void GenerateColors() {
+	if (!colors.empty()) {
+		return;
+	}
+
+	colors.reserve(32);
 	int r = 250, g = 100, b = 100;
 	const int step = 25;
 	bool incrementing = true;
@@ -151,6 +156,14 @@ void DrawingOptions::SetIngame() {
 
 bool DrawingOptions::isDrawLight() const noexcept {
 	return show_lights;
+}
+
+bool DrawingOptions::isOnlyColors() const noexcept {
+	return show_as_minimap || show_only_colors;
+}
+
+bool DrawingOptions::isTooltips() const noexcept {
+	return show_tooltips && !isOnlyColors();
 }
 
 MapDrawer::MapDrawer(MapCanvas* canvas) :
@@ -300,7 +313,8 @@ void MapDrawer::DrawMap() {
 		}
 	}
 
-	bool only_colors = options.show_as_minimap || options.show_only_colors;
+	bool only_colors = options.isOnlyColors();
+	bool show_zone_tooltips = options.isTooltips();
 
 	// Enable texture mode
 	if (!only_colors) {
@@ -354,38 +368,49 @@ void MapDrawer::DrawMap() {
 				}
 			}
 
-			for (auto& itZonePos : zoneTiles) {
-				ZoneFinder finder(itZonePos.second);
-				auto zones = finder.findZones();
+			if (show_zone_tooltips && !zoneTiles.empty()) {
+				for (auto& itZonePos : zoneTiles) {
+					ZoneFinder finder(itZonePos.second);
+					const auto& zones = finder.findZones();
 
-				for (const auto& itZone : zones) {
-					const FinderPosition center = finder.findClosestToCenter(itZone);
+					for (const auto& itZone : zones) {
+						const FinderPosition center = finder.findClosestToCenter(itZone);
 
-					QTreeNode* nd = editor.getMap().getLeaf(center.x, center.y);
-					TileLocation* location = nd->getTile(center.x, center.y, center.z);
-
-					const Tile* tile = location->get();
-
-					std::ostringstream tooltip;
-					tooltip << "zone id: ";
-					size_t zones = tile->getZoneIds().size();
-					for (const auto& zoneId : tile->getZoneIds()) {
-						tooltip << zoneId;
-						if (--zones > 0) {
-							tooltip << "/";
+						QTreeNode* nd = editor.getMap().getLeaf(center.x, center.y);
+						if (!nd) {
+							continue;
 						}
-					}
+						TileLocation* location = nd->getTile(center.x, center.y, center.z);
+						if (!location) {
+							continue;
+						}
 
-					int offset;
-					if (map_z <= GROUND_LAYER) {
-						offset = (GROUND_LAYER - map_z) * TileSize;
-					} else {
-						offset = TileSize * (floor - map_z);
-					}
+						const Tile* tile = location->get();
+						if (!tile) {
+							continue;
+						}
 
-					int draw_x = ((tile->getX() * TileSize) - view_scroll_x) - offset;
-					int draw_y = ((tile->getY() * TileSize) - view_scroll_y) - offset;
-					MakeTooltip(draw_x, draw_y + 8, tooltip.str());
+						std::ostringstream tooltip;
+						tooltip << "zone id: ";
+						size_t zones = tile->getZoneIds().size();
+						for (const auto& zoneId : tile->getZoneIds()) {
+							tooltip << zoneId;
+							if (--zones > 0) {
+								tooltip << "/";
+							}
+						}
+
+						int offset;
+						if (map_z <= GROUND_LAYER) {
+							offset = (GROUND_LAYER - map_z) * TileSize;
+						} else {
+							offset = TileSize * (floor - map_z);
+						}
+
+						int draw_x = ((tile->getX() * TileSize) - view_scroll_x) - offset;
+						int draw_y = ((tile->getY() * TileSize) - view_scroll_y) - offset;
+						MakeTooltip(draw_x, draw_y + 8, tooltip.str());
+					}
 				}
 			}
 		}
@@ -457,7 +482,7 @@ void MapDrawer::DrawMap() {
 							if (options.show_special_tiles && tile->getMapFlags() & TILESTATE_NOPVP) {
 								g /= 2;
 							}
-							if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
+							if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH && !tile->getZoneIds().empty()) {
 								size_t zones = tile->getZoneIds().size();
 								uint16_t r16 = 0, g16 = 0, b16 = 0;
 								for (const auto& zoneId : tile->getZoneIds()) {
@@ -1464,12 +1489,11 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	}
 
 	if (!zoneIds.empty()) {
+		const FinderPosition position(tile->getX(), tile->getY(), tile->getZ());
 		for (auto& zoneId : zoneIds) {
-			auto itZone = zoneTiles.find(zoneId);
-			if (itZone == zoneTiles.end()) {
-				zoneTiles.emplace(zoneId, std::vector<FinderPosition>({ FinderPosition(tile->getX(), tile->getY(), tile->getZ()) }));
-			} else {
-				itZone->second.push_back(FinderPosition(tile->getX(), tile->getY(), tile->getZ()));
+			auto& positions = zoneTiles[zoneId];
+			if (positions.empty() || !(positions.back() == position)) {
+				positions.push_back(position);
 			}
 		}
 	} else {
@@ -1519,15 +1543,21 @@ void MapDrawer::DrawTile(TileLocation* location) {
 	int map_y = location->getY();
 	int map_z = location->getZ();
 
-	Waypoint* waypoint = canvas->editor.map.waypoints.getWaypoint(location);
-	if (options.show_tooltips && location->getWaypointCount() > 0) {
+	bool as_minimap = options.show_as_minimap;
+	bool only_colors = options.isOnlyColors();
+	bool show_tooltips = options.isTooltips();
+	bool draw_waypoints = !only_colors && zoom < 10.0 && !options.ingame && options.show_waypoints;
+
+	Waypoint* waypoint = nullptr;
+	if ((show_tooltips && location->getWaypointCount() > 0) || draw_waypoints) {
+		waypoint = canvas->editor.map.waypoints.getWaypoint(location);
+	}
+
+	if (show_tooltips && location->getWaypointCount() > 0) {
 		if (waypoint) {
 			WriteTooltip(waypoint, tooltip);
 		}
 	}
-
-	bool as_minimap = options.show_as_minimap;
-	bool only_colors = as_minimap || options.show_only_colors;
 
 	int offset;
 	if (map_z <= GROUND_LAYER) {
@@ -1592,7 +1622,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			g /= 2;
 		}
 
-		if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
+		if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH && !tile->getZoneIds().empty()) {
 			size_t zones = tile->getZoneIds().size();
 			uint16_t r16 = 0, g16 = 0, b16 = 0;
 			for (const auto& zoneId : tile->getZoneIds()) {
@@ -1632,7 +1662,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 		}
 	}
 
-	if (options.show_tooltips && map_z == floor && tile->ground) {
+	if (show_tooltips && map_z == floor && tile->ground) {
 		WriteTooltip(tile, tile->ground, tooltip, tile->isHouseTile());
 	}
 	// end filters for ground tile
@@ -1642,7 +1672,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			// items on tile
 			for (ItemVector::iterator it = tile->items.begin(); it != tile->items.end(); it++) {
 				// item tooltip
-				if (options.show_tooltips && map_z == floor) {
+				if (show_tooltips && map_z == floor) {
 					WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
 				}
 
@@ -1676,7 +1706,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 
 		if (zoom < 10.0) {
 			// waypoint (blue flame)
-			if (!options.ingame && waypoint && options.show_waypoints) {
+			if (draw_waypoints && waypoint) {
 				BlitSpriteType(draw_x, draw_y, SPRITE_WAYPOINT, 64, 64, 255);
 			}
 
@@ -1703,7 +1733,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			}
 
 			// tooltips
-			if (options.show_tooltips) {
+			if (show_tooltips) {
 				if (location->getWaypointCount() > 0) {
 					MakeTooltip(draw_x, draw_y, tooltip.str(), 0, 255, 0);
 				} else {

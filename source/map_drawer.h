@@ -54,6 +54,8 @@ struct DrawingOptions {
 
 	void SetIngame();
 	void SetDefault();
+	bool isOnlyColors() const noexcept;
+	bool isTooltips() const noexcept;
 	bool isDrawLight() const noexcept;
 
 	bool transparent_floors;
@@ -97,7 +99,8 @@ class MapCanvas;
 class LightDrawer;
 
 struct FinderPosition {
-	FinderPosition() { }
+	FinderPosition() :
+		x(0), y(0), z(0) { }
 	FinderPosition(int _x, int _y, int _z) :
 		x(_x), y(_y), z(_z) { }
 	int x, y, z;
@@ -106,13 +109,15 @@ struct FinderPosition {
 		return x == other.x && y == other.y && z == other.z;
 	}
 
-	double distance(const FinderPosition& b) const {
-		return std::sqrt(std::pow(x - b.x, 2) + std::pow(y - b.y, 2));
+	uint64_t distanceSquared(const FinderPosition& b) const {
+		const int64_t dx = x - b.x;
+		const int64_t dy = y - b.y;
+		return static_cast<uint64_t>(dx * dx + dy * dy);
 	}
 
 	struct Hash {
 		size_t operator()(const FinderPosition& p) const {
-			return p.x ^ p.y ^ p.z;
+			return static_cast<size_t>(p.x) ^ (static_cast<size_t>(p.y) << 16) ^ (static_cast<size_t>(p.z) << 28);
 		}
 	};
 };
@@ -135,7 +140,7 @@ private:
 		visited.insert(pos);
 		zone.push_back(pos);
 
-		std::vector<FinderPosition> neighbors = {
+		const FinderPosition neighbors[] = {
 			{ pos.x + 1, pos.y, pos.z },
 			{ pos.x - 1, pos.y, pos.z },
 			{ pos.x, pos.y + 1, pos.z },
@@ -150,10 +155,14 @@ private:
 	}
 
 public:
-	ZoneFinder(const std::vector<FinderPosition>& inputPositions) :
-		positions(inputPositions.begin(), inputPositions.end()) { }
+	ZoneFinder(const std::vector<FinderPosition>& inputPositions) {
+		positions.reserve(inputPositions.size());
+		visited.reserve(inputPositions.size());
+		positions.insert(inputPositions.begin(), inputPositions.end());
+	}
 
-	std::vector<std::vector<FinderPosition>> findZones() {
+	const std::vector<std::vector<FinderPosition>>& findZones() {
+		zones.reserve(positions.size());
 		for (const auto& pos : positions) {
 			if (visited.find(pos) == visited.end()) {
 				std::vector<FinderPosition> zone;
@@ -177,10 +186,10 @@ public:
 		centroid.y /= zone.size();
 		centroid.z /= zone.size();
 
-		double minDistance = std::numeric_limits<double>::max();
+		uint64_t minDistance = std::numeric_limits<uint64_t>::max();
 		FinderPosition closestPosition;
 		for (const auto& pos : zone) {
-			const double dist = pos.distance(centroid);
+			const uint64_t dist = pos.distanceSquared(centroid);
 			if (dist < minDistance) {
 				minDistance = dist;
 				closestPosition = pos;

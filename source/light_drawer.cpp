@@ -36,11 +36,17 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 
 	int w = end_x - map_x;
 	int h = end_y - map_y;
+	if (w <= 0 || h <= 0) {
+		return;
+	}
 
-	buffer.resize(static_cast<size_t>(w * h * PixelFormatRGBA));
+	const size_t bufferSize = static_cast<size_t>(w * h * PixelFormatRGBA);
+	if (buffer.size() != bufferSize) {
+		buffer.resize(bufferSize);
+	}
 
-	for (int x = 0; x < w; ++x) {
-		for (int y = 0; y < h; ++y) {
+	for (int y = 0; y < h; ++y) {
+		for (int x = 0; x < w; ++x) {
 			int mx = (map_x + x);
 			int my = (map_y + y);
 			int index = (y * w + x);
@@ -144,11 +150,12 @@ void LightDrawer::clear() noexcept {
 
 void LightDrawer::createGLTexture() {
 	glGenTextures(1, &texture);
-	ASSERT(texture == 0);
+	ASSERT(texture != 0);
 }
 
 void LightDrawer::unloadGLTexture() {
 	if (texture != 0) {
 		glDeleteTextures(1, &texture);
+		texture = 0;
 	}
 }
