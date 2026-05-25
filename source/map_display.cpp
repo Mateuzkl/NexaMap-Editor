@@ -231,7 +231,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 		options.dragging = boundbox_selection;
 
-		if (options.show_preview) {
+		if (options.show_preview || drawer->GetPositionIndicatorTime() != 0) {
 			animation_timer->Start();
 		} else {
 			animation_timer->Stop();
@@ -256,6 +256,15 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 	// Send newd node requests
 	editor.SendNodeRequests();
+}
+
+void MapCanvas::ShowPositionIndicator(const Position& position) {
+	if (drawer) {
+		drawer->ShowPositionIndicator(position);
+		if (!animation_timer->IsRunning()) {
+			Update();
+		}
+	}
 }
 
 void MapCanvas::TakeScreenshot(wxFileName path, wxString format) {

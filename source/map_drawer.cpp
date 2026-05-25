@@ -417,6 +417,8 @@ void MapDrawer::DrawMap() {
 			}
 		}
 
+		DrawPositionIndicator(map_z);
+
 		if (only_colors) {
 			glEnable(GL_TEXTURE_2D);
 		}
@@ -1858,6 +1860,34 @@ void MapDrawer::DrawHookIndicator(int x, int y, const ItemType& type) {
 	glEnable(GL_TEXTURE_2D);
 }
 
+void MapDrawer::DrawPositionIndicator(int z) {
+	if (z != pos_indicator.z || pos_indicator.x < start_x || pos_indicator.x > end_x || pos_indicator.y < start_y || pos_indicator.y > end_y) {
+		return;
+	}
+
+	const long time = GetPositionIndicatorTime();
+	if (time == 0) {
+		return;
+	}
+
+	int offset;
+	if (pos_indicator.z <= GROUND_LAYER) {
+		offset = (GROUND_LAYER - pos_indicator.z) * TileSize;
+	} else {
+		offset = TileSize * (floor - pos_indicator.z);
+	}
+
+	const int x = ((pos_indicator.x * TileSize) - view_scroll_x) - offset;
+	const int y = ((pos_indicator.y * TileSize) - view_scroll_y) - offset;
+	const int size = static_cast<int>(TileSize * (0.3f + std::abs(500 - time % 1000) / 1000.f));
+	const int borderOffset = (TileSize - size) / 2;
+
+	glDisable(GL_TEXTURE_2D);
+	drawRect(x + borderOffset + 2, y + borderOffset + 2, size - 4, size - 4, *wxWHITE, 2);
+	drawRect(x + borderOffset + 1, y + borderOffset + 1, size - 2, size - 2, *wxBLACK, 2);
+	glEnable(GL_TEXTURE_2D);
+}
+
 void MapDrawer::DrawTooltips() {
 	for (std::vector<MapTooltip*>::const_iterator it = tooltips.begin(); it != tooltips.end(); ++it) {
 		MapTooltip* tooltip = (*it);
@@ -2030,6 +2060,11 @@ void MapDrawer::TakeScreenshot(uint8_t* screenshot_buffer) {
 	for (int i = 0; i < screensize_y; ++i) {
 		glReadPixels(0, screensize_y - i, screensize_x, 1, GL_RGB, GL_UNSIGNED_BYTE, (GLubyte*)(screenshot_buffer) + 3 * screensize_x * i);
 	}
+}
+
+void MapDrawer::ShowPositionIndicator(const Position& position) {
+	pos_indicator = position;
+	pos_indicator_timer.Start();
 }
 
 void MapDrawer::glBlitTexture(int sx, int sy, int texture_number, int red, int green, int blue, int alpha) {

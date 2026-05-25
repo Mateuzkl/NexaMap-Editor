@@ -126,17 +126,19 @@ Position MapWindow::GetScreenCenterPosition() {
 	return Position(x, y, canvas->GetFloor());
 }
 
-void MapWindow::SetScreenCenterPosition(const Position& position) {
-	if (position == Position()) {
+void MapWindow::SetScreenCenterPosition(const Position& position, bool showIndicator) {
+	if (!position.isValid()) {
 		return;
 	}
 
-	int x = position.x * TileSize;
-	int y = position.y * TileSize;
-	if (position.z <= GROUND_LAYER) {
+	const Position target = position;
+	int x = target.x * TileSize;
+	int y = target.y * TileSize;
+	int z = target.z;
+	if (target.z <= GROUND_LAYER) {
 		// Compensate for floor offset above ground
-		x -= (GROUND_LAYER - position.z) * TileSize;
-		y -= (GROUND_LAYER - position.z) * TileSize;
+		x -= (GROUND_LAYER - z) * TileSize;
+		y -= (GROUND_LAYER - z) * TileSize;
 	}
 
 	const Position& center = GetScreenCenterPosition();
@@ -147,11 +149,16 @@ void MapWindow::SetScreenCenterPosition(const Position& position) {
 	}
 
 	Scroll(x, y, true);
-	canvas->ChangeFloor(position.z);
+	canvas->ChangeFloor(z);
+
+	if (showIndicator) {
+		canvas->ShowPositionIndicator(target);
+		Refresh();
+	}
 }
 
 void MapWindow::GoToPreviousCenterPosition() {
-	SetScreenCenterPosition(previous_position);
+	SetScreenCenterPosition(previous_position, true);
 }
 
 void MapWindow::Scroll(int x, int y, bool center) {

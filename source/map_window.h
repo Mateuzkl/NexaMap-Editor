@@ -66,7 +66,7 @@ public:
 
 	// Screen position.
 	Position GetScreenCenterPosition();
-	void SetScreenCenterPosition(const Position& position);
+	void SetScreenCenterPosition(const Position& position, bool showIndicator = false);
 	void GoToPreviousCenterPosition();
 
 	// Return the containing canvas

@@ -213,6 +213,8 @@ protected:
 	std::unordered_map<uint16_t, std::vector<FinderPosition>> zoneTiles;
 	std::vector<MapTooltip*> tooltips;
 	std::ostringstream tooltip;
+	wxStopWatch pos_indicator_timer;
+	Position pos_indicator;
 
 public:
 	MapDrawer(MapCanvas* canvas);
@@ -240,6 +242,15 @@ public:
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);
 
+	void ShowPositionIndicator(const Position& position);
+	long GetPositionIndicatorTime() const {
+		const long time = pos_indicator_timer.Time();
+		if (time < 3000) {
+			return time;
+		}
+		return 0;
+	}
+
 	DrawingOptions& getOptions() {
 		return options;
 	}
@@ -256,6 +267,7 @@ protected:
 	void DrawTile(TileLocation* tile);
 	void DrawBrushIndicator(int x, int y, Brush* brush, uint8_t r, uint8_t g, uint8_t b);
 	void DrawHookIndicator(int x, int y, const ItemType& type);
+	void DrawPositionIndicator(int z);
 	void WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile);
 	void WriteTooltip(Waypoint* item, std::ostringstream& stream);
 	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
