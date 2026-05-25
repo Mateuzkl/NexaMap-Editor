@@ -75,6 +75,7 @@ protected:
 	wxDirPickerCtrl* screenshot_directory_picker;
 	wxChoice* screenshot_format_choice;
 	wxCheckBox* hide_items_when_zoomed_chkbox;
+	wxCheckBox* show_performance_stats_chkbox;
 	wxColourPickerCtrl* cursor_color_pick;
 	wxColourPickerCtrl* cursor_alt_color_pick;
 	/*

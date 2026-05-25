@@ -224,13 +224,14 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			options.show_towns = g_settings.getBoolean(Config::SHOW_TOWNS);
 			options.always_show_zones = g_settings.getBoolean(Config::ALWAYS_SHOW_ZONES);
 			options.extended_house_shader = g_settings.getBoolean(Config::EXT_HOUSE_SHADER);
+			options.show_performance_stats = g_settings.getBoolean(Config::SHOW_PERFORMANCE_STATS);
 
 			options.experimental_fog = g_settings.getBoolean(Config::EXPERIMENTAL_FOG);
 		}
 
 		options.dragging = boundbox_selection;
 
-		if (options.show_preview || drawer->GetPositionIndicatorTime() != 0) {
+		if (options.show_preview || drawer->GetPositionIndicatorTime() != 0 || options.show_performance_stats) {
 			animation_timer->Start();
 		} else {
 			animation_timer->Stop();
@@ -2697,15 +2698,13 @@ AnimationTimer::~AnimationTimer() {
 };
 
 void AnimationTimer::Notify() {
-	if (map_canvas->GetZoom() <= 2.0) {
-		map_canvas->Refresh();
-	}
+	map_canvas->Refresh();
 };
 
 void AnimationTimer::Start() {
 	if (!started) {
 		started = true;
-		wxTimer::Start(100);
+		wxTimer::Start(16); // ~60fps
 	}
 };
 

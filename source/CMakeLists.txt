@@ -181,3 +181,16 @@ ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
 )
+
+# ============================================================================
+# Performance overlay — psapi (Windows RAM monitoring)
+# Add the following line inside your target_link_libraries() call:
+#
+#   $<$<PLATFORM_ID:Windows>:psapi>
+#
+# Example:
+#   target_link_libraries(${PROJECT_NAME}
+#       ...existing libs...
+#       $<$<PLATFORM_ID:Windows>:psapi>
+#   )
+# ============================================================================

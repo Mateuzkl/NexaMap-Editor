@@ -82,6 +82,7 @@ struct DrawingOptions {
 	bool highlight_locked_doors;
 	bool show_blocking;
 	bool show_tooltips;
+	bool show_performance_stats;
 	bool show_as_minimap;
 	bool show_only_colors;
 	bool show_only_modified;
@@ -225,6 +226,22 @@ protected:
 	wxStopWatch pos_indicator_timer;
 	Position pos_indicator;
 
+	// Performance monitoring
+	wxStopWatch perf_update_timer;
+	int frame_count = 0;
+	double current_fps = 0.0;
+	double current_cpu = 0.0;
+	size_t current_ram = 0;
+
+#ifdef __WINDOWS__
+	ULARGE_INTEGER last_cpu_time;
+	ULARGE_INTEGER last_sys_time;
+	ULARGE_INTEGER last_now_time;
+#else
+	unsigned long long last_total_time = 0;
+	unsigned long long last_process_time = 0;
+#endif
+
 public:
 	MapDrawer(MapCanvas* canvas);
 	~MapDrawer();
@@ -246,6 +263,7 @@ public:
 	void DrawIngameBox();
 	void DrawGrid();
 	void DrawTooltips();
+	void DrawPerformanceStats();
 	void DrawLight();
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);
@@ -280,6 +298,9 @@ protected:
 	void WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile);
 	void WriteTooltip(Waypoint* item, std::ostringstream& stream);
 	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
+	void UpdateRAMUsage();
+	void UpdateCPUUsage();
+	std::string FormatPerformanceStats() const;
 	void AddLight(TileLocation* location);
 
 	enum BrushColor {
