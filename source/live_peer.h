@@ -24,11 +24,11 @@
 class LiveServer;
 class LivePeer : public LiveSocket {
 public:
-	LivePeer(LiveServer* server, boost::asio::ip::tcp::socket socket);
+	LivePeer(LiveServer* server, asio::ip::tcp::socket socket);
 	~LivePeer();
 
 	void close();
-	bool handleError(const boost::system::error_code& error);
+	bool handleError(const std::error_code& error);
 
 	//
 	uint32_t getId() const {
@@ -76,7 +76,7 @@ protected:
 	NetworkMessage readMessage;
 
 	LiveServer* server;
-	boost::asio::ip::tcp::socket socket;
+	asio::ip::tcp::socket socket;
 
 	wxColor color;
 

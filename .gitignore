@@ -34,6 +34,7 @@ data/user
 *.obj
 *.db
 *.opendb
+*.vs
 
 vcproj/ipch/
 vcproj/Beta Release/

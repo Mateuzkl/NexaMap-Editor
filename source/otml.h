@@ -26,29 +26,18 @@
 #include <memory>
 #include <algorithm>
 #include <cmath>
-#include <boost/algorithm/string.hpp>
-#include <boost/tokenizer.hpp>
+#include <regex>
 
 class OTMLNode;
 class OTMLDocument;
 class OTMLParser;
 class OTMLEmitter;
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-typedef std::shared_ptr<OTMLNode> OTMLNodePtr;
-typedef std::enable_shared_from_this<OTMLNode> OTMLNodeEnableSharedFromThis;
-typedef std::shared_ptr<OTMLDocument> OTMLDocumentPtr;
-typedef std::weak_ptr<OTMLNode> OTMLNodeWeakPtr;
-#else
-	#include <boost/shared_ptr.hpp>
-	#include <boost/enable_shared_from_this.hpp>
-typedef boost::shared_ptr<OTMLNode> OTMLNodePtr;
-typedef boost::enable_shared_from_this<OTMLNode> OTMLNodeEnableSharedFromThis;
-typedef boost::shared_ptr<OTMLDocument> OTMLDocumentPtr;
-typedef boost::weak_ptr<OTMLNode> OTMLNodeWeakPtr;
-#endif
-
-typedef std::vector<OTMLNodePtr> OTMLNodeList;
+using OTMLNodePtr = std::shared_ptr<OTMLNode>;
+using OTMLNodeEnableSharedFromThis = std::enable_shared_from_this<OTMLNode>;
+using OTMLDocumentPtr = std::shared_ptr<OTMLDocument>;
+using OTMLNodeWeakPtr = std::weak_ptr<OTMLNode>;
+using OTMLNodeList = std::vector<OTMLNodePtr>;
 
 namespace otml_util {
 	template <typename T, typename R>
@@ -534,13 +523,13 @@ inline std::string OTMLNode::emit() {
 template <>
 inline std::string OTMLNode::value() {
 	std::string value = m_value;
-	if (boost::starts_with(value, "\"") && boost::ends_with(value, "\"")) {
+	if (value.starts_with("\"") && value.ends_with("\"")) {
 		value = value.substr(1, value.length() - 2);
-		boost::replace_all(value, "\\\\", "\\");
-		boost::replace_all(value, "\\\"", "\"");
-		boost::replace_all(value, "\\t", "\t");
-		boost::replace_all(value, "\\n", "\n");
-		boost::replace_all(value, "\\'", "\'");
+		replaceString(value, "\\\\", "\\");
+		replaceString(value, "\\\"", "\"");
+		replaceString(value, "\\t", "\t");
+		replaceString(value, "\\n", "\n");
+		replaceString(value, "\\'", "\'");
 	}
 	return value;
 }
@@ -735,7 +724,7 @@ inline void OTMLParser::parseLine(std::string line) {
 	if (depth == -1) {
 		return;
 	}
-	boost::trim(line);
+	trim(line);
 	if (line.empty()) {
 		return;
 	}
@@ -762,7 +751,7 @@ inline void OTMLParser::parseNode(const std::string& data) {
 	int nodeLine = currentLine;
 	if (!data.empty() && data[0] == '-') {
 		value = data.substr(1);
-		boost::trim(value);
+		trim(value);
 	} else if (dotsPos != std::string::npos) {
 		tag = data.substr(0, dotsPos);
 		if (data.size() > dotsPos + 1) {
@@ -771,8 +760,8 @@ inline void OTMLParser::parseNode(const std::string& data) {
 	} else {
 		tag = data;
 	}
-	boost::trim(tag);
-	boost::trim(value);
+	trim(tag);
+	trim(value);
 	if (value == "|" || value == "|-" || value == "|+") {
 		std::string multiLineData;
 		do {
@@ -782,7 +771,7 @@ inline void OTMLParser::parseNode(const std::string& data) {
 			if (depth > currentDepth) {
 				multiLineData += line.substr((currentDepth + 1) * 2);
 			} else {
-				boost::trim(line);
+				trim(line);
 				if (!line.empty()) {
 					in.seekg(lastPos, std::ios::beg);
 					currentLine--;
@@ -810,13 +799,14 @@ inline void OTMLParser::parseNode(const std::string& data) {
 	if (value == "~") {
 		node->setNull(true);
 	} else {
-		if (boost::starts_with(value, "[") && boost::ends_with(value, "]")) {
-			typedef boost::tokenizer<boost::escaped_list_separator<char>> Tokenizer;
+		if (value.starts_with("[") && value.ends_with("]")) {
 			std::string tmp = value.substr(1, value.length() - 2);
-			Tokenizer tok(tmp);
-			for (Tokenizer::iterator it = tok.begin(), end = tok.end(); it != end; ++it) {
-				std::string v = *it;
-				boost::trim(v);
+			std::regex separator(",");
+			std::sregex_token_iterator token(tmp.begin(), tmp.end(), separator, -1);
+			std::sregex_token_iterator end;
+			for (; token != end; ++token) {
+				std::string v = *token;
+				trim(v);
 				node->writeIn(v);
 			}
 		} else {

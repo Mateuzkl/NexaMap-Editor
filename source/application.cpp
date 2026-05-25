@@ -86,7 +86,20 @@ EVT_SET_FOCUS(MapScrollBar::OnFocus)
 EVT_MOUSEWHEEL(MapScrollBar::OnWheel)
 END_EVENT_TABLE()
 
-wxIMPLEMENT_APP(Application);
+// The Visual Studio project links as a Windows subsystem application, which
+// needs WinMain while the existing main() below is kept for other toolchains.
+#ifdef __WINDOWS__
+wxIMPLEMENT_WXWIN_MAIN
+#endif
+wxIMPLEMENT_APP_NO_MAIN(Application);
+
+int main(int argc, char** argv) {
+	wxEntryStart(argc, argv);
+	wxApp::SetInstance(newd Application());
+	wxEntry();
+	wxEntryCleanup();
+	return 0;
+}
 
 Application::~Application() {
 	// Destroy

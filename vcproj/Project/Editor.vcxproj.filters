@@ -139,36 +139,6 @@
     <ClInclude Include="..\..\source\item_attributes.h">
       <Filter>objects</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\source\json.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_error_position.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_reader.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_reader_template.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_stream_reader.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_utils.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_value.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_writer.h">
-      <Filter>json</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\json\json_spirit_writer_template.h">
-      <Filter>json</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\source\live_action.h">
       <Filter>live</Filter>
     </ClInclude>
@@ -387,15 +357,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\source\json\json_spirit_reader.cpp">
-      <Filter>json</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\json\json_spirit_value.cpp">
-      <Filter>json</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\json\json_spirit_writer.cpp">
-      <Filter>json</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\source\mkpch.cpp" />
     <ClCompile Include="..\..\source\pngfiles.cpp" />
     <ClCompile Include="..\..\source\action.cpp">

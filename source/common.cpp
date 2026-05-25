@@ -24,6 +24,7 @@
 #include <random>
 #include <regex>
 #include <algorithm>
+#include <cctype>
 
 // random generator
 std::mt19937& getRandomGenerator() {
@@ -106,6 +107,15 @@ void replaceString(std::string& str, const std::string sought, const std::string
 		str = str.substr(0, pos) + replacement + str.substr(pos + soughtLen);
 		start = pos + replaceLen;
 	}
+}
+
+void trim(std::string& str) {
+	str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
+		return !std::isspace(ch);
+	}));
+	str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) {
+		return !std::isspace(ch);
+	}).base(), str.end());
 }
 
 void trim_right(std::string& source, const std::string& t) {

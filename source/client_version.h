@@ -187,10 +187,13 @@ struct ClientData {
 class ClientVersion;
 typedef std::vector<ClientVersion*> ClientVersionList;
 
-class ClientVersion : boost::noncopyable {
+class ClientVersion {
 public:
 	ClientVersion(OtbVersion otb, std::string versionName, wxString path);
 	~ClientVersion() = default;
+
+	ClientVersion(const ClientVersion&) = delete;
+	ClientVersion& operator=(const ClientVersion&) = delete;
 
 	static void loadVersions();
 	static void unloadVersions();

@@ -42,18 +42,18 @@ bool LiveClient::connect(const std::string& address, uint16_t port) {
 		return false;
 	}
 
-	boost::asio::io_context& service = connection.get_service();
+	asio::io_context& service = connection.get_service();
 
 	if (!resolver) {
-		resolver = std::make_shared<boost::asio::ip::tcp::resolver>(service);
+		resolver = std::make_shared<asio::ip::tcp::resolver>(service);
 	}
 
 	if (!socket) {
-		socket = std::make_shared<boost::asio::ip::tcp::socket>(service);
+		socket = std::make_shared<asio::ip::tcp::socket>(service);
 	}
 
 	resolver->async_resolve(address, std::to_string(port),
-		[this](const boost::system::error_code& error, boost::asio::ip::tcp::resolver::results_type results) -> void {
+		[this](const std::error_code& error, asio::ip::tcp::resolver::results_type results) -> void {
 			if (error) {
 				logMessage("Error: " + error.message());
 			} else {
@@ -65,15 +65,15 @@ bool LiveClient::connect(const std::string& address, uint16_t port) {
 	return true;
 }
 
-void LiveClient::tryConnect(boost::asio::ip::tcp::resolver::results_type results) {
+void LiveClient::tryConnect(asio::ip::tcp::resolver::results_type results) {
 	if (stopped) {
 		return;
 	}
 
 	logMessage("Connecting to server...");
 
-	boost::asio::async_connect(*socket, results,
-		[this](boost::system::error_code error, const boost::asio::ip::tcp::endpoint& /*endpoint*/) -> void {
+	asio::async_connect(*socket, results,
+		[this](std::error_code error, const asio::ip::tcp::endpoint& /*endpoint*/) -> void {
 			if (error) {
 				if (handleError(error)) {
 				} else {
@@ -83,8 +83,8 @@ void LiveClient::tryConnect(boost::asio::ip::tcp::resolver::results_type results
 					});
 				}
 			} else {
-				boost::system::error_code ec;
-				socket->set_option(boost::asio::ip::tcp::no_delay(true), ec);
+				std::error_code ec;
+				socket->set_option(asio::ip::tcp::no_delay(true), ec);
 				if (ec) {
 					wxTheApp->CallAfter([this]() {
 						close();
@@ -116,14 +116,14 @@ void LiveClient::close() {
 	stopped = true;
 }
 
-bool LiveClient::handleError(const boost::system::error_code& error) {
-	if (error == boost::asio::error::eof || error == boost::asio::error::connection_reset) {
+bool LiveClient::handleError(const std::error_code& error) {
+	if (error == asio::error::eof || error == asio::error::connection_reset) {
 		wxTheApp->CallAfter([this]() {
 			log->Message(wxString() + getHostName() + ": disconnected.");
 			close();
 		});
 		return true;
-	} else if (error == boost::asio::error::connection_aborted) {
+	} else if (error == asio::error::connection_aborted) {
 		logMessage("You have left the server.");
 		return true;
 	}
@@ -139,7 +139,7 @@ std::string LiveClient::getHostName() const {
 
 void LiveClient::receiveHeader() {
 	readMessage.position = 0;
-	boost::asio::async_read(*socket, boost::asio::buffer(readMessage.buffer, 4), [this](const boost::system::error_code& error, size_t bytesReceived) -> void {
+	asio::async_read(*socket, asio::buffer(readMessage.buffer, 4), [this](const std::error_code& error, size_t bytesReceived) -> void {
 		if (error) {
 			if (!handleError(error)) {
 				logMessage(wxString() + getHostName() + ": " + error.message());
@@ -154,7 +154,7 @@ void LiveClient::receiveHeader() {
 
 void LiveClient::receive(uint32_t packetSize) {
 	readMessage.buffer.resize(readMessage.position + packetSize);
-	boost::asio::async_read(*socket, boost::asio::buffer(&readMessage.buffer[readMessage.position], packetSize), [this](const boost::system::error_code& error, size_t bytesReceived) -> void {
+	asio::async_read(*socket, asio::buffer(&readMessage.buffer[readMessage.position], packetSize), [this](const std::error_code& error, size_t bytesReceived) -> void {
 		if (error) {
 			if (!handleError(error)) {
 				logMessage(wxString() + getHostName() + ": " + error.message());
@@ -172,7 +172,7 @@ void LiveClient::receive(uint32_t packetSize) {
 
 void LiveClient::send(NetworkMessage& message) {
 	memcpy(&message.buffer[0], &message.size, 4);
-	boost::asio::async_write(*socket, boost::asio::buffer(message.buffer, message.size + 4), [this](const boost::system::error_code& error, size_t bytesTransferred) -> void {
+	asio::async_write(*socket, asio::buffer(message.buffer, message.size + 4), [this](const std::error_code& error, size_t bytesTransferred) -> void {
 		if (error) {
 			logMessage(wxString() + getHostName() + ": " + error.message());
 		}

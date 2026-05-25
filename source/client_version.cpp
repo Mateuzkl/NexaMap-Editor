@@ -114,18 +114,15 @@ void ClientVersion::loadVersions() {
 
 	// Load the data directory info
 	try {
-		json::mValue read_obj;
-		json::read_or_throw(g_settings.getString(Config::ASSETS_DATA_DIRS), read_obj);
-		json::mArray& vers_obj = read_obj.get_array();
-		for (json::mArray::iterator ver_iter = vers_obj.begin(); ver_iter != vers_obj.end(); ++ver_iter) {
-			json::mObject& ver_obj = ver_iter->get_obj();
-			ClientVersion* version = get(ver_obj["id"].get_str());
+		const auto versions = nlohmann::json::parse(g_settings.getString(Config::ASSETS_DATA_DIRS));
+		for (const auto& versionInfo : versions) {
+			ClientVersion* version = get(versionInfo.at("id").get<std::string>());
 			if (version == nullptr) {
 				continue;
 			}
-			version->setClientPath(wxstr(ver_obj["path"].get_str()));
+			version->setClientPath(wxstr(versionInfo.at("path").get<std::string>()));
 		}
-	} catch (std::runtime_error&) {
+	} catch (const nlohmann::json::exception&) {
 		// pass
 		;
 	}
@@ -329,18 +326,16 @@ void ClientVersion::loadVersionExtensions(pugi::xml_node versionNode) {
 }
 
 void ClientVersion::saveVersions() {
-	json::Array vers_obj;
+	nlohmann::json vers_obj = nlohmann::json::array();
 
 	for (VersionMap::iterator i = client_versions.begin(); i != client_versions.end(); ++i) {
 		ClientVersion* version = i->second;
-		json::Object ver_obj;
-		ver_obj.push_back(json::Pair("id", version->getName()));
-		ver_obj.push_back(json::Pair("path", nstr(version->getClientPath().GetFullPath())));
-		vers_obj.push_back(ver_obj);
+		vers_obj.push_back({
+			{"id", version->getName()},
+			{"path", nstr(version->getClientPath().GetFullPath())}
+		});
 	}
-	std::ostringstream out;
-	json::write(vers_obj, out);
-	g_settings.setString(Config::ASSETS_DATA_DIRS, out.str());
+	g_settings.setString(Config::ASSETS_DATA_DIRS, vers_obj.dump());
 }
 
 // Client version class

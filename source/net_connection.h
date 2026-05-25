@@ -75,10 +75,10 @@ public:
 	bool start();
 	void stop();
 
-	boost::asio::io_context& get_service();
+	asio::io_context& get_service();
 
 private:
-	boost::asio::io_context* service;
+	asio::io_context* service;
 	std::thread thread;
 	bool stopped;
 };

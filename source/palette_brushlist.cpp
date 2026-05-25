@@ -259,7 +259,7 @@ void BrushPalettePanel::OnClickAddItemToTileset(wxCommandEvent& WXUNUSED(event))
 	if (!choicebook) {
 		return;
 	}
-	std::string tilesetName = choicebook->GetPageText(choicebook->GetSelection());
+	std::string tilesetName = nstr(choicebook->GetPageText(choicebook->GetSelection()));
 
 	auto _it = g_materials.tilesets.find(tilesetName);
 	if (_it != g_materials.tilesets.end()) {
