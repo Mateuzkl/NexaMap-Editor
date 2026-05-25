@@ -313,6 +313,9 @@
     <ClInclude Include="..\..\source\container_properties_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\duplicated_items_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\properties_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -591,6 +594,9 @@
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\container_properties_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\duplicated_items_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\properties_window.cpp">

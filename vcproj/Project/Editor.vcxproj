@@ -220,6 +220,7 @@
     <ClCompile Include="..\..\source\artprovider.cpp" />
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
+    <ClCompile Include="..\..\source\duplicated_items_window.cpp" />
     <ClCompile Include="..\..\source\find_item_window.cpp" />
     <ClCompile Include="..\..\source\light_drawer.cpp" />
     <ClCompile Include="..\..\source\replace_items_window.cpp" />
@@ -241,6 +242,7 @@
     <ClInclude Include="..\..\source\common.h" />
     <ClCompile Include="..\..\source\common.cpp" />
     <ClInclude Include="..\..\source\container_properties_window.h" />
+    <ClInclude Include="..\..\source\duplicated_items_window.h" />
     <ClInclude Include="..\..\source\con_vector.h" />
     <ClInclude Include="..\..\source\creature_brush.h" />
     <ClCompile Include="..\..\source\creature_brush.cpp" />

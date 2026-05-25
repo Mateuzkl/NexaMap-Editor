@@ -49,6 +49,7 @@ namespace MenuBar {
 		SEARCH_ON_MAP_ACTION,
 		SEARCH_ON_MAP_CONTAINER,
 		SEARCH_ON_MAP_WRITEABLE,
+		SEARCH_ON_MAP_DUPLICATED_ITEMS,
 		SEARCH_ON_SELECTION_EVERYTHING,
 		SEARCH_ON_SELECTION_ZONES,
 		SEARCH_ON_SELECTION_UNIQUE,
@@ -56,6 +57,7 @@ namespace MenuBar {
 		SEARCH_ON_SELECTION_CONTAINER,
 		SEARCH_ON_SELECTION_WRITEABLE,
 		SEARCH_ON_SELECTION_ITEM,
+		SEARCH_ON_SELECTION_DUPLICATED_ITEMS,
 		REPLACE_ON_SELECTION_ITEMS,
 		REMOVE_ON_SELECTION_ITEM,
 		SELECT_MODE_COMPENSATE,
@@ -238,6 +240,7 @@ public:
 	void OnSearchForActionOnMap(wxCommandEvent& event);
 	void OnSearchForContainerOnMap(wxCommandEvent& event);
 	void OnSearchForWriteableOnMap(wxCommandEvent& event);
+	void OnSearchForDuplicatedItemsOnMap(wxCommandEvent& event);
 
 	// Select menu
 	void OnSearchForStuffOnSelection(wxCommandEvent& event);
@@ -247,6 +250,7 @@ public:
 	void OnSearchForContainerOnSelection(wxCommandEvent& event);
 	void OnSearchForWriteableOnSelection(wxCommandEvent& event);
 	void OnSearchForItemOnSelection(wxCommandEvent& event);
+	void OnSearchForDuplicatedItemsOnSelection(wxCommandEvent& event);
 	void OnReplaceItemsOnSelection(wxCommandEvent& event);
 	void OnRemoveItemOnSelection(wxCommandEvent& event);
 
@@ -301,6 +305,7 @@ protected:
 	// Checks the items in the menus according to the settings (in config)
 	void LoadValues();
 	void SearchItems(bool unique, bool action, bool container, bool writable, bool zones, bool onSelection = false);
+	void SearchDuplicatedItems(bool selection);
 
 protected:
 	MainFrame* frame;

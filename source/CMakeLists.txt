@@ -22,6 +22,7 @@ ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.h
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.h
 ${CMAKE_CURRENT_LIST_DIR}/definitions.h
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.h
+${CMAKE_CURRENT_LIST_DIR}/duplicated_items_window.h
 ${CMAKE_CURRENT_LIST_DIR}/editor.h
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
 ${CMAKE_CURRENT_LIST_DIR}/extension.h
@@ -125,6 +126,7 @@ ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/duplicated_items_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.cpp
 ${CMAKE_CURRENT_LIST_DIR}/eraser_brush.cpp
