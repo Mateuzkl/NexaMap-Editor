@@ -29,7 +29,6 @@
 #include "map_drawer.h"
 #include "map_display.h"
 #include "copybuffer.h"
-#include "live_socket.h"
 #include "graphics.h"
 
 #include "doodad_brush.h"
@@ -246,7 +245,6 @@ void MapDrawer::Draw() {
 	if (options.dragging) {
 		DrawSelectionBox();
 	}
-	DrawLiveCursors();
 	DrawBrush();
 	if (options.show_grid) {
 		DrawGrid();
@@ -289,8 +287,6 @@ void MapDrawer::DrawMap() {
 	int box_start_map_y = center_y - view_scroll_x + offset_y;
 	int box_end_map_x = center_x + ClientMapWidth;
 	int box_end_map_y = center_y + ClientMapHeight + offset_y;
-
-	bool live_client = editor.IsLiveClient();
 
 	Brush* brush = g_gui.GetCurrentBrush();
 
@@ -342,41 +338,18 @@ void MapDrawer::DrawMap() {
 				for (int nd_map_y = nd_start_y; nd_map_y <= nd_end_y; nd_map_y += 4) {
 					QTreeNode* nd = editor.map.getLeaf(nd_map_x, nd_map_y);
 					if (!nd) {
-						if (live_client) {
-							nd = editor.map.createLeaf(nd_map_x, nd_map_y);
-							nd->setVisible(false, false);
-						} else {
-							continue;
-						}
+						continue;
 					}
 
-					if (!live_client || nd->isVisible(map_z > GROUND_LAYER)) {
-						for (int map_x = 0; map_x < 4; ++map_x) {
-							for (int map_y = 0; map_y < 4; ++map_y) {
-								TileLocation* location = nd->getTile(map_x, map_y, map_z);
-								DrawTile(location);
-								// draw light, but only if not zoomed too far
-								if (location && options.isDrawLight() && zoom <= 10.0) {
-									AddLight(location);
-								}
+					for (int map_x = 0; map_x < 4; ++map_x) {
+						for (int map_y = 0; map_y < 4; ++map_y) {
+							TileLocation* location = nd->getTile(map_x, map_y, map_z);
+							DrawTile(location);
+							// draw light, but only if not zoomed too far
+							if (location && options.isDrawLight() && zoom <= 10.0) {
+								AddLight(location);
 							}
 						}
-					} else {
-						if (!nd->isRequested(map_z > GROUND_LAYER)) {
-							// Request the node
-							editor.QueryNode(nd_map_x, nd_map_y, map_z > GROUND_LAYER);
-							nd->setRequested(map_z > GROUND_LAYER, true);
-						}
-						int cy = (nd_map_y)*TileSize - view_scroll_y - getFloorAdjustment(floor);
-						int cx = (nd_map_x)*TileSize - view_scroll_x - getFloorAdjustment(floor);
-
-						glColor4ub(255, 0, 255, 128);
-						glBegin(GL_QUADS);
-						glVertex2f(cx, cy + TileSize * 4);
-						glVertex2f(cx + TileSize * 4, cy + TileSize * 4);
-						glVertex2f(cx + TileSize * 4, cy);
-						glVertex2f(cx, cy);
-						glEnd();
 					}
 				}
 			}
@@ -661,7 +634,7 @@ void MapDrawer::DrawDraggingShadow() {
 						BlitCreature(draw_x, draw_y, tile->creature);
 					}
 					if (tile->spawn && tile->spawn->isSelected()) {
-						BlitSpriteType(draw_x, draw_y, SPRITE_SPAWN, 160, 160, 160, 160);
+						DrawIndicator(draw_x, draw_y, EDITOR_SPRITE_SPAWNS, 160, 160, 160, 160);
 					}
 				}
 			}
@@ -759,50 +732,6 @@ void MapDrawer::DrawSelectionBox() {
 	}
 	glEnd();
 	glDisable(GL_LINE_STIPPLE);
-}
-
-void MapDrawer::DrawLiveCursors() {
-	if (options.ingame || !editor.IsLive()) {
-		return;
-	}
-
-	LiveSocket& live = editor.GetLive();
-	for (LiveCursor& cursor : live.getCursorList()) {
-		if (cursor.pos.z <= GROUND_LAYER && floor > GROUND_LAYER) {
-			continue;
-		}
-
-		if (cursor.pos.z > GROUND_LAYER && floor <= 8) {
-			continue;
-		}
-
-		if (cursor.pos.z < floor) {
-			cursor.color = wxColor(
-				cursor.color.Red(),
-				cursor.color.Green(),
-				cursor.color.Blue(),
-				std::max<uint8_t>(cursor.color.Alpha() / 2, 64)
-			);
-		}
-
-		int offset;
-		if (cursor.pos.z <= GROUND_LAYER) {
-			offset = (GROUND_LAYER - cursor.pos.z) * TileSize;
-		} else {
-			offset = TileSize * (floor - cursor.pos.z);
-		}
-
-		float draw_x = ((cursor.pos.x * TileSize) - view_scroll_x) - offset;
-		float draw_y = ((cursor.pos.y * TileSize) - view_scroll_y) - offset;
-
-		glColor(cursor.color);
-		glBegin(GL_QUADS);
-		glVertex2f(draw_x, draw_y);
-		glVertex2f(draw_x + TileSize, draw_y);
-		glVertex2f(draw_x + TileSize, draw_y + TileSize);
-		glVertex2f(draw_x, draw_y + TileSize);
-		glEnd();
-	}
 }
 
 void MapDrawer::DrawBrush() {
@@ -1765,12 +1694,11 @@ void MapDrawer::DrawTile(TileLocation* location) {
 				BlitSpriteType(draw_x, draw_y, SPRITE_TOWN_TEMPLE, 255, 255, 64, 170);
 			}
 
-			// spawn (purple flame)
 			if (tile->spawn && options.show_spawns) {
 				if (tile->spawn->isSelected()) {
-					BlitSpriteType(draw_x, draw_y, SPRITE_SPAWN, 128, 128, 128);
+					DrawIndicator(draw_x, draw_y, EDITOR_SPRITE_SPAWNS, 128, 128, 128);
 				} else {
-					BlitSpriteType(draw_x, draw_y, SPRITE_SPAWN, 255, 255, 255);
+					DrawIndicator(draw_x, draw_y, EDITOR_SPRITE_SPAWNS);
 				}
 			}
 
@@ -1858,6 +1786,16 @@ void MapDrawer::DrawHookIndicator(int x, int y, const ItemType& type) {
 	}
 	glEnd();
 	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawIndicator(int x, int y, int indicator, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+	GameSprite* sprite = g_gui.gfx.getEditorSprite(indicator);
+	if (sprite == nullptr) {
+		return;
+	}
+
+	int textureId = sprite->getHardwareID(0, 0, 0, -1, 0, 0, 0, 0);
+	glBlitTexture(x, y, textureId, r, g, b, a, true);
 }
 
 void MapDrawer::DrawPositionIndicator(int z) {
@@ -2067,19 +2005,34 @@ void MapDrawer::ShowPositionIndicator(const Position& position) {
 	pos_indicator_timer.Start();
 }
 
-void MapDrawer::glBlitTexture(int sx, int sy, int texture_number, int red, int green, int blue, int alpha) {
+void MapDrawer::glBlitTexture(int sx, int sy, int texture_number, int red, int green, int blue, int alpha, bool adjustZoom) {
 	if (texture_number != 0) {
 		glBindTexture(GL_TEXTURE_2D, texture_number);
 		glColor4ub(uint8_t(red), uint8_t(green), uint8_t(blue), uint8_t(alpha));
 		glBegin(GL_QUADS);
-		glTexCoord2f(0.f, 0.f);
-		glVertex2f(sx, sy);
-		glTexCoord2f(1.f, 0.f);
-		glVertex2f(sx + TileSize, sy);
-		glTexCoord2f(1.f, 1.f);
-		glVertex2f(sx + TileSize, sy + TileSize);
-		glTexCoord2f(0.f, 1.f);
-		glVertex2f(sx, sy + TileSize);
+		if (adjustZoom) {
+			float size = TileSize;
+			if (zoom < 1.0f) {
+				float offset = 10 / (10 * zoom);
+				size = std::max<float>(16, TileSize * zoom);
+				sx += offset;
+				sy += offset;
+			} else if (zoom > 1.f) {
+				float offset = (10 * zoom);
+				size = TileSize + offset;
+				sx -= offset;
+				sy -= offset;
+			}
+			glTexCoord2f(0.f, 0.f); glVertex2f(sx, sy);
+			glTexCoord2f(1.f, 0.f); glVertex2f(sx + size, sy);
+			glTexCoord2f(1.f, 1.f); glVertex2f(sx + size, sy + size);
+			glTexCoord2f(0.f, 1.f); glVertex2f(sx, sy + size);
+		} else {
+			glTexCoord2f(0.f, 0.f); glVertex2f(sx, sy);
+			glTexCoord2f(1.f, 0.f); glVertex2f(sx + TileSize, sy);
+			glTexCoord2f(1.f, 1.f); glVertex2f(sx + TileSize, sy + TileSize);
+			glTexCoord2f(0.f, 1.f); glVertex2f(sx, sy + TileSize);
+		}
 		glEnd();
 	}
 }

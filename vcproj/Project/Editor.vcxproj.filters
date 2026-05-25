@@ -31,9 +31,6 @@
     <Filter Include="gui\palette">
       <UniqueIdentifier>{1e2eb3db-ae1f-4c1a-91b1-02a38b980e34}</UniqueIdentifier>
     </Filter>
-    <Filter Include="live">
-      <UniqueIdentifier>{3c2a64b5-bce7-48f5-b3e4-81cca5b7c153}</UniqueIdentifier>
-    </Filter>
     <Filter Include="managers">
       <UniqueIdentifier>{36763409-2fe7-4482-9863-3e17d4deb599}</UniqueIdentifier>
     </Filter>
@@ -139,24 +136,6 @@
     <ClInclude Include="..\..\source\item_attributes.h">
       <Filter>objects</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\source\live_action.h">
-      <Filter>live</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\live_client.h">
-      <Filter>live</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\live_peer.h">
-      <Filter>live</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\live_server.h">
-      <Filter>live</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\live_socket.h">
-      <Filter>live</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\live_tab.h">
-      <Filter>live</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\source\main.h" />
     <ClInclude Include="..\..\source\main_menubar.h">
       <Filter>gui</Filter>
@@ -191,9 +170,6 @@
     <ClInclude Include="..\..\source\mt_rand.h">
       <Filter>common</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\source\net_connection.h">
-      <Filter>live</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\source\outfit.h">
       <Filter>objects</Filter>
     </ClInclude>
@@ -227,9 +203,6 @@
     </ClInclude>
     <ClInclude Include="..\..\source\result_window.h">
       <Filter>gui\dialogs</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\rme_net.h">
-      <Filter>live</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\selection.h">
       <Filter>editor</Filter>
@@ -299,9 +272,6 @@
     </ClInclude>
     <ClInclude Include="..\..\source\dat_debug_view.h">
       <Filter>gui\dialogs</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\live_packets.h">
-      <Filter>live</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\rme_forward_declarations.h" />
     <ClInclude Include="..\..\source\numbertextctrl.h">
@@ -490,30 +460,6 @@
     </ClCompile>
     <ClCompile Include="..\..\source\materials.cpp">
       <Filter>managers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\rme_net.cpp">
-      <Filter>live</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\net_connection.cpp">
-      <Filter>live</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\live_tab.cpp">
-      <Filter>live</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\live_socket.cpp">
-      <Filter>live</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\live_server.cpp">
-      <Filter>live</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\live_peer.cpp">
-      <Filter>live</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\live_client.cpp">
-      <Filter>live</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\live_action.cpp">
-      <Filter>live</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\main_menubar.cpp">
       <Filter>gui</Filter>

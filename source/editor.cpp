@@ -35,13 +35,7 @@
 #include "creature_brush.h"
 #include "spawn_brush.h"
 
-#include "live_server.h"
-#include "live_client.h"
-#include "live_action.h"
-
 Editor::Editor(CopyBuffer& copybuffer) :
-	live_server(nullptr),
-	live_client(nullptr),
 	actionQueue(newd ActionQueue(*this)),
 	selection(*this),
 	copybuffer(copybuffer),
@@ -91,8 +85,6 @@ Editor::Editor(CopyBuffer& copybuffer) :
 }
 
 Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
-	live_server(nullptr),
-	live_client(nullptr),
 	actionQueue(newd ActionQueue(*this)),
 	selection(*this),
 	copybuffer(copybuffer),
@@ -145,21 +137,7 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 	}
 }
 
-Editor::Editor(CopyBuffer& copybuffer, LiveClient* client) :
-	live_server(nullptr),
-	live_client(client),
-	actionQueue(newd NetworkedActionQueue(*this)),
-	selection(*this),
-	copybuffer(copybuffer),
-	replace_brush(nullptr) {
-	;
-}
-
 Editor::~Editor() {
-	if (IsLive()) {
-		CloseLiveServer();
-	}
-
 	UnnamedRenderingLock();
 	selection.clear();
 	delete actionQueue;
@@ -1895,88 +1873,6 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Live!
-
-bool Editor::IsLiveClient() const {
-	return live_client != nullptr;
-}
-
-bool Editor::IsLiveServer() const {
-	return live_server != nullptr;
-}
-
-bool Editor::IsLive() const {
-	return IsLiveClient() || IsLiveServer();
-}
-
 bool Editor::IsLocal() const {
-	return !IsLive();
-}
-
-LiveClient* Editor::GetLiveClient() const {
-	return live_client;
-}
-
-LiveServer* Editor::GetLiveServer() const {
-	return live_server;
-}
-
-LiveSocket& Editor::GetLive() const {
-	if (live_server) {
-		return *live_server;
-	}
-	return *live_client;
-}
-
-LiveServer* Editor::StartLiveServer() {
-	ASSERT(IsLocal());
-	live_server = newd LiveServer(*this);
-
-	delete actionQueue;
-	actionQueue = newd NetworkedActionQueue(*this);
-
-	return live_server;
-}
-
-void Editor::BroadcastNodes(DirtyList& dirtyList) {
-	if (IsLiveClient()) {
-		live_client->sendChanges(dirtyList);
-	} else {
-		live_server->broadcastNodes(dirtyList);
-	}
-}
-
-void Editor::CloseLiveServer() {
-	ASSERT(IsLive());
-	if (live_client) {
-		live_client->close();
-
-		delete live_client;
-		live_client = nullptr;
-	}
-
-	if (live_server) {
-		live_server->close();
-
-		delete live_server;
-		live_server = nullptr;
-
-		delete actionQueue;
-		actionQueue = newd ActionQueue(*this);
-	}
-
-	NetworkConnection& connection = NetworkConnection::getInstance();
-	connection.stop();
-}
-
-void Editor::QueryNode(int ndx, int ndy, bool underground) {
-	ASSERT(live_client);
-	live_client->queryNode(ndx, ndy, underground);
-}
-
-void Editor::SendNodeRequests() {
-	if (live_client) {
-		live_client->sendNodeRequests();
-	}
+	return true;
 }

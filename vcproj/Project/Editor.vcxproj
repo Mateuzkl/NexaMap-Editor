@@ -105,7 +105,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_CRTDBG_MAP_ALLOC;__DEBUG__;WXUSINGDLL;wxMSVC_VERSION_AUTO;__EXPERIMENTAL__;LIVE_SERVER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRTDBG_MAP_ALLOC;__DEBUG__;WXUSINGDLL;wxMSVC_VERSION_AUTO;__EXPERIMENTAL__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -131,7 +131,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_CRTDBG_MAP_ALLOC;__DEBUG__;WXUSINGDLL;wxMSVC_VERSION_AUTO;__EXPERIMENTAL__;LIVE_SERVER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRTDBG_MAP_ALLOC;__DEBUG__;WXUSINGDLL;wxMSVC_VERSION_AUTO;__EXPERIMENTAL__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -264,26 +264,11 @@
     <ClCompile Include="..\..\source\house_brush.cpp" />
     <ClInclude Include="..\..\source\house_exit_brush.h" />
     <ClCompile Include="..\..\source\house_exit_brush.cpp" />
-    <ClInclude Include="..\..\source\live_action.h" />
-    <ClCompile Include="..\..\source\live_action.cpp" />
-    <ClInclude Include="..\..\source\live_client.h" />
-    <ClCompile Include="..\..\source\live_client.cpp" />
-    <ClInclude Include="..\..\source\live_packets.h" />
-    <ClInclude Include="..\..\source\live_peer.h" />
-    <ClCompile Include="..\..\source\live_peer.cpp" />
-    <ClInclude Include="..\..\source\live_server.h" />
-    <ClCompile Include="..\..\source\live_server.cpp" />
-    <ClInclude Include="..\..\source\live_socket.h" />
-    <ClCompile Include="..\..\source\live_socket.cpp" />
-    <ClInclude Include="..\..\source\live_tab.h" />
-    <ClCompile Include="..\..\source\live_tab.cpp" />
     <ClInclude Include="..\..\source\map_allocator.h" />
     <ClInclude Include="..\..\source\map_region.h" />
     <ClCompile Include="..\..\source\map_region.cpp" />
     <ClInclude Include="..\..\source\mt_rand.h" />
     <ClCompile Include="..\..\source\mt_rand.cpp" />
-    <ClInclude Include="..\..\source\net_connection.h" />
-    <ClCompile Include="..\..\source\net_connection.cpp" />
     <ClInclude Include="..\..\source\numbertextctrl.h" />
     <ClInclude Include="..\..\source\properties_window.h" />
     <ClInclude Include="..\..\source\raw_brush.h" />
@@ -292,8 +277,6 @@
     <ClCompile Include="..\..\source\raw_brush.cpp" />
     <ClInclude Include="..\..\source\replace_items_window.h" />
     <ClInclude Include="..\..\source\rme_forward_declarations.h" />
-    <ClInclude Include="..\..\source\rme_net.h" />
-    <ClCompile Include="..\..\source\rme_net.cpp" />
     <ClInclude Include="..\..\source\settings.h" />
     <ClCompile Include="..\..\source\settings.cpp" />
     <ClInclude Include="..\..\source\spawn_brush.h" />

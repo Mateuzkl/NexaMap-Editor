@@ -34,7 +34,6 @@
 #include "map_display.h"
 #include "map_drawer.h"
 #include "application.h"
-#include "live_server.h"
 #include "browse_tile_window.h"
 
 #include "doodad_brush.h"
@@ -254,8 +253,6 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 	// Swap buffer
 	SwapBuffers();
 
-	// Send newd node requests
-	editor.SendNodeRequests();
 }
 
 void MapCanvas::ShowPositionIndicator(const Position& position) {
@@ -424,10 +421,6 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 		}
 	} else {
 		ss << "Nothing";
-	}
-
-	if (editor.IsLive()) {
-		editor.GetLive().updateCursor(Position(map_x, map_y, floor));
 	}
 
 	g_gui.root->SetStatusText(ss, 1);

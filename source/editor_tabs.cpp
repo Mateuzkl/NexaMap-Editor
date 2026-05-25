@@ -19,7 +19,8 @@
 
 #include "editor_tabs.h"
 #include "editor.h"
-#include "live_tab.h"
+#include "gui.h"
+#include "map_tab.h"
 
 EditorTab::EditorTab() {
 	;
@@ -68,27 +69,9 @@ void MapTabbook::OnNotebookPageClose(wxAuiNotebookEvent& evt) {
 
 	MapTab* mapTab = dynamic_cast<MapTab*>(editorTab);
 	if (mapTab && mapTab->IsUniqueReference() && mapTab->GetMap()) {
-		bool needRefresh = true;
-		if (mapTab->GetEditor()->IsLive()) {
-			if (mapTab->GetMap()->hasChanged()) {
-				SetFocusedTab(evt.GetInt());
-				if (!g_gui.root->DoQuerySave(false)) {
-					needRefresh = false;
-					evt.Veto();
-				}
-			}
-		}
-
-		if (needRefresh) {
-			g_gui.RefreshPalettes(nullptr, false);
-			g_gui.UpdateMenus();
-		}
+		g_gui.RefreshPalettes(nullptr, false);
+		g_gui.UpdateMenus();
 		return;
-	}
-
-	LiveLogTab* lt = dynamic_cast<LiveLogTab*>(editorTab);
-	if (lt && lt->IsConnected()) {
-		evt.Veto();
 	}
 }
 

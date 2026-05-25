@@ -23,6 +23,7 @@
 #include <deque>
 
 #include "client_version.h"
+#include <wx/artprov.h>
 
 enum SpriteSize {
 	SPRITE_SIZE_16x16,
@@ -99,10 +100,12 @@ public:
 	const SpriteLight& getLight() const noexcept {
 		return light;
 	}
+	static GameSprite* createFromBitmap(const wxArtID& bitmapId);
 
 protected:
 	class Image;
 	class NormalImage;
+	class EditorImage;
 	class TemplateImage;
 
 	wxMemoryDC* getDC(SpriteSize size);
@@ -149,6 +152,18 @@ protected:
 	protected:
 		virtual void createGLTexture(GLuint ignored = 0);
 		virtual void unloadGLTexture(GLuint ignored = 0);
+	};
+
+	class EditorImage : public NormalImage {
+	public:
+		EditorImage(const wxArtID& bitmapId);
+
+	protected:
+		void createGLTexture(GLuint textureId) override;
+		void unloadGLTexture(GLuint textureId) override;
+
+	private:
+		wxArtID bitmapId;
 	};
 
 	class TemplateImage : public Image {
@@ -273,6 +288,7 @@ public:
 
 	Sprite* getSprite(int id);
 	GameSprite* getCreatureSprite(int id);
+	GameSprite* getEditorSprite(int id);
 
 	long getElapsedTime() const {
 		return (animation_timer->TimeInMicro() / 1000).ToLong();
@@ -339,6 +355,7 @@ private:
 
 	friend class GameSprite::Image;
 	friend class GameSprite::NormalImage;
+	friend class GameSprite::EditorImage;
 	friend class GameSprite::TemplateImage;
 };
 

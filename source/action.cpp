@@ -152,23 +152,8 @@ void Action::commit(DirtyList* dirty_list) {
 				ASSERT(newtile);
 				Position pos = newtile->getPosition();
 
-				if (editor.IsLiveClient()) {
-					QTreeNode* nd = editor.map.getLeaf(pos.x, pos.y);
-					if (!nd || !nd->isVisible(pos.z > GROUND_LAYER)) {
-						// Delete all changes that affect tiles outside our view
-						c->clear();
-						++it;
-						continue;
-					}
-				}
-
 				Tile* oldtile = editor.map.swapTile(pos, newtile);
 				TileLocation* location = newtile->getLocation();
-
-				// Update other nodes in the network
-				if (editor.IsLiveServer() && dirty_list) {
-					dirty_list->AddPosition(pos.x, pos.y, pos.z);
-				}
 
 				newtile->update();
 
@@ -227,11 +212,6 @@ void Action::commit(DirtyList* dirty_list) {
 				// Mark the tile as modified
 				newtile->modify();
 
-				// Update client dirty list
-				if (editor.IsLiveClient() && dirty_list && type != ACTION_REMOTE) {
-					// Local action, assemble changes
-					dirty_list->AddChange(c);
-				}
 				break;
 			}
 
@@ -301,22 +281,7 @@ void Action::undo(DirtyList* dirty_list) {
 				ASSERT(oldtile);
 				Position pos = oldtile->getPosition();
 
-				if (editor.IsLiveClient()) {
-					QTreeNode* nd = editor.map.getLeaf(pos.x, pos.y);
-					if (!nd || !nd->isVisible(pos.z > GROUND_LAYER)) {
-						// Delete all changes that affect tiles outside our view
-						c->clear();
-						++it;
-						continue;
-					}
-				}
-
 				Tile* newtile = editor.map.swapTile(pos, oldtile);
-
-				// Update server side change list (for broadcast)
-				if (editor.IsLiveServer() && dirty_list) {
-					dirty_list->AddPosition(pos.x, pos.y, pos.z);
-				}
 
 				if (oldtile->isSelected()) {
 					editor.selection.addInternal(oldtile);
@@ -355,11 +320,6 @@ void Action::undo(DirtyList* dirty_list) {
 				}
 				*data = newtile;
 
-				// Update client dirty list
-				if (editor.IsLiveClient() && dirty_list && type != ACTION_REMOTE) {
-					// Local action, assemble changes
-					dirty_list->AddChange(c);
-				}
 				break;
 			}
 
@@ -556,11 +516,6 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 	// Update title
 	if (editor.map.doChange()) {
 		g_gui.UpdateTitle();
-	}
-
-	if (batch->type == ACTION_REMOTE) {
-		delete batch;
-		return;
 	}
 
 	while (current != actions.size()) {

@@ -43,6 +43,7 @@
 #include "../brushes/door_quest_small.xpm"
 #include "../brushes/door_normal_alt_small.xpm"
 #include "../brushes/door_archway_small.xpm"
+#include "../icons/spawns.xpm"
 
 wxBitmap ArtProvider::CreateBitmap(const wxArtID& id, const wxArtClient& client, const wxSize& WXUNUSED(size)) {
 	if (client == wxART_TOOLBAR) {
@@ -102,6 +103,10 @@ wxBitmap ArtProvider::CreateBitmap(const wxArtID& id, const wxArtClient& client,
 			return wxBitmap(door_normal_alt_small_xpm);
 		} else if (id == ART_DOOR_ARCHWAY_SMALL) {
 			return wxBitmap(door_archway_small_xpm);
+		}
+	} else if (client == wxART_OTHER) {
+		if (id == ART_SPAWNS) {
+			return wxBitmap(spawns_xpm);
 		}
 	}
 

@@ -27,8 +27,6 @@
 #define __RME_VERSION_MINOR__ 1
 #define __RME_SUBVERSION__ 2
 
-#define __LIVE_NET_VERSION__ 5
-
 #define MAKE_VERSION_ID(major, minor, subversion) \
 	((major) * 10000000 + (minor) * 100000 + (subversion) * 1000)
 
