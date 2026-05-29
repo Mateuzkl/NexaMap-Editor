@@ -93,7 +93,6 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_NOPVP_TOOL, wxEmptyString, nopvp_bitmap, wxNullBitmap, wxITEM_CHECK, "No PvP Zone", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, wxEmptyString, nologout_bitmap, wxNullBitmap, wxITEM_CHECK, "No Logout Zone", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_PVPZONE_TOOL, wxEmptyString, pvp_bitmap, wxNullBitmap, wxITEM_CHECK, "PvP Zone", wxEmptyString, NULL);
-	brushes_toolbar->AddTool(PALETTE_TERRAIN_ZONE_BRUSH, wxEmptyString, normal_bitmap, wxNullBitmap, wxITEM_CHECK, "Zone Brush", wxEmptyString, NULL);
 	brushes_toolbar->AddSeparator();
 
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_NORMAL_DOOR, wxEmptyString, normal_bitmap, wxNullBitmap, wxITEM_CHECK, "Normal Door", wxEmptyString, NULL);
@@ -209,7 +208,6 @@ void MainToolBar::UpdateButtons() {
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NOPVP_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_PVPZONE_TOOL, has_map);
-	brushes_toolbar->EnableTool(PALETTE_TERRAIN_ZONE_BRUSH, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NORMAL_DOOR, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_LOCKED_DOOR, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_MAGIC_DOOR, has_map);
@@ -249,8 +247,7 @@ void MainToolBar::UpdateBrushButtons() {
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOPVP_TOOL, brush == g_gui.rook_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, brush == g_gui.nolog_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PVPZONE_TOOL, brush == g_gui.pvp_brush);
-		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, brush == g_gui.zone_brush);
-		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NORMAL_DOOR, brush == g_gui.normal_door_brush);
+	brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NORMAL_DOOR, brush == g_gui.normal_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_LOCKED_DOOR, brush == g_gui.locked_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_MAGIC_DOOR, brush == g_gui.magic_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_QUEST_DOOR, brush == g_gui.quest_door_brush);
@@ -265,7 +262,6 @@ void MainToolBar::UpdateBrushButtons() {
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOPVP_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PVPZONE_TOOL, false);
-		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NORMAL_DOOR, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_LOCKED_DOOR, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_MAGIC_DOOR, false);
@@ -502,9 +498,6 @@ void MainToolBar::OnBrushesButtonClick(wxCommandEvent& event) {
 			break;
 		case PALETTE_TERRAIN_WINDOW_DOOR:
 			g_gui.SelectBrush(g_gui.window_door_brush);
-			break;
-		case PALETTE_TERRAIN_ZONE_BRUSH:
-			g_gui.SelectBrush(g_gui.zone_brush);
 			break;
 		default:
 			break;

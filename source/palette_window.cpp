@@ -27,6 +27,7 @@
 #include "palette_house.h"
 #include "palette_creature.h"
 #include "palette_waypoints.h"
+#include "palette_zones.h"
 
 #include "house_brush.h"
 #include "map.h"
@@ -52,6 +53,7 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	creature_palette(nullptr),
 	house_palette(nullptr),
 	waypoint_palette(nullptr),
+	zones_palette(nullptr),
 	raw_palette(nullptr) {
 	SetMinSize(wxSize(225, 250));
 
@@ -75,6 +77,9 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 	waypoint_palette = static_cast<WaypointPalettePanel*>(CreateWaypointPalette(choicebook, tilesets));
 	choicebook->AddPage(waypoint_palette, waypoint_palette->GetName());
+
+	zones_palette = static_cast<ZonesPalettePanel*>(CreateZonesPalette(choicebook, tilesets));
+	choicebook->AddPage(zones_palette, zones_palette->GetName());
 
 	creature_palette = static_cast<CreaturePalettePanel*>(CreateCreaturePalette(choicebook, tilesets));
 	choicebook->AddPage(creature_palette, creature_palette->GetName());
@@ -105,9 +110,6 @@ PalettePanel* PaletteWindow::CreateTerrainPalette(wxWindow* parent, const Tilese
 	BrushToolPanel* tool_panel = newd BrushToolPanel(panel);
 	tool_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_TERRAIN_TOOLBAR));
 	panel->AddToolPanel(tool_panel);
-	ZoneBrushPanel* zone_brush_panel = newd ZoneBrushPanel(panel);
-	zone_brush_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_TERRAIN_TOOLBAR));
-	panel->AddToolPanel(zone_brush_panel);
 
 	BrushSizePanel* size_panel = newd BrushSizePanel(panel);
 	size_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_TERRAIN_TOOLBAR));
@@ -173,6 +175,11 @@ PalettePanel* PaletteWindow::CreateWaypointPalette(wxWindow* parent, const Tiles
 	return panel;
 }
 
+PalettePanel* PaletteWindow::CreateZonesPalette(wxWindow* parent, const TilesetContainer& tilesets) {
+	ZonesPalettePanel* panel = newd ZonesPalettePanel(parent);
+	return panel;
+}
+
 PalettePanel* PaletteWindow::CreateCreaturePalette(wxWindow* parent, const TilesetContainer& tilesets) {
 	CreaturePalettePanel* panel = newd CreaturePalettePanel(parent);
 	return panel;
@@ -204,6 +211,9 @@ void PaletteWindow::ReloadSettings(Map* map) {
 	}
 	if (waypoint_palette) {
 		waypoint_palette->SetMap(map);
+	}
+	if (zones_palette) {
+		zones_palette->SetMap(map);
 	}
 	if (item_palette) {
 		item_palette->SetListType(wxstr(g_settings.getString(Config::PALETTE_ITEM_STYLE)));
@@ -248,6 +258,9 @@ void PaletteWindow::InvalidateContents() {
 	}
 	if (waypoint_palette) {
 		waypoint_palette->OnUpdate();
+	}
+	if (zones_palette) {
+		zones_palette->OnUpdate();
 	}
 }
 
@@ -302,6 +315,12 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 	if (whatbrush->isHouse() && house_palette) {
 		house_palette->SelectBrush(whatbrush);
 		SelectPage(TILESET_HOUSE);
+		return true;
+	}
+
+	if (whatbrush->isZone() && zones_palette) {
+		zones_palette->SelectBrush(whatbrush);
+		SelectPage(TILESET_ZONES);
 		return true;
 	}
 
@@ -435,6 +454,10 @@ void PaletteWindow::OnUpdate(Map* map) {
 	if (waypoint_palette) {
 		waypoint_palette->SetMap(map);
 		waypoint_palette->OnUpdate();
+	}
+	if (zones_palette) {
+		zones_palette->SetMap(map);
+		zones_palette->OnUpdate();
 	}
 }
 

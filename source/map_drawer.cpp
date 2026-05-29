@@ -55,6 +55,7 @@
 #include "raw_brush.h"
 #include "table_brush.h"
 #include "waypoint_brush.h"
+#include "zone_brush.h"
 #include "light_drawer.h"
 
 using Color = std::tuple<int, int, int>;
@@ -420,8 +421,8 @@ void MapDrawer::DrawMap() {
 
 						std::ostringstream tooltip;
 						tooltip << "zone id: ";
-						size_t zones = tile->getZoneIds().size();
-						for (const auto& zoneId : tile->getZoneIds()) {
+						size_t zones = tile->zones.size();
+						for (const auto& zoneId : tile->zones) {
 							tooltip << zoneId;
 							if (--zones > 0) {
 								tooltip << "/";
@@ -510,10 +511,10 @@ void MapDrawer::DrawMap() {
 							if (options.show_special_tiles && tile->getMapFlags() & TILESTATE_NOPVP) {
 								g /= 2;
 							}
-							if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH && !tile->getZoneIds().empty()) {
-								size_t zones = tile->getZoneIds().size();
+							if (options.show_zone_areas && tile->hasZone()) {
+								size_t zones = tile->zones.size();
 								uint16_t r16 = 0, g16 = 0, b16 = 0;
-								for (const auto& zoneId : tile->getZoneIds()) {
+								for (const auto& zoneId : tile->zones) {
 									const uint16_t colorIndex = zoneId % colors.size();
 									const Color colour = colors.at(colorIndex);
 
@@ -1493,7 +1494,7 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 		return;
 	}
 
-	const auto& zoneIds = tile->getZoneIds();
+	const auto& zoneIds = tile->zones;
 	const uint16_t unique = item->getUniqueID();
 	const uint16_t action = item->getActionID();
 	const std::string& text = item->getText();
@@ -1650,10 +1651,10 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			g /= 2;
 		}
 
-		if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH && !tile->getZoneIds().empty()) {
-			size_t zones = tile->getZoneIds().size();
+		if (options.show_zone_areas && tile->hasZone()) {
+			size_t zones = tile->zones.size();
 			uint16_t r16 = 0, g16 = 0, b16 = 0;
-			for (const auto& zoneId : tile->getZoneIds()) {
+			for (const auto& zoneId : tile->zones) {
 				const uint16_t colorIndex = zoneId % colors.size();
 				const Color colour = colors.at(colorIndex);
 

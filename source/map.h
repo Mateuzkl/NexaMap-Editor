@@ -25,6 +25,7 @@
 #include "spawn.h"
 #include "complexitem.h"
 #include "waypoints.h"
+#include "zones.h"
 #include "templates.h"
 
 #include <unordered_set>
@@ -53,6 +54,8 @@ public:
 
 	// Operations on the entire map
 	void cleanInvalidTiles(bool showdialog = false);
+	void cleanDeletedZones(bool showdialog = false);
+	Position getZonePosition(unsigned int zoneId);
 	void convertHouseTiles(uint32_t fromId, uint32_t toId);
 
 	// Save a bmp image of the minimap
@@ -130,6 +133,9 @@ public:
 	std::string getSpawnFilename() const {
 		return spawnfile;
 	}
+	std::string getZoneFilename() const {
+		return zonefile;
+	}
 
 	// Set some map data
 	void setWidth(int new_width);
@@ -137,6 +143,7 @@ public:
 	void setMapDescription(const std::string& new_description);
 	void setHouseFilename(const std::string& new_housefile);
 	void setSpawnFilename(const std::string& new_spawnfile);
+	void setZoneFilename(const std::string& new_zonefile);
 
 	void flagAsNamed() {
 		unnamed = false;
@@ -164,6 +171,7 @@ protected:
 	std::string spawnfile; // The maps spawnfile
 	std::string housefile; // The housefile
 	std::string waypointfile; // The waypoints file (stores extended waypoint information such as id, preferred icon and matching town)
+	std::string zonefile; // The zonefile
 
 public:
 	Towns towns;
@@ -180,6 +188,7 @@ protected:
 
 public:
 	Waypoints waypoints;
+	Zones zones;
 };
 
 template <typename ForeachType>

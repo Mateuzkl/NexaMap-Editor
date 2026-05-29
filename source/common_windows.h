@@ -72,6 +72,7 @@ protected:
 	wxTextCtrl* description_ctrl;
 	wxTextCtrl* house_filename_ctrl;
 	wxTextCtrl* spawn_filename_ctrl;
+	wxTextCtrl* zone_filename_ctrl;
 
 	DECLARE_EVENT_TABLE();
 };

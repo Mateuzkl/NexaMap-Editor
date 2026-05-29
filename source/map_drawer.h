@@ -220,7 +220,7 @@ class MapDrawer {
 	int floor;
 
 protected:
-	std::unordered_map<uint16_t, std::vector<FinderPosition>> zoneTiles;
+	std::unordered_map<unsigned int, std::vector<FinderPosition>> zoneTiles;
 	std::vector<MapTooltip*> tooltips;
 	std::ostringstream tooltip;
 	wxStopWatch pos_indicator_timer;

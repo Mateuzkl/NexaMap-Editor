@@ -23,6 +23,8 @@
 #include <wx/mstream.h>
 #include <wx/datstrm.h>
 
+#include <set>
+
 #include "settings.h"
 #include "gui.h" // Loadbar
 
@@ -39,6 +41,8 @@
 
 typedef uint8_t attribute_t;
 typedef uint32_t flags_t;
+
+static const uint32_t LEGACY_TILESTATE_ZONE_BRUSH = 0x0040;
 
 // H4X
 void reform(Map* map, Tile* tile, Item* item) {
@@ -732,6 +736,12 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 		warning("Failed to load houses.");
 		map.housefile = nstr(filename.GetName()) + "-house.xml";
 	}
+	if (map.zonefile.empty()) {
+		map.zonefile = nstr(filename.GetName()) + "-zones.xml";
+	}
+	if (!loadZones(map, filename)) {
+		warning("Failed to load zones.");
+	}
 	if (!loadSpawns(map, filename)) {
 		warning("Failed to load spawns.");
 		map.spawnfile = nstr(filename.GetName()) + "-spawn.xml";
@@ -831,6 +841,12 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 				}
 				break;
 			}
+			case OTBM_ATTR_EXT_ZONE_FILE: {
+				if (!mapHeaderNode->getString(map.zonefile)) {
+					warning("Invalid map zonefile tag");
+				}
+				break;
+			}
 			case OTBM_ATTR_EXT_SPAWN_NPC_FILE: {
 				// compatibility: skip Canary RME NPC spawn file tag
 				std::string stringToSkip;
@@ -918,8 +934,8 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 								if (!tileNode->getU32(flags)) {
 									warning("Invalid tile flags of tile on %d:%d:%d", pos.x, pos.y, pos.z);
 								}
-								tile->setMapFlags(flags);
-								if (flags & TILESTATE_ZONE_BRUSH) {
+								tile->setMapFlags(flags & ~LEGACY_TILESTATE_ZONE_BRUSH);
+								if (flags & LEGACY_TILESTATE_ZONE_BRUSH) {
 									uint16_t zoneId = 0;
 									do {
 										if (!tileNode->getU16(zoneId)) {
@@ -927,7 +943,11 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 										}
 
 										if (zoneId != 0) {
-											tile->addZoneId(zoneId);
+											tile->addZone(zoneId);
+											std::string zoneName = "Zone " + i2s(zoneId);
+											if (!map.zones.hasZone(zoneName) && !map.zones.hasZone(zoneId)) {
+												map.zones.addZone(zoneName, zoneId);
+											}
 										}
 									} while (zoneId != 0);
 								}
@@ -952,12 +972,12 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 
 					for (BinaryNode* itemNode = tileNode->getChild(); itemNode != nullptr; itemNode = itemNode->advance()) {
 						Item* item = nullptr;
-						uint8_t item_type;
-						if (!itemNode->getByte(item_type)) {
+						uint8_t node_type;
+						if (!itemNode->getByte(node_type)) {
 							warning("Unknown item type %d:%d:%d", pos.x, pos.y, pos.z);
 							continue;
 						}
-						if (item_type == OTBM_ITEM) {
+						if (node_type == OTBM_ITEM) {
 							item = Item::Create_OTBM(*this, itemNode);
 							if (item) {
 								if (!item->unserializeItemNode_OTBM(*this, itemNode)) {
@@ -965,6 +985,20 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 								}
 								// reform(&map, tile, item);
 								tile->addItem(item);
+							}
+						} else if (node_type == OTBM_TILE_ZONE) {
+							uint16_t zone_count;
+							if (!itemNode->getU16(zone_count)) {
+								warning("Invalid zone count at %d:%d:%d", pos.x, pos.y, pos.z);
+								continue;
+							}
+							for (uint16_t i = 0; i < zone_count; ++i) {
+								uint16_t zone_id;
+								if (!itemNode->getU16(zone_id)) {
+									warning("Invalid zone id at %d:%d:%d", pos.x, pos.y, pos.z);
+									continue;
+								}
+								tile->addZone(zone_id);
 							}
 						} else {
 							warning("Unknown type of tile child node");
@@ -1323,6 +1357,62 @@ bool IOMapOTBM::loadWaypoints(Map& map, pugi::xml_document& doc) {
 	return true;
 };
 
+bool IOMapOTBM::loadZones(Map& map, const FileName& dir) {
+	if (map.zonefile.empty()) {
+		return true;
+	}
+
+	std::string fn = (const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8));
+	fn += map.zonefile;
+	FileName filename(wxstr(fn));
+	if (!filename.FileExists()) {
+		return true;
+	}
+
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file(fn.c_str());
+	if (!result) {
+		return false;
+	}
+	return loadZones(map, doc);
+}
+
+bool IOMapOTBM::loadZones(Map& map, pugi::xml_document& doc) {
+	pugi::xml_node node = doc.child("zones");
+	if (!node) {
+		warnings.push_back("IOMapOTBM::loadZones: Invalid rootheader.");
+		return false;
+	}
+
+	pugi::xml_attribute attribute;
+	for (pugi::xml_node zoneNode = node.first_child(); zoneNode; zoneNode = zoneNode.next_sibling()) {
+		if (as_lower_str(zoneNode.name()) != "zone") {
+			continue;
+		}
+
+		std::string name = zoneNode.attribute("name").as_string();
+		unsigned int id = zoneNode.attribute("zoneid").as_uint(zoneNode.attribute("id").as_uint());
+		if (id == 0) {
+			continue;
+		}
+		map.zones.addZone(name, id);
+
+		for (pugi::xml_node positionNode = zoneNode.child("position"); positionNode; positionNode = positionNode.next_sibling("position")) {
+			Position position(
+				positionNode.attribute("x").as_int(),
+				positionNode.attribute("y").as_int(),
+				positionNode.attribute("z").as_int()
+			);
+
+			Tile* tile = map.getTile(position);
+			if (tile) {
+				tile->addZone(id);
+			}
+		}
+	}
+	return true;
+}
+
 bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 #if OTGZ_SUPPORT > 0
 	if (identifier.GetExt() == "otgz") {
@@ -1460,6 +1550,9 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 	g_gui.SetLoadDone(99, "Saving houses...");
 	saveHouses(map, identifier);
 
+	g_gui.SetLoadDone(99, "Saving zones...");
+	saveZones(map, identifier);
+
 	// to do
 	// g_gui.SetLoadDone(99, "Saving waypoints...");
 	// saveWaypoints(map, identifier);
@@ -1530,7 +1623,7 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 				Tile* save_tile = (*map_iterator)->get();
 
 				// Is it an empty tile that we can skip? (Leftovers...)
-				if (!save_tile || save_tile->size() == 0) {
+				if (!save_tile || (save_tile->size() == 0 && !save_tile->hasZone())) {
 					++map_iterator;
 					continue;
 				}
@@ -1563,12 +1656,6 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 				if (save_tile->getMapFlags()) {
 					f.addByte(OTBM_ATTR_TILE_FLAGS);
 					f.addU32(save_tile->getMapFlags());
-					if (save_tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
-						for (const auto& zoneId : save_tile->getZoneIds()) {
-							f.addU16(zoneId);
-						}
-						f.addU16(0);
-					}
 				}
 
 				if (save_tile->ground) {
@@ -1601,6 +1688,15 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 					if (!item->isMetaItem()) {
 						item->serializeItemNode_OTBM(self, f);
 					}
+				}
+
+				if (save_tile->hasZone()) {
+					f.addNode(OTBM_TILE_ZONE);
+					f.addU16(save_tile->zones.size());
+					for (const auto& zoneId : save_tile->zones) {
+						f.addU16(zoneId);
+					}
+					f.endNode();
 				}
 
 				f.endNode();
@@ -1809,6 +1905,90 @@ bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
 		houseNode.append_attribute("z") = exitPosition.z;
 
 		houseNode.append_attribute("townid") = house->townid;
+	}
+	return true;
+}
+
+bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
+	if (map.zonefile.empty()) {
+		map.zonefile = nstr(dir.GetName()) + "-zones.xml";
+	}
+
+	wxString filepath = dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
+	filepath += wxString(map.zonefile.c_str(), wxConvUTF8);
+
+	bool hasZones = !map.zones.zones.empty();
+	for (MapIterator miter = map.begin(); !hasZones && miter != map.end(); ++miter) {
+		Tile* tile = (*miter)->get();
+		hasZones = tile && tile->hasZone();
+	}
+
+	if (!hasZones && !wxFileExists(filepath)) {
+		return true;
+	}
+
+	pugi::xml_document doc;
+	if (saveZones(map, doc)) {
+		return doc.save_file(filepath.wc_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+	}
+	return false;
+}
+
+bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {
+	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
+	if (!decl) {
+		return false;
+	}
+
+	decl.append_attribute("version") = "1.0";
+
+	pugi::xml_node zoneNodes = doc.append_child("zones");
+	std::set<unsigned int> zoneIds;
+	for (const auto& zone : map.zones.zones) {
+		if (zone.second != 0) {
+			zoneIds.insert(zone.second);
+		}
+	}
+
+	for (MapIterator miter = map.begin(); miter != map.end(); ++miter) {
+		Tile* tile = (*miter)->get();
+		if (!tile) {
+			continue;
+		}
+
+		for (const auto& zoneId : tile->zones) {
+			if (zoneId != 0) {
+				zoneIds.insert(zoneId);
+			}
+		}
+	}
+
+	for (const auto& zoneId : zoneIds) {
+		std::string zoneName = "Zone " + i2s(zoneId);
+		for (const auto& zone : map.zones.zones) {
+			if (zone.second == zoneId) {
+				zoneName = zone.first;
+				break;
+			}
+		}
+
+		pugi::xml_node zoneNode = zoneNodes.append_child("zone");
+		zoneNode.append_attribute("name") = zoneName.c_str();
+		zoneNode.append_attribute("id") = zoneId;
+		zoneNode.append_attribute("zoneid") = zoneId;
+
+		for (MapIterator miter = map.begin(); miter != map.end(); ++miter) {
+			Tile* tile = (*miter)->get();
+			if (!tile || !tile->hasZone(zoneId)) {
+				continue;
+			}
+
+			const Position& position = tile->getPosition();
+			pugi::xml_node positionNode = zoneNode.append_child("position");
+			positionNode.append_attribute("x") = position.x;
+			positionNode.append_attribute("y") = position.y;
+			positionNode.append_attribute("z") = position.z;
+		}
 	}
 	return true;
 }

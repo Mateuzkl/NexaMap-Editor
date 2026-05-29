@@ -49,6 +49,7 @@ enum OTBM_ItemAttribute {
 
 	// Canary RME (parse without loading only)
 	OTBM_ATTR_EXT_SPAWN_NPC_FILE = 23,
+	OTBM_ATTR_EXT_ZONE_FILE = 24,
 
 	OTBM_ATTR_PODIUMOUTFIT = 40,
 	OTBM_ATTR_TIER = 41,
@@ -76,6 +77,7 @@ enum OTBM_NodeTypes_t {
 	// Canary RME (unused)
 	// OTBM_SPAWN_NPC_AREA = 17,
 	// OTBM_SPAWNS_NPC = 18,
+	OTBM_TILE_ZONE = 19,
 };
 
 enum PodiumFlags : uint8_t {
@@ -145,6 +147,8 @@ protected:
 	bool loadHouses(Map& map, pugi::xml_document& doc);
 	bool loadWaypoints(Map& map, const FileName& dir);
 	bool loadWaypoints(Map& map, pugi::xml_document& doc);
+	bool loadZones(Map& map, const FileName& dir);
+	bool loadZones(Map& map, pugi::xml_document& doc);
 
 	virtual bool saveMap(Map& map, NodeFileWriteHandle& handle);
 	bool saveSpawns(Map& map, const FileName& dir);
@@ -153,6 +157,8 @@ protected:
 	bool saveHouses(Map& map, pugi::xml_document& doc);
 	bool saveWaypoints(Map& map, const FileName& dir);
 	bool saveWaypoints(Map& map, pugi::xml_document& doc);
+	bool saveZones(Map& map, const FileName& dir);
+	bool saveZones(Map& map, pugi::xml_document& doc);
 };
 
 #endif

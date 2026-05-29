@@ -78,6 +78,7 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	map.spawnfile = sname + "-spawn.xml";
 	map.housefile = sname + "-house.xml";
 	map.waypointfile = sname + "-waypoint.xml";
+	map.zonefile = sname + "-zones.xml";
 	map.description = "No map description available.";
 	map.unnamed = true;
 
@@ -177,6 +178,8 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 		map.housefile = nstr(_name.GetFullName());
 		_name.SetName(filename.GetName() + "-waypoint");
 		map.waypointfile = nstr(_name.GetFullName());
+		_name.SetName(filename.GetName() + "-zones");
+		map.zonefile = nstr(_name.GetFullName());
 
 		map.unnamed = false;
 	}
@@ -188,7 +191,7 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 
 	// Make temporary backups
 	// converter.Assign(wxstr(savefile));
-	std::string backup_otbm, backup_house, backup_spawn, backup_waypoint;
+	std::string backup_otbm, backup_house, backup_spawn, backup_waypoint, backup_zones;
 
 	if (converter.GetExt() == "otgz") {
 		save_otgz = true;
@@ -224,6 +227,13 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 			std::remove(backup_waypoint.c_str());
 			std::rename((map_path + map.waypointfile).c_str(), backup_waypoint.c_str());
 		}
+
+		converter.SetFullName(wxstr(map.zonefile));
+		if (converter.FileExists()) {
+			backup_zones = map_path + nstr(converter.GetName()) + ".xml~";
+			std::remove(backup_zones.c_str());
+			std::rename((map_path + map.zonefile).c_str(), backup_zones.c_str());
+		}
 	}
 
 	// Save the map
@@ -232,7 +242,9 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 		std::ofstream f(n.c_str(), std::ios::trunc | std::ios::out);
 		f << backup_otbm << std::endl
 		  << backup_house << std::endl
-		  << backup_spawn << std::endl;
+		  << backup_spawn << std::endl
+		  << backup_waypoint << std::endl
+		  << backup_zones << std::endl;
 	}
 
 	{
@@ -279,6 +291,12 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 				converter.SetFullName(wxstr(map.waypointfile));
 				std::string waypoint_filename = map_path + nstr(converter.GetName());
 				std::rename(backup_waypoint.c_str(), std::string(waypoint_filename + ".xml").c_str());
+			}
+
+			if (!backup_zones.empty()) {
+				converter.SetFullName(wxstr(map.zonefile));
+				std::string zones_filename = map_path + nstr(converter.GetName());
+				std::rename(backup_zones.c_str(), std::string(zones_filename + ".xml").c_str());
 			}
 
 			// Display the error
@@ -336,15 +354,23 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 		}
 
 		if (!backup_waypoint.empty()) {
-			converter.SetFullName(wxstr(map.spawnfile));
+			converter.SetFullName(wxstr(map.waypointfile));
 			std::string waypoint_filename = map_path + nstr(converter.GetName());
 			std::rename(backup_waypoint.c_str(), std::string(waypoint_filename + "." + date.str() + ".xml").c_str());
+		}
+
+		if (!backup_zones.empty()) {
+			converter.SetFullName(wxstr(map.zonefile));
+			std::string zones_filename = map_path + nstr(converter.GetName());
+			std::rename(backup_zones.c_str(), std::string(zones_filename + "." + date.str() + ".xml").c_str());
 		}
 	} else {
 		// Delete the temporary files
 		std::remove(backup_otbm.c_str());
 		std::remove(backup_house.c_str());
 		std::remove(backup_spawn.c_str());
+		std::remove(backup_waypoint.c_str());
+		std::remove(backup_zones.c_str());
 	}
 
 	map.clearChanges();
@@ -1025,9 +1051,9 @@ void Editor::moveSelection(Position offset) {
 			tmp_storage_tile->house_id = new_src_tile->house_id;
 			new_src_tile->house_id = 0;
 			tmp_storage_tile->setMapFlags(new_src_tile->getMapFlags());
-			tmp_storage_tile->setZoneIds(new_src_tile);
+			tmp_storage_tile->zones = new_src_tile->zones;
 			new_src_tile->setMapFlags(TILESTATE_NONE);
-			new_src_tile->clearZoneId();
+			new_src_tile->removeZones();
 			doborders = true;
 		}
 

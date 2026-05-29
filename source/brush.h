@@ -51,6 +51,7 @@ class HouseExitBrush;
 class WaypointBrush;
 class FlagBrush;
 class EraserBrush;
+class ZoneBrush;
 
 //=============================================================================
 // Brushes, holds all brushes
@@ -179,6 +180,9 @@ public:
 	virtual bool isWaypoint() const {
 		return false;
 	}
+	virtual bool isZone() const {
+		return false;
+	}
 	virtual bool isFlag() const {
 		return false;
 	}
@@ -235,6 +239,9 @@ public:
 		return nullptr;
 	}
 	virtual EraserBrush* asEraser() {
+		return nullptr;
+	}
+	virtual ZoneBrush* asZone() {
 		return nullptr;
 	}
 
@@ -332,13 +339,9 @@ public:
 	}
 	virtual int getLookID() const;
 	virtual std::string getName() const;
-	void setZoneId(uint16_t _zoneId) {
-		zoneId = _zoneId;
-	}
 
 protected:
 	uint32_t flag;
-	uint16_t zoneId;
 };
 
 //=============================================================================

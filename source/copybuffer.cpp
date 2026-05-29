@@ -73,7 +73,7 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 		if (tile->ground && tile->ground->isSelected()) {
 			copied_tile->house_id = tile->house_id;
 			copied_tile->setMapFlags(tile->getMapFlags());
-			copied_tile->setZoneIds(tile);
+			copied_tile->zones = tile->zones;
 		}
 
 		ItemVector tile_selection = tile->getSelectedItems();
@@ -134,10 +134,10 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 		if (tile->ground && tile->ground->isSelected()) {
 			copied_tile->house_id = newtile->house_id;
 			newtile->house_id = 0;
-			copied_tile->setZoneIds(tile);
+			copied_tile->zones = tile->zones;
 			copied_tile->setMapFlags(tile->getMapFlags());
 			newtile->setMapFlags(TILESTATE_NONE);
-			newtile->clearZoneId();
+			newtile->removeZones();
 		}
 
 		ItemVector tile_selection = newtile->popSelectedItems();

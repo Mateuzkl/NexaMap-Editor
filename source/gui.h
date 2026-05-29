@@ -28,6 +28,7 @@
 #include "editor_tabs.h"
 #include "map_tab.h"
 #include "palette_window.h"
+#include "zone_brush.h"
 #include "client_version.h"
 
 class BaseMap;
@@ -425,7 +426,7 @@ public:
 	FlagBrush* rook_brush;
 	FlagBrush* nolog_brush;
 	FlagBrush* pvp_brush;
-	FlagBrush* zone_brush;
+	ZoneBrush* zone_brush;
 
 protected:
 	//=========================================================================

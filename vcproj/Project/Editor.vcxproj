@@ -312,6 +312,8 @@
     <ClCompile Include="..\..\source\palette_house.cpp" />
     <ClInclude Include="..\..\source\palette_waypoints.h" />
     <ClCompile Include="..\..\source\palette_waypoints.cpp" />
+    <ClInclude Include="..\..\source\palette_zones.h" />
+    <ClCompile Include="..\..\source\palette_zones.cpp" />
     <ClInclude Include="..\..\source\palette_window.h" />
     <ClCompile Include="..\..\source\palette_window.cpp" />
     <ClInclude Include="..\..\source\about_window.h" />
@@ -393,6 +395,10 @@
     <ClInclude Include="..\..\source\main.h" />
     <ClInclude Include="..\..\source\waypoint_brush.h" />
     <ClCompile Include="..\..\source\waypoint_brush.cpp" />
+    <ClInclude Include="..\..\source\zone_brush.h" />
+    <ClCompile Include="..\..\source\zone_brush.cpp" />
+    <ClInclude Include="..\..\source\zones.h" />
+    <ClCompile Include="..\..\source\zones.cpp" />
     <ClInclude Include="..\..\source\find_item_window.h" />
     <ClInclude Include="..\..\source\welcome_dialog.h" />
   </ItemGroup>

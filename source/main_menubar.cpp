@@ -181,6 +181,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SELECT_CREATURE, wxITEM_NORMAL, OnSelectCreaturePalette);
 	MAKE_ACTION(SELECT_HOUSE, wxITEM_NORMAL, OnSelectHousePalette);
 	MAKE_ACTION(SELECT_WAYPOINT, wxITEM_NORMAL, OnSelectWaypointPalette);
+	MAKE_ACTION(SELECT_ZONES, wxITEM_NORMAL, OnSelectZonesPalette);
 	MAKE_ACTION(SELECT_RAW, wxITEM_NORMAL, OnSelectRawPalette);
 
 	MAKE_ACTION(FLOOR_0, wxITEM_RADIO, OnChangeFloor);
@@ -407,6 +408,7 @@ void MainMenuBar::Update() {
 	EnableItem(SELECT_HOUSE, loaded);
 	EnableItem(SELECT_CREATURE, loaded);
 	EnableItem(SELECT_WAYPOINT, loaded);
+	EnableItem(SELECT_ZONES, loaded);
 	EnableItem(SELECT_RAW, loaded);
 
 	EnableItem(DEBUG_VIEW_DAT, loaded);
@@ -551,7 +553,7 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 	}
 
 #ifdef __LINUX__
-	const int count = 46;
+	const int count = 47;
 	wxAcceleratorEntry entries[count];
 	// Edit
 	entries[0].Set(wxACCEL_CTRL, (int)'Z', MAIN_FRAME_MENU + MenuBar::UNDO);
@@ -601,8 +603,9 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 	entries[41].Set(wxACCEL_NORMAL, (int)'H', MAIN_FRAME_MENU + MenuBar::SELECT_HOUSE);
 	entries[42].Set(wxACCEL_NORMAL, (int)'C', MAIN_FRAME_MENU + MenuBar::SELECT_CREATURE);
 	entries[43].Set(wxACCEL_NORMAL, (int)'W', MAIN_FRAME_MENU + MenuBar::SELECT_WAYPOINT);
-	entries[44].Set(wxACCEL_NORMAL, (int)'R', MAIN_FRAME_MENU + MenuBar::SELECT_RAW);
-	entries[45].Set(wxACCEL_CTRL, (int)'R', MAIN_FRAME_MENU + MenuBar::SEARCH_ON_SELECTION_DUPLICATED_ITEMS);
+	entries[44].Set(wxACCEL_NORMAL, (int)'Z', MAIN_FRAME_MENU + MenuBar::SELECT_ZONES);
+	entries[45].Set(wxACCEL_NORMAL, (int)'R', MAIN_FRAME_MENU + MenuBar::SELECT_RAW);
+	entries[46].Set(wxACCEL_CTRL, (int)'R', MAIN_FRAME_MENU + MenuBar::SEARCH_ON_SELECTION_DUPLICATED_ITEMS);
 
 	wxAcceleratorTable accelerator(count, entries);
 	frame->SetAcceleratorTable(accelerator);
@@ -949,7 +952,7 @@ namespace OnSearchForStuff {
 				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
 			}
 			Container* container;
-			if ((search_zones && item->isGroundTile() && !tile->getZoneIds().empty()) || (search_unique && item->getUniqueID() > 0) || (search_action && item->getActionID() > 0) || (search_container && ((container = dynamic_cast<Container*>(item)) && container->getItemCount())) || (search_writeable && item->getText().length() > 0)) {
+			if ((search_zones && item->isGroundTile() && tile->hasZone()) || (search_unique && item->getUniqueID() > 0) || (search_action && item->getActionID() > 0) || (search_container && ((container = dynamic_cast<Container*>(item)) && container->getItemCount())) || (search_writeable && item->getText().length() > 0)) {
 				found.push_back(std::make_pair(tile, item));
 			}
 		}
@@ -958,8 +961,8 @@ namespace OnSearchForStuff {
 			wxString label;
 			if (search_zones) {
 				label << "Zone ID: ";
-				size_t zones = tile->getZoneIds().size();
-				for (const auto& zoneId : tile->getZoneIds()) {
+				size_t zones = tile->zones.size();
+				for (const auto& zoneId : tile->zones) {
 					label << zoneId;
 					if (--zones > 0) {
 						label << "/";
@@ -1008,7 +1011,13 @@ namespace OnSearchForStuff {
 			return false;
 		}
 		static bool compareZones(const std::pair<Tile*, Item*>& pair1, const std::pair<Tile*, Item*>& pair2) {
-			return pair1.first->getZoneId() < pair2.first->getZoneId();
+			if (pair1.first->zones.empty()) {
+				return false;
+			}
+			if (pair2.first->zones.empty()) {
+				return true;
+			}
+			return *pair1.first->zones.begin() < *pair2.first->zones.begin();
 		}
 	};
 }
@@ -1995,6 +2004,10 @@ void MainMenuBar::OnSelectCreaturePalette(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnSelectWaypointPalette(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.SelectPalettePage(TILESET_WAYPOINT);
+}
+
+void MainMenuBar::OnSelectZonesPalette(wxCommandEvent& WXUNUSED(event)) {
+	g_gui.SelectPalettePage(TILESET_ZONES);
 }
 
 void MainMenuBar::OnSelectRawPalette(wxCommandEvent& WXUNUSED(event)) {

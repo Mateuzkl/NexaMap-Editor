@@ -121,6 +121,14 @@ MapPropertiesWindow::MapPropertiesWindow(wxWindow* parent, MapTab* view, Editor&
 	);
 
 	grid_sizer->Add(
+		newd wxStaticText(this, wxID_ANY, "External Zonefile")
+	);
+
+	grid_sizer->Add(
+		zone_filename_ctrl = newd wxTextCtrl(this, wxID_ANY, wxstr(map.getZoneFilename())), 1, wxEXPAND
+	);
+
+	grid_sizer->Add(
 		newd wxStaticText(this, wxID_ANY, "External Spawnfile")
 	);
 
@@ -295,6 +303,7 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 	map.setMapDescription(nstr(description_ctrl->GetValue()));
 	map.setHouseFilename(nstr(house_filename_ctrl->GetValue()));
 	map.setSpawnFilename(nstr(spawn_filename_ctrl->GetValue()));
+	map.setZoneFilename(nstr(zone_filename_ctrl->GetValue()));
 
 	// Only resize if we have to
 	int new_map_width = width_spin->GetValue();
