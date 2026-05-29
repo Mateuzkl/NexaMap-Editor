@@ -1709,7 +1709,8 @@ bool IOMapOTBM::saveSpawns(Map& map, pugi::xml_document& doc) {
 						creatureNode.append_attribute("y") = y;
 						creatureNode.append_attribute("z") = spawnPosition.z;
 						creatureNode.append_attribute("spawntime") = creature->getSpawnTime();
-						creatureNode.append_attribute("weight") = creature->getWeight() > 0 ? creature->getWeight() : g_settings.getInteger(Config::MONSTER_DEFAULT_WEIGHT);
+						// Weight is not serialized to XML (internal only, stored in OTBM)
+						// Architecture note: Unlike RME Canary which uses Tile::monsters (vector), this project uses Tile::creature (single pointer)
 						if (creature->getDirection() != NORTH) {
 							creatureNode.append_attribute("direction") = creature->getDirection();
 						}
