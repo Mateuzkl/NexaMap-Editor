@@ -51,7 +51,6 @@ _Ret_bytecap_(_Size) inline void* __CRTDECL operator new[](size_t _Size, const c
 #include <wx/defs.h>
 #include "definitions.h"
 
-#include <asio.hpp>
 #include <fmt/core.h>
 #include <nlohmann/json.hpp>
 
