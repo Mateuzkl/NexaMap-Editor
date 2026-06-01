@@ -21,16 +21,17 @@
 BEGIN_EVENT_TABLE(NumberTextCtrl, wxTextCtrl)
 EVT_KILL_FOCUS(NumberTextCtrl::OnKillFocus)
 EVT_TEXT_ENTER(wxID_ANY, NumberTextCtrl::OnTextEnter)
+EVT_TEXT(wxID_ANY, NumberTextCtrl::EnsureOnlyNumbers)
 END_EVENT_TABLE()
 
 NumberTextCtrl::NumberTextCtrl(wxWindow* parent, wxWindowID id, long value, long minvalue, long maxvalue, const wxPoint& pos, const wxSize& sz, long style, const wxString& name) :
-	wxTextCtrl(parent, id, (wxString() << value), pos, sz, style, wxTextValidator(wxFILTER_NUMERIC), name),
+	wxTextCtrl(parent, id, (wxString() << value), pos, sz, style, wxTextValidator(wxFILTER_NONE), name),
 	minval(minvalue), maxval(maxvalue), lastval(value) {
 	////
 }
 
 NumberTextCtrl::NumberTextCtrl(wxWindow* parent, wxWindowID id, long value, long minvalue, long maxvalue, long style, const wxString& name, const wxPoint& pos, const wxSize& sz) :
-	wxTextCtrl(parent, id, (wxString() << value), pos, sz, style, wxTextValidator(wxFILTER_NUMERIC), name),
+	wxTextCtrl(parent, id, (wxString() << value), pos, sz, style, wxTextValidator(wxFILTER_NONE), name),
 	minval(minvalue), maxval(maxvalue), lastval(value) {
 	////
 }
@@ -42,6 +43,21 @@ NumberTextCtrl::~NumberTextCtrl() {
 void NumberTextCtrl::OnKillFocus(wxFocusEvent& evt) {
 	CheckRange();
 	evt.Skip();
+}
+
+wxString NumberTextCtrl::TextFilterDigits(const wxString& text) {
+	wxString newText;
+	for (size_t position = 0; position < text.size(); ++position) {
+		if (text[position] >= '0' && text[position] <= '9') {
+			newText.Append(text[position]);
+		}
+	}
+
+	return newText;
+}
+
+void NumberTextCtrl::EnsureOnlyNumbers(wxCommandEvent& evt) {
+	ChangeValue(TextFilterDigits(GetValue()));
 }
 
 void NumberTextCtrl::OnTextEnter(wxCommandEvent& evt) {
@@ -81,13 +97,7 @@ void NumberTextCtrl::SetMaxValue(long value) {
 
 void NumberTextCtrl::CheckRange() {
 	wxString text = GetValue();
-	wxString ntext;
-
-	for (size_t s = 0; s < text.size(); ++s) {
-		if (text[s] >= '0' && text[s] <= '9') {
-			ntext.Append(text[s]);
-		}
-	}
+	wxString ntext = TextFilterDigits(text);
 
 	// Check that value is in range
 	long v;

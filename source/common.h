@@ -28,6 +28,8 @@
 
 #include "mt_rand.h"
 
+class NumberTextCtrl;
+
 //
 inline bool testFlags(size_t flags, size_t test) {
 	return (flags & test) != 0;
@@ -73,6 +75,8 @@ std::wstring string2wstring(const std::string& utf8string);
 std::string wstring2string(const std::wstring& widestring);
 
 // Gets position values from ClipBoard
+bool clipboardPositionToFields(NumberTextCtrl* xField, NumberTextCtrl* yField, NumberTextCtrl* zField);
+bool posFromClipboard(int& x, int& y, int& z);
 bool posFromClipboard(Position& position, const int mapWidth = MAP_MAX_WIDTH, const int mapHeight = MAP_MAX_HEIGHT);
 
 // Returns 'yes' if the defined value is true or 'no' if it is false.

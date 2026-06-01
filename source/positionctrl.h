@@ -55,9 +55,6 @@ protected:
 	NumberTextCtrl* x_field;
 	NumberTextCtrl* y_field;
 	NumberTextCtrl* z_field;
-
-private:
-	int maxWidth, maxHeight;
 };
 
 #endif

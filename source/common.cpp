@@ -19,12 +19,14 @@
 
 #include "common.h"
 #include "math.h"
+#include "numbertextctrl.h"
 
 #include <sstream>
 #include <random>
 #include <regex>
 #include <algorithm>
 #include <cctype>
+#include <vector>
 
 // random generator
 std::mt19937& getRandomGenerator() {
@@ -226,6 +228,64 @@ bool posFromClipboard(Position& position, const int mapWidth /* = MAP_MAX_WIDTH 
 
 	wxTheClipboard->Close();
 	return done;
+}
+
+bool posFromClipboard(int& x, int& y, int& z) {
+	bool done = false;
+
+	if (wxTheClipboard->Open()) {
+		if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
+			std::vector<int> values;
+			wxTextDataObject data;
+			wxTheClipboard->GetData(data);
+			auto text = data.GetText().ToStdString();
+
+			if (text.size() < 50) {
+				bool readingNumber = false;
+				wxString valueText;
+
+				for (size_t index = 0; index < text.size(); ++index) {
+					if (text[index] >= '0' && text[index] <= '9') {
+						valueText << text[index];
+						readingNumber = true;
+
+						if (index + 1 == text.size()) {
+							values.emplace_back(ws2i(valueText));
+						}
+					} else if (readingNumber) {
+						values.emplace_back(ws2i(valueText));
+						valueText.Clear();
+						readingNumber = false;
+
+						if (values.size() >= 3) {
+							break;
+						}
+					}
+				}
+			}
+
+			if (values.size() == 3) {
+				x = values[0];
+				y = values[1];
+				z = values[2];
+				done = true;
+			}
+		}
+		wxTheClipboard->Close();
+	}
+	return done;
+}
+
+bool clipboardPositionToFields(NumberTextCtrl* xField, NumberTextCtrl* yField, NumberTextCtrl* zField) {
+	Position position;
+	if (posFromClipboard(position.x, position.y, position.z)) {
+		xField->SetIntValue(position.x);
+		yField->SetIntValue(position.y);
+		zField->SetIntValue(position.z);
+		return true;
+	}
+
+	return false;
 }
 
 wxString b2yn(bool value) {
