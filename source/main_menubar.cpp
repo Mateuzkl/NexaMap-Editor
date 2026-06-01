@@ -96,6 +96,9 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SEARCH_ON_SELECTION_WALLS_UPON_WALLS, wxITEM_NORMAL, OnSearchForWallsUponWallsOnSelection);
 	MAKE_ACTION(REPLACE_ON_SELECTION_ITEMS, wxITEM_NORMAL, OnReplaceItemsOnSelection);
 	MAKE_ACTION(REMOVE_ON_SELECTION_ITEM, wxITEM_NORMAL, OnRemoveItemOnSelection);
+	MAKE_ACTION(REMOVE_ON_SELECTION_MONSTER, wxITEM_NORMAL, OnRemoveMonstersOnSelection);
+	MAKE_ACTION(COUNT_ON_SELECTION_MONSTER, wxITEM_NORMAL, OnCountMonstersOnSelection);
+	MAKE_ACTION(ON_EDIT_EDIT_MONSTER_SPAWN_TIME, wxITEM_NORMAL, OnEditMonsterSpawnTime);
 	MAKE_ACTION(SELECT_MODE_COMPENSATE, wxITEM_RADIO, OnSelectionTypeChange);
 	MAKE_ACTION(SELECT_MODE_LOWER, wxITEM_RADIO, OnSelectionTypeChange);
 	MAKE_ACTION(SELECT_MODE_CURRENT, wxITEM_RADIO, OnSelectionTypeChange);
@@ -363,6 +366,9 @@ void MainMenuBar::Update() {
 	EnableItem(SEARCH_ON_SELECTION_WALLS_UPON_WALLS, has_selection && is_host);
 	EnableItem(REPLACE_ON_SELECTION_ITEMS, has_selection && is_host);
 	EnableItem(REMOVE_ON_SELECTION_ITEM, has_selection && is_host);
+	EnableItem(REMOVE_ON_SELECTION_MONSTER, has_selection && is_host);
+	EnableItem(COUNT_ON_SELECTION_MONSTER, has_selection && is_host);
+	EnableItem(ON_EDIT_EDIT_MONSTER_SPAWN_TIME, has_selection && is_host);
 
 	EnableItem(CUT, has_map);
 	EnableItem(COPY, has_map);
@@ -1241,6 +1247,76 @@ void MainMenuBar::OnRemoveItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
 		g_gui.RefreshView();
 	}
 	dialog.Destroy();
+}
+
+void MainMenuBar::OnRemoveMonstersOnSelection(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	g_gui.GetCurrentEditor()->actionQueue->clear();
+	g_gui.CreateLoadBar("Searching monsters on selection to remove...");
+	const auto monstersRemoved = RemoveMonstersOnMap(g_gui.GetCurrentMap(), true);
+	g_gui.DestroyLoadBar();
+
+	g_gui.PopupDialog("Remove Monsters", wxString::Format("%lld monsters removed.", monstersRemoved), wxOK);
+	g_gui.GetCurrentMap().doChange();
+	g_gui.RefreshView();
+}
+
+void MainMenuBar::OnEditMonsterSpawnTime(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	wxTextEntryDialog dialog(
+		frame,
+		"Enter the new spawn time (must be 1 or greater):",
+		"Spawn Time:"
+	);
+	dialog.SetValue(wxString::Format("%d", g_gui.GetSpawnTime()));
+	if (dialog.ShowModal() == wxID_OK) {
+		long spawnTime;
+		wxString inputValue = dialog.GetValue();
+		if (!inputValue.IsNumber() || !inputValue.ToLong(&spawnTime) || spawnTime < 1 || spawnTime > std::numeric_limits<int32_t>::max()) {
+			g_gui.PopupDialog("Error", "Invalid spawn time. Please enter a numeric value of 1 or greater.", wxOK);
+			return;
+		}
+
+		g_gui.GetCurrentEditor()->actionQueue->clear();
+		g_gui.CreateLoadBar("Editing monster spawn time on selection...");
+		const auto monstersUpdated = EditMonsterSpawnTime(g_gui.GetCurrentMap(), true, static_cast<int32_t>(spawnTime));
+		g_gui.DestroyLoadBar();
+
+		if (monstersUpdated == 0) {
+			g_gui.PopupDialog("Edit Monster Spawn Time", "No monsters found in the selected area.", wxOK);
+		} else {
+			g_gui.PopupDialog("Edit Monster Spawn Time", wxString::Format("%d monsters updated.", monstersUpdated), wxOK);
+		}
+
+		g_gui.GetCurrentMap().doChange();
+		g_gui.RefreshView();
+	}
+}
+
+void MainMenuBar::OnCountMonstersOnSelection(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	g_gui.CreateLoadBar("Counting monsters on selection...");
+	const auto result = CountMonstersOnMap(g_gui.GetCurrentMap(), true);
+	g_gui.DestroyLoadBar();
+
+	int64_t totalMonsters = result.first;
+	const std::unordered_map<std::string, int64_t>& monsterCounts = result.second;
+
+	wxString message = wxString::Format("There are %lld monsters in total.\n\n", totalMonsters);
+	for (const auto& pair : monsterCounts) {
+		message += wxString::Format("%s: %lld\n", pair.first, pair.second);
+	}
+
+	g_gui.PopupDialog("Count Monsters", message, wxOK);
 }
 
 void MainMenuBar::OnSelectionTypeChange(wxCommandEvent& WXUNUSED(event)) {

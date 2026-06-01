@@ -123,6 +123,9 @@
 		<item name="Replace Items on Selection" action="REPLACE_ON_SELECTION_ITEMS" help="Replace items on selected area."/>
 		<item name="Find Item on Selection" action="SEARCH_ON_SELECTION_ITEM" help="Find items on selected area."/>
 		<item name="Remove Item on Selection" action="REMOVE_ON_SELECTION_ITEM" help="Remove item on selected area."/>
+		<item name="Remove Monsters on Selection" action="REMOVE_ON_SELECTION_MONSTER" help="Remove monsters on selected area."/>
+		<item name="Count Monsters on Selection" action="COUNT_ON_SELECTION_MONSTER" help="Count monsters on selected area."/>
+		<item name="Update Monster Spawntime on Selection" action="ON_EDIT_EDIT_MONSTER_SPAWN_TIME" help="Edit the spawn time of monsters on the selected area."/>
 		<item name="Remove Duplicated Items on Selection" action="REMOVE_ON_SELECTION_DUPLICATED_ITEMS" help="Removes duplicated items from the selected area."/>
 		<separator/>
 		<menu name="Find on Selection">
