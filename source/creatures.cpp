@@ -22,8 +22,82 @@
 #include "brush.h"
 #include "creatures.h"
 #include "creature_brush.h"
+#include "lua_parser.h"
+
+#include <wx/dir.h>
 
 CreatureDatabase g_creatures;
+
+namespace {
+	enum class LuaCreatureKind {
+		Monster,
+		Npc,
+	};
+
+	std::string parseLuaCreatureName(std::string_view content, LuaCreatureKind kind) {
+		if (kind == LuaCreatureKind::Npc) {
+			std::string name = LuaParser::parseCreateCall(content, "Game.createNpcType");
+			if (name.empty()) {
+				name = LuaParser::parseLocalString(content, "internalNpcName");
+			}
+			return name;
+		}
+
+		std::string name = LuaParser::parseCreateCall(content, "Game.createMonsterType");
+		if (name.empty()) {
+			name = LuaParser::parseLocalString(content, "internalMonsterName");
+		}
+		return name;
+	}
+
+	CreatureType* loadCreatureFromLua(const wxString& filePath, LuaCreatureKind kind, wxArrayString& warnings, bool warnInvalidFile) {
+		const std::string content = LuaParser::readFileContent(nstr(filePath));
+		if (content.empty()) {
+			warnings.push_back("Could not open: " + filePath);
+			return nullptr;
+		}
+
+		const std::string name = parseLuaCreatureName(content, kind);
+		if (name.empty()) {
+			if (warnInvalidFile) {
+				warnings.push_back("No valid Lua creature declaration found in: " + filePath);
+			}
+			return nullptr;
+		}
+
+		CreatureType* creatureType = newd CreatureType();
+		creatureType->name = name;
+		creatureType->isNpc = kind == LuaCreatureKind::Npc;
+		creatureType->standard = false;
+
+		if (!LuaParser::parseOutfit(content, creatureType->outfit)) {
+			if (warnInvalidFile) {
+				warnings.push_back("No valid outfit declaration found in: " + filePath);
+			}
+			delete creatureType;
+			return nullptr;
+		}
+		return creatureType;
+	}
+
+	void addOrUpdateLuaCreature(CreatureMap& creatureMap, CreatureType* creatureType) {
+		CreatureMap::iterator iter = creatureMap.find(as_lower_str(creatureType->name));
+		if (iter == creatureMap.end()) {
+			creatureMap[as_lower_str(creatureType->name)] = creatureType;
+			return;
+		}
+
+		CreatureType* current = iter->second;
+		CreatureBrush* currentBrush = current->brush;
+		const bool inOtherTileset = current->in_other_tileset;
+		*current = *creatureType;
+		current->brush = currentBrush;
+		current->in_other_tileset = inOtherTileset;
+		current->standard = false;
+		current->missing = false;
+		delete creatureType;
+	}
+}
 
 CreatureType::CreatureType() :
 	isNpc(false),
@@ -397,6 +471,58 @@ bool CreatureDatabase::importXMLFromOT(const FileName& filename, wxString& error
 		return false;
 	}
 	return true;
+}
+
+bool CreatureDatabase::importLuaFromOT(const FileName& filename, wxString& error, wxArrayString& warnings) {
+	CreatureType* creatureType = loadCreatureFromLua(filename.GetFullPath(), LuaCreatureKind::Monster, warnings, false);
+	if (!creatureType) {
+		creatureType = loadCreatureFromLua(filename.GetFullPath(), LuaCreatureKind::Npc, warnings, false);
+	}
+	if (!creatureType) {
+		error = "This is not valid Lua monster/npc data file.";
+		return false;
+	}
+
+	addOrUpdateLuaCreature(creature_map, creatureType);
+	g_materials.createOtherTileset();
+	return true;
+}
+
+static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directory, LuaCreatureKind kind, wxString& error, wxArrayString& warnings, const wxString& label) {
+	if (directory.IsEmpty()) {
+		return true;
+	}
+	if (!wxDir::Exists(directory)) {
+		error = label + " Lua directory does not exist: " + directory;
+		return false;
+	}
+
+	wxArrayString luaFiles;
+	wxDir::GetAllFiles(directory, &luaFiles, "*.lua", wxDIR_FILES | wxDIR_DIRS | wxDIR_HIDDEN);
+
+	int fileCount = 0;
+	for (const auto& filePath : luaFiles) {
+		if (++fileCount % 50 == 0) {
+			wxSafeYield();
+		}
+
+		CreatureType* creatureType = loadCreatureFromLua(filePath, kind, warnings, false);
+		if (!creatureType) {
+			continue;
+		}
+		addOrUpdateLuaCreature(creatureMap, creatureType);
+	}
+
+	g_materials.createOtherTileset();
+	return true;
+}
+
+bool CreatureDatabase::importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings) {
+	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Monster, error, warnings, "Monsters");
+}
+
+bool CreatureDatabase::importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings) {
+	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Npc, error, warnings, "NPCs");
 }
 
 bool CreatureDatabase::saveToXML(const FileName& filename) {

@@ -47,7 +47,7 @@ enum OTBM_ItemAttribute {
 	OTBM_ATTR_SLEEPSTART = 21,
 	OTBM_ATTR_CHARGES = 22,
 
-	// Canary RME (parse without loading only)
+	// RME (parse without loading only)
 	OTBM_ATTR_EXT_SPAWN_NPC_FILE = 23,
 	OTBM_ATTR_EXT_ZONE_FILE = 24,
 

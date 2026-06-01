@@ -848,7 +848,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 				break;
 			}
 			case OTBM_ATTR_EXT_SPAWN_NPC_FILE: {
-				// compatibility: skip Canary RME NPC spawn file tag
+				// compatibility: skip RME NPC spawn file tag
 				std::string stringToSkip;
 				if (!mapHeaderNode->getString(stringToSkip)) {
 					warning("Invalid map housefile tag");
@@ -1806,7 +1806,7 @@ bool IOMapOTBM::saveSpawns(Map& map, pugi::xml_document& doc) {
 						creatureNode.append_attribute("z") = spawnPosition.z;
 						creatureNode.append_attribute("spawntime") = creature->getSpawnTime();
 						// Weight is not serialized to XML (internal only, stored in OTBM)
-						// Architecture note: Unlike RME Canary which uses Tile::monsters (vector), this project uses Tile::creature (single pointer)
+						// Architecture note: Unlike RME which uses Tile::monsters (vector), this project uses Tile::creature (single pointer)
 						if (creature->getDirection() != NORTH) {
 							creatureNode.append_attribute("direction") = creature->getDirection();
 						}

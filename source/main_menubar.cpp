@@ -33,6 +33,8 @@
 #include <unordered_set>
 
 #include <wx/chartype.h>
+#include <wx/choicdlg.h>
+#include <wx/dir.h>
 
 #include "editor.h"
 #include "materials.h"
@@ -779,9 +781,55 @@ void MainMenuBar::OnImportMap(wxCommandEvent& WXUNUSED(event)) {
 	importmap->ShowModal();
 }
 
+namespace {
+	bool ImportCreatureLuaDirectory(wxWindow* parent, const wxString& title, bool npcs, wxString directory = wxEmptyString, bool promptForMissing = true) {
+		if (directory.IsEmpty() || !wxDir::Exists(directory)) {
+			if (!promptForMissing) {
+				return false;
+			}
+			wxDirDialog dlg(parent, title, directory, wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+			if (dlg.ShowModal() != wxID_OK) {
+				return false;
+			}
+			directory = dlg.GetPath();
+			g_settings.setString(npcs ? Config::NPCS_LUA_DIRECTORY : Config::MONSTERS_LUA_DIRECTORY, nstr(directory));
+			g_settings.save();
+		}
+
+		wxString error;
+		wxArrayString warnings;
+		const bool ok = npcs
+			? g_creatures.importNpcsFromLuaDir(directory, error, warnings)
+			: g_creatures.importMonstersFromLuaDir(directory, error, warnings);
+		if (ok) {
+			g_gui.ListDialog(npcs ? "NPC Lua loader warnings" : "Monster Lua loader warnings", warnings);
+		} else {
+			wxMessageBox(error, "Error", wxOK | wxICON_INFORMATION, parent);
+		}
+		return ok;
+	}
+}
+
 void MainMenuBar::OnImportMonsterData(wxCommandEvent& WXUNUSED(event)) {
-	wxFileDialog dlg(g_gui.root, "Import monster/npc file", "", "", "*.xml", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
-	if (dlg.ShowModal() == wxID_OK) {
+	wxArrayString choices;
+	choices.Add("OT XML files");
+	choices.Add("Lua files");
+	choices.Add("Monsters Lua directory");
+	choices.Add("NPCs Lua directory");
+	choices.Add("Configured Lua directories");
+
+	wxSingleChoiceDialog sourceDialog(g_gui.root, "Select the monster/NPC import source.", "Import Monsters/NPC", choices);
+	if (sourceDialog.ShowModal() != wxID_OK) {
+		return;
+	}
+
+	const int selection = sourceDialog.GetSelection();
+	if (selection == 0) {
+		wxFileDialog dlg(g_gui.root, "Import monster/npc file", "", "", "*.xml", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+		if (dlg.ShowModal() != wxID_OK) {
+			return;
+		}
+
 		wxArrayString paths;
 		dlg.GetPaths(paths);
 		for (uint32_t i = 0; i < paths.GetCount(); ++i) {
@@ -794,7 +842,38 @@ void MainMenuBar::OnImportMonsterData(wxCommandEvent& WXUNUSED(event)) {
 				wxMessageBox("Error OT data file \"" + paths[i] + "\".\n" + error, "Error", wxOK | wxICON_INFORMATION, g_gui.root);
 			}
 		}
+	} else if (selection == 1) {
+		wxFileDialog dlg(g_gui.root, "Import Lua monster/npc files", "", "", "*.lua", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+		if (dlg.ShowModal() != wxID_OK) {
+			return;
+		}
+
+		wxArrayString paths;
+		dlg.GetPaths(paths);
+		for (uint32_t i = 0; i < paths.GetCount(); ++i) {
+			wxString error;
+			wxArrayString warnings;
+			bool ok = g_creatures.importLuaFromOT(FileName(paths[i]), error, warnings);
+			if (ok) {
+				g_gui.ListDialog("Lua creature loader warnings", warnings);
+			} else {
+				wxMessageBox("Error Lua data file \"" + paths[i] + "\".\n" + error, "Error", wxOK | wxICON_INFORMATION, g_gui.root);
+			}
+		}
+	} else if (selection == 2) {
+		ImportCreatureLuaDirectory(g_gui.root, "Select monsters Lua directory", false, wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY)));
+	} else if (selection == 3) {
+		ImportCreatureLuaDirectory(g_gui.root, "Select NPCs Lua directory", true, wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY)));
+	} else if (selection == 4) {
+		const bool loadedMonsters = ImportCreatureLuaDirectory(g_gui.root, "Select monsters Lua directory", false, wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY)), false);
+		const bool loadedNpcs = ImportCreatureLuaDirectory(g_gui.root, "Select NPCs Lua directory", true, wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY)), false);
+		if (!loadedMonsters && !loadedNpcs) {
+			wxMessageBox("No configured Lua directories were found. Set them in Preferences or select a Lua directory from the import menu.", "Import Monsters/NPC", wxOK | wxICON_INFORMATION, g_gui.root);
+			return;
+		}
 	}
+
+	g_gui.RefreshPalettes();
 }
 
 void MainMenuBar::OnImportMinimap(wxCommandEvent& WXUNUSED(event)) {

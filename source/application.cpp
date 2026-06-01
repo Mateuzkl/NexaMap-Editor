@@ -36,6 +36,7 @@
 #include "creature.h"
 
 #include <wx/snglinst.h>
+#include <wx/dir.h>
 
 #if defined(__LINUX__) || defined(__WINDOWS__)
 	#include <GL/glut.h>
@@ -548,27 +549,53 @@ bool MainFrame::DoQuerySave(bool doclose) {
 
 bool MainFrame::DoQueryImportCreatures() {
 	if (g_creatures.hasMissing()) {
-		long ret = g_gui.PopupDialog("Missing creatures", "There are missing creatures and/or NPC in the editor, do you want to load them from an OT monster/npc file?", wxYES | wxNO);
+		long ret = g_gui.PopupDialog("Missing creatures", "There are missing creatures and/or NPC in the editor, do you want to load them from Lua monster/NPC directories?", wxYES | wxNO);
 		if (ret == wxID_YES) {
-			do {
-				wxFileDialog dlg(g_gui.root, "Import monster/npc file", "", "", "*.xml", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
-				if (dlg.ShowModal() == wxID_OK) {
-					wxArrayString paths;
-					dlg.GetPaths(paths);
-					for (uint32_t i = 0; i < paths.GetCount(); ++i) {
-						wxString error;
-						wxArrayString warnings;
-						bool ok = g_creatures.importXMLFromOT(FileName(paths[i]), error, warnings);
-						if (ok) {
-							g_gui.ListDialog("Monster loader errors", warnings);
-						} else {
-							wxMessageBox("Error OT data file \"" + paths[i] + "\".\n" + error, "Error", wxOK | wxICON_INFORMATION, g_gui.root);
-						}
-					}
-				} else {
-					break;
+			bool missingMonsters = false;
+			bool missingNpcs = false;
+			for (CreatureDatabase::iterator iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
+				if (!iter->second->missing) {
+					continue;
 				}
-			} while (g_creatures.hasMissing());
+				if (iter->second->isNpc) {
+					missingNpcs = true;
+				} else {
+					missingMonsters = true;
+				}
+			}
+
+			std::string monstersLuaDir = g_settings.getString(Config::MONSTERS_LUA_DIRECTORY);
+			std::string npcsLuaDir = g_settings.getString(Config::NPCS_LUA_DIRECTORY);
+
+			const bool monstersLuaReady = !monstersLuaDir.empty() && wxDir::Exists(wxstr(monstersLuaDir));
+			const bool npcsLuaReady = !npcsLuaDir.empty() && wxDir::Exists(wxstr(npcsLuaDir));
+			if ((missingMonsters && !monstersLuaReady) || (missingNpcs && !npcsLuaReady)) {
+				PreferencesWindow dialog(g_gui.root, true);
+				dialog.ShowModal();
+				dialog.Destroy();
+				monstersLuaDir = g_settings.getString(Config::MONSTERS_LUA_DIRECTORY);
+				npcsLuaDir = g_settings.getString(Config::NPCS_LUA_DIRECTORY);
+			}
+
+			if (missingMonsters && !monstersLuaDir.empty() && wxDir::Exists(wxstr(monstersLuaDir))) {
+				wxString error;
+				wxArrayString warnings;
+				if (g_creatures.importMonstersFromLuaDir(wxstr(monstersLuaDir), error, warnings)) {
+					g_gui.ListDialog("Monster Lua loader warnings", warnings);
+				} else {
+					wxMessageBox(error, "Error", wxOK | wxICON_INFORMATION, g_gui.root);
+				}
+			}
+
+			if (missingNpcs && !npcsLuaDir.empty() && wxDir::Exists(wxstr(npcsLuaDir))) {
+				wxString error;
+				wxArrayString warnings;
+				if (g_creatures.importNpcsFromLuaDir(wxstr(npcsLuaDir), error, warnings)) {
+					g_gui.ListDialog("NPC Lua loader warnings", warnings);
+				} else {
+					wxMessageBox(error, "Error", wxOK | wxICON_INFORMATION, g_gui.root);
+				}
+			}
 		}
 	}
 	g_gui.RefreshPalettes();
