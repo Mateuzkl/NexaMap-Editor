@@ -112,6 +112,9 @@
     <ClInclude Include="..\..\source\graphics.h">
       <Filter>gui\graphics</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\gl_renderer.h">
+      <Filter>gui\graphics</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\gui.h">
       <Filter>gui</Filter>
     </ClInclude>
@@ -369,6 +372,12 @@
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\graphics.cpp">
+      <Filter>gui\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\gl_renderer.cpp">
+      <Filter>gui\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\stb_truetype_impl.cpp">
       <Filter>gui\graphics</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\editor_tabs.cpp">

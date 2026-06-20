@@ -22,6 +22,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include "gl_renderer.h"
 
 class GameSprite;
 
@@ -206,6 +207,7 @@ class MapDrawer {
 	Editor& editor;
 	DrawingOptions options;
 	std::shared_ptr<LightDrawer> light_drawer;
+	std::unique_ptr<GLRenderer> renderer = std::make_unique<GLRenderer>();
 
 	float zoom;
 

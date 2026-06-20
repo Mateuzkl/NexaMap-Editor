@@ -8,6 +8,8 @@ endif()
 
 find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(glad CONFIG REQUIRED)
+find_path(STB_INCLUDE_DIRS "stb_truetype.h")
 
 find_package(OpenGL REQUIRED)
 
@@ -30,12 +32,13 @@ add_executable(${PROJECT_NAME} ${rme_H} ${rme_SRC})
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED ON)
 
-include_directories(${OPENGL_INCLUDE_DIR} ${GLUT_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIR})
+include_directories(${OPENGL_INCLUDE_DIR} ${GLUT_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIR} ${STB_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME}
 	${wxWidgets_LIBRARIES}
 	${OPENGL_LIBRARIES}
 	${GLUT_LIBRARIES}
 	${ZLIB_LIBRARIES}
+	glad::glad
 	fmt::fmt
 	nlohmann_json::nlohmann_json
 )

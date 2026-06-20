@@ -28,6 +28,7 @@ ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.h
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.h
+${CMAKE_CURRENT_LIST_DIR}/gl_renderer.h
 ${CMAKE_CURRENT_LIST_DIR}/graphics.h
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/gui.h
@@ -124,6 +125,7 @@ ${CMAKE_CURRENT_LIST_DIR}/extension_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
+${CMAKE_CURRENT_LIST_DIR}/gl_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gui.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.cpp
@@ -180,6 +182,13 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/stb_truetype_impl.cpp
+${CMAKE_CURRENT_LIST_DIR}/zones.cpp
+${CMAKE_CURRENT_LIST_DIR}/zone_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_zones.cpp
+${CMAKE_CURRENT_LIST_DIR}/tileset_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/add_tileset_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/add_item_window.cpp
 )
 
 # ============================================================================

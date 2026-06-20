@@ -254,9 +254,14 @@ void MapDrawer::SetupGL() {
 	glPushMatrix();
 	glLoadIdentity();
 	glTranslatef(0.375f, 0.375f, 0.0f);
+
+	renderer->init();
+	renderer->setOrtho(0.0f, static_cast<float>(vPort[2]) * zoom, static_cast<float>(vPort[3]) * zoom, 0.0f);
 }
 
 void MapDrawer::Release() {
+	renderer->flush();
+
 	for (std::vector<MapTooltip*>::const_iterator it = tooltips.begin(); it != tooltips.end(); ++it) {
 		delete *it;
 	}
@@ -620,24 +625,29 @@ void MapDrawer::DrawIngameBox() {
 }
 
 void MapDrawer::DrawGrid() {
-	glDisable(GL_TEXTURE_2D);
-	glColor4ub(255, 255, 255, 128);
-	glBegin(GL_LINES);
+	std::vector<float> lines;
+	lines.reserve(static_cast<size_t>((end_y - start_y) + (end_x - start_x)) * 4);
 
 	for (int y = start_y; y < end_y; ++y) {
-		int py = y * TileSize - view_scroll_y;
-		glVertex2f(start_x * TileSize - view_scroll_x, py);
-		glVertex2f(end_x * TileSize - view_scroll_x, py);
+		float py = static_cast<float>(y * TileSize - view_scroll_y);
+		lines.push_back(static_cast<float>(start_x * TileSize - view_scroll_x));
+		lines.push_back(py);
+		lines.push_back(static_cast<float>(end_x * TileSize - view_scroll_x));
+		lines.push_back(py);
 	}
 
 	for (int x = start_x; x < end_x; ++x) {
-		int px = x * TileSize - view_scroll_x;
-		glVertex2f(px, start_y * TileSize - view_scroll_y);
-		glVertex2f(px, end_y * TileSize - view_scroll_y);
+		float px = static_cast<float>(x * TileSize - view_scroll_x);
+		lines.push_back(px);
+		lines.push_back(static_cast<float>(start_y * TileSize - view_scroll_y));
+		lines.push_back(px);
+		lines.push_back(static_cast<float>(end_y * TileSize - view_scroll_y));
 	}
 
-	glEnd();
-	glEnable(GL_TEXTURE_2D);
+	if (!lines.empty()) {
+		renderer->drawLines(lines.data(), static_cast<int>(lines.size() / 4), 255, 255, 255, 128, 1.0f);
+		renderer->flush();
+	}
 }
 
 void MapDrawer::DrawDraggingShadow() {

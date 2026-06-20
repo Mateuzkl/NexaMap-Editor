@@ -284,6 +284,13 @@
     <ClInclude Include="..\..\source\threads.h" />
     <ClInclude Include="..\..\source\graphics.h" />
     <ClCompile Include="..\..\source\graphics.cpp" />
+    <ClInclude Include="..\..\source\gl_renderer.h" />
+    <ClCompile Include="..\..\source\gl_renderer.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\source\stb_truetype_impl.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClInclude Include="..\..\source\pngfiles.h" />
     <ClInclude Include="..\..\source\sprites.h" />
     <ClInclude Include="..\..\source\application.h" />
