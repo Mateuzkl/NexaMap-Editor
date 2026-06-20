@@ -43,6 +43,7 @@ public:
 	virtual void MacOpenFiles(const wxArrayString& fileNames);
 	virtual int OnExit();
 	void Unload();
+	void ShutdownServices();
 
 private:
 	bool m_startup;

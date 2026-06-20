@@ -352,6 +352,13 @@ int Application::OnExit() {
 	return 1;
 }
 
+void Application::ShutdownServices() {
+#ifdef _USE_PROCESS_COM
+	wxDELETE(m_proc_server);
+	wxDELETE(m_single_instance_checker);
+#endif
+}
+
 void Application::OnFatalException() {
 	////
 }
@@ -624,13 +631,16 @@ void MainFrame::OnExit(wxCloseEvent& event) {
 			}
 		}
 	}
-	g_gui.aui_manager->UnInit();
-	((Application&)wxGetApp()).Unload();
-#ifdef __RELEASE__
-	// Hack, "crash" gracefully in release builds, let OS handle cleanup of windows
+
+	// Persist only the cheap state, then exit immediately to avoid the slow
+	// teardown of large maps (CloseAllEditors/Destroy) that can freeze on close.
+	g_gui.SaveHotkeys();
+	g_gui.SavePerspective();
+	g_gui.root->SaveRecentFiles();
+	ClientVersion::saveVersions();
+	g_settings.save(true);
+	((Application&)wxGetApp()).ShutdownServices();
 	exit(0);
-#endif
-	Destroy();
 }
 
 void MainFrame::AddRecentFile(const FileName& file) {
