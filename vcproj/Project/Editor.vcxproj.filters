@@ -158,6 +158,9 @@
     <ClInclude Include="..\..\source\map_region.h">
       <Filter>objects</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\object_pool.h">
+      <Filter>objects</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\map_tab.h">
       <Filter>gui\map window</Filter>
     </ClInclude>
@@ -429,6 +432,9 @@
       <Filter>objects</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\map_region.cpp">
+      <Filter>objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\object_pool.cpp">
       <Filter>objects</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\spawn.cpp">

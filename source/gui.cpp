@@ -37,6 +37,7 @@
 #include "map_display.h"
 #include "application.h"
 #include "welcome_dialog.h"
+#include "object_pool.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -553,6 +554,8 @@ void GUI::SaveMapAs() {
 }
 
 bool GUI::LoadMap(const FileName& fileName) {
+	rme::bindPooledObjectOwnerThread();
+
 	FinishWelcomeDialog();
 
 	if (GetCurrentEditor() && !GetCurrentMap().hasChanged() && !GetCurrentMap().hasFile()) {

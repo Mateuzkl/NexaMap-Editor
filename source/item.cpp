@@ -29,6 +29,7 @@
 #include "carpet_brush.h"
 #include "table_brush.h"
 #include "wall_brush.h"
+#include "object_pool.h"
 
 Item* Item::Create(uint16_t _type, uint16_t _subtype /*= 0xFFFF*/) {
 	if (_type == 0) {
@@ -67,6 +68,22 @@ Item* Item::Create(uint16_t _type, uint16_t _subtype /*= 0xFFFF*/) {
 	}
 
 	return newItem;
+}
+
+void* Item::operator new(size_t size) {
+	return rme::allocatePooledObject(size);
+}
+
+void Item::operator delete(void* ptr) noexcept {
+	rme::deallocatePooledObject(ptr);
+}
+
+void* Item::operator new(size_t size, const char*, int) {
+	return rme::allocatePooledObject(size);
+}
+
+void Item::operator delete(void* ptr, const char*, int) noexcept {
+	rme::deallocatePooledObject(ptr);
 }
 
 Item::Item(unsigned short _type, unsigned short _count) :

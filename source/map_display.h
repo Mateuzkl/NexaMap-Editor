@@ -210,12 +210,13 @@ public:
 	~AnimationTimer();
 
 	void Notify();
-	void Start();
+	void StartRefresh(int interval);
 	void Stop();
 
 private:
 	MapCanvas* map_canvas;
-	bool started;
+	bool started = false;
+	int interval = 0;
 };
 
 #endif

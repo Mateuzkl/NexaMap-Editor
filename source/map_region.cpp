@@ -21,6 +21,7 @@
 #include "basemap.h"
 #include "position.h"
 #include "tile.h"
+#include "object_pool.h"
 
 //**************** Tile Location **********************
 
@@ -51,6 +52,22 @@ bool TileLocation::empty() const {
 }
 
 //**************** Floor **********************
+
+void* Floor::operator new(size_t size) {
+	return rme::allocatePooledObject(size);
+}
+
+void Floor::operator delete(void* ptr) noexcept {
+	rme::deallocatePooledObject(ptr);
+}
+
+void* Floor::operator new(size_t size, const char*, int) {
+	return rme::allocatePooledObject(size);
+}
+
+void Floor::operator delete(void* ptr, const char*, int) noexcept {
+	rme::deallocatePooledObject(ptr);
+}
 
 Floor::Floor(int sx, int sy, int z) {
 	sx = sx & ~3;

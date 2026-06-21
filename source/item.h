@@ -87,6 +87,11 @@ protected:
 	Item(unsigned short _type, unsigned short _count);
 
 public:
+	static void* operator new(size_t size);
+	static void operator delete(void* ptr) noexcept;
+	static void* operator new(size_t size, const char* file, int line);
+	static void operator delete(void* ptr, const char* file, int line) noexcept;
+
 	virtual ~Item();
 
 	// Deep copy thingy

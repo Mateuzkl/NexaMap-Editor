@@ -30,6 +30,23 @@
 #include "table_brush.h"
 #include "town.h"
 #include "map.h"
+#include "object_pool.h"
+
+void* Tile::operator new(size_t size) {
+	return rme::allocatePooledObject(size);
+}
+
+void Tile::operator delete(void* ptr) noexcept {
+	rme::deallocatePooledObject(ptr);
+}
+
+void* Tile::operator new(size_t size, const char*, int) {
+	return rme::allocatePooledObject(size);
+}
+
+void Tile::operator delete(void* ptr, const char*, int) noexcept {
+	rme::deallocatePooledObject(ptr);
+}
 
 Tile::Tile(int x, int y, int z) :
 	location(nullptr),

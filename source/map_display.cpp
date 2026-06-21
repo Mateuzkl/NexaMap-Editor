@@ -231,8 +231,14 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 		options.dragging = boundbox_selection;
 
-		if (options.show_preview || drawer->GetPositionIndicatorTime() != 0 || options.show_performance_stats) {
-			animation_timer->Start();
+		const bool animate_position_indicator = drawer->GetPositionIndicatorTime() != 0;
+		const bool animate_preview = options.show_preview && zoom <= 2.0;
+		if (animate_position_indicator) {
+			animation_timer->StartRefresh(16);
+		} else if (animate_preview) {
+			animation_timer->StartRefresh(250);
+		} else if (options.show_performance_stats) {
+			animation_timer->StartRefresh(500);
 		} else {
 			animation_timer->Stop();
 		}
@@ -2701,16 +2707,18 @@ void AnimationTimer::Notify() {
 	map_canvas->Refresh();
 };
 
-void AnimationTimer::Start() {
-	if (!started) {
+void AnimationTimer::StartRefresh(int new_interval) {
+	if (!started || interval != new_interval) {
 		started = true;
-		wxTimer::Start(16); // ~60fps
+		interval = new_interval;
+		wxTimer::Start(interval);
 	}
 };
 
 void AnimationTimer::Stop() {
 	if (started) {
 		started = false;
+		interval = 0;
 		wxTimer::Stop();
 	}
 };
