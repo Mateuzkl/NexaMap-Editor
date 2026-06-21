@@ -17,11 +17,7 @@
 
 #include "main.h"
 
-#ifdef __APPLE__
-	#include <GLUT/glut.h>
-#else
-	#include <GL/glut.h>
-#endif
+#include "bitmap_font.h"
 
 #ifdef __WINDOWS__
 	#include <windows.h>
@@ -1905,7 +1901,7 @@ void MapDrawer::DrawTooltips() {
 				line_width = 0.0f;
 				line_char_count = 0;
 			} else {
-				line_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_12, *c);
+				line_width += bitmapCharWidth(rme_bitmap_helvetica_12, *c);
 			}
 			width = std::max<float>(width, line_width);
 			char_count++;
@@ -1990,12 +1986,12 @@ void MapDrawer::DrawTooltips() {
 				line_char_count++;
 
 				if (tooltip->ellipsis && char_count >= MapTooltip::MAX_CHARS) {
-					glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, '.');
+					drawBitmapChar(rme_bitmap_helvetica_18, '.');
 					if (char_count >= (MapTooltip::MAX_CHARS + 2)) {
 						break;
 					}
 				} else if (!iscntrl(*c)) {
-					glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
+					drawBitmapChar(rme_bitmap_helvetica_12, *c);
 				}
 			}
 		}
@@ -2321,7 +2317,7 @@ void MapDrawer::DrawPerformanceStats() {
 
 	glRasterPos2i(x, y);
 	for (const char& c : stats_text) {
-		glutBitmapCharacter(GLUT_BITMAP_9_BY_15, c);
+		drawBitmapChar(rme_bitmap_fixed_9x15, c);
 	}
 
 	glEnable(GL_TEXTURE_2D);

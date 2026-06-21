@@ -6,7 +6,6 @@
 		"nlohmann-json",
 		"wxwidgets",
 		"pugixml",
-		"freeglut",
 		"glad",
 		"opengl"
 	]

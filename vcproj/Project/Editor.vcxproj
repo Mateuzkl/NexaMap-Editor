@@ -367,6 +367,8 @@
     <ClCompile Include="..\..\source\tileset.cpp" />
     <ClInclude Include="..\..\source\basemap.h" />
     <ClCompile Include="..\..\source\basemap.cpp" />
+    <ClInclude Include="..\..\source\bitmap_font.h" />
+    <ClCompile Include="..\..\source\bitmap_font.cpp" />
     <ClInclude Include="..\..\source\complexitem.h" />
     <ClCompile Include="..\..\source\complexitem.cpp" />
     <ClInclude Include="..\..\source\creature.h" />
