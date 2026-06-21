@@ -529,6 +529,20 @@ void Podium::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteH
 	|--- OTBM_ITEM_DEF (not implemented)
 */
 
+static bool isWildcardOtbmIdentifier(const uint8_t* data) {
+	return data[0] == 0 && data[1] == 0 && data[2] == 0 && data[3] == 0;
+}
+
+static bool hasValidOtbmPrefix(const uint8_t* data, size_t size) {
+	if (size < 5) {
+		return false;
+	}
+	if (!isWildcardOtbmIdentifier(data) && memcmp(data, "OTBM", 4) != 0) {
+		return false;
+	}
+	return data[4] == NODE_START;
+}
+
 bool IOMapOTBM::getVersionInfo(const FileName& filename, MapVersion& out_ver) {
 #if OTGZ_SUPPORT > 0
 	if (filename.GetExt() == "otgz") {
@@ -570,6 +584,23 @@ bool IOMapOTBM::getVersionInfo(const FileName& filename, MapVersion& out_ver) {
 		return false;
 	}
 #endif
+
+	// Validate the OTBM prefix before parsing
+	FileReadHandle otbmProbe(nstr(filename.GetFullPath()));
+	if (!otbmProbe.isOk()) {
+		return false;
+	}
+
+	uint8_t otbmPrefix[5] = { 0 };
+	if (otbmProbe.size() < sizeof(otbmPrefix)) {
+		return false;
+	}
+	if (!otbmProbe.getRAW(otbmPrefix, sizeof(otbmPrefix))) {
+		return false;
+	}
+	if (!hasValidOtbmPrefix(otbmPrefix, sizeof(otbmPrefix))) {
+		return false;
+	}
 
 	// Just open a disk-based read handle
 	DiskNodeFileReadHandle f(nstr(filename.GetFullPath()), StringVector(1, "OTBM"));
@@ -1674,6 +1705,10 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 
 			tmpName.Assign(wxstr(map.housefile));
 			f.addU8(OTBM_ATTR_EXT_HOUSE_FILE);
+			f.addString(nstr(tmpName.GetFullName()));
+
+			tmpName.Assign(wxstr(map.zonefile));
+			f.addU8(OTBM_ATTR_EXT_ZONE_FILE);
 			f.addString(nstr(tmpName.GetFullName()));
 
 			// Start writing tiles
