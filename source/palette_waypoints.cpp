@@ -24,6 +24,7 @@
 #include "palette_waypoints.h"
 #include "waypoint_brush.h"
 #include "map.h"
+#include "map_tab.h"
 
 BEGIN_EVENT_TABLE(WaypointPalettePanel, PalettePanel)
 EVT_BUTTON(PALETTE_WAYPOINT_ADD_WAYPOINT, WaypointPalettePanel::OnClickAddWaypoint)
@@ -196,7 +197,11 @@ void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
 
 void WaypointPalettePanel::OnClickAddWaypoint(wxCommandEvent& event) {
 	if (map) {
-		map->waypoints.addWaypoint(newd Waypoint());
+		Waypoint* wp = newd Waypoint();
+		if (MapTab* mapTab = g_gui.GetCurrentMapTab()) {
+			wp->pos = mapTab->GetScreenCenterPosition();
+		}
+		map->waypoints.addWaypoint(wp);
 		long i = waypoint_list->InsertItem(0, "");
 		waypoint_list->EditLabel(i);
 

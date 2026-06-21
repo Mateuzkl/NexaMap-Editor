@@ -260,7 +260,7 @@ void MapDrawer::SetupGL() {
 }
 
 void MapDrawer::Release() {
-	renderer->flush();
+	renderer->endFrame();
 
 	for (std::vector<MapTooltip*>::const_iterator it = tooltips.begin(); it != tooltips.end(); ++it) {
 		delete *it;
@@ -362,13 +362,8 @@ void MapDrawer::DrawMap() {
 				glDisable(GL_TEXTURE_2D);
 			}
 
-			glColor4ub(0, 0, 0, 128);
-			glBegin(GL_QUADS);
-			glVertex2f(0, int(screensize_y * zoom));
-			glVertex2f(int(screensize_x * zoom), int(screensize_y * zoom));
-			glVertex2f(int(screensize_x * zoom), 0);
-			glVertex2f(0, 0);
-			glEnd();
+			renderer->drawColoredQuad(0.0f, 0.0f, static_cast<float>(screensize_x) * zoom, static_cast<float>(screensize_y) * zoom, { 0, 0, 0, 128 });
+			renderer->flush();
 
 			if (!only_colors) {
 				glEnable(GL_TEXTURE_2D);
@@ -788,17 +783,17 @@ void MapDrawer::DrawSelectionBox() {
 	lines[3][2] = last_click_rx;
 	lines[3][3] = last_click_ry;
 
-	glEnable(GL_LINE_STIPPLE);
-	glLineStipple(1, 0xf0);
-	glLineWidth(1.0);
-	glColor4f(1.0, 1.0, 1.0, 1.0);
-	glBegin(GL_LINES);
+	float stipple_verts[16];
 	for (int i = 0; i < 4; i++) {
-		glVertex2f(lines[i][0], lines[i][1]);
-		glVertex2f(lines[i][2], lines[i][3]);
+		stipple_verts[i * 4 + 0] = lines[i][0];
+		stipple_verts[i * 4 + 1] = lines[i][1];
+		stipple_verts[i * 4 + 2] = lines[i][2];
+		stipple_verts[i * 4 + 3] = lines[i][3];
 	}
-	glEnd();
-	glDisable(GL_LINE_STIPPLE);
+	float dash_width = std::max(1.0f, zoom);
+	int dash_factor = std::max(1, static_cast<int>(zoom + 0.5f));
+	renderer->drawStippledLines(stipple_verts, 4, { 255, 255, 255, 255 }, dash_width, dash_factor, 0xf0f0);
+	renderer->flush();
 }
 
 void MapDrawer::DrawBrush() {
@@ -845,35 +840,19 @@ void MapDrawer::DrawBrush() {
 			int delta_y = last_click_end_sy - last_click_start_sy;
 
 			glColor(brushColor);
-			glBegin(GL_QUADS);
-			{
-				glVertex2f(last_click_start_sx, last_click_start_sy + TileSize);
-				glVertex2f(last_click_end_sx, last_click_start_sy + TileSize);
-				glVertex2f(last_click_end_sx, last_click_start_sy);
-				glVertex2f(last_click_start_sx, last_click_start_sy);
-			}
+			glFillQuad(last_click_start_sx, last_click_start_sy + TileSize, last_click_end_sx, last_click_start_sy + TileSize, last_click_end_sx, last_click_start_sy, last_click_start_sx, last_click_start_sy);
 
 			if (delta_y > TileSize) {
-				glVertex2f(last_click_start_sx, last_click_end_sy - TileSize);
-				glVertex2f(last_click_start_sx + TileSize, last_click_end_sy - TileSize);
-				glVertex2f(last_click_start_sx + TileSize, last_click_start_sy + TileSize);
-				glVertex2f(last_click_start_sx, last_click_start_sy + TileSize);
+				glFillQuad(last_click_start_sx, last_click_end_sy - TileSize, last_click_start_sx + TileSize, last_click_end_sy - TileSize, last_click_start_sx + TileSize, last_click_start_sy + TileSize, last_click_start_sx, last_click_start_sy + TileSize);
 			}
 
 			if (delta_x > TileSize && delta_y > TileSize) {
-				glVertex2f(last_click_end_sx - TileSize, last_click_start_sy + TileSize);
-				glVertex2f(last_click_end_sx, last_click_start_sy + TileSize);
-				glVertex2f(last_click_end_sx, last_click_end_sy - TileSize);
-				glVertex2f(last_click_end_sx - TileSize, last_click_end_sy - TileSize);
+				glFillQuad(last_click_end_sx - TileSize, last_click_start_sy + TileSize, last_click_end_sx, last_click_start_sy + TileSize, last_click_end_sx, last_click_end_sy - TileSize, last_click_end_sx - TileSize, last_click_end_sy - TileSize);
 			}
 
 			if (delta_y > TileSize) {
-				glVertex2f(last_click_start_sx, last_click_end_sy - TileSize);
-				glVertex2f(last_click_end_sx, last_click_end_sy - TileSize);
-				glVertex2f(last_click_end_sx, last_click_end_sy);
-				glVertex2f(last_click_start_sx, last_click_end_sy);
+				glFillQuad(last_click_start_sx, last_click_end_sy - TileSize, last_click_end_sx, last_click_end_sy - TileSize, last_click_end_sx, last_click_end_sy, last_click_start_sx, last_click_end_sy);
 			}
-			glEnd();
 		} else {
 			if (brush->isRaw()) {
 				glEnable(GL_TEXTURE_2D);
@@ -927,12 +906,7 @@ void MapDrawer::DrawBrush() {
 					int last_click_end_sy = last_click_end_map_y * TileSize - view_scroll_y - getFloorAdjustment(floor);
 
 					glColor(brushColor);
-					glBegin(GL_QUADS);
-					glVertex2f(last_click_start_sx, last_click_start_sy);
-					glVertex2f(last_click_end_sx, last_click_start_sy);
-					glVertex2f(last_click_end_sx, last_click_end_sy);
-					glVertex2f(last_click_start_sx, last_click_end_sy);
-					glEnd();
+					glFillQuad(last_click_start_sx, last_click_start_sy, last_click_end_sx, last_click_start_sy, last_click_end_sx, last_click_end_sy, last_click_start_sx, last_click_end_sy);
 				}
 			} else if (g_gui.GetBrushShape() == BRUSHSHAPE_CIRCLE) {
 				// Calculate drawing offsets
@@ -982,12 +956,7 @@ void MapDrawer::DrawBrush() {
 								DrawRawBrush(cx, cy, raw_brush->getItemType(), 160, 160, 160, 160);
 							} else {
 								glColor(brushColor);
-								glBegin(GL_QUADS);
-								glVertex2f(cx, cy + TileSize);
-								glVertex2f(cx + TileSize, cy + TileSize);
-								glVertex2f(cx + TileSize, cy);
-								glVertex2f(cx, cy);
-								glEnd();
+								glFillQuad(cx, cy + TileSize, cx + TileSize, cy + TileSize, cx + TileSize, cy, cx, cy);
 							}
 						}
 					}
@@ -1014,46 +983,25 @@ void MapDrawer::DrawBrush() {
 			int delta_y = end_sy - start_sy;
 
 			glColor(brushColor);
-			glBegin(GL_QUADS);
-			{
-				glVertex2f(start_sx, start_sy + TileSize);
-				glVertex2f(end_sx, start_sy + TileSize);
-				glVertex2f(end_sx, start_sy);
-				glVertex2f(start_sx, start_sy);
-			}
+			glFillQuad(start_sx, start_sy + TileSize, end_sx, start_sy + TileSize, end_sx, start_sy, start_sx, start_sy);
 
 			if (delta_y > TileSize) {
-				glVertex2f(start_sx, end_sy - TileSize);
-				glVertex2f(start_sx + TileSize, end_sy - TileSize);
-				glVertex2f(start_sx + TileSize, start_sy + TileSize);
-				glVertex2f(start_sx, start_sy + TileSize);
+				glFillQuad(start_sx, end_sy - TileSize, start_sx + TileSize, end_sy - TileSize, start_sx + TileSize, start_sy + TileSize, start_sx, start_sy + TileSize);
 			}
 
 			if (delta_x > TileSize && delta_y > TileSize) {
-				glVertex2f(end_sx - TileSize, start_sy + TileSize);
-				glVertex2f(end_sx, start_sy + TileSize);
-				glVertex2f(end_sx, end_sy - TileSize);
-				glVertex2f(end_sx - TileSize, end_sy - TileSize);
+				glFillQuad(end_sx - TileSize, start_sy + TileSize, end_sx, start_sy + TileSize, end_sx, end_sy - TileSize, end_sx - TileSize, end_sy - TileSize);
 			}
 
 			if (delta_y > TileSize) {
-				glVertex2f(start_sx, end_sy - TileSize);
-				glVertex2f(end_sx, end_sy - TileSize);
-				glVertex2f(end_sx, end_sy);
-				glVertex2f(start_sx, end_sy);
+				glFillQuad(start_sx, end_sy - TileSize, end_sx, end_sy - TileSize, end_sx, end_sy, start_sx, end_sy);
 			}
-			glEnd();
 		} else if (brush->isDoor()) {
 			int cx = (mouse_map_x)*TileSize - view_scroll_x - getFloorAdjustment(floor);
 			int cy = (mouse_map_y)*TileSize - view_scroll_y - getFloorAdjustment(floor);
 
 			glColorCheck(brush, Position(mouse_map_x, mouse_map_y, floor));
-			glBegin(GL_QUADS);
-			glVertex2f(cx, cy + TileSize);
-			glVertex2f(cx + TileSize, cy + TileSize);
-			glVertex2f(cx + TileSize, cy);
-			glVertex2f(cx, cy);
-			glEnd();
+			glFillQuad(cx, cy + TileSize, cx + TileSize, cy + TileSize, cx + TileSize, cy, cx, cy);
 		} else if (brush->isCreature()) {
 			glEnable(GL_TEXTURE_2D);
 			int cy = (mouse_map_y)*TileSize - view_scroll_y - getFloorAdjustment(floor);
@@ -1092,12 +1040,7 @@ void MapDrawer::DrawBrush() {
 										glColor(brushColor);
 									}
 
-									glBegin(GL_QUADS);
-									glVertex2f(cx, cy + TileSize);
-									glVertex2f(cx + TileSize, cy + TileSize);
-									glVertex2f(cx + TileSize, cy);
-									glVertex2f(cx, cy);
-									glEnd();
+									glFillQuad(cx, cy + TileSize, cx + TileSize, cy + TileSize, cx + TileSize, cy, cx, cy);
 								}
 							}
 						}
@@ -1118,12 +1061,7 @@ void MapDrawer::DrawBrush() {
 										glColor(brushColor);
 									}
 
-									glBegin(GL_QUADS);
-									glVertex2f(cx, cy + TileSize);
-									glVertex2f(cx + TileSize, cy + TileSize);
-									glVertex2f(cx + TileSize, cy);
-									glVertex2f(cx, cy);
-									glEnd();
+									glFillQuad(cx, cy + TileSize, cx + TileSize, cy + TileSize, cx + TileSize, cy, cx, cy);
 								}
 							}
 						}
@@ -1266,8 +1204,8 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 	for (int cx = 0; cx != spr->width; cx++) {
 		for (int cy = 0; cy != spr->height; cy++) {
 			for (int cf = 0; cf != spr->layers; cf++) {
-				int texnum = spr->getHardwareID(cx, cy, cf, subtype, pattern_x, pattern_y, pattern_z, frame);
-				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, texnum, red, green, blue, alpha);
+				auto st = spr->getSpriteTex(cx, cy, cf, subtype, pattern_x, pattern_y, pattern_z, frame);
+				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 			}
 		}
 	}
@@ -1336,9 +1274,8 @@ void MapDrawer::BlitSpriteType(int screenx, int screeny, uint32_t spriteid, int 
 	for (int cx = 0; cx != spr->width; ++cx) {
 		for (int cy = 0; cy != spr->height; ++cy) {
 			for (int cf = 0; cf != spr->layers; ++cf) {
-				int texnum = spr->getHardwareID(cx, cy, cf, -1, 0, 0, 0, tme);
-				// printf("CF: %d\tTexturenum: %d\n", cf, texnum);
-				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, texnum, red, green, blue, alpha);
+				auto st = spr->getSpriteTex(cx, cy, cf, -1, 0, 0, 0, tme);
+				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 			}
 		}
 	}
@@ -1355,9 +1292,8 @@ void MapDrawer::BlitSpriteType(int screenx, int screeny, GameSprite* spr, int re
 	for (int cx = 0; cx != spr->width; ++cx) {
 		for (int cy = 0; cy != spr->height; ++cy) {
 			for (int cf = 0; cf != spr->layers; ++cf) {
-				int texnum = spr->getHardwareID(cx, cy, cf, -1, 0, 0, 0, tme);
-				// printf("CF: %d\tTexturenum: %d\n", cf, texnum);
-				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, texnum, red, green, blue, alpha);
+				auto st = spr->getSpriteTex(cx, cy, cf, -1, 0, 0, 0, tme);
+				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 			}
 		}
 	}
@@ -1391,8 +1327,8 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 
 				for (int cx = 0; cx != mountSpr->width; ++cx) {
 					for (int cy = 0; cy != mountSpr->height; ++cy) {
-						int texnum = mountSpr->getHardwareID(cx, cy, (int)dir, 0, 0, mountOutfit, tme);
-						glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, texnum, red, green, blue, alpha);
+						auto st = mountSpr->getSpriteTex(cx, cy, (int)dir, 0, 0, mountOutfit, tme);
+						glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 					}
 				}
 
@@ -1410,8 +1346,8 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 
 			for (int cx = 0; cx != spr->width; ++cx) {
 				for (int cy = 0; cy != spr->height; ++cy) {
-					int texnum = spr->getHardwareID(cx, cy, (int)dir, pattern_y, pattern_z, outfit, tme);
-					glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, texnum, red, green, blue, alpha);
+					auto st = spr->getSpriteTex(cx, cy, (int)dir, pattern_y, pattern_z, outfit, tme);
+					glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 				}
 			}
 		}
@@ -1437,23 +1373,12 @@ void MapDrawer::BlitSquare(int sx, int sy, int red, int green, int blue, int alp
 		return;
 	}
 
-	int texnum = spr->getHardwareID(0, 0, 0, -1, 0, 0, 0, 0);
-	if (texnum == 0) {
+	auto st = spr->getSpriteTex(0, 0, 0, -1, 0, 0, 0, 0);
+	if (st.texture == 0) {
 		return;
 	}
 
-	glBindTexture(GL_TEXTURE_2D, texnum);
-	glColor4ub(uint8_t(red), uint8_t(green), uint8_t(blue), uint8_t(alpha));
-	glBegin(GL_QUADS);
-	glTexCoord2f(0.f, 0.f);
-	glVertex2f(sx, sy);
-	glTexCoord2f(1.f, 0.f);
-	glVertex2f(sx + TileSize, sy);
-	glTexCoord2f(1.f, 1.f);
-	glVertex2f(sx + TileSize, sy + TileSize);
-	glTexCoord2f(0.f, 1.f);
-	glVertex2f(sx, sy + TileSize);
-	glEnd();
+	renderer->drawTexturedQuad(static_cast<float>(sx), static_cast<float>(sy), static_cast<float>(TileSize), static_cast<float>(TileSize), st.texture, { uint8_t(red), uint8_t(green), uint8_t(blue), uint8_t(alpha) }, st.u0, st.v0, st.u1, st.v1);
 }
 
 void MapDrawer::DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha) {
@@ -1809,55 +1734,62 @@ void MapDrawer::DrawBrushIndicator(int x, int y, Brush* brush, uint8_t r, uint8_
 	};
 
 	// circle
-	glBegin(GL_TRIANGLE_FAN);
-	glColor4ub(0x00, 0x00, 0x00, 0x50);
-	glVertex2i(x, y);
-	for (int i = 0; i <= 30; i++) {
-		float angle = i * 2.0f * PI / 30;
-		glVertex2f(cos(angle) * (TileSize / 2) + x, sin(angle) * (TileSize / 2) + y);
+	{
+		std::vector<float> fan;
+		fan.reserve((1 + 31) * 2);
+		fan.push_back(static_cast<float>(x));
+		fan.push_back(static_cast<float>(y));
+		for (int i = 0; i <= 30; i++) {
+			float angle = i * 2.0f * PI / 30;
+			fan.push_back(cos(angle) * (TileSize / 2) + x);
+			fan.push_back(sin(angle) * (TileSize / 2) + y);
+		}
+		renderer->drawTriangleFan(fan.data(), static_cast<int>(fan.size() / 2), 0x00, 0x00, 0x00, 0x50);
+		renderer->flush();
 	}
-	glEnd();
 
 	// background
-	glColor4ub(r, g, b, 0xB4);
-	glBegin(GL_POLYGON);
-	for (int i = 0; i < 8; ++i) {
-		glVertex2i(vertexes[i][0] + x, vertexes[i][1] + y);
+	{
+		std::vector<float> poly;
+		poly.reserve(8 * 2);
+		for (int i = 0; i < 8; ++i) {
+			poly.push_back(static_cast<float>(vertexes[i][0] + x));
+			poly.push_back(static_cast<float>(vertexes[i][1] + y));
+		}
+		renderer->drawPolygon(poly.data(), 8, r, g, b, 0xB4);
+		renderer->flush();
 	}
-	glEnd();
 
 	// borders
-	glColor4ub(0x00, 0x00, 0x00, 0xB4);
-	glLineWidth(1.0);
-	glBegin(GL_LINES);
-	for (int i = 0; i < 8; ++i) {
-		glVertex2i(vertexes[i][0] + x, vertexes[i][1] + y);
-		glVertex2i(vertexes[i + 1][0] + x, vertexes[i + 1][1] + y);
+	{
+		std::vector<float> seg;
+		seg.reserve(8 * 4);
+		for (int i = 0; i < 8; ++i) {
+			seg.push_back(static_cast<float>(vertexes[i][0] + x));
+			seg.push_back(static_cast<float>(vertexes[i][1] + y));
+			seg.push_back(static_cast<float>(vertexes[i + 1][0] + x));
+			seg.push_back(static_cast<float>(vertexes[i + 1][1] + y));
+		}
+		renderer->drawLines(seg.data(), 8, 0x00, 0x00, 0x00, 0xB4, 1.0f);
+		renderer->flush();
 	}
-	glEnd();
 }
 
 void MapDrawer::DrawHookIndicator(int x, int y, const ItemType& type) {
-	glDisable(GL_TEXTURE_2D);
-	glColor4ub(uint8_t(0), uint8_t(0), uint8_t(255), uint8_t(200));
-	glBegin(GL_QUADS);
+	std::vector<float> v;
 	if (type.hookSouth) {
 		x -= 10;
 		y += 10;
-		glVertex2f(x, y);
-		glVertex2f(x + 10, y);
-		glVertex2f(x + 20, y + 10);
-		glVertex2f(x + 10, y + 10);
+		v = { static_cast<float>(x), static_cast<float>(y), static_cast<float>(x + 10), static_cast<float>(y), static_cast<float>(x + 20), static_cast<float>(y + 10), static_cast<float>(x + 10), static_cast<float>(y + 10) };
 	} else if (type.hookEast) {
 		x += 10;
 		y -= 10;
-		glVertex2f(x, y);
-		glVertex2f(x + 10, y + 10);
-		glVertex2f(x + 10, y + 20);
-		glVertex2f(x, y + 10);
+		v = { static_cast<float>(x), static_cast<float>(y), static_cast<float>(x + 10), static_cast<float>(y + 10), static_cast<float>(x + 10), static_cast<float>(y + 20), static_cast<float>(x), static_cast<float>(y + 10) };
 	}
-	glEnd();
-	glEnable(GL_TEXTURE_2D);
+	if (!v.empty()) {
+		renderer->drawPolygon(v.data(), 4, 0, 0, 255, 200);
+		renderer->flush();
+	}
 }
 
 void MapDrawer::DrawIndicator(int x, int y, int indicator, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -1914,7 +1846,7 @@ void MapDrawer::DrawTooltips() {
 				line_width = 0.0f;
 				line_char_count = 0;
 			} else {
-				line_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_12, *c);
+				line_width += renderer->getCharWidth(*c);
 			}
 			width = std::max<float>(width, line_width);
 			char_count++;
@@ -1957,48 +1889,62 @@ void MapDrawer::DrawTooltips() {
 		};
 
 		// background
-		glColor4ub(tooltip->r, tooltip->g, tooltip->b, 255);
-		glBegin(GL_POLYGON);
-		for (int i = 0; i < 8; ++i) {
-			glVertex2f(vertexes[i][0], vertexes[i][1]);
+		{
+			float poly[16];
+			for (int i = 0; i < 8; ++i) {
+				poly[i * 2] = vertexes[i][0];
+				poly[i * 2 + 1] = vertexes[i][1];
+			}
+			renderer->drawPolygon(poly, 8, tooltip->r, tooltip->g, tooltip->b, 255);
+			renderer->flush();
 		}
-		glEnd();
 
 		// borders
-		glColor4ub(0, 0, 0, 255);
-		glLineWidth(1.0);
-		glBegin(GL_LINES);
-		for (int i = 0; i < 8; ++i) {
-			glVertex2f(vertexes[i][0], vertexes[i][1]);
-			glVertex2f(vertexes[i + 1][0], vertexes[i + 1][1]);
+		{
+			float seg[32];
+			for (int i = 0; i < 8; ++i) {
+				seg[i * 4] = vertexes[i][0];
+				seg[i * 4 + 1] = vertexes[i][1];
+				seg[i * 4 + 2] = vertexes[i + 1][0];
+				seg[i * 4 + 3] = vertexes[i + 1][1];
+			}
+			renderer->drawLines(seg, 8, 0, 0, 0, 255, 1.0f);
+			renderer->flush();
 		}
-		glEnd();
 
 		// text
 		if (zoom <= 1.0) {
 			startx += (3.0f * scale);
 			starty += (14.0f * scale);
-			glColor4ub(0, 0, 0, 255);
-			glRasterPos2f(startx, starty);
+			std::string lineStr;
+			float lineY = starty;
 			char_count = 0;
 			line_char_count = 0;
 			for (const char* c = text; *c != '\0'; c++) {
 				if (*c == '\n' || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
-					starty += (14.0f * scale);
-					glRasterPos2f(startx, starty);
+					if (!lineStr.empty()) {
+						renderer->drawText(startx, lineY, lineStr, 0, 0, 0, 255);
+						renderer->flush();
+						lineStr.clear();
+					}
+					lineY += (14.0f * scale);
 					line_char_count = 0;
 				}
 				char_count++;
 				line_char_count++;
 
 				if (tooltip->ellipsis && char_count >= MapTooltip::MAX_CHARS) {
-					glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, '.');
+					lineStr += '.';
 					if (char_count >= (MapTooltip::MAX_CHARS + 2)) {
 						break;
 					}
-				} else if (!iscntrl(*c)) {
-					glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
+				} else if (!iscntrl((unsigned char)*c)) {
+					lineStr += *c;
 				}
+			}
+			if (!lineStr.empty()) {
+				renderer->drawText(startx, lineY, lineStr, 0, 0, 0, 255);
+				renderer->flush();
 			}
 		}
 	}
@@ -2006,7 +1952,7 @@ void MapDrawer::DrawTooltips() {
 
 void MapDrawer::DrawLight() {
 	// draw in-game light
-	light_drawer->draw(start_x, start_y, end_x, end_y, view_scroll_x, view_scroll_y, options.experimental_fog);
+	light_drawer->draw(start_x, start_y, end_x, end_y, view_scroll_x, view_scroll_y, options.experimental_fog, renderer.get());
 }
 
 void MapDrawer::MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r, uint8_t g, uint8_t b) {
@@ -2077,13 +2023,10 @@ void MapDrawer::ShowPositionIndicator(const Position& position) {
 	pos_indicator_timer.Start();
 }
 
-void MapDrawer::glBlitTexture(int sx, int sy, int texture_number, int red, int green, int blue, int alpha, bool adjustZoom) {
+void MapDrawer::glBlitTexture(int sx, int sy, int texture_number, int red, int green, int blue, int alpha, bool adjustZoom, float u0, float v0, float u1, float v1) {
 	if (texture_number != 0) {
-		glBindTexture(GL_TEXTURE_2D, texture_number);
-		glColor4ub(uint8_t(red), uint8_t(green), uint8_t(blue), uint8_t(alpha));
-		glBegin(GL_QUADS);
+		float size = TileSize;
 		if (adjustZoom) {
-			float size = TileSize;
 			if (zoom < 1.0f) {
 				float offset = 10 / (10 * zoom);
 				size = std::max<float>(16, TileSize * zoom);
@@ -2095,17 +2038,8 @@ void MapDrawer::glBlitTexture(int sx, int sy, int texture_number, int red, int g
 				sx -= offset;
 				sy -= offset;
 			}
-			glTexCoord2f(0.f, 0.f); glVertex2f(sx, sy);
-			glTexCoord2f(1.f, 0.f); glVertex2f(sx + size, sy);
-			glTexCoord2f(1.f, 1.f); glVertex2f(sx + size, sy + size);
-			glTexCoord2f(0.f, 1.f); glVertex2f(sx, sy + size);
-		} else {
-			glTexCoord2f(0.f, 0.f); glVertex2f(sx, sy);
-			glTexCoord2f(1.f, 0.f); glVertex2f(sx + TileSize, sy);
-			glTexCoord2f(1.f, 1.f); glVertex2f(sx + TileSize, sy + TileSize);
-			glTexCoord2f(0.f, 1.f); glVertex2f(sx, sy + TileSize);
 		}
-		glEnd();
+		renderer->drawTexturedQuad(static_cast<float>(sx), static_cast<float>(sy), size, size, static_cast<GLuint>(texture_number), { uint8_t(red), uint8_t(green), uint8_t(blue), uint8_t(alpha) }, u0, v0, u1, v1);
 	}
 }
 
@@ -2114,58 +2048,52 @@ void MapDrawer::glBlitSquare(int sx, int sy, int red, int green, int blue, int a
 		size = TileSize;
 	}
 
-	glColor4ub(uint8_t(red), uint8_t(green), uint8_t(blue), uint8_t(alpha));
-	glBegin(GL_QUADS);
-	glVertex2f(sx, sy);
-	glVertex2f(sx + size, sy);
-	glVertex2f(sx + size, sy + size);
-	glVertex2f(sx, sy + size);
-	glEnd();
+	renderer->drawColoredQuad(static_cast<float>(sx), static_cast<float>(sy), static_cast<float>(size), static_cast<float>(size), { uint8_t(red), uint8_t(green), uint8_t(blue), uint8_t(alpha) });
 }
 
 void MapDrawer::glColor(wxColor color) {
-	glColor4ub(color.Red(), color.Green(), color.Blue(), color.Alpha());
+	m_brushColor = { color.Red(), color.Green(), color.Blue(), color.Alpha() };
 }
 
 void MapDrawer::glColor(MapDrawer::BrushColor color) {
 	switch (color) {
 		case COLOR_BRUSH:
-			glColor4ub(
-				g_settings.getInteger(Config::CURSOR_RED),
-				g_settings.getInteger(Config::CURSOR_GREEN),
-				g_settings.getInteger(Config::CURSOR_BLUE),
-				g_settings.getInteger(Config::CURSOR_ALPHA)
-			);
+			m_brushColor = {
+				(uint8_t)g_settings.getInteger(Config::CURSOR_RED),
+				(uint8_t)g_settings.getInteger(Config::CURSOR_GREEN),
+				(uint8_t)g_settings.getInteger(Config::CURSOR_BLUE),
+				(uint8_t)g_settings.getInteger(Config::CURSOR_ALPHA)
+			};
 			break;
 
 		case COLOR_FLAG_BRUSH:
 		case COLOR_HOUSE_BRUSH:
-			glColor4ub(
-				g_settings.getInteger(Config::CURSOR_ALT_RED),
-				g_settings.getInteger(Config::CURSOR_ALT_GREEN),
-				g_settings.getInteger(Config::CURSOR_ALT_BLUE),
-				g_settings.getInteger(Config::CURSOR_ALT_ALPHA)
-			);
+			m_brushColor = {
+				(uint8_t)g_settings.getInteger(Config::CURSOR_ALT_RED),
+				(uint8_t)g_settings.getInteger(Config::CURSOR_ALT_GREEN),
+				(uint8_t)g_settings.getInteger(Config::CURSOR_ALT_BLUE),
+				(uint8_t)g_settings.getInteger(Config::CURSOR_ALT_ALPHA)
+			};
 			break;
 
 		case COLOR_SPAWN_BRUSH:
-			glColor4ub(166, 0, 0, 128);
+			m_brushColor = { 166, 0, 0, 128 };
 			break;
 
 		case COLOR_ERASER:
-			glColor4ub(166, 0, 0, 128);
+			m_brushColor = { 166, 0, 0, 128 };
 			break;
 
 		case COLOR_VALID:
-			glColor4ub(0, 166, 0, 128);
+			m_brushColor = { 0, 166, 0, 128 };
 			break;
 
 		case COLOR_INVALID:
-			glColor4ub(166, 0, 0, 128);
+			m_brushColor = { 166, 0, 0, 128 };
 			break;
 
 		default:
-			glColor4ub(255, 255, 255, 128);
+			m_brushColor = { 255, 255, 255, 128 };
 			break;
 	}
 }
@@ -2179,25 +2107,19 @@ void MapDrawer::glColorCheck(Brush* brush, const Position& pos) {
 }
 
 void MapDrawer::drawRect(int x, int y, int w, int h, const wxColor& color, int width) {
-	glLineWidth(width);
-	glColor4ub(color.Red(), color.Green(), color.Blue(), color.Alpha());
-	glBegin(GL_LINE_STRIP);
-	glVertex2f(x, y);
-	glVertex2f(x + w, y);
-	glVertex2f(x + w, y + h);
-	glVertex2f(x, y + h);
-	glVertex2f(x, y);
-	glEnd();
+	renderer->drawRect(static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h), { color.Red(), color.Green(), color.Blue(), color.Alpha() }, static_cast<float>(width));
 }
 
 void MapDrawer::drawFilledRect(int x, int y, int w, int h, const wxColor& color) {
-	glColor4ub(color.Red(), color.Green(), color.Blue(), color.Alpha());
-	glBegin(GL_QUADS);
-	glVertex2f(x, y);
-	glVertex2f(x + w, y);
-	glVertex2f(x + w, y + h);
-	glVertex2f(x, y + h);
-	glEnd();
+	renderer->drawColoredQuad(static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h), { color.Red(), color.Green(), color.Blue(), color.Alpha() });
+}
+
+void MapDrawer::glFillQuad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3) {
+	float minx = std::min({ x0, x1, x2, x3 });
+	float miny = std::min({ y0, y1, y2, y3 });
+	float maxx = std::max({ x0, x1, x2, x3 });
+	float maxy = std::max({ y0, y1, y2, y3 });
+	renderer->drawColoredQuad(minx, miny, maxx - minx, maxy - miny, m_brushColor);
 }
 
 // Performance Monitor
@@ -2337,18 +2259,14 @@ void MapDrawer::DrawPerformanceStats() {
 	glPushMatrix();
 	glLoadIdentity();
 
-	glDisable(GL_TEXTURE_2D);
-	glColor3f(1.0f, 1.0f, 0.0f); // Amarelo brilhante
+	renderer->flush();
+	renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
 
 	int x = 10;
 	int y = 20;
 
-	glRasterPos2i(x, y);
-	for (const char& c : stats_text) {
-		glutBitmapCharacter(GLUT_BITMAP_9_BY_15, c);
-	}
-
-	glEnable(GL_TEXTURE_2D);
+	renderer->drawText(static_cast<float>(x), static_cast<float>(y), stats_text, 255, 255, 0, 255);
+	renderer->flush();
 
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);

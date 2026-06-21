@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include "light_drawer.h"
+#include "gl_renderer.h"
 
 LightDrawer::LightDrawer() {
 	texture = 0;
@@ -29,7 +30,7 @@ LightDrawer::~LightDrawer() {
 	lights.clear();
 }
 
-void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x, int scroll_y, bool fog) {
+void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x, int scroll_y, bool fog, GLRenderer* renderer) {
 	if (texture == 0) {
 		createGLTexture();
 	}
@@ -86,34 +87,24 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
 
+	if (renderer) {
+		renderer->flush();
+	}
+
 	if (!fog) {
 		glBlendFunc(GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
-	glColor4ub(255, 255, 255, 255); // reset color
-	glEnable(GL_TEXTURE_2D);
-	glBegin(GL_QUADS);
-	glTexCoord2f(0.f, 0.f);
-	glVertex2f(draw_x, draw_y);
-	glTexCoord2f(1.f, 0.f);
-	glVertex2f(draw_x + draw_width, draw_y);
-	glTexCoord2f(1.f, 1.f);
-	glVertex2f(draw_x + draw_width, draw_y + draw_height);
-	glTexCoord2f(0.f, 1.f);
-	glVertex2f(draw_x, draw_y + draw_height);
-	glEnd();
-	glDisable(GL_TEXTURE_2D);
+	if (renderer) {
+		renderer->drawTexturedQuad(static_cast<float>(draw_x), static_cast<float>(draw_y), static_cast<float>(draw_width), static_cast<float>(draw_height), texture, { 255, 255, 255, 255 });
+		renderer->flush();
+	}
 
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	if (fog) {
-		glColor4ub(10, 10, 10, 80);
-		glBegin(GL_QUADS);
-		glVertex2f(draw_x, draw_y);
-		glVertex2f(draw_x + draw_width, draw_y);
-		glVertex2f(draw_x + draw_width, draw_y + draw_height);
-		glVertex2f(draw_x, draw_y + draw_height);
-		glEnd();
+	if (fog && renderer) {
+		renderer->drawColoredQuad(static_cast<float>(draw_x), static_cast<float>(draw_y), static_cast<float>(draw_width), static_cast<float>(draw_height), { 10, 10, 10, 80 });
+		renderer->flush();
 	}
 }
 

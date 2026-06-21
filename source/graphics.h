@@ -84,6 +84,16 @@ public:
 	int getIndex(int width, int height, int layer, int pattern_x, int pattern_y, int pattern_z, int frame) const;
 	GLuint getHardwareID(int _x, int _y, int _layer, int _subtype, int _pattern_x, int _pattern_y, int _pattern_z, int _frame);
 	GLuint getHardwareID(int _x, int _y, int _dir, int _addon, int _pattern_z, const Outfit& _outfit, int _frame); // CreatureDatabase
+
+	struct SpriteTex {
+		GLuint texture = 0;
+		float u0 = 0.f;
+		float v0 = 0.f;
+		float u1 = 1.f;
+		float v1 = 1.f;
+	};
+	SpriteTex getSpriteTex(int _x, int _y, int _layer, int _subtype, int _pattern_x, int _pattern_y, int _pattern_z, int _frame);
+	SpriteTex getSpriteTex(int _x, int _y, int _dir, int _addon, int _pattern_z, const Outfit& _outfit, int _frame);
 	virtual void DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width = -1, int height = -1);
 
 	virtual void unloadDC();
@@ -125,6 +135,12 @@ protected:
 		virtual GLuint getHardwareID() = 0;
 		virtual uint8_t* getRGBData() = 0;
 		virtual uint8_t* getRGBAData() = 0;
+		virtual void getUV(float& u0, float& v0, float& u1, float& v1) {
+			u0 = 0.f;
+			v0 = 0.f;
+			u1 = 1.f;
+			v1 = 1.f;
+		}
 
 	protected:
 		virtual void createGLTexture(GLuint whatid);
@@ -148,6 +164,15 @@ protected:
 		virtual GLuint getHardwareID();
 		virtual uint8_t* getRGBData();
 		virtual uint8_t* getRGBAData();
+		void getUV(float& u0, float& v0, float& u1, float& v1) override;
+
+		// Sprite atlas state (only used for atlased NormalImage sprites)
+		GLuint atlas_tex = 0;
+		float au0 = 0.f;
+		float av0 = 0.f;
+		float au1 = 1.f;
+		float av1 = 1.f;
+		bool atlas_loaded = false;
 
 	protected:
 		virtual void createGLTexture(GLuint ignored = 0);
@@ -157,6 +182,8 @@ protected:
 	class EditorImage : public NormalImage {
 	public:
 		EditorImage(const wxArtID& bitmapId);
+
+		GLuint getHardwareID() override;
 
 	protected:
 		void createGLTexture(GLuint textureId) override;
@@ -313,6 +340,12 @@ public:
 	void garbageCollection();
 	void addSpriteToCleanup(GameSprite* spr);
 
+	// Sprite atlas: packs 32x32 sprites into large pages so they can be batched.
+	bool allocAtlasSlot(GLuint& outTex, int& outX, int& outY);
+	int getAtlasSize() const {
+		return atlas_size;
+	}
+
 	wxFileName getMetadataFileName() const {
 		return metadata_file;
 	}
@@ -350,6 +383,10 @@ private:
 
 	int loaded_textures;
 	int lastclean;
+
+	std::vector<GLuint> atlas_textures;
+	int atlas_size = 0;
+	int atlas_count = 0;
 
 	wxStopWatch* animation_timer;
 

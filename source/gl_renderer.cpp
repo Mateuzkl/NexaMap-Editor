@@ -369,6 +369,7 @@ void GLRenderer::init() {
 
 void GLRenderer::shutdown() {
 	current_texture = 0;
+	m_programBound = false;
 	std::erase(s_instances, this);
 	if (!initialized) {
 		return;
@@ -392,6 +393,31 @@ void GLRenderer::shutdown() {
 	initialized = false;
 }
 
+void GLRenderer::bindState() {
+	if (m_programBound) {
+		return;
+	}
+	glUseProgram(program);
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	m_programBound = true;
+}
+
+void GLRenderer::unbindState() {
+	if (!m_programBound) {
+		return;
+	}
+	glBindVertexArray(0);
+	glUseProgram(0);
+	m_programBound = false;
+}
+
+void GLRenderer::endFrame() {
+	flushBatch();
+	unbindState();
+	current_texture = 0;
+}
+
 void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
 	std::array<float, 16> m {};
 	m[0] = 2.0f / (right - left);
@@ -401,9 +427,8 @@ void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
 	m[13] = -(top + bottom) / (top - bottom);
 	m[15] = 1.0f;
 
-	glUseProgram(program);
+	bindState();
 	glUniformMatrix4fv(loc_projection, 1, GL_FALSE, m.data());
-	glUseProgram(0);
 }
 
 void GLRenderer::flushBatch() {
@@ -411,9 +436,7 @@ void GLRenderer::flushBatch() {
 		return;
 	}
 
-	glUseProgram(program);
-	glBindVertexArray(vao);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	bindState();
 	glBufferData(GL_ARRAY_BUFFER, batch.size() * sizeof(Vertex), batch.data(), GL_DYNAMIC_DRAW);
 
 	if (current_texture != 0) {
@@ -427,21 +450,19 @@ void GLRenderer::flushBatch() {
 
 	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)batch.size());
 
-	glBindVertexArray(0);
-	glUseProgram(0);
 	batch.clear();
 }
 
-void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color) {
+void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color, float u0, float v0_, float u1, float v1_) {
 	if (current_texture != textureId && !batch.empty()) {
 		flushBatch();
 	}
 	current_texture = textureId;
 
-	Vertex v0 = { x, y, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex v1 = { x + w, y, 1, 0, color.r, color.g, color.b, color.a };
-	Vertex v2 = { x + w, y + h, 1, 1, color.r, color.g, color.b, color.a };
-	Vertex v3 = { x, y + h, 0, 1, color.r, color.g, color.b, color.a };
+	Vertex v0 = { x, y, u0, v0_, color.r, color.g, color.b, color.a };
+	Vertex v1 = { x + w, y, u1, v0_, color.r, color.g, color.b, color.a };
+	Vertex v2 = { x + w, y + h, u1, v1_, color.r, color.g, color.b, color.a };
+	Vertex v3 = { x, y + h, u0, v1_, color.r, color.g, color.b, color.a };
 
 	batch.push_back(v0);
 	batch.push_back(v1);
@@ -546,14 +567,10 @@ void GLRenderer::drawRoundedRect(float x, float y, float w, float h, float radiu
 		tris.push_back(perimeter[next]);
 	}
 
-	glUseProgram(program);
-	glBindVertexArray(vao);
+	bindState();
 	glUniform1i(loc_useTexture, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, tris.size() * sizeof(Vertex), tris.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)tris.size());
-	glBindVertexArray(0);
-	glUseProgram(0);
 }
 
 void GLRenderer::drawRoundedRectOutline(float x, float y, float w, float h, float radius, const GLColor &color, float lineWidth) {
@@ -649,14 +666,10 @@ void GLRenderer::drawPolygon(const float* vertices, int vertexCount, uint8_t r, 
 	for (int i = 0; i < vertexCount; ++i) {
 		verts.push_back({ vertices[i * 2], vertices[i * 2 + 1], 0, 0, r, g, b, a });
 	}
-	glUseProgram(program);
-	glBindVertexArray(vao);
+	bindState();
 	glUniform1i(loc_useTexture, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(Vertex), verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_TRIANGLE_FAN, 0, (GLsizei)verts.size());
-	glBindVertexArray(0);
-	glUseProgram(0);
 }
 
 void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -668,14 +681,10 @@ void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t
 	for (int i = 0; i < vertexCount; ++i) {
 		verts.push_back({ vertices[i * 2], vertices[i * 2 + 1], 0, 0, r, g, b, a });
 	}
-	glUseProgram(program);
-	glBindVertexArray(vao);
+	bindState();
 	glUniform1i(loc_useTexture, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(Vertex), verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_TRIANGLE_FAN, 0, (GLsizei)verts.size());
-	glBindVertexArray(0);
-	glUseProgram(0);
 }
 
 void GLRenderer::drawText(float x, float y, const std::string &text, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {

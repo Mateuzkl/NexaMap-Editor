@@ -317,13 +317,15 @@ protected:
 	};
 
 	void getColor(Brush* brush, const Position& position, uint8_t& r, uint8_t& g, uint8_t& b);
-	void glBlitTexture(int sx, int sy, int texture_number, int red, int green, int blue, int alpha, bool adjustZoom = false);
+	void glBlitTexture(int sx, int sy, int texture_number, int red, int green, int blue, int alpha, bool adjustZoom = false, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);
 	void glBlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size = 0);
 	void glColor(wxColor color);
 	void glColor(BrushColor color);
 	void glColorCheck(Brush* brush, const Position& pos);
 	void drawRect(int x, int y, int w, int h, const wxColor& color, int width = 1);
 	void drawFilledRect(int x, int y, int w, int h, const wxColor& color);
+	void glFillQuad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3);
+	GLColor m_brushColor { 255, 255, 255, 128 };
 };
 
 #endif

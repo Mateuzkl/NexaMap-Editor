@@ -23,7 +23,7 @@ public:
 	void init();
 	void shutdown();
 
-	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color);
+	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);
 	void drawColoredQuad(float x, float y, float w, float h, const GLColor &color);
 
 	void drawRect(float x, float y, float w, float h, const GLColor &color, float lineWidth = 1.0f);
@@ -48,11 +48,13 @@ public:
 	void setOrtho(float left, float right, float bottom, float top);
 
 	void flush();
+	void endFrame();
 	static void invalidateTexture(GLuint id);
 
 private:
 	static std::vector<GLRenderer*> s_instances;
 	bool initialized = false;
+	bool m_programBound = false;
 	GLuint vao = 0;
 	GLuint vbo = 0;
 	GLuint program = 0;
@@ -76,6 +78,8 @@ private:
 	GLuint current_texture = 0;
 
 	void flushBatch();
+	void bindState();
+	void unbindState();
 	void drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor &color);
 
 	struct GlyphInfo {

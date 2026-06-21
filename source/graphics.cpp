@@ -221,6 +221,47 @@ GLuint GraphicManager::getFreeTextureID() {
 	return id_counter++; // This should (hopefully) never run out
 }
 
+bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
+	constexpr int PAD = 1;
+	constexpr int CELL = SPRITE_PIXELS + 2 * PAD;
+
+	if (atlas_size == 0) {
+		GLint maxTex = 2048;
+		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTex);
+		atlas_size = std::min(4096, static_cast<int>(maxTex));
+		if (atlas_size < CELL) {
+			atlas_size = CELL;
+		}
+	}
+
+	const int perRow = atlas_size / CELL;
+	const int perPage = perRow * perRow;
+
+	if (atlas_textures.empty() || atlas_count >= perPage) {
+		GLuint tex = 0;
+		glGenTextures(1, &tex);
+		if (tex == 0) {
+			return false;
+		}
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		atlas_textures.push_back(tex);
+		atlas_count = 0;
+	}
+
+	const int slot = atlas_count++;
+	const int col = slot % perRow;
+	const int row = slot / perRow;
+	outTex = atlas_textures.back();
+	outX = col * CELL;
+	outY = row * CELL;
+	return true;
+}
+
 void GraphicManager::clear() {
 	SpriteMap new_sprite_space;
 	for (SpriteMap::iterator iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
@@ -244,6 +285,15 @@ void GraphicManager::clear() {
 	loaded_textures = 0;
 	lastclean = time(nullptr);
 	spritefile = "";
+
+	for (GLuint tex : atlas_textures) {
+		if (tex) {
+			glDeleteTextures(1, &tex);
+		}
+	}
+	atlas_textures.clear();
+	atlas_size = 0;
+	atlas_count = 0;
 
 	unloaded = true;
 }
@@ -1043,6 +1093,22 @@ GLuint GameSprite::getHardwareID(int _x, int _y, int _layer, int _count, int _pa
 	return spriteList[v]->getHardwareID();
 }
 
+GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _layer, int _count, int _pattern_x, int _pattern_y, int _pattern_z, int _frame) {
+	uint32_t v;
+	if (_count >= 0 && height <= 1 && width <= 1) {
+		v = _count;
+	} else {
+		v = ((((((_frame)*pattern_y + _pattern_y) * pattern_x + _pattern_x) * layers + _layer) * height + _y) * width + _x);
+	}
+	if (v >= numsprites) {
+		v = (numsprites == 1) ? 0 : (v % numsprites);
+	}
+	SpriteTex st;
+	st.texture = spriteList[v]->getHardwareID();
+	spriteList[v]->getUV(st.u0, st.v0, st.u1, st.v1);
+	return st;
+}
+
 GameSprite::TemplateImage* GameSprite::getTemplateImage(int sprite_index, const Outfit& outfit) {
 	if (instanced_templates.empty()) {
 		TemplateImage* img = newd TemplateImage(this, sprite_index, outfit);
@@ -1078,6 +1144,23 @@ GLuint GameSprite::getHardwareID(int _x, int _y, int _dir, int _addon, int _patt
 		return img->getHardwareID();
 	}
 	return spriteList[v]->getHardwareID();
+}
+
+GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _dir, int _addon, int _pattern_z, const Outfit& _outfit, int _frame) {
+	uint32_t v = getIndex(_x, _y, 0, _dir, _addon, _pattern_z, _frame);
+	if (v >= numsprites) {
+		v = (numsprites == 1) ? 0 : (v % numsprites);
+	}
+	SpriteTex st;
+	if (layers > 1) {
+		TemplateImage* img = getTemplateImage(v, _outfit);
+		st.texture = img->getHardwareID();
+		img->getUV(st.u0, st.v0, st.u1, st.v1);
+	} else {
+		st.texture = spriteList[v]->getHardwareID();
+		spriteList[v]->getUV(st.u0, st.v0, st.u1, st.v1);
+	}
+	return st;
 }
 
 wxMemoryDC* GameSprite::getDC(SpriteSize size) {
@@ -1199,7 +1282,9 @@ GameSprite::NormalImage::~NormalImage() {
 }
 
 void GameSprite::NormalImage::clean(int time) {
-	Image::clean(time);
+	if (!atlas_loaded) {
+		Image::clean(time);
+	}
 	if (time - lastaccess > 5 && !g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) { // We keep dumps around for 5 seconds.
 		delete[] dump;
 		dump = nullptr;
@@ -1312,11 +1397,66 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 }
 
 GLuint GameSprite::NormalImage::getHardwareID() {
-	if (!isGLLoaded) {
-		createGLTexture(id);
+	if (!atlas_loaded) {
+		uint8_t* rgba = getRGBAData();
+		if (!rgba) {
+			return 0;
+		}
+
+		GLuint tex = 0;
+		int px = 0;
+		int py = 0;
+		if (g_gui.gfx.allocAtlasSlot(tex, px, py)) {
+			constexpr int PAD = 1;
+			constexpr int S = SPRITE_PIXELS;
+			constexpr int CW = S + 2 * PAD;
+
+			std::vector<uint8_t> padded(static_cast<size_t>(CW) * CW * 4);
+			for (int y = 0; y < CW; ++y) {
+				int sy = std::clamp(y - PAD, 0, S - 1);
+				for (int x = 0; x < CW; ++x) {
+					int sx = std::clamp(x - PAD, 0, S - 1);
+					const uint8_t* src = rgba + (static_cast<size_t>(sy) * S + sx) * 4;
+					uint8_t* dst = padded.data() + (static_cast<size_t>(y) * CW + x) * 4;
+					dst[0] = src[0];
+					dst[1] = src[1];
+					dst[2] = src[2];
+					dst[3] = src[3];
+				}
+			}
+
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, px, py, CW, CW, GL_RGBA, GL_UNSIGNED_BYTE, padded.data());
+
+			float fs = static_cast<float>(g_gui.gfx.getAtlasSize());
+			atlas_tex = tex;
+			au0 = (px + PAD) / fs;
+			av0 = (py + PAD) / fs;
+			au1 = (px + PAD + S) / fs;
+			av1 = (py + PAD + S) / fs;
+			atlas_loaded = true;
+			isGLLoaded = true;
+			g_gui.gfx.loaded_textures += 1;
+		}
+
+		delete[] rgba;
 	}
 	visit();
-	return id;
+	return atlas_tex;
+}
+
+void GameSprite::NormalImage::getUV(float& u0, float& v0, float& u1, float& v1) {
+	if (atlas_loaded) {
+		u0 = au0;
+		v0 = av0;
+		u1 = au1;
+		v1 = av1;
+	} else {
+		u0 = 0.f;
+		v0 = 0.f;
+		u1 = 1.f;
+		v1 = 1.f;
+	}
 }
 
 void GameSprite::NormalImage::createGLTexture(GLuint ignored) {
@@ -1330,6 +1470,14 @@ void GameSprite::NormalImage::unloadGLTexture(GLuint ignored) {
 GameSprite::EditorImage::EditorImage(const wxArtID& bitmapId) :
 	NormalImage(),
 	bitmapId(bitmapId) {
+}
+
+GLuint GameSprite::EditorImage::getHardwareID() {
+	if (!isGLLoaded) {
+		createGLTexture(id);
+	}
+	visit();
+	return id;
 }
 
 void GameSprite::EditorImage::createGLTexture(GLuint textureId) {
