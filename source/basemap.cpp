@@ -17,6 +17,8 @@
 
 #include "main.h"
 
+#include <memory>
+
 #include "tile.h"
 #include "basemap.h"
 
@@ -118,7 +120,7 @@ void BaseMap::setTile(int x, int y, int z, Tile* newtile, bool remove) {
 	QTreeNode* leaf = root.getLeafForce(x, y);
 	Tile* old = leaf->setTile(x, y, z, newtile);
 	if (remove) {
-		delete old;
+		std::unique_ptr<Tile> { old };
 	}
 }
 

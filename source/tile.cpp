@@ -275,6 +275,10 @@ void Tile::addItem(Item* item) {
 		return;
 	}
 
+	if (items.empty()) {
+		items.reserve(4);
+	}
+
 	ItemVector::iterator it;
 
 	uint16_t gid = item->getGroundEquivalent();
@@ -299,7 +303,12 @@ void Tile::addItem(Item* item) {
 				++it;
 			}
 		} else {
-			it = items.end();
+			items.push_back(item);
+
+			if (item->isSelected()) {
+				statflags |= TILESTATE_SELECTED;
+			}
+			return;
 		}
 	}
 

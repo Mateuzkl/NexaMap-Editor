@@ -22,8 +22,10 @@
 #include <wx/zstream.h>
 #include <wx/mstream.h>
 #include <wx/datstrm.h>
+#include <wx/file.h>
 
 #include <set>
+#include <sstream>
 
 #include "settings.h"
 #include "gui.h" // Loadbar
@@ -1857,6 +1859,111 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 	return true;
 }
 
+static bool readFileContent(const wxString& filepath, std::string& content) {
+	if (!wxFileExists(filepath)) {
+		return false;
+	}
+
+	wxFile file(filepath, wxFile::read);
+	if (!file.IsOpened()) {
+		return false;
+	}
+
+	const wxFileOffset fileSize = file.Length();
+	if (fileSize < 0) {
+		return false;
+	}
+
+	content.resize(static_cast<size_t>(fileSize));
+	if (content.empty()) {
+		return true;
+	}
+
+	const auto bytesRead = file.Read(content.data(), content.size());
+	return static_cast<size_t>(bytesRead) == content.size();
+}
+
+static bool readNormalizedLineEndingChar(const std::string& content, size_t& offset, char& out) {
+	if (offset >= content.size()) {
+		return false;
+	}
+
+	out = content[offset++];
+	if (out == '\r') {
+		if (offset < content.size() && content[offset] == '\n') {
+			++offset;
+		}
+		out = '\n';
+	}
+	return true;
+}
+
+static bool contentMatchesIgnoringLineEndings(const std::string& left, const std::string& right) {
+	size_t leftOffset = 0;
+	size_t rightOffset = 0;
+	char leftChar = '\0';
+	char rightChar = '\0';
+
+	while (true) {
+		const bool hasLeft = readNormalizedLineEndingChar(left, leftOffset, leftChar);
+		const bool hasRight = readNormalizedLineEndingChar(right, rightOffset, rightChar);
+		if (hasLeft != hasRight) {
+			return false;
+		}
+		if (!hasLeft) {
+			return true;
+		}
+		if (leftChar != rightChar) {
+			return false;
+		}
+	}
+}
+
+static bool fileMatchesXmlContent(const wxString& filepath, const std::string& content) {
+	std::string existingContent;
+	if (!readFileContent(filepath, existingContent)) {
+		return false;
+	}
+
+	if (existingContent == content) {
+		return true;
+	}
+
+	return contentMatchesIgnoringLineEndings(existingContent, content);
+}
+
+static bool writeContentToFile(const wxString& filepath, const std::string& content) {
+	wxFile file(filepath, wxFile::write);
+	if (!file.IsOpened()) {
+		return false;
+	}
+
+	if (!content.empty()) {
+		const auto bytesWritten = file.Write(content.data(), content.size());
+		if (static_cast<size_t>(bytesWritten) != content.size()) {
+			return false;
+		}
+	}
+	return file.Close();
+}
+
+static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath) {
+	std::ostringstream stream;
+	doc.save(stream, "\t", pugi::format_default, pugi::encoding_utf8);
+	const std::string content = stream.str();
+
+	if (fileMatchesXmlContent(filepath, content)) {
+		return true;
+	}
+
+	const wxString backupPath = filepath + "~";
+	if (!wxFileExists(filepath) && fileMatchesXmlContent(backupPath, content)) {
+		return wxRenameFile(backupPath, filepath, false);
+	}
+
+	return writeContentToFile(filepath, content);
+}
+
 bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	wxString filepath = dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
 	filepath += wxString(map.spawnfile.c_str(), wxConvUTF8);
@@ -1864,7 +1971,7 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	// Create the XML file
 	pugi::xml_document doc;
 	if (saveSpawns(map, doc)) {
-		return doc.save_file(filepath.wc_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+		return saveXmlFileIfChanged(doc, filepath);
 	}
 	return false;
 }
@@ -1939,7 +2046,7 @@ bool IOMapOTBM::saveHouses(Map& map, const FileName& dir) {
 	// Create the XML file
 	pugi::xml_document doc;
 	if (saveHouses(map, doc)) {
-		return doc.save_file(filepath.wc_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+		return saveXmlFileIfChanged(doc, filepath);
 	}
 	return false;
 }
@@ -1983,7 +2090,7 @@ bool IOMapOTBM::saveWaypoints(Map& map, const FileName& dir) {
 	// Create the XML file
 	pugi::xml_document doc;
 	if (saveWaypoints(map, doc)) {
-		return doc.save_file(filepath.wc_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+		return saveXmlFileIfChanged(doc, filepath);
 	}
 	return false;
 }
@@ -2035,7 +2142,7 @@ bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 
 	pugi::xml_document doc;
 	if (saveZones(map, doc)) {
-		return doc.save_file(filepath.wc_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+		return saveXmlFileIfChanged(doc, filepath);
 	}
 	return false;
 }

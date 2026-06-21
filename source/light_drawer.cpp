@@ -146,6 +146,7 @@ void LightDrawer::createGLTexture() {
 
 void LightDrawer::unloadGLTexture() {
 	if (texture != 0) {
+		GLRenderer::invalidateTexture(texture);
 		glDeleteTextures(1, &texture);
 		texture = 0;
 	}
