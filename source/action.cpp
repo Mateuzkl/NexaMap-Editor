@@ -245,7 +245,9 @@ void Action::commit(DirtyList* dirty_list) {
 						}
 					}
 
-					newtile->increaseWaypointCount();
+					if (newtile) {
+						newtile->increaseWaypointCount();
+					}
 
 					// Update shit
 					Position oldpos = wp->pos;
@@ -411,6 +413,10 @@ size_t BatchAction::memsize(bool recalc) const {
 }
 
 void BatchAction::addAction(Action* action) {
+	if (!action) {
+		return;
+	}
+
 	// If empty, do nothing.
 	if (action->size() == 0) {
 		delete action;
@@ -430,6 +436,10 @@ void BatchAction::addAction(Action* action) {
 }
 
 void BatchAction::addAndCommitAction(Action* action) {
+	if (!action) {
+		return;
+	}
+
 	// If empty, do nothing.
 	if (action->size() == 0) {
 		delete action;
@@ -449,7 +459,7 @@ void BatchAction::addAndCommitAction(Action* action) {
 
 void BatchAction::commit() {
 	for (Action* action : batch) {
-		if (!action->isCommited()) {
+		if (action && !action->isCommited()) {
 			action->commit(nullptr);
 		}
 	}
@@ -457,13 +467,17 @@ void BatchAction::commit() {
 
 void BatchAction::undo() {
 	for (Action* action : std::views::reverse(batch)) {
-		action->undo(nullptr);
+		if (action) {
+			action->undo(nullptr);
+		}
 	}
 }
 
 void BatchAction::redo() {
 	for (Action* action : batch) {
-		action->redo(nullptr);
+		if (action) {
+			action->redo(nullptr);
+		}
 	}
 }
 
@@ -504,6 +518,10 @@ void ActionQueue::resetTimer() {
 void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 	ASSERT(batch);
 	ASSERT(current <= actions.size());
+
+	if (!batch) {
+		return;
+	}
 
 	if (batch->size() == 0) {
 		delete batch;
@@ -560,6 +578,10 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 }
 
 void ActionQueue::addAction(Action* action, int stacking_delay) {
+	if (!action) {
+		return;
+	}
+
 	BatchAction* batch = createBatch(action->getType());
 	batch->addAndCommitAction(action);
 	if (batch->size() == 0) {

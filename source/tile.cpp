@@ -157,6 +157,10 @@ int Tile::size() const {
 }
 
 void Tile::merge(Tile* other) {
+	if (!other) {
+		return;
+	}
+
 	if (other->isPZ()) {
 		setPZ(true);
 	}
@@ -180,12 +184,6 @@ void Tile::merge(Tile* other) {
 		delete spawn;
 		spawn = other->spawn;
 		other->spawn = nullptr;
-	}
-
-	if (other->creature) {
-		delete creature;
-		creature = other->creature;
-		other->creature = nullptr;
 	}
 
 	ItemVector::iterator it;
@@ -560,6 +558,7 @@ bool tilePositionVisualLessThan(const Tile* a, const Tile* b) {
 
 void Tile::update() {
 	statflags &= TILESTATE_MODIFIED;
+	minimapColor = INVALID_MINIMAP_COLOR;
 
 	if (spawn && spawn->isSelected()) {
 		statflags |= TILESTATE_SELECTED;
