@@ -158,6 +158,11 @@ void ZonesPalettePanel::OnBeginEditZoneLabel(wxListEvent& event) {
 }
 
 void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
+	// END_LABEL_EDIT fires exactly once after OnBeginEditZoneLabel disabled hotkeys
+	// (whether committed, cancelled, or vetoed). Always restore them here so shortcuts
+	// don't stay dead after adding/renaming a zone.
+	g_gui.EnableHotkeys();
+
 	if (!map) {
 		return;
 	}
@@ -166,7 +171,6 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 	std::string oldName = nstr(zone_list->GetItemText(event.GetIndex()));
 
 	if (event.IsEditCancelled()) {
-		g_gui.EnableHotkeys();
 		return;
 	}
 
@@ -190,10 +194,6 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 				refresh_timer.Start(300, true);
 			}
 		}
-	}
-
-	if (event.IsAllowed()) {
-		g_gui.EnableHotkeys();
 	}
 }
 

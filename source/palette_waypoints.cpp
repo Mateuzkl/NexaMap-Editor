@@ -146,6 +146,11 @@ void WaypointPalettePanel::OnBeginEditWaypointLabel(wxListEvent& event) {
 }
 
 void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
+	// END_LABEL_EDIT fires exactly once after OnBeginEditWaypointLabel disabled hotkeys
+	// (whether the edit was committed, cancelled, or vetoed). Always restore them here,
+	// otherwise every keyboard shortcut stays dead after adding/renaming a waypoint.
+	g_gui.EnableHotkeys();
+
 	std::string wpname = nstr(event.GetLabel());
 	std::string oldwpname = nstr(waypoint_list->GetItemText(event.GetIndex()));
 	Waypoint* wp = map->waypoints.getWaypoint(oldwpname);
@@ -188,10 +193,6 @@ void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
 				refresh_timer.Start(300, true);
 			}
 		}
-	}
-
-	if (event.IsAllowed()) {
-		g_gui.EnableHotkeys();
 	}
 }
 
