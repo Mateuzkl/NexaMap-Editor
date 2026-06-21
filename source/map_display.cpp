@@ -152,6 +152,17 @@ MapCanvas::~MapCanvas() {
 }
 
 void MapCanvas::Refresh() {
+	if (drawer) {
+		drawer->markDirty();
+	}
+	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
+		refresh_watch.Start();
+		wxGLCanvas::Update();
+	}
+	wxGLCanvas::Refresh();
+}
+
+void MapCanvas::RefreshAnimation() {
 	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
 		refresh_watch.Start();
 		wxGLCanvas::Update();
@@ -193,6 +204,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		DrawingOptions& options = drawer->getOptions();
 		if (screenshot_buffer) {
 			options.SetIngame();
+			options.use_fbo_scene_cache = false;
 		} else {
 			options.transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
 			options.transparent_items = g_settings.getBoolean(Config::TRANSPARENT_ITEMS);
@@ -227,6 +239,8 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			options.show_performance_stats = g_settings.getBoolean(Config::SHOW_PERFORMANCE_STATS);
 
 			options.experimental_fog = g_settings.getBoolean(Config::EXPERIMENTAL_FOG);
+
+			options.use_fbo_scene_cache = g_settings.getBoolean(Config::USE_FBO_SCENE_CACHE);
 		}
 
 		options.dragging = boundbox_selection;
@@ -2704,7 +2718,7 @@ AnimationTimer::~AnimationTimer() {
 };
 
 void AnimationTimer::Notify() {
-	map_canvas->Refresh();
+	map_canvas->RefreshAnimation();
 };
 
 void AnimationTimer::StartRefresh(int new_interval) {

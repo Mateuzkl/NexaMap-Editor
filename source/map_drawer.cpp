@@ -278,7 +278,7 @@ void MapDrawer::Release() {
 	glPopMatrix();
 }
 
-void MapDrawer::Draw() {
+void MapDrawer::DrawScene() {
 	DrawBackground();
 	DrawMap();
 	if (options.isDrawLight()) {
@@ -286,6 +286,9 @@ void MapDrawer::Draw() {
 	}
 	DrawDraggingShadow();
 	DrawHigherFloors();
+}
+
+void MapDrawer::DrawOverlays() {
 	if (options.dragging) {
 		DrawSelectionBox();
 	}
@@ -302,6 +305,62 @@ void MapDrawer::Draw() {
 	if (options.show_performance_stats) {
 		DrawPerformanceStats();
 	}
+}
+
+void MapDrawer::markDirty() {
+	scene_dirty = true;
+}
+
+bool MapDrawer::isSceneDirty() {
+	if (options.show_preview) {
+		return true;
+	}
+	if (scene_dirty
+		|| !prev_view_initialized
+		|| prev_view_scroll_x != view_scroll_x
+		|| prev_view_scroll_y != view_scroll_y
+		|| prev_zoom != zoom
+		|| prev_floor != floor
+		|| prev_start_z != start_z
+		|| prev_screensize_x != screensize_x
+		|| prev_screensize_y != screensize_y) {
+		prev_view_initialized = true;
+		prev_view_scroll_x = view_scroll_x;
+		prev_view_scroll_y = view_scroll_y;
+		prev_zoom = zoom;
+		prev_floor = floor;
+		prev_start_z = start_z;
+		prev_screensize_x = screensize_x;
+		prev_screensize_y = screensize_y;
+		return true;
+	}
+	return false;
+}
+
+void MapDrawer::Draw() {
+	if (!options.use_fbo_scene_cache || options.show_preview) {
+		DrawScene();
+		DrawOverlays();
+		return;
+	}
+
+	renderer->ensureFBO(screensize_x, screensize_y);
+	if (!renderer->hasFBO()) {
+		DrawScene();
+		DrawOverlays();
+		return;
+	}
+
+	if (isSceneDirty()) {
+		renderer->beginFBO();
+		DrawScene();
+		renderer->flush();
+		renderer->endFBO();
+		scene_dirty = false;
+	}
+
+	renderer->blitFBO(screensize_x, screensize_y);
+	DrawOverlays();
 }
 
 void MapDrawer::DrawBackground() {

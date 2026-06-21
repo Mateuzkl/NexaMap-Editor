@@ -508,3 +508,71 @@ void GLRenderer::invalidateTexture(GLuint id) {
 		}
 	}
 }
+
+void GLRenderer::ensureFBO(int w, int h) {
+	if (w <= 0 || h <= 0) {
+		return;
+	}
+	if (fboData.fbo != 0 && fboData.width == w && fboData.height == h) {
+		return;
+	}
+	destroyFBO();
+
+	glGenFramebuffers(1, &fboData.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fboData.fbo);
+
+	glGenTextures(1, &fboData.texture);
+	glBindTexture(GL_TEXTURE_2D, fboData.texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboData.texture, 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		glDeleteTextures(1, &fboData.texture);
+		glDeleteFramebuffers(1, &fboData.fbo);
+		fboData.fbo = 0;
+		fboData.texture = 0;
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	fboData.width = w;
+	fboData.height = h;
+}
+
+void GLRenderer::destroyFBO() {
+	if (fboData.texture != 0) {
+		invalidateTexture(fboData.texture);
+		glDeleteTextures(1, &fboData.texture);
+		fboData.texture = 0;
+	}
+	if (fboData.fbo != 0) {
+		glDeleteFramebuffers(1, &fboData.fbo);
+		fboData.fbo = 0;
+	}
+	fboData.width = 0;
+	fboData.height = 0;
+}
+
+void GLRenderer::beginFBO() {
+	if (fboData.fbo != 0) {
+		glBindFramebuffer(GL_FRAMEBUFFER, fboData.fbo);
+	}
+}
+
+void GLRenderer::endFBO() {
+	if (fboData.fbo != 0) {
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+}
+
+void GLRenderer::blitFBO(int w, int h) {
+	if (fboData.fbo == 0 || w <= 0 || h <= 0) {
+		return;
+	}
+	flush();
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, fboData.fbo);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}

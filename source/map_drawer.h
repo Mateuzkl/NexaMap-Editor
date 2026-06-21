@@ -95,6 +95,8 @@ struct DrawingOptions {
 	bool extended_house_shader;
 
 	bool experimental_fog;
+
+	bool use_fbo_scene_cache = false;
 };
 
 class MapCanvas;
@@ -221,6 +223,16 @@ class MapDrawer {
 	int tile_size;
 	int floor;
 
+	bool scene_dirty = true;
+	bool prev_view_initialized = false;
+	int prev_view_scroll_x = 0;
+	int prev_view_scroll_y = 0;
+	float prev_zoom = -1.0f;
+	int prev_floor = -1;
+	int prev_start_z = -1;
+	int prev_screensize_x = -1;
+	int prev_screensize_y = -1;
+
 protected:
 	std::unordered_map<unsigned int, std::vector<FinderPosition>> zoneTiles;
 	std::vector<MapTooltip*> tooltips;
@@ -256,6 +268,10 @@ public:
 	void Release();
 
 	void Draw();
+	void DrawScene();
+	void DrawOverlays();
+	void markDirty();
+	bool isSceneDirty();
 	void DrawBackground();
 	void DrawMap();
 	void DrawDraggingShadow();

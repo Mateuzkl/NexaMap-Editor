@@ -44,6 +44,15 @@ public:
 	void flushAndUnbind();
 	static void invalidateTexture(GLuint id);
 
+	void ensureFBO(int w, int h);
+	void destroyFBO();
+	void beginFBO();
+	void endFBO();
+	void blitFBO(int w, int h);
+	bool hasFBO() const {
+		return fboData.fbo != 0;
+	}
+
 private:
 	static std::vector<GLRenderer*> s_instances;
 	bool initialized = false;
@@ -69,6 +78,14 @@ private:
 
 	std::vector<Vertex> batch;
 	GLuint current_texture = 0;
+
+	struct FBOData {
+		GLuint fbo = 0;
+		GLuint texture = 0;
+		int width = 0;
+		int height = 0;
+	};
+	FBOData fboData;
 
 	void flushBatch();
 	void bindState();
