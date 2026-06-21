@@ -17,8 +17,6 @@
 #include <array>
 #include <cmath>
 #include <numbers>
-#include <fstream>
-#include <stb_truetype.h>
 
 #ifdef _WIN32
 static void* rmeGetGLProc(const char* name) {
@@ -85,193 +83,6 @@ void main() {
         FragColor = vColor;
 }
 )";
-
-void GLRenderer::initFontAtlas() {
-	// Load TTF font
-	const float fontSize = 14.0f;
-	std::string fontPath;
-
-#ifdef _WIN32
-	fontPath = "C:\\Windows\\Fonts\\segoeui.ttf";
-#elif defined(__APPLE__)
-	fontPath = "/System/Library/Fonts/Helvetica.ttc";
-#else
-	fontPath = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-#endif
-
-	// Try bundled font first
-	std::string bundledPath = "data/fonts/DejaVuSans.ttf";
-	std::ifstream testFile(bundledPath, std::ios::binary);
-	if (testFile.good()) {
-		fontPath = bundledPath;
-	}
-	testFile.close();
-
-	std::ifstream file(fontPath, std::ios::binary | std::ios::ate);
-	if (!file.is_open()) {
-		// Fallback to old wxBitmap method
-		initFontAtlasFallback();
-		return;
-	}
-
-	auto fileSize = file.tellg();
-	file.seekg(0);
-	std::vector<uint8_t> ttfData(fileSize);
-	file.read(reinterpret_cast<char*>(ttfData.data()), fileSize);
-	file.close();
-
-	stbtt_fontinfo stbFont;
-	if (!stbtt_InitFont(&stbFont, ttfData.data(), 0)) {
-		initFontAtlasFallback();
-		return;
-	}
-
-	float scale = stbtt_ScaleForPixelHeight(&stbFont, fontSize);
-
-	int ascent;
-	int descent;
-	int lineGap;
-	stbtt_GetFontVMetrics(&stbFont, &ascent, &descent, &lineGap);
-	font.ascent = ascent * scale;
-	font.lineHeight = (ascent - descent + lineGap) * scale;
-
-	// Bake glyphs into atlas
-	const int texW = 512;
-	const int texH = 512;
-	std::vector<uint8_t> bitmap(texW * texH, 0);
-
-	int penX = 1;
-	int penY = 1;
-	int rowH = 0;
-
-	for (int i = 0; i < 96; i++) {
-		const auto ch = 32 + i;
-		int x0;
-		int y0;
-		int x1;
-		int y1;
-		stbtt_GetCodepointBitmapBox(&stbFont, ch, scale, scale, &x0, &y0, &x1, &y1);
-
-		int gw = x1 - x0;
-		int gh = y1 - y0;
-
-		if (penX + gw + 1 >= texW) {
-			penX = 1;
-			penY += rowH + 1;
-			rowH = 0;
-		}
-
-		if (penY + gh + 1 >= texH) {
-			break; // atlas full
-		}
-
-		stbtt_MakeCodepointBitmap(&stbFont, &bitmap[penY * texW + penX], gw, gh, texW, scale, scale, ch);
-
-		font.glyphs[i].u0 = static_cast<float>(penX) / texW;
-		font.glyphs[i].v0 = static_cast<float>(penY) / texH;
-		font.glyphs[i].u1 = static_cast<float>(penX + gw) / texW;
-		font.glyphs[i].v1 = static_cast<float>(penY + gh) / texH;
-		font.glyphs[i].xoff = static_cast<float>(x0);
-		font.glyphs[i].yoff = static_cast<float>(y0);
-		font.glyphs[i].w = static_cast<float>(gw);
-		font.glyphs[i].h = static_cast<float>(gh);
-
-		int advW;
-		int lsb;
-		stbtt_GetCodepointHMetrics(&stbFont, ch, &advW, &lsb);
-		font.glyphs[i].advance = advW * scale;
-		font.advances[i] = advW * scale;
-
-		penX += gw + 1;
-		if (gh + 1 > rowH) {
-			rowH = gh + 1;
-		}
-	}
-
-	// Upload as RGBA (white + alpha)
-	std::vector<uint8_t> pixels(texW * texH * 4);
-	for (int i = 0; i < texW * texH; i++) {
-		pixels[i * 4] = 255;
-		pixels[i * 4 + 1] = 255;
-		pixels[i * 4 + 2] = 255;
-		pixels[i * 4 + 3] = bitmap[i];
-	}
-
-	glGenTextures(1, &font.texture);
-	glBindTexture(GL_TEXTURE_2D, font.texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texW, texH, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	font.texW = texW;
-	font.texH = texH;
-	font.loaded = true;
-}
-
-void GLRenderer::initFontAtlasFallback() {
-	const int glyphW = 10;
-	const int glyphH = 16;
-	const int cols = 16;
-	const int rows = 6;
-	const int texW = cols * glyphW;
-	const int texH = rows * glyphH;
-
-	wxBitmap bmp(texW, texH, 24);
-	wxMemoryDC dc(bmp);
-	dc.SetBackground(*wxBLACK_BRUSH);
-	dc.Clear();
-	dc.SetFont(wxFont(10, wxFONTFAMILY_MODERN, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
-	dc.SetTextForeground(*wxWHITE);
-	for (int i = 0; i < 96; i++) {
-		int col = i % cols;
-		int row = i / cols;
-		const auto ch = static_cast<char>(32 + i);
-		dc.DrawText(wxString(ch), col * glyphW, row * glyphH);
-	}
-	dc.SelectObject(wxNullBitmap);
-	wxImage img = bmp.ConvertToImage();
-	std::vector<uint8_t> pixels(texW * texH * 4);
-	for (int y = 0; y < texH; y++) {
-		for (int x = 0; x < texW; x++) {
-			int si = (y * texW + x) * 3;
-			int di = (y * texW + x) * 4;
-			uint8_t lum = img.GetData()[si];
-			pixels[di] = 255;
-			pixels[di + 1] = 255;
-			pixels[di + 2] = 255;
-			pixels[di + 3] = lum;
-		}
-	}
-
-	glGenTextures(1, &font.texture);
-	glBindTexture(GL_TEXTURE_2D, font.texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texW, texH, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	font.ascent = 12.0f;
-	font.lineHeight = 16.0f;
-	for (int i = 0; i < 96; i++) {
-		int col = i % cols;
-		int row = i / cols;
-		font.glyphs[i].u0 = static_cast<float>(col * glyphW) / texW;
-		font.glyphs[i].v0 = static_cast<float>(row * glyphH) / texH;
-		font.glyphs[i].u1 = static_cast<float>((col + 1) * glyphW) / texW;
-		font.glyphs[i].v1 = static_cast<float>((row + 1) * glyphH) / texH;
-		font.glyphs[i].xoff = 0;
-		font.glyphs[i].yoff = -12.0f;
-		font.glyphs[i].w = static_cast<float>(glyphW);
-		font.glyphs[i].h = static_cast<float>(glyphH);
-		font.glyphs[i].advance = static_cast<float>(glyphW);
-		font.advances[i] = static_cast<float>(glyphW);
-	}
-
-	font.texW = texW;
-	font.texH = texH;
-	font.loaded = true;
-}
 
 void GLRenderer::init() {
 	if (std::find(s_instances.begin(), s_instances.end(), this) == s_instances.end()) {
@@ -362,8 +173,6 @@ void GLRenderer::init() {
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-	initFontAtlas();
-
 	initialized = true;
 }
 
@@ -385,10 +194,6 @@ void GLRenderer::shutdown() {
 	if (vao) {
 		glDeleteVertexArrays(1, &vao);
 		vao = 0;
-	}
-	if (font.texture) {
-		glDeleteTextures(1, &font.texture);
-		font.texture = 0;
 	}
 	initialized = false;
 }
@@ -416,6 +221,11 @@ void GLRenderer::endFrame() {
 	flushBatch();
 	unbindState();
 	current_texture = 0;
+}
+
+void GLRenderer::flushAndUnbind() {
+	flushBatch();
+	unbindState();
 }
 
 void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
@@ -685,66 +495,6 @@ void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t
 	glUniform1i(loc_useTexture, 0);
 	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(Vertex), verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_TRIANGLE_FAN, 0, (GLsizei)verts.size());
-}
-
-void GLRenderer::drawText(float x, float y, const std::string &text, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-	if (current_texture != font.texture && !batch.empty()) {
-		flushBatch();
-	}
-	current_texture = font.texture;
-	setColor(r, g, b, a);
-	setRasterPos(x, y);
-	for (char c : text) {
-		drawBitmapChar(c);
-	}
-}
-
-float GLRenderer::getCharWidth(char c) {
-	if (c < 32 || c > 127) {
-		return 0.0f;
-	}
-	return font.advances[c - 32];
-}
-
-float GLRenderer::getLineHeight() const {
-	return font.lineHeight;
-}
-
-float GLRenderer::getAscent() const {
-	return font.ascent;
-}
-
-void GLRenderer::setRasterPos(float x, float y) {
-	cursorX = x;
-	cursorY = y;
-}
-
-void GLRenderer::drawBitmapChar(char c) {
-	if (c < 32 || c > 127) {
-		return;
-	}
-	if (current_texture != font.texture) {
-		flushBatch();
-		current_texture = font.texture;
-	}
-	int idx = c - 32;
-	const auto &g = font.glyphs[idx];
-	float qx = cursorX + g.xoff;
-	float qy = cursorY + g.yoff;
-	float qw = g.w;
-	float qh = g.h;
-	batch.push_back({ qx, qy, g.u0, g.v0, textColor.r, textColor.g, textColor.b, textColor.a });
-	batch.push_back({ qx + qw, qy, g.u1, g.v0, textColor.r, textColor.g, textColor.b, textColor.a });
-	batch.push_back({ qx + qw, qy + qh, g.u1, g.v1, textColor.r, textColor.g, textColor.b, textColor.a });
-	batch.push_back({ qx, qy, g.u0, g.v0, textColor.r, textColor.g, textColor.b, textColor.a });
-	batch.push_back({ qx + qw, qy + qh, g.u1, g.v1, textColor.r, textColor.g, textColor.b, textColor.a });
-	batch.push_back({ qx, qy + qh, g.u0, g.v1, textColor.r, textColor.g, textColor.b, textColor.a });
-	cursorX += g.advance;
-}
-
-void GLRenderer::setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-	flushBatch();
-	textColor = { r, g, b, a };
 }
 
 void GLRenderer::flush() {

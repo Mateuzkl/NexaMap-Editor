@@ -377,9 +377,6 @@
     <ClCompile Include="..\..\source\gl_renderer.cpp">
       <Filter>gui\graphics</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\source\stb_truetype_impl.cpp">
-      <Filter>gui\graphics</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\source\editor_tabs.cpp">
       <Filter>gui\map window</Filter>
     </ClCompile>

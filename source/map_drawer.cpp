@@ -1846,7 +1846,7 @@ void MapDrawer::DrawTooltips() {
 				line_width = 0.0f;
 				line_char_count = 0;
 			} else {
-				line_width += renderer->getCharWidth(*c);
+				line_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_12, *c);
 			}
 			width = std::max<float>(width, line_width);
 			char_count++;
@@ -1914,37 +1914,30 @@ void MapDrawer::DrawTooltips() {
 
 		// text
 		if (zoom <= 1.0) {
+			renderer->flushAndUnbind();
 			startx += (3.0f * scale);
 			starty += (14.0f * scale);
-			std::string lineStr;
-			float lineY = starty;
+			glColor4ub(0, 0, 0, 255);
+			glRasterPos2f(startx, starty);
 			char_count = 0;
 			line_char_count = 0;
 			for (const char* c = text; *c != '\0'; c++) {
 				if (*c == '\n' || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
-					if (!lineStr.empty()) {
-						renderer->drawText(startx, lineY, lineStr, 0, 0, 0, 255);
-						renderer->flush();
-						lineStr.clear();
-					}
-					lineY += (14.0f * scale);
+					starty += (14.0f * scale);
+					glRasterPos2f(startx, starty);
 					line_char_count = 0;
 				}
 				char_count++;
 				line_char_count++;
 
 				if (tooltip->ellipsis && char_count >= MapTooltip::MAX_CHARS) {
-					lineStr += '.';
+					glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, '.');
 					if (char_count >= (MapTooltip::MAX_CHARS + 2)) {
 						break;
 					}
-				} else if (!iscntrl((unsigned char)*c)) {
-					lineStr += *c;
+				} else if (!iscntrl(*c)) {
+					glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
 				}
-			}
-			if (!lineStr.empty()) {
-				renderer->drawText(startx, lineY, lineStr, 0, 0, 0, 255);
-				renderer->flush();
 			}
 		}
 	}
@@ -2259,14 +2252,20 @@ void MapDrawer::DrawPerformanceStats() {
 	glPushMatrix();
 	glLoadIdentity();
 
-	renderer->flush();
-	renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
+	renderer->flushAndUnbind();
+
+	glDisable(GL_TEXTURE_2D);
+	glColor3f(1.0f, 1.0f, 0.0f); // Amarelo brilhante
 
 	int x = 10;
 	int y = 20;
 
-	renderer->drawText(static_cast<float>(x), static_cast<float>(y), stats_text, 255, 255, 0, 255);
-	renderer->flush();
+	glRasterPos2i(x, y);
+	for (const char& c : stats_text) {
+		glutBitmapCharacter(GLUT_BITMAP_9_BY_15, c);
+	}
+
+	glEnable(GL_TEXTURE_2D);
 
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);

@@ -182,7 +182,6 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
-${CMAKE_CURRENT_LIST_DIR}/stb_truetype_impl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zones.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_zones.cpp

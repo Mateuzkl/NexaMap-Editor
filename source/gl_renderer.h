@@ -37,18 +37,11 @@ public:
 	void drawPolygon(const float* vertices, int vertexCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 	void drawTriangleFan(const float* vertices, int vertexCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
-	void drawText(float x, float y, const std::string &text, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-	float getCharWidth(char c);
-	float getLineHeight() const;
-	float getAscent() const;
-	void setRasterPos(float x, float y);
-	void drawBitmapChar(char c);
-	void setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-
 	void setOrtho(float left, float right, float bottom, float top);
 
 	void flush();
 	void endFrame();
+	void flushAndUnbind();
 	static void invalidateTexture(GLuint id);
 
 private:
@@ -81,39 +74,6 @@ private:
 	void bindState();
 	void unbindState();
 	void drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor &color);
-
-	struct GlyphInfo {
-		float u0;
-		float v0;
-		float u1;
-		float v1; // UV coords in texture (normalized)
-		float xoff;
-		float yoff; // offset from cursor pos (pixels)
-		float w;
-		float h; // glyph size (pixels)
-		float advance; // horizontal advance (pixels)
-	};
-
-	struct FontData {
-		GLuint texture = 0;
-		int texW = 0;
-		int texH = 0;
-		float fontSize = 0;
-		float ascent = 0;
-		float descent = 0;
-		float lineHeight = 0;
-		bool loaded = false;
-		std::array<GlyphInfo, 96> glyphs {};
-		std::array<float, 96> advances {};
-	};
-
-	FontData font;
-	void initFontAtlas();
-	void initFontAtlasFallback();
-
-	float cursorX = 0;
-	float cursorY = 0;
-	GLColor textColor { 255, 255, 255, 255 };
 };
 
 #endif
