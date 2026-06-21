@@ -824,6 +824,10 @@ void OldPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 			}
 
 			// Done validating, set the values.
+			if (new_uid != 0 && new_uid != edit_item->getUniqueID() && g_gui.GetCurrentMap().hasUniqueId(new_uid)) {
+				g_gui.PopupDialog(this, "Error", "Unique ID must be unique, this UID is already taken.", wxOK);
+				return;
+			}
 			if (edit_item->canHoldDescription()) {
 				edit_item->setText(new_desc);
 			}

@@ -288,6 +288,8 @@ public:
 
 	// Load/unload a client version (takes care of dialogs aswell)
 	void UnloadVersion();
+	// Persists the per-version user creatures.xml (imported monsters/NPCs) without tearing down the version.
+	void SaveUserCreatures();
 	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false);
 	// The current version loaded (returns CLIENT_VERSION_NONE if no version is loaded)
 	const ClientVersion& GetCurrentVersion() const;

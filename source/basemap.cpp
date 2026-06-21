@@ -112,6 +112,30 @@ TileLocation* BaseMap::createTileL(const Position& pos) {
 	return createTileL(pos.x, pos.y, pos.z);
 }
 
+void BaseMap::setTile(TileLocation* location, Tile* newtile, bool remove) {
+	ASSERT(location);
+	ASSERT(!newtile || newtile->getX() == location->getX());
+	ASSERT(!newtile || newtile->getY() == location->getY());
+	ASSERT(!newtile || newtile->getZ() == location->getZ());
+
+	Tile* old = location->tile;
+	location->tile = newtile;
+
+	if ((remove && old) || newtile) {
+		updateUniqueIds(remove ? old : nullptr, newtile);
+	}
+
+	if (newtile && !old) {
+		++tilecount;
+	} else if (old && !newtile) {
+		--tilecount;
+	}
+
+	if (remove) {
+		std::unique_ptr<Tile> { old };
+	}
+}
+
 void BaseMap::setTile(int x, int y, int z, Tile* newtile, bool remove) {
 	ASSERT(!newtile || newtile->getX() == int(x));
 	ASSERT(!newtile || newtile->getY() == int(y));
@@ -119,6 +143,11 @@ void BaseMap::setTile(int x, int y, int z, Tile* newtile, bool remove) {
 
 	QTreeNode* leaf = root.getLeafForce(x, y);
 	Tile* old = leaf->setTile(x, y, z, newtile);
+
+	if ((remove && old) || newtile) {
+		updateUniqueIds(remove ? old : nullptr, newtile);
+	}
+
 	if (remove) {
 		std::unique_ptr<Tile> { old };
 	}

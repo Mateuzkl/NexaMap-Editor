@@ -639,6 +639,7 @@ void MainFrame::OnExit(wxCloseEvent& event) {
 	g_gui.SaveHotkeys();
 	g_gui.SavePerspective();
 	g_gui.root->SaveRecentFiles();
+	g_gui.SaveUserCreatures();
 	ClientVersion::saveVersions();
 	g_settings.save(true);
 	((Application&)wxGetApp()).ShutdownServices();

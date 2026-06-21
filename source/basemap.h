@@ -119,6 +119,8 @@ public:
 	}
 
 	// Assigns a tile, it might seem pointless to provide position, but it is not, as the passed tile may be nullptr
+	// Direct overload: assigns the tile straight into an already-resolved TileLocation, skipping the QTree traversal.
+	void setTile(TileLocation* location, Tile* newtile, bool remove = false);
 	void setTile(int _x, int _y, int _z, Tile* newtile, bool remove = false);
 	void setTile(const Position& pos, Tile* newtile, bool remove = false) {
 		setTile(pos.x, pos.y, pos.z, newtile, remove);
@@ -139,10 +141,51 @@ public:
 		return tilecount;
 	}
 
+	template <typename Fn>
+	void forEachTileLocation(Fn& fn) {
+		forEachTileLocation(root, fn);
+	}
+
 public:
 	MapAllocator allocator;
 
 protected:
+	// Hook invoked whenever a tile is assigned/replaced. Default is a no-op; Map overrides it
+	// to keep the unique-id index in sync.
+	virtual void updateUniqueIds(Tile* old_tile, Tile* new_tile) { }
+
+	template <typename Fn>
+	void forEachFloorTileLocation(Floor& floor, Fn& fn) {
+		for (TileLocation& location : floor.locs) {
+			if (location.get()) {
+				fn(&location);
+			}
+		}
+	}
+
+	template <typename Fn>
+	void forEachLeafTileLocation(const QTreeNode& node, Fn& fn) {
+		for (Floor* floor : node.array) {
+			if (floor) {
+				forEachFloorTileLocation(*floor, fn);
+			}
+		}
+	}
+
+	template <typename Fn>
+	void forEachTileLocation(const QTreeNode& node, Fn& fn) {
+		if (node.isLeaf) {
+			forEachLeafTileLocation(node, fn);
+			return;
+		}
+
+		for (const QTreeNode* child : node.child) {
+			if (child) {
+				forEachTileLocation(*child, fn);
+			}
+		}
+	}
+
 	uint64_t tilecount;
 
 	QTreeNode root; // The Quad Tree root

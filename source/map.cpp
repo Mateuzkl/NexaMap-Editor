@@ -385,6 +385,65 @@ void Map::convertHouseTiles(uint32_t fromId, uint32_t toId) {
 	g_gui.DestroyLoadBar();
 }
 
+void Map::updateUniqueIds(Tile* old_tile, Tile* new_tile) {
+	if (old_tile && old_tile->hasUniqueItem()) {
+		if (old_tile->ground) {
+			uint16_t uid = old_tile->ground->getUniqueID();
+			if (uid != 0) {
+				removeUniqueId(uid);
+			}
+		}
+		for (const Item* item : old_tile->items) {
+			if (item) {
+				uint16_t uid = item->getUniqueID();
+				if (uid != 0) {
+					removeUniqueId(uid);
+				}
+			}
+		}
+	}
+
+	if (new_tile && new_tile->hasUniqueItem()) {
+		if (new_tile->ground) {
+			uint16_t uid = new_tile->ground->getUniqueID();
+			if (uid != 0) {
+				addUniqueId(uid);
+			}
+		}
+		for (const Item* item : new_tile->items) {
+			if (item) {
+				uint16_t uid = item->getUniqueID();
+				if (uid != 0) {
+					addUniqueId(uid);
+				}
+			}
+		}
+	}
+}
+
+void Map::addUniqueId(uint16_t uid) {
+	auto it = std::find(uniqueIds.begin(), uniqueIds.end(), uid);
+	if (it == uniqueIds.end()) {
+		uniqueIds.push_back(uid);
+	}
+}
+
+void Map::removeUniqueId(uint16_t uid) {
+	auto it = std::find(uniqueIds.begin(), uniqueIds.end(), uid);
+	if (it != uniqueIds.end()) {
+		uniqueIds.erase(it);
+	}
+}
+
+bool Map::hasUniqueId(uint16_t uid) const {
+	if (uid == 0 || uniqueIds.empty()) {
+		return false;
+	}
+
+	auto it = std::find(uniqueIds.begin(), uniqueIds.end(), uid);
+	return it != uniqueIds.end();
+}
+
 MapVersion Map::getVersion() const {
 	return mapVersion;
 }

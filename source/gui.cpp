@@ -420,13 +420,20 @@ void GUI::UnloadVersion() {
 		g_items.clear();
 		gfx.clear();
 
-		FileName cdb = getLoadedVersion()->getLocalDataPath();
-		cdb.SetFullName("creatures.xml");
-		g_creatures.saveToXML(cdb);
+		SaveUserCreatures();
 		g_creatures.clear();
 
 		loaded_version = CLIENT_VERSION_NONE;
 	}
+}
+
+void GUI::SaveUserCreatures() {
+	if (loaded_version == CLIENT_VERSION_NONE) {
+		return;
+	}
+	FileName cdb = getLoadedVersion()->getLocalDataPath();
+	cdb.SetFullName("creatures.xml");
+	g_creatures.saveToXML(cdb);
 }
 
 void GUI::SaveCurrentMap(FileName filename, bool showdialog) {

@@ -149,11 +149,18 @@ public:
 		unnamed = false;
 	}
 
+	// Returns true if the given (non-zero) unique id is already present somewhere on the map.
+	bool hasUniqueId(uint16_t uid) const;
+
 protected:
 	// Loads a map
 	bool open(const std::string identifier);
 
 protected:
+	void updateUniqueIds(Tile* old_tile, Tile* new_tile) override;
+	void addUniqueId(uint16_t uid);
+	void removeUniqueId(uint16_t uid);
+
 	void removeSpawnInternal(Tile* tile);
 
 	wxArrayString warnings;
@@ -189,6 +196,9 @@ protected:
 public:
 	Waypoints waypoints;
 	Zones zones;
+
+private:
+	std::vector<uint16_t> uniqueIds;
 };
 
 template <typename ForeachType>

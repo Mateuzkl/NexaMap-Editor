@@ -16,6 +16,7 @@
 #include "gl_renderer.h"
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <numbers>
 
 #ifdef _WIN32
@@ -173,6 +174,31 @@ void GLRenderer::init() {
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+	// Persistent ring-buffered, indexed stream for the quad batch path.
+	glGenVertexArrays(1, &streamVAO);
+	glGenBuffers(1, &streamVBO);
+	glGenBuffers(1, &streamEBO);
+
+	glBindVertexArray(streamVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, streamVBO);
+	glBufferData(GL_ARRAY_BUFFER, STREAM_VBO_CAPACITY * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, streamEBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, STREAM_EBO_CAPACITY * sizeof(GLuint), nullptr, GL_DYNAMIC_DRAW);
+
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, x));
+
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, r));
+
+	// Unbind the VAO first so the element-buffer binding stays recorded in streamVAO.
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
 	initialized = true;
 }
 
@@ -195,17 +221,35 @@ void GLRenderer::shutdown() {
 		glDeleteVertexArrays(1, &vao);
 		vao = 0;
 	}
+	if (streamVBO) {
+		glDeleteBuffers(1, &streamVBO);
+		streamVBO = 0;
+	}
+	if (streamEBO) {
+		glDeleteBuffers(1, &streamEBO);
+		streamEBO = 0;
+	}
+	if (streamVAO) {
+		glDeleteVertexArrays(1, &streamVAO);
+		streamVAO = 0;
+	}
+	vboOffset = 0;
+	eboOffset = 0;
 	initialized = false;
 }
 
-void GLRenderer::bindState() {
+void GLRenderer::bindProgram() {
 	if (m_programBound) {
 		return;
 	}
 	glUseProgram(program);
+	m_programBound = true;
+}
+
+void GLRenderer::bindState() {
+	bindProgram();
 	glBindVertexArray(vao);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	m_programBound = true;
 }
 
 void GLRenderer::unbindState() {
@@ -241,13 +285,38 @@ void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
 	glUniformMatrix4fv(loc_projection, 1, GL_FALSE, m.data());
 }
 
+void GLRenderer::ensureQuadIndices(size_t quadCount) {
+	size_t haveQuads = indexScratch.size() / 6;
+	if (haveQuads >= quadCount) {
+		return;
+	}
+	indexScratch.reserve(quadCount * 6);
+	for (size_t q = haveQuads; q < quadCount; ++q) {
+		GLuint base = static_cast<GLuint>(q * 4);
+		indexScratch.push_back(base + 0);
+		indexScratch.push_back(base + 1);
+		indexScratch.push_back(base + 2);
+		indexScratch.push_back(base + 0);
+		indexScratch.push_back(base + 2);
+		indexScratch.push_back(base + 3);
+	}
+}
+
 void GLRenderer::flushBatch() {
 	if (batch.empty() || !initialized) {
 		return;
 	}
 
-	bindState();
-	glBufferData(GL_ARRAY_BUFFER, batch.size() * sizeof(Vertex), batch.data(), GL_DYNAMIC_DRAW);
+	const size_t quadCount = batch.size() / 4;
+	if (quadCount == 0) {
+		batch.clear();
+		return;
+	}
+
+	bindProgram();
+	glBindVertexArray(streamVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, streamVBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, streamEBO);
 
 	if (current_texture != 0) {
 		glActiveTexture(GL_TEXTURE0);
@@ -258,9 +327,56 @@ void GLRenderer::flushBatch() {
 		glUniform1i(loc_useTexture, 0);
 	}
 
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)batch.size());
+	// A single flush can exceed the ring capacity (RME batches all same-texture quads
+	// eagerly). Split it into capacity-sized chunks instead of dropping vertices.
+	constexpr size_t QUADS_PER_CHUNK = STREAM_VBO_CAPACITY / 4; // also == STREAM_EBO_CAPACITY / 6
+	size_t quadStart = 0;
+	while (quadStart < quadCount) {
+		const size_t chunkQuads = std::min(QUADS_PER_CHUNK, quadCount - quadStart);
+		const size_t chunkVerts = chunkQuads * 4;
+		const size_t chunkIdx = chunkQuads * 6;
+		const size_t vtxBytes = chunkVerts * sizeof(Vertex);
+		const size_t idxBytes = chunkIdx * sizeof(GLuint);
+
+		ensureQuadIndices(chunkQuads);
+
+		if (vboOffset + chunkVerts > STREAM_VBO_CAPACITY || eboOffset + chunkIdx > STREAM_EBO_CAPACITY) {
+			// Orphan both buffers and restart the ring from the beginning.
+			glBufferData(GL_ARRAY_BUFFER, STREAM_VBO_CAPACITY * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, STREAM_EBO_CAPACITY * sizeof(GLuint), nullptr, GL_DYNAMIC_DRAW);
+			vboOffset = 0;
+			eboOffset = 0;
+		}
+
+		void* vboPtr = glMapBufferRange(GL_ARRAY_BUFFER, vboOffset * sizeof(Vertex), vtxBytes, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+		if (!vboPtr) {
+			break;
+		}
+		std::memcpy(vboPtr, batch.data() + quadStart * 4, vtxBytes);
+		glUnmapBuffer(GL_ARRAY_BUFFER);
+
+		void* eboPtr = glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, eboOffset * sizeof(GLuint), idxBytes, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+		if (!eboPtr) {
+			break;
+		}
+		std::memcpy(eboPtr, indexScratch.data(), idxBytes);
+		glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+
+		glDrawElementsBaseVertex(GL_TRIANGLES, static_cast<GLsizei>(chunkIdx), GL_UNSIGNED_INT, (void*)(eboOffset * sizeof(GLuint)), static_cast<GLint>(vboOffset));
+
+		vboOffset += chunkVerts;
+		eboOffset += chunkIdx;
+		quadStart += chunkQuads;
+	}
 
 	batch.clear();
+}
+
+void GLRenderer::pushQuad(const Vertex &v0, const Vertex &v1, const Vertex &v2, const Vertex &v3) {
+	batch.push_back(v0);
+	batch.push_back(v1);
+	batch.push_back(v2);
+	batch.push_back(v3);
 }
 
 void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color, float u0, float v0_, float u1, float v1_) {
@@ -274,12 +390,7 @@ void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint tex
 	Vertex v2 = { x + w, y + h, u1, v1_, color.r, color.g, color.b, color.a };
 	Vertex v3 = { x, y + h, u0, v1_, color.r, color.g, color.b, color.a };
 
-	batch.push_back(v0);
-	batch.push_back(v1);
-	batch.push_back(v2);
-	batch.push_back(v0);
-	batch.push_back(v2);
-	batch.push_back(v3);
+	pushQuad(v0, v1, v2, v3);
 }
 
 void GLRenderer::drawColoredQuad(float x, float y, float w, float h, const GLColor &color) {
@@ -293,12 +404,7 @@ void GLRenderer::drawColoredQuad(float x, float y, float w, float h, const GLCol
 	Vertex v2 = { x + w, y + h, 0, 0, color.r, color.g, color.b, color.a };
 	Vertex v3 = { x, y + h, 0, 0, color.r, color.g, color.b, color.a };
 
-	batch.push_back(v0);
-	batch.push_back(v1);
-	batch.push_back(v2);
-	batch.push_back(v0);
-	batch.push_back(v2);
-	batch.push_back(v3);
+	pushQuad(v0, v1, v2, v3);
 }
 
 void GLRenderer::drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor &color) {
@@ -321,12 +427,7 @@ void GLRenderer::drawThickLineSegment(float x1, float y1, float x2, float y2, fl
 	Vertex v2 = { x2 - nx, y2 - ny, 0, 0, color.r, color.g, color.b, color.a };
 	Vertex v3 = { x2 + nx, y2 + ny, 0, 0, color.r, color.g, color.b, color.a };
 
-	batch.push_back(v0);
-	batch.push_back(v1);
-	batch.push_back(v2);
-	batch.push_back(v0);
-	batch.push_back(v2);
-	batch.push_back(v3);
+	pushQuad(v0, v1, v2, v3);
 }
 
 void GLRenderer::drawRect(float x, float y, float w, float h, const GLColor &color, float lineWidth) {
