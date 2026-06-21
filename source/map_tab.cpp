@@ -25,6 +25,8 @@
 #include "editor_tabs.h"
 #include "map_display.h"
 
+#include <thread>
+
 MapTab::MapTab(MapTabbook* aui, Editor* editor) :
 	EditorTab(),
 	MapWindow(aui, *editor),
@@ -53,8 +55,18 @@ MapTab::MapTab(const MapTab* other) :
 MapTab::~MapTab() {
 	iref->owner_count--;
 	if (iref->owner_count <= 0) {
-		delete iref->editor;
+		Editor* ed = iref->editor;
+		iref->editor = nullptr;
 		delete iref;
+
+		// Destroy the editor (and its large map) on a detached background
+		// thread so closing a tab never freezes the GUI thread.
+		std::thread([ed]() {
+			delete ed;
+#ifdef __linux__
+			malloc_trim(0);
+#endif
+		}).detach();
 	}
 }
 

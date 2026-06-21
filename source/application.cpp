@@ -32,8 +32,11 @@
 
 #include "materials.h"
 #include "map.h"
+#include "map_tab.h"
 #include "complexitem.h"
 #include "creature.h"
+
+#include <set>
 
 #include <wx/snglinst.h>
 #include <wx/dir.h>
@@ -620,15 +623,24 @@ bool MainFrame::LoadMap(FileName name) {
 void MainFrame::OnExit(wxCloseEvent& event) {
 	// clicking 'x' button
 
-	// do you want to save map changes?
-	while (g_gui.IsEditorOpen()) {
-		if (!DoQuerySave()) {
+	// Ask to save changed maps WITHOUT destroying the editors. Destroying large
+	// maps synchronously on the GUI thread is what freezes the window on close;
+	// since we exit(0) right after, the OS reclaims the memory instantly.
+	std::set<Map*> prompted;
+	for (int i = 0; i < g_gui.tabbook->GetTabCount(); ++i) {
+		auto* mapTab = dynamic_cast<MapTab*>(g_gui.tabbook->GetTab(i));
+		if (!mapTab || !mapTab->GetMap() || !mapTab->GetMap()->hasChanged()
+			|| prompted.count(mapTab->GetMap())) {
+			continue;
+		}
+		prompted.insert(mapTab->GetMap());
+		g_gui.tabbook->SetFocusedTab(i);
+		if (!DoQuerySave(false)) {
 			if (event.CanVeto()) {
 				event.Veto();
 				return;
-			} else {
-				break;
 			}
+			break;
 		}
 	}
 
