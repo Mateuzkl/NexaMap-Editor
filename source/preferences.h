@@ -76,6 +76,8 @@ protected:
 	wxChoice* screenshot_format_choice;
 	wxCheckBox* hide_items_when_zoomed_chkbox;
 	wxCheckBox* show_performance_stats_chkbox;
+	wxCheckBox* fbo_scene_cache_chkbox;
+	wxSpinCtrl* animation_fps_spin;
 	wxColourPickerCtrl* cursor_color_pick;
 	wxColourPickerCtrl* cursor_alt_color_pick;
 	/*

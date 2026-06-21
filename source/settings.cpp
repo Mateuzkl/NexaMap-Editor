@@ -217,6 +217,7 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_SPECIAL_TILES, 1);
 	Int(SHOW_ZONE_AREAS, 1);
 	Int(USE_FBO_SCENE_CACHE, 0);
+	Int(ANIMATION_FPS, 10);
 	Int(SHOW_SPAWNS, 1);
 	Int(SHOW_ITEMS, 1);
 	Int(HIGHLIGHT_ITEMS, 0);

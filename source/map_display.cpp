@@ -250,7 +250,13 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		if (animate_position_indicator) {
 			animation_timer->StartRefresh(16);
 		} else if (animate_preview) {
-			animation_timer->StartRefresh(250);
+			int animation_fps = g_settings.getInteger(Config::ANIMATION_FPS);
+			if (animation_fps < 1) {
+				animation_fps = 1;
+			} else if (animation_fps > 60) {
+				animation_fps = 60;
+			}
+			animation_timer->StartRefresh(1000 / animation_fps);
 		} else if (options.show_performance_stats) {
 			animation_timer->StartRefresh(500);
 		} else {

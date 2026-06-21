@@ -215,6 +215,11 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage() {
 	sizer->Add(show_performance_stats_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(show_performance_stats_chkbox, "Display real-time FPS, CPU and RAM usage on screen.");
 
+	fbo_scene_cache_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Cache map scene in framebuffer (experimental)");
+	fbo_scene_cache_chkbox->SetValue(g_settings.getBoolean(Config::USE_FBO_SCENE_CACHE));
+	sizer->Add(fbo_scene_cache_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(fbo_scene_cache_chkbox, "Render the map into an offscreen buffer and reuse it while the view is static, lowering CPU/GPU usage when idle. Overlays and animations are drawn normally. Experimental: disable if you see rendering glitches.");
+
 	icon_selection_shadow_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use icon selection shadow");
 	icon_selection_shadow_chkbox->SetValue(g_settings.getBoolean(Config::USE_GUI_SELECTION_SHADOW));
 	sizer->Add(icon_selection_shadow_chkbox, 0, wxLEFT | wxTOP, 5);
@@ -246,6 +251,12 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage() {
 	subsizer->Add(tmp = newd wxStaticText(graphics_page, wxID_ANY, "Icon background color: "), 0);
 	subsizer->Add(icon_background_choice, 0);
 	SetWindowToolTip(icon_background_choice, tmp, "This will change the background color on icons in all windows.");
+
+	// Animation framerate
+	subsizer->Add(tmp = newd wxStaticText(graphics_page, wxID_ANY, "Animation FPS: "), 0);
+	animation_fps_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::ANIMATION_FPS)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 60);
+	subsizer->Add(animation_fps_spin, 0);
+	SetWindowToolTip(animation_fps_spin, tmp, "How many times per second animated sprites are redrawn while preview animation is enabled. Higher is smoother but uses more CPU/GPU. (1-60)");
 
 	// Cursor colors
 	subsizer->Add(tmp = newd wxStaticText(graphics_page, wxID_ANY, "Cursor color: "), 0);
@@ -629,6 +640,8 @@ void PreferencesWindow::Apply() {
 
 	// Graphics
 	g_settings.setInteger(Config::USE_GUI_SELECTION_SHADOW, icon_selection_shadow_chkbox->GetValue());
+	g_settings.setInteger(Config::USE_FBO_SCENE_CACHE, fbo_scene_cache_chkbox->GetValue());
+	g_settings.setInteger(Config::ANIMATION_FPS, animation_fps_spin->GetValue());
 	if (g_settings.getBoolean(Config::USE_MEMCACHED_SPRITES) != use_memcached_chkbox->GetValue()) {
 		must_restart = true;
 	}
