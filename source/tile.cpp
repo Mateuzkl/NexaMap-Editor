@@ -312,6 +312,89 @@ void Tile::addItem(Item* item) {
 	}
 }
 
+void Tile::addLoadedItem(Item* item) {
+	if (!item) {
+		return;
+	}
+	if (item->isGroundTile()) {
+		delete ground;
+		ground = item;
+		return;
+	}
+
+	uint16_t gid = item->getGroundEquivalent();
+	if (gid != 0) {
+		delete ground;
+		ground = Item::Create(gid);
+	}
+
+	// OTBM items are stored bottom-to-top, so appending preserves stacking order
+	// without addItem's O(n) sorted-insertion scan.
+	items.push_back(item);
+
+	if (item->isSelected()) {
+		statflags |= TILESTATE_SELECTED;
+	}
+}
+
+void Tile::addLoadedItem(Item* item, const ItemType &type) {
+	if (!item) {
+		return;
+	}
+
+	const bool createsGroundEquivalent = !type.isGroundTile() && type.ground_equivalent != 0;
+
+	if (type.isGroundTile()) {
+		delete ground;
+		ground = item;
+		updateStateForItem(item, type);
+		return;
+	}
+
+	uint16_t gid = type.ground_equivalent;
+	if (gid != 0) {
+		delete ground;
+		ground = Item::Create(gid);
+	}
+
+	items.push_back(item);
+
+	if (createsGroundEquivalent && ground) {
+		updateStateForItem(ground, g_items[ground->getID()]);
+	}
+	updateStateForItem(item, type);
+}
+
+void Tile::updateStateForItem(const Item* item, const ItemType &type) {
+	if (item->isSelected()) {
+		statflags |= TILESTATE_SELECTED;
+	}
+	if (item->getUniqueID() != 0) {
+		statflags |= TILESTATE_UNIQUE;
+	}
+	if (item->getMiniMapColor() != 0) {
+		minimapColor = item->getMiniMapColor();
+	}
+	if (type.unpassable) {
+		statflags |= TILESTATE_BLOCKING;
+	}
+	if (type.isOptionalBorder) {
+		statflags |= TILESTATE_OP_BORDER;
+	}
+	if (type.isTable) {
+		statflags |= TILESTATE_HAS_TABLE;
+	}
+	if (type.isCarpet) {
+		statflags |= TILESTATE_HAS_CARPET;
+	}
+}
+
+void Tile::finalizeLoadedState() {
+	if ((statflags & TILESTATE_BLOCKING) == 0 && !ground && items.empty()) {
+		statflags |= TILESTATE_BLOCKING;
+	}
+}
+
 void Tile::select() {
 	if (size() == 0) {
 		return;

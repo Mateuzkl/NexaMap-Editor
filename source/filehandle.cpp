@@ -422,16 +422,28 @@ void BinaryNode::load() {
 	size_t& cache_length = file->cache_length;
 	size_t& local_read_index = file->local_read_index;
 	while (true) {
-		if (local_read_index >= cache_length) {
-			if (!file->renewCache()) {
-				// Failed to renew, exit
-				file->error_code = FILE_PREMATURE_END;
-				return;
+		if (local_read_index >= cache_length && !file->renewCache()) {
+			// Failed to renew, exit
+			file->error_code = FILE_PREMATURE_END;
+			return;
+		}
+
+		const size_t chunk_start = local_read_index;
+		while (local_read_index < cache_length) {
+			if (const uint8_t op = cache[local_read_index]; op == NODE_START || op == NODE_END || op == ESCAPE_CHAR) {
+				break;
+			}
+			++local_read_index;
+		}
+
+		if (local_read_index > chunk_start) {
+			data.append(reinterpret_cast<const char*>(cache + chunk_start), local_read_index - chunk_start);
+			if (local_read_index >= cache_length) {
+				continue;
 			}
 		}
 
-		uint8_t op = cache[local_read_index];
-		++local_read_index;
+		uint8_t op = cache[local_read_index++];
 
 		switch (op) {
 			case NODE_START: {
@@ -445,24 +457,21 @@ void BinaryNode::load() {
 			}
 
 			case ESCAPE_CHAR: {
-				if (local_read_index >= cache_length) {
-					if (!file->renewCache()) {
-						// Failed to renew, exit
-						file->error_code = FILE_PREMATURE_END;
-						return;
-					}
+				if (local_read_index >= cache_length && !file->renewCache()) {
+					// Failed to renew, exit
+					file->error_code = FILE_PREMATURE_END;
+					return;
 				}
 
 				op = cache[local_read_index];
 				++local_read_index;
-				break;
+				data.append(1, op);
+				continue;
 			}
 
 			default:
 				break;
 		}
-		// std::cout << "Appending..." << std::endl;
-		data.append(1, op);
 	}
 }
 

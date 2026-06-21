@@ -67,15 +67,23 @@ void reform(Map* map, Tile* tile, Item* item) {
 // ============================================================================
 // Item
 
-Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream) {
+Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemType** itemType) {
+	if (itemType) {
+		*itemType = nullptr;
+	}
+
 	uint16_t _id;
 	if (!stream->getU16(_id)) {
 		return nullptr;
 	}
 
+	const ItemType& iType = g_items[_id];
+	if (itemType) {
+		*itemType = &iType;
+	}
+
 	uint8_t _count = 0;
 
-	const ItemType& iType = g_items[_id];
 	if (maphandle.version.otbm == MAP_OTBM_1) {
 		if (iType.stackable || iType.isSplash() || iType.isFluidContainer()) {
 			stream->getU8(_count);
@@ -721,12 +729,40 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 	}
 #endif
 
-	DiskNodeFileReadHandle f(nstr(filename.GetFullPath()), StringVector(1, "OTBM"));
-	if (!f.isOk()) {
-		error(("Couldn't open file for reading\nThe error reported was: " + wxstr(f.getErrorMessage())).wc_str());
+	// Read the whole OTBM into memory and parse from there. Parsing directly off
+	// a disk handle (DiskNodeFileReadHandle) interleaves chunked disk reads with
+	// parsing, which can stall the load mid-way on large maps.
+	FileReadHandle otbmFile(nstr(filename.GetFullPath()));
+	if (!otbmFile.isOk()) {
+		error(("Couldn't open file for reading\nThe error reported was: " + wxstr(otbmFile.getErrorMessage())).wc_str());
 		return false;
 	}
 
+	const size_t otbmSize = otbmFile.size();
+	if (otbmSize < 5) {
+		error("Could not read OTBM file header.");
+		return false;
+	}
+
+	std::vector<uint8_t> otbmBuffer(otbmSize);
+	if (!otbmFile.getRAW(otbmBuffer.data(), otbmBuffer.size())) {
+		error(("Couldn't read file\nThe error reported was: " + wxstr(otbmFile.getErrorMessage())).wc_str());
+		return false;
+	}
+
+	const uint8_t* buf = otbmBuffer.data();
+	const bool isWildcard = buf[0] == 0 && buf[1] == 0 && buf[2] == 0 && buf[3] == 0;
+	const bool isOtbm = buf[0] == 'O' && buf[1] == 'T' && buf[2] == 'B' && buf[3] == 'M';
+	if (!isWildcard && !isOtbm) {
+		error("File magic number not recognized.");
+		return false;
+	}
+	if (buf[4] != NODE_START) {
+		error("Could not read root node.");
+		return false;
+	}
+
+	MemoryNodeFileReadHandle f(otbmBuffer.data() + 4, otbmSize - 4);
 	if (!loadMap(map, f)) {
 		return false;
 	}
@@ -736,16 +772,19 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 		warning("Failed to load houses.");
 		map.housefile = nstr(filename.GetName()) + "-house.xml";
 	}
+
 	if (map.zonefile.empty()) {
 		map.zonefile = nstr(filename.GetName()) + "-zones.xml";
 	}
 	if (!loadZones(map, filename)) {
 		warning("Failed to load zones.");
 	}
+
 	if (!loadSpawns(map, filename)) {
 		warning("Failed to load spawns.");
 		map.spawnfile = nstr(filename.GetName()) + "-spawn.xml";
 	}
+
 	if (!loadWaypoints(map, filename)) {
 		// just assume the map did not have this file before
 		// warning("Failed to load waypoints.");
@@ -941,6 +980,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 
 					// printf("So far so good\n");
 
+					bool needsFullTileUpdate = false;
 					uint8_t attribute;
 					while (tileNode->getU8(attribute)) {
 						switch (attribute) {
@@ -969,11 +1009,17 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 								break;
 							}
 							case OTBM_ATTR_ITEM: {
-								Item* item = Item::Create_OTBM(*this, tileNode);
+								const ItemType* itemType = nullptr;
+								Item* item = Item::Create_OTBM(*this, tileNode, &itemType);
 								if (item == nullptr) {
 									warning("Invalid item at tile %d:%d:%d", pos.x, pos.y, pos.z);
 								}
-								tile->addItem(item);
+								if (item && itemType) {
+									if (((itemType->isGroundTile() || itemType->ground_equivalent != 0) && tile->ground) || (itemType->alwaysOnBottom && !tile->items.empty())) {
+										needsFullTileUpdate = true;
+									}
+									tile->addLoadedItem(item, *itemType);
+								}
 								break;
 							}
 							default: {
@@ -993,13 +1039,19 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 							continue;
 						}
 						if (node_type == OTBM_ITEM) {
-							item = Item::Create_OTBM(*this, itemNode);
+							const ItemType* itemType = nullptr;
+							item = Item::Create_OTBM(*this, itemNode, &itemType);
 							if (item) {
 								if (!item->unserializeItemNode_OTBM(*this, itemNode)) {
 									warning("Couldn't unserialize item attributes at %d:%d:%d", pos.x, pos.y, pos.z);
 								}
 								// reform(&map, tile, item);
-								tile->addItem(item);
+								if (itemType) {
+									if (((itemType->isGroundTile() || itemType->ground_equivalent != 0) && tile->ground) || (itemType->alwaysOnBottom && !tile->items.empty())) {
+										needsFullTileUpdate = true;
+									}
+									tile->addLoadedItem(item, *itemType);
+								}
 							}
 						} else if (node_type == OTBM_TILE_ZONE) {
 							uint16_t zone_count;
@@ -1020,7 +1072,11 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 						}
 					}
 
-					tile->update();
+					if (needsFullTileUpdate) {
+						tile->update();
+					} else {
+						tile->finalizeLoadedState();
+					}
 					if (house) {
 						house->addTile(tile);
 					}

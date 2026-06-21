@@ -147,6 +147,10 @@ public: // Functions
 	Item* getTopItem() const; // Returns the topmost item, or nullptr if the tile is empty
 	Item* getItemAt(int index) const;
 	void addItem(Item* item);
+	// Fast item append for the OTBM load path: items already come in correct
+	// stacking order, so skip addItem's sorted-insertion scan.
+	void addLoadedItem(Item* item);
+	void addLoadedItem(Item* item, const ItemType &type);
 
 	void select();
 	void deselect();
@@ -167,6 +171,7 @@ public: // Functions
 
 	// Refresh internal flags (such as selected etc.)
 	void update();
+	void finalizeLoadedState();
 
 	uint8_t getMiniMapColor() const;
 
@@ -286,6 +291,7 @@ protected:
 
 private:
 	uint8_t minimapColor;
+	void updateStateForItem(const Item* item, const ItemType &type);
 
 	Tile(const Tile& tile); // No copy
 	Tile& operator=(const Tile& i); // Can't copy
