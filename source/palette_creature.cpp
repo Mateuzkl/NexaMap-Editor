@@ -240,9 +240,20 @@ void CreaturePalettePanel::OnUpdate() {
 	}
 
 	all_creature_brushes.assign(allBrushes.begin(), allBrushes.end());
-	std::sort(all_creature_brushes.begin(), all_creature_brushes.end(), [](CreatureBrush* a, CreatureBrush* b) {
-		return as_lower_str(a->getName()) < as_lower_str(b->getName());
-	});
+	{
+		// Sort by a precomputed lowercase key instead of lowercasing twice per comparison.
+		std::vector<std::pair<std::string, CreatureBrush*>> keyed;
+		keyed.reserve(all_creature_brushes.size());
+		for (CreatureBrush* brush : all_creature_brushes) {
+			keyed.emplace_back(as_lower_str(brush->getName()), brush);
+		}
+		std::sort(keyed.begin(), keyed.end(), [](const auto& a, const auto& b) {
+			return a.first < b.first;
+		});
+		for (size_t i = 0; i < keyed.size(); ++i) {
+			all_creature_brushes[i] = keyed[i].second;
+		}
+	}
 
 	std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
 		return a.first.CmpNoCase(b.first) < 0;
@@ -456,9 +467,20 @@ void CreaturePalettePanel::RefreshCreatureList(const std::string& preferredSelec
 		}), brushes.end());
 	}
 
-	std::sort(brushes.begin(), brushes.end(), [](CreatureBrush* a, CreatureBrush* b) {
-		return as_lower_str(a->getName()) < as_lower_str(b->getName());
-	});
+	{
+		// Sort by a precomputed lowercase key instead of lowercasing twice per comparison.
+		std::vector<std::pair<std::string, CreatureBrush*>> keyed;
+		keyed.reserve(brushes.size());
+		for (CreatureBrush* brush : brushes) {
+			keyed.emplace_back(as_lower_str(brush->getName()), brush);
+		}
+		std::sort(keyed.begin(), keyed.end(), [](const auto& a, const auto& b) {
+			return a.first < b.first;
+		});
+		for (size_t i = 0; i < keyed.size(); ++i) {
+			brushes[i] = keyed[i].second;
+		}
+	}
 
 	creature_list->Freeze();
 	creature_list->Clear();

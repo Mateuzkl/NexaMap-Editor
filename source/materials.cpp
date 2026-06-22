@@ -230,6 +230,17 @@ bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node no
 }
 
 void Materials::createOtherTileset() {
+	// Skip the expensive full item-DB + creature rescan when nothing changed since the
+	// last build. This runs on every palette refresh (CreaturePalettePanel::OnUpdate),
+	// so rebuilding unconditionally re-scans every item id and every creature each time.
+	const size_t cur_creature_count = g_creatures.size();
+	const int32_t cur_item_maxid = g_items.getMaxID();
+	if (tilesets.count("Others") && tilesets.count("NPCs")
+		&& cur_creature_count == other_tileset_creature_count
+		&& cur_item_maxid == other_tileset_item_maxid) {
+		return;
+	}
+
 	Tileset* others;
 	Tileset* npc_tileset;
 
@@ -297,6 +308,9 @@ void Materials::createOtherTileset() {
 			}
 		}
 	}
+
+	other_tileset_creature_count = cur_creature_count;
+	other_tileset_item_maxid = cur_item_maxid;
 }
 
 bool Materials::unserializeTileset(pugi::xml_node node, wxArrayString& warnings) {
