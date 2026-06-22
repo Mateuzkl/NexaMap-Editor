@@ -167,10 +167,10 @@ class OTMLNode : public OTMLNodeEnableSharedFromThis {
 public:
 	virtual ~OTMLNode() { }
 
-	static OTMLNodePtr create(std::string tag = "", bool unique = false);
-	static OTMLNodePtr create(std::string tag, std::string value);
+	static OTMLNodePtr create(const std::string& tag = "", bool unique = false);
+	static OTMLNodePtr create(const std::string& tag, const std::string& value);
 
-	std::string tag() const {
+	const std::string& tag() const {
 		return m_tag;
 	}
 	int size() const {
@@ -179,10 +179,10 @@ public:
 	OTMLNodePtr parent() const {
 		return m_parent.lock();
 	}
-	std::string source() const {
+	const std::string& source() const {
 		return m_source;
 	}
-	std::string rawValue() const {
+	const std::string& rawValue() const {
 		return m_value;
 	}
 
@@ -207,7 +207,7 @@ public:
 		return !!getIndex(childIndex);
 	}
 
-	void setTag(std::string tag) {
+	void setTag(const std::string& tag) {
 		m_tag = tag;
 	}
 	void setValue(const std::string& value) {
@@ -338,14 +338,14 @@ inline OTMLException::OTMLException(const OTMLDocumentPtr& doc, const std::strin
 	m_what = ss.str();
 }
 
-inline OTMLNodePtr OTMLNode::create(std::string tag, bool unique) {
+inline OTMLNodePtr OTMLNode::create(const std::string& tag, bool unique) {
 	OTMLNodePtr node(new OTMLNode);
 	node->setTag(tag);
 	node->setUnique(unique);
 	return node;
 }
 
-inline OTMLNodePtr OTMLNode::create(std::string tag, std::string value) {
+inline OTMLNodePtr OTMLNode::create(const std::string& tag, const std::string& value) {
 	OTMLNodePtr node(new OTMLNode);
 	node->setTag(tag);
 	node->setValue(value);

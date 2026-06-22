@@ -53,7 +53,7 @@ protected:
 	wxGrid* attributesGrid;
 	wxWindow* createAttributesPanel(wxWindow* parent);
 	void saveAttributesPanel();
-	static void SetGridValue(wxGrid* grid, int rowIndex, std::string name, const ItemAttribute& attr);
+	static void SetGridValue(wxGrid* grid, int rowIndex, const std::string& name, const ItemAttribute& attr);
 
 protected:
 	wxNotebook* notebook;

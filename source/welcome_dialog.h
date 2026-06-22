@@ -83,7 +83,7 @@ public:
 	void OnMouseEnter(const wxMouseEvent& event);
 	void OnMouseLeave(const wxMouseEvent& event);
 	void PropagateItemClicked(wxMouseEvent& event);
-	wxString GetText() {
+	const wxString& GetText() {
 		return m_item_text;
 	};
 

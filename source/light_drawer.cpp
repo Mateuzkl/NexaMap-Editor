@@ -19,9 +19,9 @@
 #include "light_drawer.h"
 #include "gl_renderer.h"
 
-LightDrawer::LightDrawer() {
+LightDrawer::LightDrawer() :
+	global_color(wxColor(50, 50, 50, 255)) {
 	texture = 0;
-	global_color = wxColor(50, 50, 50, 255);
 }
 
 LightDrawer::~LightDrawer() {

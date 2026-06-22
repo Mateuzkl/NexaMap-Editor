@@ -280,7 +280,7 @@ public:
 	static wxString GetExtensionsDirectory();
 
 	void discoverDataDirectory(const wxString& existentFile);
-	wxString getFoundDataDirectory() {
+	const wxString& getFoundDataDirectory() {
 		return m_dataDirectory;
 	}
 

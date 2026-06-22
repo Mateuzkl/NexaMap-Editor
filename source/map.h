@@ -84,7 +84,7 @@ public:
 	bool hasError() const {
 		return error.size() != 0;
 	}
-	wxString getError() const {
+	const wxString& getError() const {
 		return error;
 	}
 
@@ -107,10 +107,10 @@ public:
 	// Returns true if the map has been saved
 	// ie. it knows which file it should be saved to
 	bool hasFile() const;
-	std::string getFilename() const {
+	const std::string& getFilename() const {
 		return filename;
 	}
-	std::string getName() const {
+	const std::string& getName() const {
 		return name;
 	}
 	void setName(const std::string& n) {
@@ -124,16 +124,16 @@ public:
 	int getHeight() const {
 		return height;
 	}
-	std::string getMapDescription() const {
+	const std::string& getMapDescription() const {
 		return description;
 	}
-	std::string getHouseFilename() const {
+	const std::string& getHouseFilename() const {
 		return housefile;
 	}
-	std::string getSpawnFilename() const {
+	const std::string& getSpawnFilename() const {
 		return spawnfile;
 	}
-	std::string getZoneFilename() const {
+	const std::string& getZoneFilename() const {
 		return zonefile;
 	}
 

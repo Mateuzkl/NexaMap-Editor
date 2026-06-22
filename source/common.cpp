@@ -64,11 +64,11 @@ std::string f2s(const double _d) {
 	return ss.str();
 }
 
-int s2i(const std::string s) {
+int s2i(const std::string& s) {
 	return atoi(s.c_str());
 }
 
-double s2f(const std::string s) {
+double s2f(const std::string& s) {
 	return atof(s.c_str());
 }
 
@@ -84,7 +84,7 @@ wxString f2ws(const double _d) {
 	return str;
 }
 
-int ws2i(const wxString s) {
+int ws2i(const wxString& s) {
 	long _i;
 	if (s.ToLong(&_i)) {
 		return int(_i);
@@ -92,7 +92,7 @@ int ws2i(const wxString s) {
 	return 0;
 }
 
-double ws2f(const wxString s) {
+double ws2f(const wxString& s) {
 	double _d;
 	if (s.ToDouble(&_d)) {
 		return _d;
@@ -100,7 +100,7 @@ double ws2f(const wxString s) {
 	return 0.0;
 }
 
-void replaceString(std::string& str, const std::string sought, const std::string replacement) {
+void replaceString(std::string& str, const std::string& sought, const std::string& replacement) {
 	size_t pos = 0;
 	size_t start = 0;
 	size_t const soughtLen = sought.length();

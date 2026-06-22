@@ -166,7 +166,7 @@ wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
 	return panel;
 }
 
-void PropertiesWindow::SetGridValue(wxGrid* grid, int rowIndex, std::string label, const ItemAttribute& attr) {
+void PropertiesWindow::SetGridValue(wxGrid* grid, int rowIndex, const std::string& label, const ItemAttribute& attr) {
 	wxArrayString types;
 	types.Add("Number");
 	types.Add("Float");
