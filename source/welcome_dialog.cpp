@@ -86,9 +86,6 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxSize& size
 	wxSize const button_size = FROM_DIP(this, wxSize(150, 35));
 	wxColour const button_base_colour = base_colour.ChangeLightness(90);
 
-	int const button_pos_center_x = size.x / 4 - button_size.x / 2;
-	int const button_pos_center_y = size.y / 2;
-
 	auto* new_map_button = newd WelcomeDialogButton(this, wxDefaultPosition, button_size, button_base_colour, "New");
 	new_map_button->SetAction(wxID_NEW);
 	new_map_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);
