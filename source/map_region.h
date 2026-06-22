@@ -149,7 +149,7 @@ public:
 		return array;
 	}
 
-	void setVisible(bool overground, bool underground);
+	void setVisible(bool underground, bool value);
 	void setVisible(uint32_t client, bool underground, bool value);
 	bool isVisible(uint32_t client, bool underground);
 	void clearVisible(uint32_t client);

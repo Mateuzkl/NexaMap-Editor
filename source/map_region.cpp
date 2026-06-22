@@ -206,7 +206,7 @@ void QTreeNode::setVisible(bool underground, bool value) {
 		if (value) {
 			visible |= 1;
 		} else {
-			visible &= 1;
+			visible &= ~1;
 		}
 	}
 }
