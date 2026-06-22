@@ -202,7 +202,6 @@ public:
 	static ClientVersion* get(ClientVersionID id);
 	static ClientVersion* get(std::string name);
 	static ClientVersionList getVisible(std::string from, std::string to);
-	static ClientVersionList getAll();
 	static ClientVersionList getAllVisible();
 	static ClientVersionList getAllForOTBMVersion(MapVersionID map_version);
 	static ClientVersionList getAllVersionsSupportedForClientVersion(ClientVersion* v);

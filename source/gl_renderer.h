@@ -21,14 +21,11 @@ struct GLColor {
 class GLRenderer {
 public:
 	void init();
-	void shutdown();
 
 	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);
 	void drawColoredQuad(float x, float y, float w, float h, const GLColor &color);
 
 	void drawRect(float x, float y, float w, float h, const GLColor &color, float lineWidth = 1.0f);
-	void drawRoundedRect(float x, float y, float w, float h, float radius, const GLColor &fill);
-	void drawRoundedRectOutline(float x, float y, float w, float h, float radius, const GLColor &color, float lineWidth = 1.0f);
 
 	void drawLine(float x1, float y1, float x2, float y2, const GLColor &color, float width = 1.0f);
 	void drawLines(const float* vertices, int pairCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a, float width = 1.0f);

@@ -209,11 +209,9 @@ public:
 
 	// Search Results
 	SearchResultWindow* ShowSearchWindow(wxString caption = "Search Results", bool duplicateItems = false);
-	void HideSearchWindow();
 
 	// Minimap
 	void CreateMinimap();
-	void HideMinimap();
 	void DestroyMinimap();
 	void UpdateMinimap(bool immediate = false);
 	bool IsMinimapVisible() const;

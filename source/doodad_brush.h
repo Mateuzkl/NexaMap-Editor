@@ -61,7 +61,6 @@ public:
 	}
 
 	int getCompositeChance(int variation) const;
-	int getSingleChance(int variation) const;
 	int getTotalChance(int variation) const;
 
 	bool hasSingleObjects(int variation) const;

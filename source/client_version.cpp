@@ -366,14 +366,6 @@ ClientVersion* ClientVersion::get(std::string id) {
 	return nullptr;
 }
 
-ClientVersionList ClientVersion::getAll() {
-	ClientVersionList l;
-	for (VersionMap::iterator i = client_versions.begin(); i != client_versions.end(); ++i) {
-		l.push_back(i->second);
-	}
-	return l;
-}
-
 ClientVersionList ClientVersion::getAllVisible() {
 	ClientVersionList l;
 	for (VersionMap::iterator i = client_versions.begin(); i != client_versions.end(); ++i) {

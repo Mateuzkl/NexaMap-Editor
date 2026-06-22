@@ -744,22 +744,6 @@ void Tile::cleanWalls(WallBrush* wb) {
 	}
 }
 
-void Tile::cleanTables(bool dontdelete) {
-	ItemVector::iterator it;
-
-	it = items.begin();
-	while (it != items.end()) {
-		if ((*it)->isTable()) {
-			if (!dontdelete) {
-				delete *it;
-			}
-			it = items.erase(it);
-		} else {
-			++it;
-		}
-	}
-}
-
 void Tile::tableize(BaseMap* parent) {
 	TableBrush::doTables(parent, this);
 }

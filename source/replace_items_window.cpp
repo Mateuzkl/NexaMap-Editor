@@ -32,16 +32,6 @@ ReplaceItemsButton::ReplaceItemsButton(wxWindow* parent) :
 	////
 }
 
-ItemGroup_t ReplaceItemsButton::GetGroup() const {
-	if (m_id != 0) {
-		const ItemType& it = g_items.getItemType(m_id);
-		if (it.id != 0) {
-			return it.group;
-		}
-	}
-	return ITEM_GROUP_NONE;
-}
-
 void ReplaceItemsButton::SetItemId(uint16_t id) {
 	if (m_id == id) {
 		return;

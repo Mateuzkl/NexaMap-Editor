@@ -75,7 +75,6 @@ public:
 	}
 
 	void ShowReplaceItemsDialog(bool selectionOnly);
-	void CloseReplaceItemsDialog();
 	void OnReplaceItemsDialogClose(wxCloseEvent& event);
 
 protected:

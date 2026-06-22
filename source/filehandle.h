@@ -417,7 +417,6 @@ public:
 	void reset();
 	void close() override;
 
-	uint8_t* getMemory();
 	size_t getSize();
 
 protected:

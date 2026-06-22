@@ -108,10 +108,6 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 	}
 }
 
-void LightDrawer::setGlobalLightColor(uint8_t color) {
-	global_color = colorFromEightBit(color);
-}
-
 void LightDrawer::addLight(int map_x, int map_y, int map_z, const SpriteLight& light) {
 	if (map_z <= GROUND_LAYER) {
 		map_x -= (GROUND_LAYER - map_z);

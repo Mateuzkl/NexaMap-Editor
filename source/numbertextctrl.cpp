@@ -79,14 +79,6 @@ long NumberTextCtrl::GetIntValue() {
 	return 0;
 }
 
-void NumberTextCtrl::SetMinValue(long value) {
-	if (value == minval) {
-		return;
-	}
-	minval = value;
-	CheckRange();
-}
-
 void NumberTextCtrl::SetMaxValue(long value) {
 	if (value == maxval) {
 		return;

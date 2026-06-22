@@ -167,14 +167,6 @@ bool QTreeNode::isVisible(bool underground) {
 	return testFlags(visible, underground + 1);
 }
 
-bool QTreeNode::isRequested(bool underground) {
-	if (underground) {
-		return testFlags(visible, 4);
-	} else {
-		return testFlags(visible, 8);
-	}
-}
-
 void QTreeNode::clearVisible(uint32_t u) {
 	if (isLeaf) {
 		visible &= u;
@@ -208,14 +200,6 @@ void QTreeNode::setVisible(bool underground, bool value) {
 		} else {
 			visible &= ~1;
 		}
-	}
-}
-
-void QTreeNode::setRequested(bool underground, bool r) {
-	if (r) {
-		visible |= (underground ? 4 : 8);
-	} else {
-		visible &= ~(underground ? 4 : 8);
 	}
 }
 
@@ -262,14 +246,3 @@ Tile* QTreeNode::setTile(int x, int y, int z, Tile* newtile) {
 	return oldtile;
 }
 
-void QTreeNode::clearTile(int x, int y, int z) {
-	ASSERT(isLeaf);
-	Floor* f = createFloor(x, y, z);
-
-	int const offset_x = x & 3;
-	int const offset_y = y & 3;
-
-	TileLocation* tmp = &f->locs[offset_x * 4 + offset_y];
-	delete tmp->tile;
-	tmp->tile = map.allocator(tmp);
-}

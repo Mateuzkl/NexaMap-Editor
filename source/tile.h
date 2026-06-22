@@ -228,7 +228,6 @@ public: // Functions
 	// Wallize (name sucks, I know) this tile
 	void wallize(BaseMap* parent);
 	// Remove all tables from this tile
-	void cleanTables(bool dontdelete = false);
 	// Tableize (name sucks even worse, I know) this tile
 	void tableize(BaseMap* parent);
 	// Carpetize (name sucks even worse than last one, I know) this tile

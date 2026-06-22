@@ -34,7 +34,6 @@ public:
 	long GetIntValue();
 	void SetIntValue(long value);
 
-	void SetMinValue(long value);
 	void SetMaxValue(long value);
 
 protected:

@@ -214,20 +214,6 @@ void PropertiesWindow::SetGridValue(wxGrid* grid, int rowIndex, std::string labe
 	grid->SetCellEditor(rowIndex, 1, new wxGridCellChoiceEditor(types));
 }
 
-void PropertiesWindow::OnResize(wxSizeEvent& evt) {
-	/*
-	if(wxGrid* grid = (wxGrid*)currentPanel->FindWindowByName("AdvancedGrid")) {
-		int tWidth = 0;
-		for(int i = 0; i < 3; ++i)
-			tWidth += grid->GetColumnWidth(i);
-
-		int wWidth = grid->GetParent()->GetSize().GetWidth();
-
-		grid->SetColumnWidth(2, wWidth - 100 - 80);
-	}
-	*/
-}
-
 void PropertiesWindow::OnNotebookPageChanged(wxNotebookEvent& evt) {
 	wxWindow const* page = notebook->GetCurrentPage();
 
@@ -245,14 +231,6 @@ void PropertiesWindow::OnNotebookPageChanged(wxNotebookEvent& evt) {
 		default:
 			break;
 	}
-}
-
-void PropertiesWindow::saveGeneralPanel() {
-	////
-}
-
-void PropertiesWindow::saveContainerPanel() {
-	////
 }
 
 void PropertiesWindow::saveAttributesPanel() {

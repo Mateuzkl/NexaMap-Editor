@@ -828,13 +828,6 @@ void GUI::SavePerspective() {
 	root->GetAuiToolBar()->SavePerspective();
 }
 
-void GUI::HideSearchWindow() {
-	if (search_result_window) {
-		aui_manager->GetPane(search_result_window).Show(false);
-		aui_manager->Update();
-	}
-}
-
 SearchResultWindow* GUI::ShowSearchWindow(wxString caption /* = "Search Results" */, bool duplicateItems /* = false */) {
 	if (search_result_window == nullptr) {
 		search_result_window = newd SearchResultWindow(root);
@@ -966,13 +959,6 @@ void GUI::CreateMinimap() {
 		aui_manager->AddPane(minimap, wxAuiPaneInfo().Caption("Minimap"));
 	}
 	aui_manager->Update();
-}
-
-void GUI::HideMinimap() {
-	if (minimap) {
-		aui_manager->GetPane(minimap).Show(false);
-		aui_manager->Update();
-	}
 }
 
 void GUI::DestroyMinimap() {

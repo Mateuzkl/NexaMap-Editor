@@ -36,7 +36,6 @@ public:
 	void OnClickAddAttribute(wxCommandEvent&);
 	void OnClickRemoveAttribute(wxCommandEvent&);
 
-	void OnResize(wxSizeEvent&);
 	void OnNotebookPageChanged(wxNotebookEvent&);
 	void OnGridValueChanged(wxGridEvent&);
 
@@ -45,12 +44,10 @@ public:
 protected:
 	// Simple pane
 	wxWindow* createGeneralPanel(wxWindow* parent);
-	void saveGeneralPanel();
 
 	// Container pane
 	std::vector<ContainerItemButton*> container_items;
 	wxWindow* createContainerPanel(wxWindow* parent);
-	void saveContainerPanel();
 
 	// Advanced pane
 	wxGrid* attributesGrid;

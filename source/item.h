@@ -127,7 +127,6 @@ public:
 
 	// Static conversions
 	static std::string LiquidID2Name(uint16_t id);
-	static uint16_t LiquidName2ID(std::string id);
 
 	// IDs
 	uint16_t getID() const {

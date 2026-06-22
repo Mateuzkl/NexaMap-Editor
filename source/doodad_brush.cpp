@@ -390,16 +390,6 @@ int DoodadBrush::getCompositeChance(int ab) const {
 	return ab_ptr->composite_chance;
 }
 
-int DoodadBrush::getSingleChance(int ab) const {
-	if (alternatives.empty()) {
-		return 0;
-	}
-	ab %= alternatives.size();
-	const AlternativeBlock* ab_ptr = alternatives[ab];
-	ASSERT(ab_ptr);
-	return ab_ptr->single_chance;
-}
-
 int DoodadBrush::getTotalChance(int ab) const {
 	if (alternatives.empty()) {
 		return 0;

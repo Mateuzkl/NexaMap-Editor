@@ -28,7 +28,6 @@ public:
 	void clear();
 
 	const MaterialsExtensionList& getExtensions();
-	MaterialsExtensionList getExtensionsByVersion(uint16_t version_id);
 
 	TilesetContainer tilesets;
 

@@ -604,10 +604,6 @@ void MemoryNodeFileWriteHandle::close() {
 	cache = nullptr;
 }
 
-uint8_t* MemoryNodeFileWriteHandle::getMemory() {
-	return cache;
-}
-
 size_t MemoryNodeFileWriteHandle::getSize() {
 	return local_write_index;
 }

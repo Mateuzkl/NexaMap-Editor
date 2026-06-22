@@ -33,7 +33,6 @@ public:
 	void SetFocusedTab(int idx);
 	void DeleteTab(int idx);
 	int GetTabCount();
-	int GetTabIndex(wxWindow* tab);
 	int GetSelection();
 	void CycleTab(bool forward = true);
 	wxWindow* GetCurrentPage();
@@ -41,7 +40,6 @@ public:
 	EditorTab* GetTab(int idx);
 
 	// Events
-	void OnAllowNotebookDND(wxAuiNotebookEvent& evt);
 	void OnNotebookPageClose(wxAuiNotebookEvent& evt);
 	void OnNotebookPageChanged(wxAuiNotebookEvent& evt);
 	void OnSwitchEditorMode(EditorMode mode);

@@ -372,10 +372,6 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 	map.clearChanges();
 }
 
-bool Editor::importMiniMap(FileName filename, int import, int import_x_offset, int import_y_offset, int import_z_offset) {
-	return false;
-}
-
 bool Editor::exportMiniMap(FileName filename, int floor /*= GROUND_LAYER*/, bool displaydialog) {
 	return map.exportMinimap(filename, floor, displaydialog);
 }
@@ -1915,6 +1911,3 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 	}
 }
 
-bool Editor::IsLocal() const {
-	return true;
-}

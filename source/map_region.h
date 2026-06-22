@@ -138,7 +138,6 @@ public:
 	TileLocation* createTile(int x, int y, int z);
 	TileLocation* getTile(int x, int y, int z);
 	Tile* setTile(int x, int y, int z, Tile* tile);
-	void clearTile(int x, int y, int z);
 
 	Floor* createFloor(int x, int y, int z);
 	Floor* getFloor(uint32_t z) {
@@ -154,9 +153,7 @@ public:
 	bool isVisible(uint32_t client, bool underground);
 	void clearVisible(uint32_t client);
 
-	void setRequested(bool underground, bool r);
 	bool isVisible(bool underground);
-	bool isRequested(bool underground);
 
 protected:
 	BaseMap& map;

@@ -644,10 +644,3 @@ void DirtyList::AddChange(Change* c) {
 	ichanges.push_back(c);
 }
 
-DirtyList::SetType& DirtyList::GetPosList() {
-	return iset;
-}
-
-ChangeList& DirtyList::GetChanges() {
-	return ichanges;
-}

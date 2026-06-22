@@ -40,7 +40,6 @@ public:
 
 	// Static conversions
 	static std::string DirID2Name(uint16_t id);
-	static uint16_t DirName2ID(std::string id);
 
 	Creature* deepCopy() const;
 

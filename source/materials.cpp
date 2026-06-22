@@ -55,16 +55,6 @@ const MaterialsExtensionList& Materials::getExtensions() {
 	return extensions;
 }
 
-MaterialsExtensionList Materials::getExtensionsByVersion(uint16_t version_id) {
-	MaterialsExtensionList ret_list;
-	for (MaterialsExtensionList::iterator iter = extensions.begin(); iter != extensions.end(); ++iter) {
-		if ((*iter)->isForVersion(version_id)) {
-			ret_list.push_back(*iter);
-		}
-	}
-	return ret_list;
-}
-
 bool Materials::loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings) {
 	pugi::xml_document doc;
 	pugi::xml_parse_result result = doc.load_file(identifier.GetFullPath().mb_str());

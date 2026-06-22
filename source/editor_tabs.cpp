@@ -109,10 +109,6 @@ void MapTabbook::OnNotebookPageChanged(wxAuiNotebookEvent& evt) {
 	}
 }
 
-void MapTabbook::OnAllowNotebookDND(wxAuiNotebookEvent& evt) {
-	evt.Allow();
-}
-
 // Wrappers
 
 void MapTabbook::AddTab(EditorTab* tab, bool select) {
@@ -171,13 +167,6 @@ void MapTabbook::DeleteTab(int idx) {
 int MapTabbook::GetTabCount() {
 	if (notebook) {
 		return notebook->GetPageCount();
-	}
-	return 0;
-}
-
-int MapTabbook::GetTabIndex(wxWindow* w) {
-	if (notebook) {
-		return notebook->GetPageIndex(w);
 	}
 	return 0;
 }

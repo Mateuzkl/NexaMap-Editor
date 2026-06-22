@@ -64,12 +64,6 @@ void MapWindow::ShowReplaceItemsDialog(bool selectionOnly) {
 	replaceItemsDialog->Show();
 }
 
-void MapWindow::CloseReplaceItemsDialog() {
-	if (replaceItemsDialog) {
-		replaceItemsDialog->Close();
-	}
-}
-
 void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent& event) {
 	if (replaceItemsDialog) {
 		replaceItemsDialog->Disconnect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnReplaceItemsDialogClose), NULL, this);

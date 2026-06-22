@@ -202,42 +202,6 @@ void GLRenderer::init() {
 	initialized = true;
 }
 
-void GLRenderer::shutdown() {
-	current_texture = 0;
-	m_programBound = false;
-	std::erase(s_instances, this);
-	if (!initialized) {
-		return;
-	}
-	if (program) {
-		glDeleteProgram(program);
-		program = 0;
-	}
-	if (vbo) {
-		glDeleteBuffers(1, &vbo);
-		vbo = 0;
-	}
-	if (vao) {
-		glDeleteVertexArrays(1, &vao);
-		vao = 0;
-	}
-	if (streamVBO) {
-		glDeleteBuffers(1, &streamVBO);
-		streamVBO = 0;
-	}
-	if (streamEBO) {
-		glDeleteBuffers(1, &streamEBO);
-		streamEBO = 0;
-	}
-	if (streamVAO) {
-		glDeleteVertexArrays(1, &streamVAO);
-		streamVAO = 0;
-	}
-	vboOffset = 0;
-	eboOffset = 0;
-	initialized = false;
-}
-
 void GLRenderer::bindProgram() {
 	if (m_programBound) {
 		return;
@@ -435,82 +399,6 @@ void GLRenderer::drawRect(float x, float y, float w, float h, const GLColor &col
 	drawThickLineSegment(x + w, y, x + w, y + h, lineWidth, color);
 	drawThickLineSegment(x + w, y + h, x, y + h, lineWidth, color);
 	drawThickLineSegment(x, y + h, x, y, lineWidth, color);
-}
-
-void GLRenderer::drawRoundedRect(float x, float y, float w, float h, float radius, const GLColor &fill) {
-	const int segments = 8;
-	flushBatch();
-
-	std::vector<Vertex> const verts;
-	// center vertex for fan
-	float const cx = x + w * 0.5f;
-	float const cy = y + h * 0.5f;
-	Vertex const center = { cx, cy, 0, 0, fill.r, fill.g, fill.b, fill.a };
-
-	// corners: top-left, top-right, bottom-right, bottom-left
-	std::array<std::array<float, 2>, 4> corners = { {
-		{ x + radius, y + radius },
-		{ x + w - radius, y + radius },
-		{ x + w - radius, y + h - radius },
-		{ x + radius, y + h - radius },
-	} };
-
-	constexpr float pi = std::numbers::pi_v<float>;
-	std::array<float, 4> startAngle = { pi, 1.5f * pi, 0.0f, 0.5f * pi };
-
-	// build perimeter vertices
-	std::vector<Vertex> perimeter;
-	for (int c = 0; c < 4; ++c) {
-		for (int s = 0; s <= segments; ++s) {
-			float const angle = startAngle[c] + (s / static_cast<float>(segments)) * (pi * 0.5f);
-			float const px = corners[c][0] + cosf(angle) * radius;
-			float const py = corners[c][1] + sinf(angle) * radius;
-			perimeter.push_back({ px, py, 0, 0, fill.r, fill.g, fill.b, fill.a });
-		}
-	}
-
-	// triangle fan from center
-	std::vector<Vertex> tris;
-	for (size_t i = 0; i < perimeter.size(); ++i) {
-		size_t const next = (i + 1) % perimeter.size();
-		tris.push_back(center);
-		tris.push_back(perimeter[i]);
-		tris.push_back(perimeter[next]);
-	}
-
-	bindState();
-	glUniform1i(loc_useTexture, 0);
-	glBufferData(GL_ARRAY_BUFFER, tris.size() * sizeof(Vertex), tris.data(), GL_DYNAMIC_DRAW);
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)tris.size());
-}
-
-void GLRenderer::drawRoundedRectOutline(float x, float y, float w, float h, float radius, const GLColor &color, float lineWidth) {
-	const int segments = 8;
-
-	std::array<std::array<float, 2>, 4> corners = { {
-		{ x + radius, y + radius },
-		{ x + w - radius, y + radius },
-		{ x + w - radius, y + h - radius },
-		{ x + radius, y + h - radius },
-	} };
-
-	constexpr float pi = std::numbers::pi_v<float>;
-	std::array<float, 4> startAngle = { pi, 1.5f * pi, 0.0f, 0.5f * pi };
-
-	std::vector<std::array<float, 2>> perimeter;
-	for (int c = 0; c < 4; ++c) {
-		for (int s = 0; s <= segments; ++s) {
-			float const angle = startAngle[c] + (s / static_cast<float>(segments)) * (pi * 0.5f);
-			float const px = corners[c][0] + cosf(angle) * radius;
-			float const py = corners[c][1] + sinf(angle) * radius;
-			perimeter.push_back({ px, py });
-		}
-	}
-
-	for (size_t i = 0; i < perimeter.size(); ++i) {
-		size_t const next = (i + 1) % perimeter.size();
-		drawThickLineSegment(perimeter[i][0], perimeter[i][1], perimeter[next][0], perimeter[next][1], lineWidth, color);
-	}
 }
 
 void GLRenderer::drawLine(float x1, float y1, float x2, float y2, const GLColor &color, float width) {

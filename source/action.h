@@ -95,8 +95,6 @@ public:
 	bool Empty() const {
 		return iset.empty() && ichanges.empty();
 	}
-	SetType& GetPosList();
-	ChangeList& GetChanges();
 
 protected:
 	SetType iset;

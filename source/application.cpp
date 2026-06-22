@@ -397,10 +397,6 @@ void MainFrame::UpdateMenubar() {
 	tool_bar->UpdateButtons();
 }
 
-bool MainFrame::DoQueryClose() {
-	return true;
-}
-
 bool MainFrame::DoQuerySaveTileset(bool doclose) {
 
 	if (!g_materials.needSave()) {

@@ -47,7 +47,6 @@ public: // Functions
 	static bool CanEdit() {
 		return true;
 	}
-	bool IsLocal() const;
 
 	// Map handling
 	void saveMap(FileName filename, bool showdialog); // "" means default filename
@@ -69,7 +68,6 @@ public: // Functions
 		return map.getError();
 	}
 	bool importMap(FileName filename, int import_x_offset, int import_y_offset, ImportType house_import_type, ImportType spawn_import_type);
-	bool importMiniMap(FileName filename, int import, int import_x_offset, int import_y_offset, int import_z_offset);
 	bool exportMiniMap(FileName filename, int floor /*= GROUND_LAYER*/, bool displaydialog);
 	bool exportSelectionAsMiniMap(FileName directory, wxString fileName);
 
