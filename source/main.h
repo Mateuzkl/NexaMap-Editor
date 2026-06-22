@@ -86,12 +86,6 @@ _Ret_bytecap_(_Size) inline void* __CRTDECL operator new[](size_t _Size, const c
 // PugiXML
 #include "ext/pugixml.hpp"
 
-// Libarchive, for OTGZ
-#if OTGZ_SUPPORT > 0
-	#include <archive.h>
-	#include <archive_entry.h>
-#endif
-
 #include <assert.h>
 #define _MSG(msg) !bool(msg)
 #ifdef __DEBUG__

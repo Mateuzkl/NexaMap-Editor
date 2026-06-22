@@ -1842,7 +1842,6 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 					if (tile) {
 						Tile* new_tile = tile->deepCopy(map);
 						new_tile->wallize(&map);
-						// if(*tile == *new_tile) delete new_tile;
 						action->addChange(newd Change(new_tile));
 					}
 				}
@@ -1890,7 +1889,6 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 				if (tile) {
 					Tile* new_tile = tile->deepCopy(map);
 					new_tile->wallize(&map);
-					// if(*tile == *new_tile) delete new_tile;
 					action->addChange(newd Change(new_tile));
 				}
 			}

@@ -276,7 +276,6 @@ void PaletteWindow::SelectPage(PaletteType id) {
 		PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetPage(iz));
 		if (panel->GetType() == id) {
 			choicebook->SetSelection(iz);
-			// LoadCurrentContents();
 			break;
 		}
 	}

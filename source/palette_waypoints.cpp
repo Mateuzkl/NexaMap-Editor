@@ -70,7 +70,6 @@ void WaypointPalettePanel::SetMap(Map* m) {
 }
 
 void WaypointPalettePanel::SelectFirstBrush() {
-	// SelectWaypointBrush();
 }
 
 Brush* WaypointPalettePanel::GetSelectedBrush() const {

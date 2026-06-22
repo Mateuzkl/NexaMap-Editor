@@ -871,7 +871,6 @@ FindDialog::FindDialog(wxWindow* parent, wxString title) :
 	SetSizerAndFit(sizer);
 	Centre(wxBOTH);
 	// We can't call it here since it calls an abstract function, call in child constructors instead.
-	// RefreshContents();
 }
 
 FindDialog::~FindDialog() = default;
