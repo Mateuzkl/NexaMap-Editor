@@ -240,9 +240,6 @@
     <ClInclude Include="..\..\source\town.h">
       <Filter>objects</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\source\updater.h">
-      <Filter>editor</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\source\waypoints.h">
       <Filter>objects</Filter>
     </ClInclude>
@@ -354,9 +351,6 @@
       <Filter>editor</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\selection.cpp">
-      <Filter>editor</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\updater.cpp">
       <Filter>editor</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\about_window.cpp">

@@ -78,10 +78,6 @@ wxNotebookPage* PreferencesWindow::CreateGeneralPage() {
 	always_make_backup_chkbox->SetValue(g_settings.getInteger(Config::ALWAYS_MAKE_BACKUP) == 1);
 	sizer->Add(always_make_backup_chkbox, 0, wxLEFT | wxTOP, 5);
 
-	update_check_on_startup_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Check for updates on startup");
-	update_check_on_startup_chkbox->SetValue(g_settings.getInteger(Config::USE_UPDATER) == 1);
-	sizer->Add(update_check_on_startup_chkbox, 0, wxLEFT | wxTOP, 5);
-
 	only_one_instance_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Open all maps in the same instance");
 	only_one_instance_chkbox->SetValue(g_settings.getInteger(Config::ONLY_ONE_INSTANCE) == 1);
 	only_one_instance_chkbox->SetToolTip("When checked, maps opened using the shell will all be opened in the same instance.");
@@ -612,7 +608,6 @@ void PreferencesWindow::Apply() {
 	// General
 	g_settings.setInteger(Config::WELCOME_DIALOG, show_welcome_dialog_chkbox->GetValue());
 	g_settings.setInteger(Config::ALWAYS_MAKE_BACKUP, always_make_backup_chkbox->GetValue());
-	g_settings.setInteger(Config::USE_UPDATER, update_check_on_startup_chkbox->GetValue());
 	g_settings.setInteger(Config::ONLY_ONE_INSTANCE, only_one_instance_chkbox->GetValue());
 	g_settings.setInteger(Config::UNDO_SIZE, undo_size_spin->GetValue());
 	g_settings.setInteger(Config::UNDO_MEM_SIZE, undo_mem_size_spin->GetValue());

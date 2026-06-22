@@ -88,7 +88,6 @@ ${CMAKE_CURRENT_LIST_DIR}/threads.h
 ${CMAKE_CURRENT_LIST_DIR}/tile.h
 ${CMAKE_CURRENT_LIST_DIR}/tileset.h
 ${CMAKE_CURRENT_LIST_DIR}/town.h
-${CMAKE_CURRENT_LIST_DIR}/updater.h
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
@@ -184,7 +183,6 @@ ${CMAKE_CURRENT_LIST_DIR}/templatemap854.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tile.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tileset.cpp
 ${CMAKE_CURRENT_LIST_DIR}/town.cpp
-${CMAKE_CURRENT_LIST_DIR}/updater.cpp
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp

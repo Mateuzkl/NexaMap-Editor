@@ -355,8 +355,6 @@ void Settings::IO(IOMode mode) {
 	Int(EXPERIMENTAL_FOG, 0);
 
 	section("");
-	Int(GOTO_WEBSITE_ON_BOOT, 0);
-	Int(USE_UPDATER, 1);
 	String(RECENT_EDITED_MAP_PATH, "");
 	String(RECENT_EDITED_MAP_POSITION, "");
 

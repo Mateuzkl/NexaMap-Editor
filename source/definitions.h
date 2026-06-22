@@ -98,12 +98,6 @@
 	#endif
 #endif
 
-#ifndef _DONT_USE_UPDATER_
-	#if defined __WINDOWS__ && !defined _USE_UPDATER_
-		#define _USE_UPDATER_
-	#endif
-#endif
-
 #ifndef _DONT_USE_PROCESS_COM
 	#if defined __WINDOWS__ && !defined _USE_PROCESS_COM
 		#define _USE_PROCESS_COM

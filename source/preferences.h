@@ -46,7 +46,6 @@ protected:
 	// General
 	wxCheckBox* always_make_backup_chkbox;
 	wxCheckBox* create_on_startup_chkbox;
-	wxCheckBox* update_check_on_startup_chkbox;
 	wxCheckBox* only_one_instance_chkbox;
 	wxCheckBox* show_welcome_dialog_chkbox;
 	wxCheckBox* enable_tileset_editing_chkbox;

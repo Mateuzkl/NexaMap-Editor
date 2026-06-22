@@ -354,9 +354,7 @@
     <ClInclude Include="..\..\source\selection.h" />
     <ClCompile Include="..\..\source\selection.cpp" />
     <ClInclude Include="..\..\source\tileset_window.h" />
-    <ClInclude Include="..\..\source\updater.h" />
     <ClCompile Include="..\..\source\table_brush.cpp" />
-    <ClCompile Include="..\..\source\updater.cpp" />
     <ClInclude Include="..\..\source\brush.h" />
     <ClCompile Include="..\..\source\brush.cpp" />
     <ClInclude Include="..\..\source\brush_enums.h" />

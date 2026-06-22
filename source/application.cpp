@@ -22,7 +22,6 @@
 #include "common_windows.h"
 #include "preferences.h"
 #include "main_menubar.h"
-#include "updater.h"
 #include "artprovider.h"
 
 #include "materials.h"
@@ -39,10 +38,6 @@
 BEGIN_EVENT_TABLE(MainFrame, wxFrame)
 EVT_CLOSE(MainFrame::OnExit)
 
-// Update check complete
-#ifdef _USE_UPDATER_
-EVT_ON_UPDATE_CHECK_FINISHED(wxID_ANY, MainFrame::OnUpdateReceived)
-#endif
 EVT_ON_UPDATE_MENUS(wxID_ANY, MainFrame::OnUpdateMenus)
 
 // Idle event handler
@@ -184,34 +179,6 @@ bool Application::OnInit() {
 
 	// Set idle event handling mode
 	wxIdleEvent::SetMode(wxIDLE_PROCESS_SPECIFIED);
-
-	// Goto RME website?
-	if (g_settings.getInteger(Config::GOTO_WEBSITE_ON_BOOT) == 1) {
-		::wxLaunchDefaultBrowser(__SITE_URL__, wxBROWSER_NEW_WINDOW);
-		g_settings.setInteger(Config::GOTO_WEBSITE_ON_BOOT, 0);
-	}
-
-	// Check for updates
-#ifdef _USE_UPDATER_
-	if (g_settings.getInteger(Config::USE_UPDATER) == -1) {
-		int ret = g_gui.PopupDialog(
-			"Notice",
-			"Do you want the editor to automatically check for updates?\n"
-			"It will connect to the internet if you choose yes.\n"
-			"You can change this setting in the preferences later.",
-			wxYES | wxNO
-		);
-		if (ret == wxID_YES) {
-			g_settings.setInteger(Config::USE_UPDATER, 1);
-		} else {
-			g_settings.setInteger(Config::USE_UPDATER, 0);
-		}
-	}
-	if (g_settings.getInteger(Config::USE_UPDATER) == 1) {
-		// UpdateChecker updater;
-		// updater.connect(g_gui.root);
-	}
-#endif
 
 	FileName save_failed_file = GUI::GetLocalDataDirectory();
 	save_failed_file.SetName(".saving.txt");
@@ -407,36 +374,6 @@ MainFrame::~MainFrame() = default;
 void MainFrame::OnIdle(wxIdleEvent& event) {
 	////
 }
-
-#ifdef _USE_UPDATER_
-void MainFrame::OnUpdateReceived(wxCommandEvent& event) {
-	std::string data = *(std::string*)event.GetClientData();
-	delete (std::string*)event.GetClientData();
-	size_t first_colon = data.find(':');
-	size_t second_colon = data.find(':', first_colon + 1);
-
-	if (first_colon == std::string::npos || second_colon == std::string::npos) {
-		return;
-	}
-
-	std::string update = data.substr(0, first_colon);
-	std::string verstr = data.substr(first_colon + 1, second_colon - first_colon - 1);
-	std::string url = (second_colon == data.size() ? "" : data.substr(second_colon + 1));
-
-	if (update == "yes") {
-		int ret = g_gui.PopupDialog(
-			"Update Notice",
-			wxString("There is a newd update available (") << wxstr(verstr) << "). Do you want to go to the website and download it?",
-			wxYES | wxNO,
-			"I don't want any update notices",
-			Config::AUTOCHECK_FOR_UPDATES
-		);
-		if (ret == wxID_YES) {
-			::wxLaunchDefaultBrowser(wxstr(url), wxBROWSER_NEW_WINDOW);
-		}
-	}
-}
-#endif
 
 void MainFrame::OnUpdateMenus(wxCommandEvent&) {
 	UpdateMenubar();

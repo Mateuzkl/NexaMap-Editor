@@ -87,10 +87,6 @@ public:
 	void OnIdle(wxIdleEvent& event);
 	void OnExit(wxCloseEvent& event);
 
-#ifdef _USE_UPDATER_
-	void OnUpdateReceived(wxCommandEvent& event);
-#endif
-
 #ifdef __WINDOWS__
 	bool MSWTranslateMessage(WXMSG* msg) override;
 #endif
