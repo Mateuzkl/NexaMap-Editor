@@ -785,7 +785,6 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 				break;
 
 			case DatFlagLight: {
-				SpriteLight light;
 				uint16_t intensity;
 				uint16_t color;
 				file.getU16(intensity);

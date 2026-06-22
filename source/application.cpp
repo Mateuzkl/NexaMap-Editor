@@ -152,10 +152,6 @@ bool Application::OnInit() {
 #ifndef __DEBUG_MODE__
 	// wxHandleFatalExceptions(true);
 #endif
-	// Load all the dependency files
-	std::string error;
-	StringVector warnings;
-
 	m_file_to_open = wxEmptyString;
 	ParseCommandLineMap(m_file_to_open);
 

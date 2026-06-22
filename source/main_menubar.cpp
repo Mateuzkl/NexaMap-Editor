@@ -1487,7 +1487,7 @@ namespace OnMapRemoveCorpses {
 				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
 			}
 
-			return g_materials.isInTileset(item, "Corpses") & !item->isComplex();
+			return g_materials.isInTileset(item, "Corpses") && !item->isComplex();
 		}
 	};
 }

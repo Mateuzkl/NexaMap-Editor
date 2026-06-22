@@ -32,6 +32,9 @@ public:
 		free(start);
 	}
 
+	contigous_vector(const contigous_vector&) = delete;
+	contigous_vector& operator=(const contigous_vector&) = delete;
+
 	void resize(size_t new_size) {
 		size_t old_size = sz;
 		start = reinterpret_cast<T*>(realloc(start, sizeof(T) * new_size));

@@ -310,6 +310,9 @@ public:
 	GraphicManager();
 	~GraphicManager();
 
+	GraphicManager(const GraphicManager&) = delete;
+	GraphicManager& operator=(const GraphicManager&) = delete;
+
 	void clear();
 	void cleanSoftwareSprites();
 
