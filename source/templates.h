@@ -33,6 +33,5 @@ struct ConversionMap {
 ConversionMap getReplacementMapFrom800To810();
 ConversionMap getReplacementMapFrom760To740();
 ConversionMap getReplacementMapFrom854To854();
-ConversionMap getReplacementMapClassic();
 
 #endif

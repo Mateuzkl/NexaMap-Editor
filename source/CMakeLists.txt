@@ -39,7 +39,6 @@ ${CMAKE_CURRENT_LIST_DIR}/house_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.h
-#${CMAKE_CURRENT_LIST_DIR}/iomap_otmm.h
 ${CMAKE_CURRENT_LIST_DIR}/item.h
 ${CMAKE_CURRENT_LIST_DIR}/item_attributes.h
 ${CMAKE_CURRENT_LIST_DIR}/items.h
@@ -94,6 +93,12 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/zones.h
+${CMAKE_CURRENT_LIST_DIR}/zone_brush.h
+${CMAKE_CURRENT_LIST_DIR}/palette_zones.h
+${CMAKE_CURRENT_LIST_DIR}/tileset_window.h
+${CMAKE_CURRENT_LIST_DIR}/add_tileset_window.h
+${CMAKE_CURRENT_LIST_DIR}/add_item_window.h
 )
 
 set(rme_SRC
@@ -136,7 +141,6 @@ ${CMAKE_CURRENT_LIST_DIR}/house.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iomap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.cpp
-#${CMAKE_CURRENT_LIST_DIR}/iomap_otmm.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item_attributes.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item.cpp
 ${CMAKE_CURRENT_LIST_DIR}/items.cpp
@@ -177,7 +181,6 @@ ${CMAKE_CURRENT_LIST_DIR}/table_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap76-74.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap81.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap854.cpp
-${CMAKE_CURRENT_LIST_DIR}/templatemapclassic.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tile.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tileset.cpp
 ${CMAKE_CURRENT_LIST_DIR}/town.cpp

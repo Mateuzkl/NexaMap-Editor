@@ -58,18 +58,4 @@ public:
 	virtual bool saveMap(Map& map, const FileName& identifier) = 0;
 };
 
-class VirtualIOMap : public IOMap {
-public:
-	VirtualIOMap(MapVersion v) {
-		version = v;
-	}
-
-	virtual bool loadMap(Map& map, const FileName& identifier) {
-		return false;
-	}
-	virtual bool saveMap(Map& map, const FileName& identifier) {
-		return false;
-	}
-};
-
 #endif

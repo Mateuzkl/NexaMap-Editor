@@ -92,9 +92,6 @@ _Ret_bytecap_(_Size) inline void* __CRTDECL operator new[](size_t _Size, const c
 	#include <archive_entry.h>
 #endif
 
-// This has annoyed me one time too many
-#define wxANY_ID (wxID_ANY)
-
 #include <assert.h>
 #define _MSG(msg) !bool(msg)
 #ifdef __DEBUG__

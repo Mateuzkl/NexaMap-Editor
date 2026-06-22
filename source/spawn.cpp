@@ -38,17 +38,6 @@ void Spawns::addSpawn(Tile* tile) {
 void Spawns::removeSpawn(Tile* tile) {
 	ASSERT(tile->spawn);
 	spawns.erase(tile->getPosition());
-#if 0
-	SpawnPositionList::iterator iter = begin();
-	while(iter != end()) {
-		if(*iter == tile->getPosition()) {
-			spawns.erase(iter);
-			return;
-		}
-		++iter;
-	}
-	ASSERT(false);
-#endif
 }
 
 std::ostream& operator<<(std::ostream& os, const Spawn& spawn) {
