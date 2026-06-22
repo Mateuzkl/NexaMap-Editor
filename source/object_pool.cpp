@@ -33,7 +33,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <new>
 #include <thread>
 #include <vector>
 

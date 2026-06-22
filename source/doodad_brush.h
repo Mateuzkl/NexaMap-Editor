@@ -81,9 +81,6 @@ public:
 	virtual bool canSmear() const {
 		return draggable;
 	}
-	virtual bool canDrag() const {
-		return false;
-	}
 	virtual bool oneSizeFitsAll() const {
 		return one_size;
 	}

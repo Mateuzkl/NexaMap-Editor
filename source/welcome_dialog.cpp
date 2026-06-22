@@ -89,7 +89,6 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxSize& size
 	int button_pos_center_x = size.x / 4 - button_size.x / 2;
 	int button_pos_center_y = size.y / 2;
 
-	wxPoint newMapButtonPoint(button_pos_center_x, button_pos_center_y);
 	auto* new_map_button = newd WelcomeDialogButton(this, wxDefaultPosition, button_size, button_base_colour, "New");
 	new_map_button->SetAction(wxID_NEW);
 	new_map_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);

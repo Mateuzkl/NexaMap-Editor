@@ -5,7 +5,6 @@
 #include "main.h"
 
 #include "zones.h"
-#include "map.h"
 
 Zones::~Zones() {
 	zones.clear();

@@ -18,14 +18,9 @@
 #include "main.h"
 
 #include "application.h"
-#include "sprites.h"
 #include "editor.h"
 #include "common_windows.h"
-#include "palette_window.h"
 #include "preferences.h"
-#include "result_window.h"
-#include "minimap_window.h"
-#include "about_window.h"
 #include "main_menubar.h"
 #include "updater.h"
 #include "artprovider.h"
@@ -33,8 +28,6 @@
 #include "materials.h"
 #include "map.h"
 #include "map_tab.h"
-#include "complexitem.h"
-#include "creature.h"
 
 #include <set>
 

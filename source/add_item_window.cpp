@@ -17,23 +17,11 @@
 
 #include "main.h"
 
-#include <wx/grid.h>
-
-#include "tile.h"
-#include "item.h"
-#include "complexitem.h"
-#include "town.h"
-#include "house.h"
-#include "map.h"
-#include "editor.h"
-#include "creature.h"
 #include "materials.h"
 #include "tileset.h"
 
 #include "gui.h"
-#include "application.h"
 #include "add_item_window.h"
-#include "container_properties_window.h"
 #include "find_item_window.h"
 
 // ============================================================================

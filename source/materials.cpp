@@ -19,7 +19,6 @@
 
 #include <wx/dir.h>
 
-#include "editor.h"
 #include "items.h"
 #include "creatures.h"
 

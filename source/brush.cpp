@@ -19,12 +19,10 @@
 
 #include "brush.h"
 #include "carpet_brush.h"
-#include "creature_brush.h"
 #include "doodad_brush.h"
 #include "ground_brush.h"
 #include "house_brush.h"
 #include "house_exit_brush.h"
-#include "raw_brush.h"
 #include "spawn_brush.h"
 #include "table_brush.h"
 #include "wall_brush.h"
@@ -37,8 +35,6 @@
 
 #include "item.h"
 #include "complexitem.h"
-#include "creatures.h"
-#include "creature.h"
 #include "map.h"
 
 #include "gui.h"

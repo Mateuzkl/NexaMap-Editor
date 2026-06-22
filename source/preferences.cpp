@@ -21,7 +21,6 @@
 
 #include "settings.h"
 #include "client_version.h"
-#include "editor.h"
 
 #include "gui.h"
 

@@ -21,7 +21,6 @@
 #include "application.h"
 #include "preferences.h"
 #include "about_window.h"
-#include "minimap_window.h"
 #include "dat_debug_view.h"
 #include "result_window.h"
 #include "extension_window.h"
@@ -32,8 +31,6 @@
 
 #include <unordered_set>
 
-#include <wx/chartype.h>
-#include <wx/choicdlg.h>
 #include <wx/dir.h>
 
 #include "editor.h"

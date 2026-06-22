@@ -24,10 +24,8 @@
 #include "items.h"
 #include "map.h"
 #include "item.h"
-#include "complexitem.h"
 #include "raw_brush.h"
 
-#include "palette_window.h"
 #include "gui.h"
 #include "application.h"
 #include "common_windows.h"

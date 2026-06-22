@@ -20,7 +20,6 @@
 #include "settings.h"
 #include "gui.h"
 #include "brush.h"
-#include "map_display.h"
 
 #include "palette_window.h"
 #include "palette_brushlist.h"
@@ -29,7 +28,6 @@
 #include "palette_waypoints.h"
 #include "palette_zones.h"
 
-#include "house_brush.h"
 #include "map.h"
 
 // ============================================================================

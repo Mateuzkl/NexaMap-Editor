@@ -28,7 +28,6 @@
 #include "wall_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
-#include "town.h"
 #include "map.h"
 #include "object_pool.h"
 

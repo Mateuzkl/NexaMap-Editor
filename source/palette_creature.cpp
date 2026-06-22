@@ -25,8 +25,6 @@
 #include "spawn_brush.h"
 #include "materials.h"
 
-#include <wx/checklst.h>
-
 #include <algorithm>
 #include <set>
 

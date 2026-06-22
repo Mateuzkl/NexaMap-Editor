@@ -47,9 +47,6 @@ public:
 	virtual void draw(BaseMap* map, Tile* tile, void* parameter);
 	virtual void undraw(BaseMap* map, Tile* tile);
 
-	virtual bool canDrag() const {
-		return false;
-	}
 	virtual bool canSmear() const {
 		return false;
 	}

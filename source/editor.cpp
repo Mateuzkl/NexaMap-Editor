@@ -18,7 +18,6 @@
 #include "main.h"
 
 #include "editor.h"
-#include "materials.h"
 #include "map.h"
 #include "complexitem.h"
 #include "settings.h"
@@ -27,12 +26,9 @@
 #include "brush.h"
 #include "ground_brush.h"
 #include "wall_brush.h"
-#include "table_brush.h"
-#include "carpet_brush.h"
 #include "waypoint_brush.h"
 #include "house_exit_brush.h"
 #include "doodad_brush.h"
-#include "creature_brush.h"
 #include "spawn_brush.h"
 
 Editor::Editor(CopyBuffer& copybuffer) :

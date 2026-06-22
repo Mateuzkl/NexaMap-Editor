@@ -35,6 +35,15 @@ data/user
 *.db
 *.opendb
 *.vs
+*.tlog
+*.iobj
+*.ipdb
+*.pch
+*.recipe
+*.res
+*.idb
+*.pdb
+vcpkg.applocal.log
 
 vcproj/ipch/
 vcproj/Beta Release/
@@ -48,6 +57,8 @@ vcproj/Project/x64/
 vcproj/Installer/Beta Release/
 vcproj/Installer/Debug/
 vcproj/Installer/Release/
+vcproj/Project/Editor/
+vcproj/Project/x64/
 .vscode/
 
 # Xcode

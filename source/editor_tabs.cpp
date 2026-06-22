@@ -18,7 +18,6 @@
 #include "main.h"
 
 #include "editor_tabs.h"
-#include "editor.h"
 #include "gui.h"
 #include "map_tab.h"
 

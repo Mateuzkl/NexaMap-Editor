@@ -19,8 +19,6 @@
 
 #include "complexitem.h"
 
-#include "iomap.h"
-
 // Container
 Container::Container(const uint16_t type) :
 	Item(type, 0) {

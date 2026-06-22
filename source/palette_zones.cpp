@@ -8,8 +8,6 @@
 #include "palette_zones.h"
 #include "zone_brush.h"
 #include "map.h"
-#include <wx/wfstream.h>
-#include <fstream>
 
 BEGIN_EVENT_TABLE(ZonesPalettePanel, PalettePanel)
 EVT_BUTTON(PALETTE_ZONES_ADD_ZONE, ZonesPalettePanel::OnClickAddZone)

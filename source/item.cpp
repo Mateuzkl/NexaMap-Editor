@@ -22,7 +22,6 @@
 #include "gui.h"
 #include "tile.h"
 #include "complexitem.h"
-#include "iomap.h"
 #include "item.h"
 
 #include "ground_brush.h"

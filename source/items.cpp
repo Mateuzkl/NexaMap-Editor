@@ -17,12 +17,10 @@
 
 #include "main.h"
 
-#include "materials.h"
 #include "gui.h"
 #include <string.h> // memcpy
 
 #include "items.h"
-#include "item.h"
 
 ItemDatabase g_items;
 

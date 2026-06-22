@@ -19,9 +19,6 @@
 
 #include "town.h"
 
-#include "map.h"
-#include "tile.h"
-
 Towns::Towns() {
 	////
 }

@@ -22,7 +22,6 @@
 #include "sprites.h"
 #include "gui.h"
 #include "common_windows.h"
-#include "application.h"
 #include "palette_waypoints.h"
 
 // ============================================================================

@@ -24,10 +24,8 @@
 #include <wx/confbase.h>
 #include <wx/config.h>
 #include <wx/fileconf.h>
-#include <wx/sstream.h>
 #include <wx/wfstream.h>
 
-#include <iostream>
 #include <string>
 
 Settings g_settings;
