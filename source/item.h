@@ -90,7 +90,7 @@ public:
 	static void* operator new(size_t size, const char* file, int line);
 	static void operator delete(void* ptr, const char* file, int line) noexcept;
 
-	virtual ~Item();
+	~Item() override;
 
 	// Deep copy thingy
 	virtual Item* deepCopy() const;

@@ -214,7 +214,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	public:
 		CustomMenuBar(MainMenuBar* mb) :
 			mb(mb) { }
-		~CustomMenuBar() {
+		~CustomMenuBar() override {
 			delete mb;
 		}
 

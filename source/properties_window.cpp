@@ -290,7 +290,7 @@ void PropertiesWindow::OnGridValueChanged(wxGridEvent& event) {
 
 		ItemAttribute attr;
 		if (newType == "String") {
-			attr.set("");
+			attr.set(std::string());
 		} else if (newType == "Float") {
 			attr.set(0.0f);
 		} else if (newType == "Number") {

@@ -29,7 +29,7 @@ class ZonesPalettePanel;
 class PaletteWindow : public wxPanel {
 public:
 	PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets);
-	~PaletteWindow();
+	~PaletteWindow() override;
 
 	// Interface
 	// Reloads layout g_settings from g_settings (and using map)

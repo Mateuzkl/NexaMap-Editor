@@ -50,7 +50,7 @@ class Map : public BaseMap {
 public:
 	// ctor and dtor
 	Map();
-	virtual ~Map();
+	~Map() override;
 
 	// Operations on the entire map
 	void cleanInvalidTiles(bool showdialog = false);

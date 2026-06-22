@@ -25,7 +25,7 @@ class Tile;
 class SearchResultWindow : public wxPanel {
 public:
 	SearchResultWindow(wxWindow* parent);
-	virtual ~SearchResultWindow();
+	~SearchResultWindow() override;
 
 	void Clear();
 	void SetDuplicateMode(bool duplicateMode);

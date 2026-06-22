@@ -33,7 +33,7 @@ class ItemToggleButton : public DCButton {
 public:
 	ItemToggleButton(wxWindow* parent, RenderSize size, int lookid, wxWindowID id = wxID_ANY) :
 		DCButton(parent, id, wxDefaultPosition, DC_BTN_TOGGLE, size, lookid) { }
-	virtual ~ItemToggleButton() { }
+	~ItemToggleButton() override { }
 };
 
 /**
@@ -43,7 +43,7 @@ class ItemButton : public DCButton {
 public:
 	ItemButton(wxWindow* parent, RenderSize size, uint16_t lookid, wxWindowID id = wxID_ANY) :
 		DCButton(parent, id, wxDefaultPosition, DC_BTN_NORMAL, size, lookid) { }
-	virtual ~ItemButton() { }
+	~ItemButton() override { }
 };
 
 /**
@@ -53,7 +53,7 @@ public:
 class MapPropertiesWindow : public wxDialog {
 public:
 	MapPropertiesWindow(wxWindow* parent, MapTab* tab, Editor& editor);
-	virtual ~MapPropertiesWindow();
+	~MapPropertiesWindow() override;
 
 	void OnChangeVersion(wxCommandEvent&);
 
@@ -84,7 +84,7 @@ protected:
 class ImportMapWindow : public wxDialog {
 public:
 	ImportMapWindow(wxWindow* parent, Editor& editor);
-	virtual ~ImportMapWindow();
+	~ImportMapWindow() override;
 
 	void OnClickBrowse(wxCommandEvent&);
 	void OnClickOK(wxCommandEvent&);
@@ -109,7 +109,7 @@ protected:
 class ExportMiniMapWindow : public wxDialog {
 public:
 	ExportMiniMapWindow(wxWindow* parent, Editor& editor);
-	virtual ~ExportMiniMapWindow();
+	~ExportMiniMapWindow() override;
 
 	void OnClickBrowse(wxCommandEvent&);
 	void OnDirectoryChanged(wxKeyEvent&);
@@ -139,7 +139,7 @@ protected:
 class ExportTilesetsWindow : public wxDialog {
 public:
 	ExportTilesetsWindow(wxWindow* parent, Editor& editor);
-	virtual ~ExportTilesetsWindow();
+	~ExportTilesetsWindow() override;
 
 	void OnClickBrowse(wxCommandEvent&);
 	void OnDirectoryChanged(wxKeyEvent&);
@@ -167,7 +167,7 @@ class KeyForwardingTextCtrl : public wxTextCtrl {
 public:
 	KeyForwardingTextCtrl(wxWindow* parent, wxWindowID id, const wxString& value = "", const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = 0, const wxValidator& validator = wxDefaultValidator, const wxString& name = wxTextCtrlNameStr) :
 		wxTextCtrl(parent, id, value, pos, size, style, validator, name) { }
-	~KeyForwardingTextCtrl() { }
+	~KeyForwardingTextCtrl() override { }
 
 	void OnKeyDown(wxKeyEvent&);
 
@@ -181,15 +181,15 @@ public:
 class FindDialogListBox : public wxVListBox {
 public:
 	FindDialogListBox(wxWindow* parent, wxWindowID id);
-	~FindDialogListBox();
+	~FindDialogListBox() override;
 
 	void Clear();
 	void SetNoMatches();
 	void AddBrush(Brush*);
 	Brush* GetSelectedBrush();
 
-	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const;
-	wxCoord OnMeasureItem(size_t index) const;
+	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const override;
+	wxCoord OnMeasureItem(size_t index) const override;
 
 protected:
 	bool cleared;
@@ -204,7 +204,7 @@ protected:
 class SortableListBox : public wxListBox {
 public:
 	SortableListBox(wxWindow* parent, wxWindowID id, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize);
-	~SortableListBox();
+	~SortableListBox() override;
 	void Sort();
 
 private:
@@ -219,7 +219,7 @@ private:
 class FindDialog : public wxDialog {
 public:
 	FindDialog(wxWindow* parent, wxString title);
-	virtual ~FindDialog();
+	~FindDialog() override;
 
 	void OnKeyDown(wxKeyEvent&);
 	void OnTextChange(wxCommandEvent&);
@@ -257,11 +257,11 @@ protected:
 class FindBrushDialog : public FindDialog {
 public:
 	FindBrushDialog(wxWindow* parent, wxString title = "Jump to Brush");
-	virtual ~FindBrushDialog();
+	~FindBrushDialog() override;
 
-	virtual void RefreshContentsInternal();
-	virtual void OnClickListInternal(wxCommandEvent&);
-	virtual void OnClickOKInternal();
+	void RefreshContentsInternal() override;
+	void OnClickListInternal(wxCommandEvent&) override;
+	void OnClickOKInternal() override;
 };
 
 /**
@@ -271,7 +271,7 @@ public:
 class GotoPositionDialog : public wxDialog {
 public:
 	GotoPositionDialog(wxWindow* parent, Editor& editor);
-	~GotoPositionDialog() { }
+	~GotoPositionDialog() override { }
 
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
@@ -327,7 +327,7 @@ protected:
 class EditTownsDialog : public wxDialog {
 public:
 	EditTownsDialog(wxWindow* parent, Editor& editor);
-	virtual ~EditTownsDialog();
+	~EditTownsDialog() override;
 
 	void OnListBoxChange(wxCommandEvent&);
 	void OnClickSelectTemplePosition(wxCommandEvent&);

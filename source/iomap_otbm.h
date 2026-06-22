@@ -130,12 +130,12 @@ public:
 	IOMapOTBM(MapVersion ver) {
 		version = ver;
 	}
-	~IOMapOTBM() { }
+	~IOMapOTBM() override { }
 
 	static bool getVersionInfo(const FileName& identifier, MapVersion& out_ver);
 
-	virtual bool loadMap(Map& map, const FileName& identifier);
-	virtual bool saveMap(Map& map, const FileName& identifier);
+	bool loadMap(Map& map, const FileName& identifier) override;
+	bool saveMap(Map& map, const FileName& identifier) override;
 
 protected:
 	static bool getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver);

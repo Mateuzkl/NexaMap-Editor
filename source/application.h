@@ -37,21 +37,21 @@ class wxSingleInstanceChecker;
 
 class Application : public wxApp {
 public:
-	~Application();
-	virtual bool OnInit();
-	virtual void OnEventLoopEnter(wxEventLoopBase* loop);
+	~Application() override;
+	bool OnInit() override;
+	void OnEventLoopEnter(wxEventLoopBase* loop) override;
 	virtual void MacOpenFiles(const wxArrayString& fileNames);
-	virtual int OnExit();
+	int OnExit() override;
 	void Unload();
 	void ShutdownServices();
 
 private:
-	bool m_startup;
+	bool m_startup = false;
 	wxString m_file_to_open;
 	void FixVersionDiscrapencies();
 	bool ParseCommandLineMap(wxString& fileName);
 
-	virtual void OnFatalException();
+	void OnFatalException() override;
 
 #ifdef _USE_PROCESS_COM
 	RMEProcessServer* m_proc_server;
@@ -64,7 +64,7 @@ class MainMenuBar;
 class MainFrame : public wxFrame {
 public:
 	MainFrame(const wxString& title, const wxPoint& pos, const wxSize& size);
-	~MainFrame();
+	~MainFrame() override;
 
 	void UpdateMenubar();
 	bool DoQueryClose();
@@ -92,10 +92,10 @@ public:
 #endif
 
 #ifdef __WINDOWS__
-	virtual bool MSWTranslateMessage(WXMSG* msg);
+	bool MSWTranslateMessage(WXMSG* msg) override;
 #endif
 
-	void PrepareDC(wxDC& dc);
+	void PrepareDC(wxDC& dc) override;
 
 protected:
 	MainMenuBar* menu_bar;

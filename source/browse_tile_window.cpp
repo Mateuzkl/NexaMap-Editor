@@ -28,10 +28,10 @@
 class BrowseTileListBox : public wxVListBox {
 public:
 	BrowseTileListBox(wxWindow* parent, wxWindowID id, Tile* tile);
-	~BrowseTileListBox();
+	~BrowseTileListBox() override;
 
-	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const;
-	wxCoord OnMeasureItem(size_t index) const;
+	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const override;
+	wxCoord OnMeasureItem(size_t index) const override;
 	Item* GetSelectedItem();
 	void RemoveSelected();
 

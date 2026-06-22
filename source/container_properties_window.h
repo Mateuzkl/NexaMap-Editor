@@ -27,7 +27,7 @@ class ContainerItemButton;
 class ContainerItemPopupMenu : public wxMenu {
 public:
 	ContainerItemPopupMenu();
-	virtual ~ContainerItemPopupMenu();
+	~ContainerItemPopupMenu() override;
 
 	void Update(ContainerItemButton* what);
 };
@@ -37,7 +37,7 @@ class ContainerItemButton : public ItemButton {
 	DECLARE_EVENT_TABLE()
 public:
 	ContainerItemButton(wxWindow* parent, bool large, int index, const Map* map, Item* item);
-	~ContainerItemButton();
+	~ContainerItemButton() override;
 
 	void OnMouseDoubleLeftClick(wxMouseEvent& event);
 	void OnMouseRightRelease(wxMouseEvent& event);

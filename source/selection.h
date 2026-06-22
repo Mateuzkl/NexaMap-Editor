@@ -112,11 +112,11 @@ private:
 class SelectionThread : public wxThread {
 public:
 	SelectionThread(Editor& editor, Position start, Position end);
-	virtual ~SelectionThread();
+	~SelectionThread() override;
 
 	void Execute(); // Calls "Create" and then "Run"
 protected:
-	virtual ExitCode Entry();
+	ExitCode Entry() override;
 	Editor& editor;
 	Position start, end;
 	Selection selection;

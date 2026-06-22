@@ -27,7 +27,7 @@
 class GamePanel : public wxPanel {
 public:
 	GamePanel(wxWindow* parent, int width, int height);
-	virtual ~GamePanel();
+	~GamePanel() override;
 
 	void OnPaint(wxPaintEvent&);
 	void OnKeyDown(wxKeyEvent&);
@@ -69,14 +69,14 @@ const int TETRIS_MAPWIDTH = 10;
 class TetrisPanel : public GamePanel {
 public:
 	TetrisPanel(wxWindow* parent);
-	~TetrisPanel();
+	~TetrisPanel() override;
 
 protected:
-	virtual void Render(wxDC& pdc);
-	virtual void GameLoop(int time);
-	virtual void OnKey(wxKeyEvent& event, bool down);
+	void Render(wxDC& pdc) override;
+	void GameLoop(int time) override;
+	void OnKey(wxKeyEvent& event, bool down) override;
 
-	virtual int getFPS() const {
+	int getFPS() const override {
 		return lines / 10 + 3;
 	}
 
@@ -129,14 +129,14 @@ const int SNAKE_MAPWIDTH = 20;
 class SnakePanel : public GamePanel {
 public:
 	SnakePanel(wxWindow* parent);
-	~SnakePanel();
+	~SnakePanel() override;
 
 protected:
-	virtual void Render(wxDC& pdc);
-	virtual void GameLoop(int time);
-	virtual void OnKey(wxKeyEvent& event, bool down);
+	void Render(wxDC& pdc) override;
+	void GameLoop(int time) override;
+	void OnKey(wxKeyEvent& event, bool down) override;
 
-	virtual int getFPS() const {
+	int getFPS() const override {
 		return 7;
 	}
 

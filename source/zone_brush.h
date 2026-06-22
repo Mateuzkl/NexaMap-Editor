@@ -10,29 +10,29 @@
 class ZoneBrush : public FlagBrush {
 public:
 	ZoneBrush();
-	virtual ~ZoneBrush();
+	~ZoneBrush() override;
 
-	bool isZone() const {
+	bool isZone() const override {
 		return true;
 	}
-	ZoneBrush* asZone() {
+	ZoneBrush* asZone() override {
 		return static_cast<ZoneBrush*>(this);
 	}
 
-	virtual bool load(pugi::xml_node node, wxArrayString& warnings) {
+	bool load(pugi::xml_node node, wxArrayString& warnings) override {
 		return true;
 	}
 
-	virtual bool canDraw(BaseMap* map, const Position& position) const;
-	virtual void draw(BaseMap* map, Tile* tile, void* parameter);
-	virtual void undraw(BaseMap* map, Tile* tile);
+	bool canDraw(BaseMap* map, const Position& position) const override;
+	void draw(BaseMap* map, Tile* tile, void* parameter) override;
+	void undraw(BaseMap* map, Tile* tile) override;
 
 	unsigned int getZone() const;
 	void setZone(unsigned int id);
-	virtual int getLookID() const {
+	int getLookID() const override {
 		return 0;
 	}
-	virtual std::string getName() const {
+	std::string getName() const override {
 		return "Zone Brush";
 	}
 

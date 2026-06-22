@@ -26,27 +26,27 @@
 class CreatureBrush : public Brush {
 public:
 	CreatureBrush(CreatureType* type); // Create a RAWBrush of the specified type
-	virtual ~CreatureBrush();
+	~CreatureBrush() override;
 
-	bool isCreature() const {
+	bool isCreature() const override {
 		return true;
 	}
-	CreatureBrush* asCreature() {
+	CreatureBrush* asCreature() override {
 		return static_cast<CreatureBrush*>(this);
 	}
 
-	virtual bool canDraw(BaseMap* map, const Position& position) const;
-	virtual void draw(BaseMap* map, Tile* tile, void* parameter);
+	bool canDraw(BaseMap* map, const Position& position) const override;
+	void draw(BaseMap* map, Tile* tile, void* parameter) override;
 	void draw_creature(BaseMap* map, Tile* tile);
-	virtual void undraw(BaseMap* map, Tile* tile);
+	void undraw(BaseMap* map, Tile* tile) override;
 
 	CreatureType* getType() const {
 		return creature_type;
 	}
 
-	virtual int getLookID() const; // We don't have a look type, this will always return 0
-	virtual std::string getName() const;
-	virtual bool oneSizeFitsAll() const {
+	int getLookID() const override; // We don't have a look type, this will always return 0
+	std::string getName() const override;
+	bool oneSizeFitsAll() const override {
 		return true;
 	}
 

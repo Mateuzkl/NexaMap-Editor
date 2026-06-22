@@ -23,7 +23,7 @@ class DatDebugViewListBox;
 class DatDebugView : public wxPanel {
 public:
 	DatDebugView(wxWindow* parent);
-	~DatDebugView();
+	~DatDebugView() override;
 
 	void OnTextChange(wxCommandEvent&);
 	void OnClickList(wxCommandEvent&);

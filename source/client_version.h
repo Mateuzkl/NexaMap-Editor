@@ -112,9 +112,9 @@ struct OtbVersion {
 	// '8.60', '7.40' etc.
 	std::string name;
 	// What file format the OTB is in (version 1..3)
-	OtbFormatVersion format_version;
+	OtbFormatVersion format_version{};
 	// The minor version ID of the OTB (maps to CLIENT_VERSION in OTServ)
-	ClientVersionID id;
+	ClientVersionID id{};
 };
 
 // Formats for the metadata file

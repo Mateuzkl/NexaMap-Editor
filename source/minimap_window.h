@@ -21,7 +21,7 @@
 class MinimapWindow : public wxPanel {
 public:
 	MinimapWindow(wxWindow* parent);
-	virtual ~MinimapWindow();
+	~MinimapWindow() override;
 
 	void OnPaint(wxPaintEvent&);
 	void OnEraseBackground(wxEraseEvent&) { }

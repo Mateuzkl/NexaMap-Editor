@@ -28,7 +28,7 @@
 class MainToolBar : public wxEvtHandler {
 public:
 	MainToolBar(wxWindow* parent, wxAuiManager* manager);
-	~MainToolBar();
+	~MainToolBar() override;
 
 	wxAuiPaneInfo& GetPane(ToolBarID id);
 	void UpdateButtons();

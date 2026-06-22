@@ -27,7 +27,7 @@ class BrowseTileListBox;
 class BrowseTileWindow : public wxDialog {
 public:
 	BrowseTileWindow(wxWindow* parent, Tile* tile, wxPoint position = wxDefaultPosition);
-	~BrowseTileWindow();
+	~BrowseTileWindow() override;
 
 	void OnItemSelected(wxCommandEvent&);
 	void OnClickDelete(wxCommandEvent&);

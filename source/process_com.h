@@ -25,17 +25,17 @@
 class RMEProcessConnection : public wxConnection {
 public:
 	RMEProcessConnection();
-	~RMEProcessConnection();
+	~RMEProcessConnection() override;
 
-	bool OnExec(const wxString& topic, const wxString& fileName);
+	bool OnExec(const wxString& topic, const wxString& fileName) override;
 };
 
 class RMEProcessServer : public wxServer {
 public:
 	RMEProcessServer();
-	~RMEProcessServer();
+	~RMEProcessServer() override;
 
-	wxConnectionBase* OnAcceptConnection(const wxString& topic);
+	wxConnectionBase* OnAcceptConnection(const wxString& topic) override;
 };
 
 class RMEProcessClient : public wxClient {
@@ -43,9 +43,9 @@ class RMEProcessClient : public wxClient {
 
 public:
 	RMEProcessClient();
-	~RMEProcessClient();
+	~RMEProcessClient() override;
 
-	wxConnectionBase* OnMakeConnection();
+	wxConnectionBase* OnMakeConnection() override;
 };
 
 	#endif

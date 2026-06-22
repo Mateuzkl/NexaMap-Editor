@@ -30,7 +30,7 @@ public:
 	OldPropertiesWindow(wxWindow* parent, const Map* map, const Tile* tile, Item* item, wxPoint = wxDefaultPosition);
 	OldPropertiesWindow(wxWindow* parent, const Map* map, const Tile* tile, Creature* creature, wxPoint = wxDefaultPosition);
 	OldPropertiesWindow(wxWindow* parent, const Map* map, const Tile* tile, Spawn* spawn, wxPoint = wxDefaultPosition);
-	virtual ~OldPropertiesWindow();
+	~OldPropertiesWindow() override;
 
 	void OnFocusChange(wxFocusEvent&);
 	void OnChar(wxKeyEvent& evt);
@@ -38,7 +38,7 @@ public:
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
 
-	void Update();
+	void Update() override;
 
 protected:
 	// item

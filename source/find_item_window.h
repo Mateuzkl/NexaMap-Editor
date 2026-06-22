@@ -53,7 +53,7 @@ public:
 	};
 
 	FindItemDialog(wxWindow* parent, const wxString& title, bool onlyPickupables = false);
-	~FindItemDialog();
+	~FindItemDialog() override;
 
 	Brush* getResult() const {
 		return result_brush;

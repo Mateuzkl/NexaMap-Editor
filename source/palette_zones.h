@@ -13,19 +13,19 @@
 class ZonesPalettePanel : public PalettePanel {
 public:
 	ZonesPalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY);
-	~ZonesPalettePanel();
+	~ZonesPalettePanel() override;
 
-	wxString GetName() const;
-	PaletteType GetType() const;
+	wxString GetName() const override;
+	PaletteType GetType() const override;
 
-	void SelectFirstBrush();
-	Brush* GetSelectedBrush() const;
-	int GetSelectedBrushSize() const;
-	bool SelectBrush(const Brush* whatbrush);
+	void SelectFirstBrush() override;
+	Brush* GetSelectedBrush() const override;
+	int GetSelectedBrushSize() const override;
+	bool SelectBrush(const Brush* whatbrush) override;
 
-	void OnUpdate();
-	void OnSwitchIn();
-	void OnSwitchOut();
+	void OnUpdate() override;
+	void OnSwitchIn() override;
+	void OnSwitchOut() override;
 
 	void OnClickZone(wxListEvent& event);
 	void OnRightClickZone(wxListEvent& event);

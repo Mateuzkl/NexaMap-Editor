@@ -36,10 +36,10 @@ class wxURL;
 class UpdateConnectionThread : public DetachedThread {
 public:
 	UpdateConnectionThread(wxEvtHandler* receiver, wxURL* url);
-	virtual ~UpdateConnectionThread();
+	~UpdateConnectionThread() override;
 
 protected:
-	virtual ExitCode Entry();
+	ExitCode Entry() override;
 	wxEvtHandler* receiver;
 	wxURL* url;
 };

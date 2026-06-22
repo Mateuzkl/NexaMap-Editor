@@ -25,7 +25,7 @@ class GamePanel;
 class AboutWindow : public wxDialog {
 public:
 	AboutWindow(wxWindow* parent);
-	~AboutWindow();
+	~AboutWindow() override;
 
 	void OnClickOK(wxCommandEvent&);
 	void OnClickLicense(wxCommandEvent&);

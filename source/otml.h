@@ -131,7 +131,7 @@ namespace otml_util {
 
 	class BadCast : public std::bad_cast {
 	public:
-		virtual ~BadCast() throw() { }
+		~BadCast() throw() override { }
 		virtual const char* what() {
 			return "failed to cast value";
 		}
@@ -153,9 +153,9 @@ public:
 		m_what(error) { }
 	OTMLException(const OTMLNodePtr& node, const std::string& error);
 	OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line = -1);
-	virtual ~OTMLException() throw() {};
+	~OTMLException() throw() override {};
 
-	virtual const char* what() const throw() {
+	const char* what() const throw() override {
 		return m_what.c_str();
 	}
 
@@ -277,11 +277,11 @@ protected:
 
 class OTMLDocument : public OTMLNode {
 public:
-	virtual ~OTMLDocument() { }
+	~OTMLDocument() override { }
 	static OTMLDocumentPtr create();
 	static OTMLDocumentPtr parse(const std::string& fileName);
 	static OTMLDocumentPtr parse(std::istream& in, const std::string& source);
-	std::string emit();
+	std::string emit() override;
 	bool save(const std::string& fileName);
 
 private:

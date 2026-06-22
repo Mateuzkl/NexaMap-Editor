@@ -146,7 +146,9 @@ void ContainerItemButton::OnRemoveItem(wxCommandEvent& WXUNUSED(event)) {
 
 	ASSERT(it != itemVector.end());
 
-	itemVector.erase(it);
+	if (it != itemVector.end()) {
+		itemVector.erase(it);
+	}
 	delete edit_item;
 
 	ObjectPropertiesWindowBase* propertyWindow = getParentContainerWindow();

@@ -23,7 +23,7 @@ class MaterialsExtension;
 class ExtensionsDialog : public wxDialog {
 public:
 	ExtensionsDialog(wxWindow* parent);
-	virtual ~ExtensionsDialog();
+	~ExtensionsDialog() override;
 
 	void OnClickOK(wxCommandEvent& evt);
 	void OnClickOpenFolder(wxCommandEvent& evt);

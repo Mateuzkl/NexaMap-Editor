@@ -53,22 +53,22 @@ protected:
 class BrushListBox : public wxVListBox, public BrushBoxInterface {
 public:
 	BrushListBox(wxWindow* parent, const TilesetCategory* _tileset);
-	~BrushListBox();
+	~BrushListBox() override;
 
-	wxWindow* GetSelfWindow() {
+	wxWindow* GetSelfWindow() override {
 		return this;
 	}
 
 	// Select the first brush
-	void SelectFirstBrush();
+	void SelectFirstBrush() override;
 	// Returns the currently selected brush (First brush if panel is not loaded)
-	Brush* GetSelectedBrush() const;
+	Brush* GetSelectedBrush() const override;
 	// Select the brush in the parameter, this only changes the look of the panel
-	bool SelectBrush(const Brush* brush);
+	bool SelectBrush(const Brush* brush) override;
 
 	// Event handlers
-	virtual void OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const;
-	virtual wxCoord OnMeasureItem(size_t n) const;
+	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const override;
+	wxCoord OnMeasureItem(size_t n) const override;
 
 	void OnKey(wxKeyEvent& event);
 
@@ -78,9 +78,9 @@ public:
 class BrushIconBox : public wxScrolledWindow, public BrushBoxInterface {
 public:
 	BrushIconBox(wxWindow* parent, const TilesetCategory* _tileset, RenderSize rsz);
-	~BrushIconBox();
+	~BrushIconBox() override;
 
-	wxWindow* GetSelfWindow() {
+	wxWindow* GetSelfWindow() override {
 		return this;
 	}
 
@@ -89,11 +89,11 @@ public:
 	void EnsureVisible(size_t n);
 
 	// Select the first brush
-	void SelectFirstBrush();
+	void SelectFirstBrush() override;
 	// Returns the currently selected brush (First brush if panel is not loaded)
-	Brush* GetSelectedBrush() const;
+	Brush* GetSelectedBrush() const override;
 	// Select the brush in the parameter, this only changes the look of the panel
-	bool SelectBrush(const Brush* brush);
+	bool SelectBrush(const Brush* brush) override;
 
 	// Event handling...
 	void OnClickBrushButton(wxCommandEvent& event);
@@ -118,7 +118,7 @@ protected:
 class BrushPanel : public wxPanel {
 public:
 	BrushPanel(wxWindow* parent);
-	~BrushPanel();
+	~BrushPanel() override;
 
 	// Interface
 	// Flushes this panel and consequent views will feature reloaded data
@@ -160,31 +160,31 @@ protected:
 class BrushPalettePanel : public PalettePanel {
 public:
 	BrushPalettePanel(wxWindow* parent, const TilesetContainer& tilesets, TilesetCategoryType category, wxWindowID id = wxID_ANY);
-	~BrushPalettePanel();
+	~BrushPalettePanel() override;
 
 	// Interface
 	// Flushes this panel and consequent views will feature reloaded data
-	void InvalidateContents();
+	void InvalidateContents() override;
 	// Loads the currently displayed page
-	void LoadCurrentContents();
+	void LoadCurrentContents() override;
 	// Loads all content in this panel
-	void LoadAllContents();
+	void LoadAllContents() override;
 
-	PaletteType GetType() const;
+	PaletteType GetType() const override;
 
 	// Sets the display type (list or icons)
 	void SetListType(BrushListType ltype);
 	void SetListType(wxString ltype);
 
 	// Select the first brush
-	void SelectFirstBrush();
+	void SelectFirstBrush() override;
 	// Returns the currently selected brush (first brush if panel is not loaded)
-	Brush* GetSelectedBrush() const;
+	Brush* GetSelectedBrush() const override;
 	// Select the brush in the parameter, this only changes the look of the panel
-	bool SelectBrush(const Brush* whatbrush);
+	bool SelectBrush(const Brush* whatbrush) override;
 
 	// Called when this page is displayed
-	void OnSwitchIn();
+	void OnSwitchIn() override;
 
 	// Event handler for child window
 	void OnSwitchingPage(wxChoicebookEvent& event);

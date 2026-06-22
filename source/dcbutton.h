@@ -37,7 +37,7 @@ class DCButton : public wxPanel {
 public:
 	DCButton();
 	DCButton(wxWindow* parent, wxWindowID id, wxPoint pos, int type, RenderSize sz, int sprite_id);
-	virtual ~DCButton();
+	~DCButton() override;
 
 	void SetValue(bool val);
 	bool GetValue() const;

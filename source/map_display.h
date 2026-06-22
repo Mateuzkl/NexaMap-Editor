@@ -32,7 +32,7 @@ class MapDrawer;
 class MapCanvas : public wxGLCanvas {
 public:
 	MapCanvas(MapWindow* parent, Editor& editor, int* attriblist);
-	virtual ~MapCanvas();
+	~MapCanvas() override;
 	void Reset();
 
 	// All events
@@ -197,7 +197,7 @@ private:
 class MapPopupMenu : public wxMenu {
 public:
 	MapPopupMenu(Editor& editor);
-	virtual ~MapPopupMenu();
+	~MapPopupMenu() override;
 
 	void Update();
 
@@ -208,11 +208,11 @@ protected:
 class AnimationTimer : public wxTimer {
 public:
 	AnimationTimer(MapCanvas* canvas);
-	~AnimationTimer();
+	~AnimationTimer() override;
 
-	void Notify();
+	void Notify() override;
 	void StartRefresh(int interval);
-	void Stop();
+	void Stop() override;
 
 private:
 	MapCanvas* map_canvas;

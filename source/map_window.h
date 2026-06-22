@@ -31,7 +31,7 @@ class DCButton;
 class MapWindow : public wxPanel {
 public:
 	MapWindow(wxWindow* parent, Editor& editor);
-	virtual ~MapWindow();
+	~MapWindow() override;
 
 	// Event handlers
 	void OnSize(wxSizeEvent& event);
@@ -108,7 +108,7 @@ class MapScrollBar : public wxScrollBar {
 public:
 	MapScrollBar(MapWindow* parent, wxWindowID id, long style, wxWindow* canvas) :
 		wxScrollBar(parent, id, wxDefaultPosition, wxDefaultSize, style), canvas(canvas) { }
-	virtual ~MapScrollBar() { }
+	~MapScrollBar() override { }
 
 	void OnKey(wxKeyEvent& event) {
 		canvas->GetEventHandler()->AddPendingEvent(event);

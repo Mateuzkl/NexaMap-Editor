@@ -28,22 +28,22 @@ public:
 	// Constructs a newd window, but it uses the same internal editor as 'other'
 	// AND the same parent, aui_notebook etc.
 	MapTab(const MapTab* other);
-	~MapTab();
+	~MapTab() override;
 
 	bool IsUniqueReference() const;
 	bool HasSameReference(MapTab* other) const;
 
 	// Properties
 	MapWindow* GetView() const;
-	wxWindow* GetWindow() const;
-	wxString GetTitle() const;
+	wxWindow* GetWindow() const override;
+	wxString GetTitle() const override;
 	Editor* GetEditor() const;
 	Map* GetMap() const;
 
 	void VisibilityCheck();
 
 	// Event handlers
-	void OnSwitchEditorMode(EditorMode mode);
+	void OnSwitchEditorMode(EditorMode mode) override;
 
 protected:
 	struct InternalReference {

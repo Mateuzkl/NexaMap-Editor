@@ -29,7 +29,7 @@ class ItemAttribute;
 class PropertiesWindow : public ObjectPropertiesWindowBase {
 public:
 	PropertiesWindow(wxWindow* parent, const Map* map, const Tile* tile, Item* item, wxPoint position = wxDefaultPosition);
-	~PropertiesWindow();
+	~PropertiesWindow() override;
 
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
@@ -40,7 +40,7 @@ public:
 	void OnNotebookPageChanged(wxNotebookEvent&);
 	void OnGridValueChanged(wxGridEvent&);
 
-	void Update();
+	void Update() override;
 
 protected:
 	// Simple pane

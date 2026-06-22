@@ -28,7 +28,7 @@ public:
 	explicit PreferencesWindow(wxWindow* parent) :
 		PreferencesWindow(parent, false) {};
 	PreferencesWindow(wxWindow* parent, bool clientVersionSelected);
-	virtual ~PreferencesWindow();
+	~PreferencesWindow() override;
 
 	void OnClickDefaults(wxCommandEvent&);
 	void OnClickApply(wxCommandEvent&);
