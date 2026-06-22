@@ -95,7 +95,7 @@ wxWindow* PropertiesWindow::createGeneralPanel(wxWindow* parent) {
 }
 
 wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
-	Container const* container = (Container*)edit_item;
+	Container const* container = static_cast<const Container*>(edit_item);
 	wxPanel* panel = newd wxPanel(parent, ITEM_PROPERTIES_CONTAINER_TAB);
 	wxSizer* topSizer = newd wxBoxSizer(wxVERTICAL);
 

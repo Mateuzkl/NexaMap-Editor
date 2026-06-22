@@ -178,7 +178,7 @@ protected:
 			read_offset = data.size();
 			return false;
 		}
-		ref = *(T*)(data.data() + read_offset);
+		ref = *reinterpret_cast<const T*>(data.data() + read_offset);
 
 		read_offset += sizeof(ref);
 		return true;

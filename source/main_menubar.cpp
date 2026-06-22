@@ -1288,7 +1288,7 @@ void MainMenuBar::OnEditMonsterSpawnTime(wxCommandEvent& WXUNUSED(event)) {
 		if (monstersUpdated == 0) {
 			g_gui.PopupDialog("Edit Monster Spawn Time", "No monsters found in the selected area.", wxOK);
 		} else {
-			g_gui.PopupDialog("Edit Monster Spawn Time", wxString::Format("%d monsters updated.", monstersUpdated), wxOK);
+			g_gui.PopupDialog("Edit Monster Spawn Time", wxString::Format("%lld monsters updated.", monstersUpdated), wxOK);
 		}
 
 		g_gui.GetCurrentMap().doChange();

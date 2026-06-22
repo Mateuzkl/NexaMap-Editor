@@ -568,7 +568,7 @@ void MainFrame::OnExit(wxCloseEvent& event) {
 	g_gui.SaveUserCreatures();
 	ClientVersion::saveVersions();
 	g_settings.save(true);
-	((Application&)wxGetApp()).ShutdownServices();
+	static_cast<Application&>(wxGetApp()).ShutdownServices();
 	exit(0);
 }
 
