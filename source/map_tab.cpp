@@ -78,10 +78,6 @@ wxWindow* MapTab::GetWindow() const {
 	return const_cast<MapTab*>(this);
 }
 
-MapCanvas* MapTab::GetCanvas() const {
-	return canvas;
-}
-
 MapWindow* MapTab::GetView() const {
 	return const_cast<MapWindow*>((const MapWindow*)this);
 }

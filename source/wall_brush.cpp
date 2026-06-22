@@ -392,6 +392,16 @@ bool hasMatchingWallBrushAtTile(BaseMap* map, WallBrush* wall_brush, uint32_t x,
 	return false;
 }
 
+uint16_t WallBrush::pickWeightedWallItemId(const WallNode& wn) {
+	int chance = random(1, wn.total_chance);
+	for (std::vector<WallType>::const_iterator iter = wn.items.begin(); iter != wn.items.end(); ++iter) {
+		if (chance <= iter->chance) {
+			return iter->id;
+		}
+	}
+	return 0;
+}
+
 void WallBrush::doWalls(BaseMap* map, Tile* tile) {
 	ASSERT(tile);
 
@@ -507,15 +517,7 @@ void WallBrush::doWalls(BaseMap* map, Tile* tile) {
 								id = wn.items.front().id;
 							}
 						} else {
-							int chance = random(1, wn.total_chance);
-							for (std::vector<WallType>::const_iterator witer = wn.items.begin();
-								 witer != wn.items.end();
-								 ++witer) {
-								if (chance <= witer->chance) {
-									id = witer->id;
-									break;
-								}
-							}
+							id = pickWeightedWallItemId(wn);
 						}
 						if (id != 0) {
 							Item* new_wall = Item::Create(id);
@@ -603,15 +605,7 @@ void WallBrush::doWalls(BaseMap* map, Tile* tile) {
 								id = wn.items.front().id;
 							}
 						} else {
-							int chance = random(1, wn.total_chance);
-							for (std::vector<WallType>::const_iterator node_iter = wn.items.begin();
-								 node_iter != wn.items.end();
-								 ++node_iter) {
-								if (chance <= node_iter->chance) {
-									id = node_iter->id;
-									break;
-								}
-							}
+							id = pickWeightedWallItemId(wn);
 						}
 						if (id != 0) {
 							Item* new_wall = Item::Create(id);

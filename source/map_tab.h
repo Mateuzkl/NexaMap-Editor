@@ -35,7 +35,6 @@ public:
 
 	// Properties
 	MapWindow* GetView() const;
-	MapCanvas* GetCanvas() const;
 	wxWindow* GetWindow() const;
 	wxString GetTitle() const;
 	Editor* GetEditor() const;

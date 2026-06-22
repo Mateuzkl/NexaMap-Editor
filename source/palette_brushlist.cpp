@@ -403,12 +403,9 @@ void BrushPanel::OnClickListBoxRow(wxCommandEvent& event) {
 	ASSERT(brushbox);
 	size_t n = event.GetSelection();
 
-	wxWindow* w = this;
-	while ((w = w->GetParent()) && dynamic_cast<PaletteWindow*>(w) == nullptr)
-		;
-
-	if (w) {
-		g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
+	PaletteWindow* palette = GetParentPalette(this);
+	if (palette) {
+		g_gui.ActivatePalette(palette);
 	}
 
 	g_gui.SelectBrush(tileset->brushlist[n], tileset->getType());
@@ -542,11 +539,9 @@ void BrushIconBox::OnClickBrushButton(wxCommandEvent& event) {
 	wxObject* obj = event.GetEventObject();
 	BrushButton* btn = dynamic_cast<BrushButton*>(obj);
 	if (btn) {
-		wxWindow* w = this;
-		while ((w = w->GetParent()) && dynamic_cast<PaletteWindow*>(w) == nullptr)
-			;
-		if (w) {
-			g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
+		PaletteWindow* palette = GetParentPalette(this);
+		if (palette) {
+			g_gui.ActivatePalette(palette);
 		}
 		g_gui.SelectBrush(btn->brush, tileset->getType());
 	}

@@ -34,6 +34,9 @@ class PaletteWindow;
 
 typedef TilesetCategoryType PaletteType;
 
+// Walks up the parent chain and returns the enclosing PaletteWindow (or nullptr).
+PaletteWindow* GetParentPalette(const wxWindow* window);
+
 class BrushButton : public ItemToggleButton {
 public:
 	BrushButton(wxWindow* parent, Brush* brush, RenderSize, uint32_t id = wxID_ANY);

@@ -42,11 +42,15 @@ PalettePanel::~PalettePanel() {
 	////
 }
 
-PaletteWindow* PalettePanel::GetParentPalette() const {
-	const wxWindow* w = this;
+PaletteWindow* GetParentPalette(const wxWindow* window) {
+	const wxWindow* w = window;
 	while ((w = w->GetParent()) && dynamic_cast<const PaletteWindow*>(w) == nullptr)
 		;
 	return const_cast<PaletteWindow*>(static_cast<const PaletteWindow*>(w));
+}
+
+PaletteWindow* PalettePanel::GetParentPalette() const {
+	return ::GetParentPalette(this);
 }
 
 void PalettePanel::InvalidateContents() {

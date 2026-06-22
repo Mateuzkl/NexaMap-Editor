@@ -119,13 +119,10 @@ void HousePalettePanel::OnSwitchIn() {
 }
 
 void HousePalettePanel::OnLayoutFixTimer(wxTimerEvent& WXUNUSED(event)) {
-	wxWindow* w = this;
-	while ((w = w->GetParent()) && dynamic_cast<PaletteWindow*>(w) == nullptr)
-		;
-
-	if (w) {
-		w->SetSize(w->GetSize().GetWidth(), w->GetSize().GetHeight() + 1);
-		w->SetSize(w->GetSize().GetWidth(), w->GetSize().GetHeight() - 1);
+	PaletteWindow* palette = GetParentPalette();
+	if (palette) {
+		palette->SetSize(palette->GetSize().GetWidth(), palette->GetSize().GetHeight() + 1);
+		palette->SetSize(palette->GetSize().GetWidth(), palette->GetSize().GetHeight() - 1);
 	}
 }
 

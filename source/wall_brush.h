@@ -76,6 +76,8 @@ protected:
 		int total_chance;
 		std::vector<WallType> items;
 	};
+	// Returns a weighted-random item id from the node (0 if none).
+	static uint16_t pickWeightedWallItemId(const WallNode& wn);
 	struct DoorType {
 		::DoorType type;
 		uint16_t id;
