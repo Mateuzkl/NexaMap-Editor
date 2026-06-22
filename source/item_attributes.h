@@ -94,11 +94,6 @@ public:
 	const bool* getBooleanAttribute(const std::string& key) const;
 
 	// Returns true if the attribute (of that type) exists
-	bool hasStringAttribute(const std::string& key) const;
-	bool hasIntegerAttribute(const std::string& key) const;
-	bool hasFloatAttribute(const std::string& key) const;
-	bool hasBooleanAttribute(const std::string& key) const;
-
 	void eraseAttribute(const std::string& key);
 
 	void clearAllAttributes();

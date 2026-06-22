@@ -140,22 +140,6 @@ const bool* ItemAttributes::getBooleanAttribute(const std::string& key) const {
 	return nullptr;
 }
 
-bool ItemAttributes::hasStringAttribute(const std::string& key) const {
-	return getStringAttribute(key) != nullptr;
-}
-
-bool ItemAttributes::hasIntegerAttribute(const std::string& key) const {
-	return getIntegerAttribute(key) != nullptr;
-}
-
-bool ItemAttributes::hasFloatAttribute(const std::string& key) const {
-	return getFloatAttribute(key) != nullptr;
-}
-
-bool ItemAttributes::hasBooleanAttribute(const std::string& key) const {
-	return getBooleanAttribute(key) != nullptr;
-}
-
 // Attribute type
 // Can hold either int, bool or std::string
 // Without using newd to allocate them

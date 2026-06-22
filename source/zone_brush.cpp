@@ -21,10 +21,6 @@ void ZoneBrush::setZone(unsigned int id) {
 	zoneId = id;
 }
 
-unsigned int ZoneBrush::getZone() const {
-	return zoneId;
-}
-
 bool ZoneBrush::canDraw(BaseMap* map, const Position& position) const {
 	return map->getTile(position) != nullptr && zoneId != 0;
 }

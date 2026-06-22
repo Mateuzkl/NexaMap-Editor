@@ -27,7 +27,6 @@ public:
 	void draw(BaseMap* map, Tile* tile, void* parameter) override;
 	void undraw(BaseMap* map, Tile* tile) override;
 
-	unsigned int getZone() const;
 	void setZone(unsigned int id);
 	int getLookID() const override {
 		return 0;
