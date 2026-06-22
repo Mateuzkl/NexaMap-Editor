@@ -2163,6 +2163,9 @@ bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {
 		}
 	}
 
+	// Single map pass: collect, per zone id, the tile positions in iterator order.
+	// (Previously this re-scanned the whole map once per zone -> O(tiles * zones).)
+	std::map<unsigned int, std::vector<Position>> zonePositions;
 	for (MapIterator miter = map.begin(); miter != map.end(); ++miter) {
 		Tile* tile = (*miter)->get();
 		if (!tile) {
@@ -2172,6 +2175,7 @@ bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {
 		for (const auto& zoneId : tile->zones) {
 			if (zoneId != 0) {
 				zoneIds.insert(zoneId);
+				zonePositions[zoneId].push_back(tile->getPosition());
 			}
 		}
 	}
@@ -2190,17 +2194,14 @@ bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {
 		zoneNode.append_attribute("id") = zoneId;
 		zoneNode.append_attribute("zoneid") = zoneId;
 
-		for (MapIterator miter = map.begin(); miter != map.end(); ++miter) {
-			Tile* tile = (*miter)->get();
-			if (!tile || !tile->hasZone(zoneId)) {
-				continue;
+		auto positionsIt = zonePositions.find(zoneId);
+		if (positionsIt != zonePositions.end()) {
+			for (const Position& position : positionsIt->second) {
+				pugi::xml_node positionNode = zoneNode.append_child("position");
+				positionNode.append_attribute("x") = position.x;
+				positionNode.append_attribute("y") = position.y;
+				positionNode.append_attribute("z") = position.z;
 			}
-
-			const Position& position = tile->getPosition();
-			pugi::xml_node positionNode = zoneNode.append_child("position");
-			positionNode.append_attribute("x") = position.x;
-			positionNode.append_attribute("y") = position.y;
-			positionNode.append_attribute("z") = position.z;
 		}
 	}
 	return true;
