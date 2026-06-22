@@ -1426,10 +1426,6 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 			f.addU8(OTBM_ATTR_EXT_HOUSE_FILE);
 			f.addString(nstr(tmpName.GetFullName()));
 
-			tmpName.Assign(wxstr(map.zonefile));
-			f.addU8(OTBM_ATTR_EXT_ZONE_FILE);
-			f.addString(nstr(tmpName.GetFullName()));
-
 			// Start writing tiles
 			uint32_t tiles_saved = 0;
 			bool first = true;
