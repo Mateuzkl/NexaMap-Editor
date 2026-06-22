@@ -39,10 +39,6 @@ public:
 
 	bool load(pugi::xml_node node, wxArrayString& warnings) override;
 
-	bool canDraw(BaseMap* map, const Position& position) const override {
-		return true;
-	}
-
 	// Draw to the target tile
 	// Note that this actually only puts the first WALL_NORMAL item on the tile.
 	// It's up to the doWalls function to change it to the correct alignment
@@ -57,9 +53,6 @@ public:
 
 	bool canSmear() const override {
 		return false;
-	}
-	bool canDrag() const override {
-		return true;
 	}
 
 	static uint32_t full_border_types[16];

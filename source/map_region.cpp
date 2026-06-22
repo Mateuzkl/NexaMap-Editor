@@ -111,7 +111,7 @@ QTreeNode* QTreeNode::getLeaf(int x, int y) {
 		if (node->isLeaf) {
 			return node;
 		} else {
-			uint32_t index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
+			uint32_t const index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
 			if (node->child[index]) {
 				node = node->child[index];
 				cx <<= 2;
@@ -129,7 +129,7 @@ QTreeNode* QTreeNode::getLeafForce(int x, int y) {
 	uint32_t cx = x, cy = y;
 	int level = 6;
 	while (node) {
-		uint32_t index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
+		uint32_t const index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
 
 		QTreeNode*& qt = node->child[index];
 		if (qt) {
@@ -246,8 +246,8 @@ Tile* QTreeNode::setTile(int x, int y, int z, Tile* newtile) {
 	ASSERT(isLeaf);
 	Floor* f = createFloor(x, y, z);
 
-	int offset_x = x & 3;
-	int offset_y = y & 3;
+	int const offset_x = x & 3;
+	int const offset_y = y & 3;
 
 	TileLocation* tmp = &f->locs[offset_x * 4 + offset_y];
 	Tile* oldtile = tmp->tile;
@@ -266,8 +266,8 @@ void QTreeNode::clearTile(int x, int y, int z) {
 	ASSERT(isLeaf);
 	Floor* f = createFloor(x, y, z);
 
-	int offset_x = x & 3;
-	int offset_y = y & 3;
+	int const offset_x = x & 3;
+	int const offset_y = y & 3;
 
 	TileLocation* tmp = &f->locs[offset_x * 4 + offset_y];
 	delete tmp->tile;

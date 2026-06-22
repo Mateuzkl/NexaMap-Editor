@@ -96,7 +96,7 @@ void NumberTextCtrl::SetMaxValue(long value) {
 }
 
 void NumberTextCtrl::CheckRange() {
-	wxString text = GetValue();
+	wxString const text = GetValue();
 	wxString ntext = TextFilterDigits(text);
 
 	// Check that value is in range

@@ -374,7 +374,7 @@ void Settings::IO(IOMode mode) {
 void Settings::load() {
 	wxConfigBase* conf;
 #ifdef __WINDOWS__
-	FileName filename("editor.cfg");
+	FileName const filename("editor.cfg");
 	if (filename.FileExists()) { // Use local file if it exists
 		wxFileInputStream file(filename.GetFullPath());
 		conf = newd wxFileConfig(file);
@@ -414,7 +414,7 @@ void Settings::save(bool endoftheworld) {
 		if (!conf) {
 			return;
 		}
-		FileName filename("editor.cfg");
+		FileName const filename("editor.cfg");
 		wxFileOutputStream file(filename.GetFullPath());
 		conf->Save(file);
 	}
@@ -436,7 +436,7 @@ void Settings::save(bool endoftheworld) {
 	}
 #endif
 	if (endoftheworld) {
-		wxConfigBase* conf = dynamic_cast<wxConfigBase*>(wxConfig::Get());
+		wxConfigBase const* conf = dynamic_cast<wxConfigBase*>(wxConfig::Get());
 		wxConfig::Set(nullptr);
 		delete conf;
 	}

@@ -177,7 +177,7 @@ void TilesetCategory::loadBrush(pugi::xml_node node, wxArrayString& warnings) {
 
 	std::string brushName = node.attribute("after").as_string();
 	if ((attribute = node.attribute("afteritem"))) {
-		ItemType& it = g_items[attribute.as_ushort()];
+		ItemType const& it = g_items[attribute.as_ushort()];
 		if (it.id != 0) {
 			brushName = it.raw_brush ? it.raw_brush->getName() : std::string();
 		}

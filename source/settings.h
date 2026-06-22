@@ -206,7 +206,7 @@ public:
 	void setFloat(uint32_t key, float newval);
 	void setString(uint32_t key, std::string newval);
 
-	wxConfigBase& getConfigObject();
+	static wxConfigBase& getConfigObject();
 	void setDefaults() {
 		IO(DEFAULT);
 	}

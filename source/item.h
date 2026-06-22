@@ -309,14 +309,14 @@ public:
 
 	// Slot-based Item Types
 	bool isWeapon() const {
-		uint8_t weaponType = g_items[id].weapon_type;
+		uint8_t const weaponType = g_items[id].weapon_type;
 		return weaponType != WEAPON_NONE && weaponType != WEAPON_AMMO;
 	}
 	bool isAmmunition() const {
 		return g_items[id].weapon_type == WEAPON_AMMO;
 	}
 	bool isWearableEquipment() const { // Determine if the item is wearable piece of armor
-		uint16_t slotPosition = g_items[id].slot_position;
+		uint16_t const slotPosition = g_items[id].slot_position;
 		return slotPosition & SLOTP_HEAD || slotPosition & SLOTP_NECKLACE ||
 			// slotPosition & SLOTP_BACKPACK || // handled as container in properties window
 			slotPosition & SLOTP_ARMOR || slotPosition & SLOTP_LEGS || slotPosition & SLOTP_FEET || slotPosition & SLOTP_RING || (slotPosition & SLOTP_AMMO && !isAmmunition()); // light sources that give stats

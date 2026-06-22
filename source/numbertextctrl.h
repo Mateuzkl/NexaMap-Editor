@@ -29,7 +29,7 @@ public:
 	void OnTextEnter(wxCommandEvent&);
 	void EnsureOnlyNumbers(wxCommandEvent& evt);
 
-	wxString TextFilterDigits(const wxString& text);
+	static wxString TextFilterDigits(const wxString& text);
 
 	long GetIntValue();
 	void SetIntValue(long value);

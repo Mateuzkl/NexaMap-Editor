@@ -80,13 +80,13 @@ bool CarpetBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				continue;
 			}
 
-			int32_t id = attribute.as_int();
+			int32_t const id = attribute.as_int();
 			if (!(attribute = subChildNode.attribute("chance"))) {
 				warnings.push_back("Could not read chance tag of item node\n");
 				continue;
 			}
 
-			int32_t chance = attribute.as_int();
+			int32_t const chance = attribute.as_int();
 
 			ItemType& it = g_items[id];
 			if (it.id == 0) {
@@ -116,7 +116,7 @@ bool CarpetBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				continue;
 			}
 
-			uint16_t id = attribute.as_ushort();
+			uint16_t const id = attribute.as_ushort();
 
 			ItemType& it = g_items[id];
 			if (it.id == 0) {
@@ -155,9 +155,9 @@ void CarpetBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 void CarpetBrush::undraw(BaseMap* map, Tile* tile) {
 	auto& items = tile->items;
 	for (auto it = items.begin(); it != items.end();) {
-		Item* item = *it;
+		Item const* item = *it;
 		if (item->isCarpet()) {
-			CarpetBrush* carpetBrush = item->getCarpetBrush();
+			CarpetBrush const* carpetBrush = item->getCarpetBrush();
 			if (carpetBrush) {
 				delete item;
 				it = items.erase(it);
@@ -172,12 +172,12 @@ void CarpetBrush::undraw(BaseMap* map, Tile* tile) {
 
 void CarpetBrush::doCarpets(BaseMap* map, Tile* tile) {
 	static const auto hasMatchingCarpetBrushAtTile = [](BaseMap* map, CarpetBrush* carpetBrush, uint32_t x, uint32_t y, uint32_t z) -> bool {
-		Tile* tile = map->getTile(x, y, z);
+		Tile const* tile = map->getTile(x, y, z);
 		if (!tile) {
 			return false;
 		}
 
-		for (Item* item : tile->items) {
+		for (Item const* item : tile->items) {
 			if (item->getCarpetBrush() == carpetBrush) {
 				return true;
 			}
@@ -191,9 +191,9 @@ void CarpetBrush::doCarpets(BaseMap* map, Tile* tile) {
 	}
 
 	const Position& position = tile->getPosition();
-	uint32_t x = position.x;
-	uint32_t y = position.y;
-	uint32_t z = position.z;
+	uint32_t const x = position.x;
+	uint32_t const y = position.y;
+	uint32_t const z = position.z;
 	/*
 	static const std::pair<int32_t, int32_t> positionOffset[8] = {
 		{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}
@@ -262,7 +262,7 @@ void CarpetBrush::doCarpets(BaseMap* map, Tile* tile) {
 		}
 
 		// border type is always valid.
-		uint16_t id = carpetBrush->getRandomCarpet(static_cast<BorderType>(carpet_types[tileData]));
+		uint16_t const id = carpetBrush->getRandomCarpet(static_cast<BorderType>(carpet_types[tileData]));
 		if (id != 0) {
 			item->setID(id);
 		}
@@ -288,7 +288,7 @@ uint16_t CarpetBrush::getRandomCarpet(BorderType alignment) {
 
 	node = carpet_items[CARPET_CENTER];
 	if (alignment != CARPET_CENTER && node.total_chance > 0) {
-		uint16_t id = findRandomCarpet(node);
+		uint16_t const id = findRandomCarpet(node);
 		if (id != 0) {
 			return id;
 		}
@@ -298,7 +298,7 @@ uint16_t CarpetBrush::getRandomCarpet(BorderType alignment) {
 	for (int32_t i = 0; i < 12; ++i) {
 		node = carpet_items[i];
 		if (node.total_chance > 0) {
-			uint16_t id = findRandomCarpet(node);
+			uint16_t const id = findRandomCarpet(node);
 			if (id != 0) {
 				return id;
 			}

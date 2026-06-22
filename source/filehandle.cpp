@@ -90,7 +90,7 @@ void FileReadHandle::close() {
 }
 
 bool FileReadHandle::getRAW(uint8_t* ptr, size_t sz) {
-	size_t o = fread(ptr, 1, sz, file);
+	size_t const o = fread(ptr, 1, sz, file);
 	if (o != sz) {
 		error_code = FILE_READ_ERROR;
 		return false;
@@ -100,7 +100,7 @@ bool FileReadHandle::getRAW(uint8_t* ptr, size_t sz) {
 
 bool FileReadHandle::getRAW(std::string& str, size_t sz) {
 	str.resize(sz);
-	size_t o = fread(const_cast<char*>(str.data()), 1, sz, file);
+	size_t const o = fread(const_cast<char*>(str.data()), 1, sz, file);
 	if (o != sz) {
 		error_code = FILE_READ_ERROR;
 		return false;
@@ -380,7 +380,7 @@ BinaryNode* BinaryNode::advance() {
 		// Last was end (0xff)
 		// Read next byte to decide if there is another node following this
 		uint8_t*& cache = file->cache;
-		size_t& cache_length = file->cache_length;
+		size_t const& cache_length = file->cache_length;
 		size_t& local_read_index = file->local_read_index;
 
 		if (local_read_index >= cache_length) {
@@ -392,7 +392,7 @@ BinaryNode* BinaryNode::advance() {
 			}
 		}
 
-		uint8_t op = cache[local_read_index];
+		uint8_t const op = cache[local_read_index];
 		++local_read_index;
 
 		if (op == NODE_START) {
@@ -419,7 +419,7 @@ void BinaryNode::load() {
 	ASSERT(file);
 	// Read until next node starts
 	uint8_t*& cache = file->cache;
-	size_t& cache_length = file->cache_length;
+	size_t const& cache_length = file->cache_length;
 	size_t& local_read_index = file->local_read_index;
 	while (true) {
 		if (local_read_index >= cache_length && !file->renewCache()) {
@@ -504,7 +504,7 @@ bool FileWriteHandle::addString(const std::string& str) {
 }
 
 bool FileWriteHandle::addString(const char* str) {
-	size_t len = strlen(str);
+	size_t const len = strlen(str);
 	if (len > 0xFFFF) {
 		error_code = FILE_STRING_TOO_LONG;
 		return false;

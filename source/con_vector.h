@@ -22,9 +22,6 @@
 
 template <class T> // This only really works with pointers.. hrhr "T" might be abit misleading.. :o
 class contigous_vector {
-	T __pointer_check(T t) {
-		return *t;
-	} // If this fails, you have tried using this class with a non-pointer type, DONT
 public:
 	contigous_vector(size_t start_size = 7) {
 		start = reinterpret_cast<T*>(malloc(sizeof(T) * start_size));

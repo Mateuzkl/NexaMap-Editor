@@ -103,8 +103,8 @@ double ws2f(const wxString s) {
 void replaceString(std::string& str, const std::string sought, const std::string replacement) {
 	size_t pos = 0;
 	size_t start = 0;
-	size_t soughtLen = sought.length();
-	size_t replaceLen = replacement.length();
+	size_t const soughtLen = sought.length();
+	size_t const replaceLen = replacement.length();
 	while ((pos = str.find(sought, start)) != std::string::npos) {
 		str = str.substr(0, pos) + replacement + str.substr(pos + soughtLen);
 		start = pos + replaceLen;
@@ -168,9 +168,9 @@ int random(int low, int high) {
 		return low;
 	}
 
-	int range = high - low;
+	int const range = high - low;
 
-	double dist = double(mt_randi()) / 0xFFFFFFFF;
+	double const dist = double(mt_randi()) / 0xFFFFFFFF;
 	return low + min(range, int((1 + range) * dist));
 }
 
@@ -179,12 +179,12 @@ int random(int high) {
 }
 
 std::wstring string2wstring(const std::string& utf8string) {
-	wxString s(utf8string.c_str(), wxConvUTF8);
+	wxString const s(utf8string.c_str(), wxConvUTF8);
 	return std::wstring((const wchar_t*)s.c_str());
 }
 
 std::string wstring2string(const std::wstring& widestring) {
-	wxString s(widestring.c_str());
+	wxString const s(widestring.c_str());
 	return std::string((const char*)s.mb_str(wxConvUTF8));
 }
 
@@ -201,7 +201,7 @@ bool posFromClipboard(Position& position, const int mapWidth /* = MAP_MAX_WIDTH 
 	wxTextDataObject data;
 	wxTheClipboard->GetData(data);
 
-	std::string input = data.GetText().ToStdString();
+	std::string const input = data.GetText().ToStdString();
 	if (input.empty()) {
 		wxTheClipboard->Close();
 		return false;

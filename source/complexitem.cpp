@@ -26,7 +26,7 @@ Container::Container(const uint16_t type) :
 }
 
 Container::~Container() {
-	for (Item* item : contents) {
+	for (Item const* item : contents) {
 		delete item;
 	}
 }
@@ -35,7 +35,7 @@ Item* Container::deepCopy() const {
 	Item* copy = Item::deepCopy();
 	Container* copyContainer = dynamic_cast<Container*>(copy);
 	if (copyContainer) {
-		for (Item* item : contents) {
+		for (Item const* item : contents) {
 			copyContainer->contents.push_back(item->deepCopy());
 		}
 	}

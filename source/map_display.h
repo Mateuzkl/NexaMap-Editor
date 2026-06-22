@@ -133,7 +133,7 @@ private:
 		BLOCK_SIZE = 100
 	};
 
-	inline int getFillIndex(int x, int y) const {
+	static inline int getFillIndex(int x, int y) {
 		return x + BLOCK_SIZE * y;
 	}
 

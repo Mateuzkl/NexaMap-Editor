@@ -47,7 +47,7 @@ bool EraserBrush::canDraw(BaseMap* map, const Position& position) const {
 
 void EraserBrush::undraw(BaseMap* map, Tile* tile) {
 	for (ItemVector::iterator item_iter = tile->items.begin(); item_iter != tile->items.end();) {
-		Item* item = *item_iter;
+		Item const* item = *item_iter;
 		if (item->isComplex() && g_settings.getInteger(Config::ERASER_LEAVE_UNIQUE)) {
 			++item_iter;
 		} else {
@@ -71,7 +71,7 @@ void EraserBrush::undraw(BaseMap* map, Tile* tile) {
 void EraserBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	// Draw is undraw, undraw is super-undraw!
 	for (ItemVector::iterator item_iter = tile->items.begin(); item_iter != tile->items.end();) {
-		Item* item = *item_iter;
+		Item const* item = *item_iter;
 		if ((item->isComplex() || item->isBorder()) && g_settings.getInteger(Config::ERASER_LEAVE_UNIQUE)) {
 			++item_iter;
 			//} else if(item->getDoodadBrush()) {

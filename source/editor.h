@@ -44,7 +44,7 @@ public:
 	Map map; // The map that is being edited
 
 public: // Functions
-	bool CanEdit() const {
+	static bool CanEdit() {
 		return true;
 	}
 	bool IsLocal() const;

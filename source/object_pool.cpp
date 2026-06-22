@@ -132,7 +132,7 @@ namespace {
 	class SmallObjectPool {
 	public:
 		void bindOwnerThread() noexcept {
-			std::scoped_lock lock(ownerMutex_);
+			std::scoped_lock const lock(ownerMutex_);
 
 			const auto currentThread = std::this_thread::get_id();
 			if (!ownerSet_.load(std::memory_order_relaxed)) {
@@ -206,7 +206,7 @@ namespace {
 				return;
 			}
 
-			std::scoped_lock lock(remoteMutex_);
+			std::scoped_lock const lock(remoteMutex_);
 			node->next = remoteFreeLists_[cls];
 			remoteFreeLists_[cls] = node;
 		}
@@ -214,7 +214,7 @@ namespace {
 	private:
 		bool becomeOwnerOrIsOwner() {
 			if (!ownerSet_.load(std::memory_order_acquire)) {
-				std::scoped_lock lock(ownerMutex_);
+				std::scoped_lock const lock(ownerMutex_);
 				if (!ownerSet_.load(std::memory_order_relaxed)) {
 					ownerThread_ = std::this_thread::get_id();
 					ownerSet_.store(true, std::memory_order_release);
@@ -232,7 +232,7 @@ namespace {
 		void drainRemoteIntoEmptyLocal(uint16_t cls) {
 			assert(localFreeLists_[cls] == nullptr);
 
-			std::scoped_lock lock(remoteMutex_);
+			std::scoped_lock const lock(remoteMutex_);
 			localFreeLists_[cls] = remoteFreeLists_[cls];
 			remoteFreeLists_[cls] = nullptr;
 		}

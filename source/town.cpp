@@ -37,7 +37,7 @@ void Towns::clear() {
 }
 
 bool Towns::addTown(Town* town) {
-	TownMap::iterator it = find(town->getID());
+	TownMap::iterator const it = find(town->getID());
 	if (it != end()) {
 		return false;
 	}
@@ -65,7 +65,7 @@ Town* Towns::getTown(std::string& name) {
 }
 
 Town* Towns::getTown(uint32_t id) {
-	TownMap::iterator it = find(id);
+	TownMap::iterator const it = find(id);
 	if (it != end()) {
 		return it->second;
 	}

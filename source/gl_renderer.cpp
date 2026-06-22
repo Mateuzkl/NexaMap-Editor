@@ -98,7 +98,7 @@ void GLRenderer::init() {
 		return;
 	}
 
-	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+	GLuint const vs = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vs, 1, &vertSrc, nullptr);
 	glCompileShader(vs);
 	{
@@ -113,7 +113,7 @@ void GLRenderer::init() {
 		}
 	}
 
-	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+	GLuint const fs = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fs, 1, &fragSrc, nullptr);
 	glCompileShader(fs);
 	{
@@ -286,13 +286,13 @@ void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
 }
 
 void GLRenderer::ensureQuadIndices(size_t quadCount) {
-	size_t haveQuads = indexScratch.size() / 6;
+	size_t const haveQuads = indexScratch.size() / 6;
 	if (haveQuads >= quadCount) {
 		return;
 	}
 	indexScratch.reserve(quadCount * 6);
 	for (size_t q = haveQuads; q < quadCount; ++q) {
-		GLuint base = static_cast<GLuint>(q * 4);
+		GLuint const base = static_cast<GLuint>(q * 4);
 		indexScratch.push_back(base + 0);
 		indexScratch.push_back(base + 1);
 		indexScratch.push_back(base + 2);
@@ -385,10 +385,10 @@ void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint tex
 	}
 	current_texture = textureId;
 
-	Vertex v0 = { x, y, u0, v0_, color.r, color.g, color.b, color.a };
-	Vertex v1 = { x + w, y, u1, v0_, color.r, color.g, color.b, color.a };
-	Vertex v2 = { x + w, y + h, u1, v1_, color.r, color.g, color.b, color.a };
-	Vertex v3 = { x, y + h, u0, v1_, color.r, color.g, color.b, color.a };
+	Vertex const v0 = { x, y, u0, v0_, color.r, color.g, color.b, color.a };
+	Vertex const v1 = { x + w, y, u1, v0_, color.r, color.g, color.b, color.a };
+	Vertex const v2 = { x + w, y + h, u1, v1_, color.r, color.g, color.b, color.a };
+	Vertex const v3 = { x, y + h, u0, v1_, color.r, color.g, color.b, color.a };
 
 	pushQuad(v0, v1, v2, v3);
 }
@@ -399,33 +399,33 @@ void GLRenderer::drawColoredQuad(float x, float y, float w, float h, const GLCol
 	}
 	current_texture = 0;
 
-	Vertex v0 = { x, y, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex v1 = { x + w, y, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex v2 = { x + w, y + h, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex v3 = { x, y + h, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v0 = { x, y, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v1 = { x + w, y, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v2 = { x + w, y + h, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v3 = { x, y + h, 0, 0, color.r, color.g, color.b, color.a };
 
 	pushQuad(v0, v1, v2, v3);
 }
 
 void GLRenderer::drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor &color) {
-	float dx = x2 - x1;
-	float dy = y2 - y1;
-	float len = sqrtf(dx * dx + dy * dy);
+	float const dx = x2 - x1;
+	float const dy = y2 - y1;
+	float const len = sqrtf(dx * dx + dy * dy);
 	if (len < 1e-6f) {
 		return;
 	}
-	float nx = (-dy / len) * (width * 0.5f);
-	float ny = (dx / len) * (width * 0.5f);
+	float const nx = (-dy / len) * (width * 0.5f);
+	float const ny = (dx / len) * (width * 0.5f);
 
 	if (current_texture != 0 && !batch.empty()) {
 		flushBatch();
 	}
 	current_texture = 0;
 
-	Vertex v0 = { x1 + nx, y1 + ny, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex v1 = { x1 - nx, y1 - ny, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex v2 = { x2 - nx, y2 - ny, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex v3 = { x2 + nx, y2 + ny, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v0 = { x1 + nx, y1 + ny, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v1 = { x1 - nx, y1 - ny, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v2 = { x2 - nx, y2 - ny, 0, 0, color.r, color.g, color.b, color.a };
+	Vertex const v3 = { x2 + nx, y2 + ny, 0, 0, color.r, color.g, color.b, color.a };
 
 	pushQuad(v0, v1, v2, v3);
 }
@@ -441,11 +441,11 @@ void GLRenderer::drawRoundedRect(float x, float y, float w, float h, float radiu
 	const int segments = 8;
 	flushBatch();
 
-	std::vector<Vertex> verts;
+	std::vector<Vertex> const verts;
 	// center vertex for fan
-	float cx = x + w * 0.5f;
-	float cy = y + h * 0.5f;
-	Vertex center = { cx, cy, 0, 0, fill.r, fill.g, fill.b, fill.a };
+	float const cx = x + w * 0.5f;
+	float const cy = y + h * 0.5f;
+	Vertex const center = { cx, cy, 0, 0, fill.r, fill.g, fill.b, fill.a };
 
 	// corners: top-left, top-right, bottom-right, bottom-left
 	std::array<std::array<float, 2>, 4> corners = { {
@@ -462,9 +462,9 @@ void GLRenderer::drawRoundedRect(float x, float y, float w, float h, float radiu
 	std::vector<Vertex> perimeter;
 	for (int c = 0; c < 4; ++c) {
 		for (int s = 0; s <= segments; ++s) {
-			float angle = startAngle[c] + (s / static_cast<float>(segments)) * (pi * 0.5f);
-			float px = corners[c][0] + cosf(angle) * radius;
-			float py = corners[c][1] + sinf(angle) * radius;
+			float const angle = startAngle[c] + (s / static_cast<float>(segments)) * (pi * 0.5f);
+			float const px = corners[c][0] + cosf(angle) * radius;
+			float const py = corners[c][1] + sinf(angle) * radius;
 			perimeter.push_back({ px, py, 0, 0, fill.r, fill.g, fill.b, fill.a });
 		}
 	}
@@ -472,7 +472,7 @@ void GLRenderer::drawRoundedRect(float x, float y, float w, float h, float radiu
 	// triangle fan from center
 	std::vector<Vertex> tris;
 	for (size_t i = 0; i < perimeter.size(); ++i) {
-		size_t next = (i + 1) % perimeter.size();
+		size_t const next = (i + 1) % perimeter.size();
 		tris.push_back(center);
 		tris.push_back(perimeter[i]);
 		tris.push_back(perimeter[next]);
@@ -500,15 +500,15 @@ void GLRenderer::drawRoundedRectOutline(float x, float y, float w, float h, floa
 	std::vector<std::array<float, 2>> perimeter;
 	for (int c = 0; c < 4; ++c) {
 		for (int s = 0; s <= segments; ++s) {
-			float angle = startAngle[c] + (s / static_cast<float>(segments)) * (pi * 0.5f);
-			float px = corners[c][0] + cosf(angle) * radius;
-			float py = corners[c][1] + sinf(angle) * radius;
+			float const angle = startAngle[c] + (s / static_cast<float>(segments)) * (pi * 0.5f);
+			float const px = corners[c][0] + cosf(angle) * radius;
+			float const py = corners[c][1] + sinf(angle) * radius;
 			perimeter.push_back({ px, py });
 		}
 	}
 
 	for (size_t i = 0; i < perimeter.size(); ++i) {
-		size_t next = (i + 1) % perimeter.size();
+		size_t const next = (i + 1) % perimeter.size();
 		drawThickLineSegment(perimeter[i][0], perimeter[i][1], perimeter[next][0], perimeter[next][1], lineWidth, color);
 	}
 }
@@ -518,32 +518,32 @@ void GLRenderer::drawLine(float x1, float y1, float x2, float y2, const GLColor 
 }
 
 void GLRenderer::drawLines(const float* vertices, int pairCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a, float width) {
-	GLColor c = { r, g, b, a };
+	GLColor const c = { r, g, b, a };
 	for (int i = 0; i < pairCount; ++i) {
-		float x1 = vertices[i * 4];
-		float y1 = vertices[i * 4 + 1];
-		float x2 = vertices[i * 4 + 2];
-		float y2 = vertices[i * 4 + 3];
+		float const x1 = vertices[i * 4];
+		float const y1 = vertices[i * 4 + 1];
+		float const x2 = vertices[i * 4 + 2];
+		float const y2 = vertices[i * 4 + 3];
 		drawThickLineSegment(x1, y1, x2, y2, width, c);
 	}
 }
 
 void GLRenderer::drawStippledLines(const float* vertices, int pairCount, const GLColor &color, float width, int factor, uint16_t pattern) {
 	for (int i = 0; i < pairCount; ++i) {
-		float x1 = vertices[i * 4];
-		float y1 = vertices[i * 4 + 1];
-		float x2 = vertices[i * 4 + 2];
-		float y2 = vertices[i * 4 + 3];
+		float const x1 = vertices[i * 4];
+		float const y1 = vertices[i * 4 + 1];
+		float const x2 = vertices[i * 4 + 2];
+		float const y2 = vertices[i * 4 + 3];
 
-		float dx = x2 - x1;
-		float dy = y2 - y1;
-		float len = sqrtf(dx * dx + dy * dy);
+		float const dx = x2 - x1;
+		float const dy = y2 - y1;
+		float const len = sqrtf(dx * dx + dy * dy);
 		if (len < 1e-6f) {
 			continue;
 		}
 
-		float dirX = dx / len;
-		float dirY = dy / len;
+		float const dirX = dx / len;
+		float const dirY = dy / len;
 		auto step = static_cast<float>(factor);
 		int bit = 0;
 		float pos = 0.0f;
@@ -555,10 +555,10 @@ void GLRenderer::drawStippledLines(const float* vertices, int pairCount, const G
 			}
 
 			if (pattern & (1 << (bit & 15))) {
-				float sx = x1 + dirX * pos;
-				float sy = y1 + dirY * pos;
-				float ex = x1 + dirX * segEnd;
-				float ey = y1 + dirY * segEnd;
+				float const sx = x1 + dirX * pos;
+				float const sy = y1 + dirY * pos;
+				float const ex = x1 + dirX * segEnd;
+				float const ey = y1 + dirY * segEnd;
 				drawThickLineSegment(sx, sy, ex, ey, width, color);
 			}
 

@@ -48,7 +48,7 @@ bool MaterialsExtension::isForVersion(uint16_t versionId) {
 		return true;
 	}
 
-	for (ClientVersion* version : version_list) {
+	for (ClientVersion const* version : version_list) {
 		if (version->getID() == versionId) {
 			return true;
 		}
@@ -63,7 +63,7 @@ std::string MaterialsExtension::getVersionString() {
 
 	std::string versions;
 	std::string last;
-	for (ClientVersion* version : version_list) {
+	for (ClientVersion const* version : version_list) {
 		if (!last.empty()) {
 			if (!versions.empty()) {
 				versions += ", " + last;

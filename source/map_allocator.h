@@ -39,26 +39,26 @@ public:
 	}
 
 	//
-	Tile* allocateTile(TileLocation* location) {
+	static Tile* allocateTile(TileLocation* location) {
 		return newd Tile(*location);
 	}
-	void freeTile(Tile* t) {
+	static void freeTile(Tile* t) {
 		delete t;
 	}
 
 	//
-	Floor* allocateFloor(int x, int y, int z) {
+	static Floor* allocateFloor(int x, int y, int z) {
 		return newd Floor(x, y, z);
 	}
-	void freeFloor(Floor* f) {
+	static void freeFloor(Floor* f) {
 		delete f;
 	}
 
 	//
-	QTreeNode* allocateNode(BaseMap& map) {
+	static QTreeNode* allocateNode(BaseMap& map) {
 		return newd QTreeNode(map);
 	}
-	void freeNode(QTreeNode* qt) {
+	static void freeNode(QTreeNode* qt) {
 		delete qt;
 	}
 };

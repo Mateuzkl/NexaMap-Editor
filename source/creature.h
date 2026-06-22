@@ -108,7 +108,7 @@ inline bool Creature::isSaved() {
 }
 
 inline bool Creature::isNpc() const {
-	CreatureType* type = g_creatures[type_name];
+	CreatureType const* type = g_creatures[type_name];
 	if (type) {
 		return type->isNpc;
 	}
@@ -116,14 +116,14 @@ inline bool Creature::isNpc() const {
 }
 
 inline std::string Creature::getName() const {
-	CreatureType* type = g_creatures[type_name];
+	CreatureType const* type = g_creatures[type_name];
 	if (type) {
 		return type->name;
 	}
 	return "";
 }
 inline CreatureBrush* Creature::getBrush() const {
-	CreatureType* type = g_creatures[type_name];
+	CreatureType const* type = g_creatures[type_name];
 	if (type) {
 		return type->brush;
 	}

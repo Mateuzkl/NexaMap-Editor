@@ -70,7 +70,7 @@ void RAWBrush::undraw(BaseMap* map, Tile* tile) {
 		tile->ground = nullptr;
 	}
 	for (ItemVector::iterator iter = tile->items.begin(); iter != tile->items.end();) {
-		Item* item = *iter;
+		Item const* item = *iter;
 		if (item->getID() == itemtype->id) {
 			delete item;
 			iter = tile->items.erase(iter);
@@ -85,10 +85,10 @@ void RAWBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 		return;
 	}
 
-	bool b = parameter ? *reinterpret_cast<bool*>(parameter) : false;
+	bool const b = parameter ? *reinterpret_cast<bool*>(parameter) : false;
 	if ((g_settings.getInteger(Config::RAW_LIKE_SIMONE) && !b) && itemtype->alwaysOnBottom && itemtype->alwaysOnTopOrder == 2) {
 		for (ItemVector::iterator iter = tile->items.begin(); iter != tile->items.end();) {
-			Item* item = *iter;
+			Item const* item = *iter;
 			if (item->getTopOrder() == itemtype->alwaysOnTopOrder) {
 				delete item;
 				iter = tile->items.erase(iter);

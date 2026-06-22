@@ -73,7 +73,7 @@ bool AutoBorder::load(pugi::xml_node node, wxArrayString& warnings, GroundBrush*
 			continue;
 		}
 
-		uint16_t itemid = attribute.as_ushort();
+		uint16_t const itemid = attribute.as_ushort();
 		if (!(attribute = childNode.attribute("edge"))) {
 			continue;
 		}
@@ -102,7 +102,7 @@ bool AutoBorder::load(pugi::xml_node node, wxArrayString& warnings, GroundBrush*
 			it.border_group = group;
 		}
 
-		int32_t edge_id = edgeNameToID(orientation);
+		int32_t const edge_id = edgeNameToID(orientation);
 		if (edge_id != BORDER_NONE) {
 			tiles[edge_id] = itemid;
 			if (it.border_alignment == BORDER_NONE) {
@@ -127,9 +127,9 @@ GroundBrush::GroundBrush() :
 }
 
 GroundBrush::~GroundBrush() {
-	for (BorderBlock* borderBlock : borders) {
+	for (BorderBlock const* borderBlock : borders) {
 		if (borderBlock->autoborder) {
-			for (SpecificCaseBlock* specificCaseBlock : borderBlock->specific_cases) {
+			for (SpecificCaseBlock const* specificCaseBlock : borderBlock->specific_cases) {
 				delete specificCaseBlock;
 			}
 
@@ -167,8 +167,8 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 	for (pugi::xml_node childNode = node.first_child(); childNode; childNode = childNode.next_sibling()) {
 		const std::string& childName = as_lower_str(childNode.name());
 		if (childName == "item") {
-			uint16_t itemId = childNode.attribute("id").as_ushort();
-			int32_t chance = childNode.attribute("chance").as_int();
+			uint16_t const itemId = childNode.attribute("id").as_ushort();
+			int32_t const chance = childNode.attribute("chance").as_int();
 
 			ItemType& it = g_items[itemId];
 			if (it.id == 0) {
@@ -201,10 +201,10 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 			}
 
 			if ((attribute = childNode.attribute("ground_equivalent"))) {
-				uint16_t ground_equivalent = attribute.as_ushort();
+				uint16_t const ground_equivalent = attribute.as_ushort();
 
 				// Load from inline definition
-				ItemType& it = g_items[ground_equivalent];
+				ItemType const& it = g_items[ground_equivalent];
 				if (it.id == 0) {
 					warnings.push_back("Invalid id of ground dependency equivalent item.\n");
 					continue;
@@ -226,7 +226,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 					continue;
 				}
 
-				uint16_t id = attribute.as_ushort();
+				uint16_t const id = attribute.as_ushort();
 				auto it = g_brushes.borders.find(id);
 				if (it == g_brushes.borders.end() || !it->second) {
 					warnings.push_back("\nCould not find border id " + std::to_string(id));
@@ -242,8 +242,8 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 					continue;
 				}
 
-				uint16_t ground_equivalent = attribute.as_ushort();
-				ItemType& it = g_items[ground_equivalent];
+				uint16_t const ground_equivalent = attribute.as_ushort();
+				ItemType const& it = g_items[ground_equivalent];
 				if (it.id == 0) {
 					warnings.push_back("Invalid id of ground dependency equivalent item.\n");
 				}
@@ -259,7 +259,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				autoBorder = newd AutoBorder(0); // Empty id basically
 				autoBorder->load(childNode, warnings, this, ground_equivalent);
 			} else {
-				int32_t id = attribute.as_int();
+				int32_t const id = attribute.as_int();
 				if (id == 0) {
 					autoBorder = nullptr;
 				} else {
@@ -283,7 +283,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				} else if (value == "none") {
 					borderBlock->to = 0;
 				} else {
-					Brush* tobrush = g_brushes.getBrush(value);
+					Brush const* tobrush = g_brushes.getBrush(value);
 					if (!tobrush) {
 						warnings.push_back("To brush " + wxstr(value) + " doesn't exist.");
 						continue;
@@ -339,19 +339,19 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 									continue;
 								}
 
-								int32_t border_id = attribute.as_int();
+								int32_t const border_id = attribute.as_int();
 								if (!(attribute = conditionChild.attribute("edge"))) {
 									continue;
 								}
 
-								int32_t edge_id = AutoBorder::edgeNameToID(attribute.as_string());
+								int32_t const edge_id = AutoBorder::edgeNameToID(attribute.as_string());
 								auto it = g_brushes.borders.find(border_id);
 								if (it == g_brushes.borders.end()) {
 									warnings.push_back("Unknown border id in specific case match block " + std::to_string(border_id));
 									continue;
 								}
 
-								AutoBorder* autoBorder = it->second;
+								AutoBorder const* autoBorder = it->second;
 								ASSERT(autoBorder != nullptr);
 
 								uint32_t match_itemid = autoBorder->tiles[edge_id];
@@ -364,12 +364,12 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 									continue;
 								}
 
-								uint16_t group = attribute.as_ushort();
+								uint16_t const group = attribute.as_ushort();
 								if (!(attribute = conditionChild.attribute("edge"))) {
 									continue;
 								}
 
-								int32_t edge_id = AutoBorder::edgeNameToID(attribute.as_string());
+								int32_t const edge_id = AutoBorder::edgeNameToID(attribute.as_string());
 								if (!specificCaseBlock) {
 									specificCaseBlock = newd SpecificCaseBlock();
 								}
@@ -399,24 +399,24 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 									continue;
 								}
 
-								int32_t border_id = attribute.as_int();
+								int32_t const border_id = attribute.as_int();
 								if (!(attribute = actionChild.attribute("edge"))) {
 									continue;
 								}
 
-								int32_t edge_id = AutoBorder::edgeNameToID(attribute.as_string());
+								int32_t const edge_id = AutoBorder::edgeNameToID(attribute.as_string());
 								if (!(attribute = actionChild.attribute("with"))) {
 									continue;
 								}
 
-								int32_t with_id = attribute.as_int();
+								int32_t const with_id = attribute.as_int();
 								auto itt = g_brushes.borders.find(border_id);
 								if (itt == g_brushes.borders.end()) {
 									warnings.push_back("Unknown border id in specific case match block " + std::to_string(border_id));
 									continue;
 								}
 
-								AutoBorder* autoBorder = itt->second;
+								AutoBorder const* autoBorder = itt->second;
 								ASSERT(autoBorder != nullptr);
 
 								ItemType& it = g_items[with_id];
@@ -436,12 +436,12 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 									continue;
 								}
 
-								int32_t to_replace_id = attribute.as_int();
+								int32_t const to_replace_id = attribute.as_int();
 								if (!(attribute = actionChild.attribute("with"))) {
 									continue;
 								}
 
-								int32_t with_id = attribute.as_int();
+								int32_t const with_id = attribute.as_int();
 								ItemType& it = g_items[with_id];
 								if (it.id == 0) {
 									return false;
@@ -478,7 +478,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				if (name == "all") {
 					friends.push_back(0xFFFFFFFF);
 				} else {
-					Brush* brush = g_brushes.getBrush(name);
+					Brush const* brush = g_brushes.getBrush(name);
 					if (brush) {
 						friends.push_back(brush->getID());
 					} else {
@@ -493,7 +493,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				if (name == "all") {
 					friends.push_back(0xFFFFFFFF);
 				} else {
-					Brush* brush = g_brushes.getBrush(name);
+					Brush const* brush = g_brushes.getBrush(name);
 					if (brush) {
 						friends.push_back(brush->getID());
 					} else {
@@ -546,8 +546,8 @@ void GroundBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	}
 
 	if (parameter != nullptr) {
-		std::pair<bool, GroundBrush*>& param = *reinterpret_cast<std::pair<bool, GroundBrush*>*>(parameter);
-		GroundBrush* other = tile->getGroundBrush();
+		std::pair<bool, GroundBrush*> const& param = *reinterpret_cast<std::pair<bool, GroundBrush*>*>(parameter);
+		GroundBrush const* other = tile->getGroundBrush();
 		if (param.first) { // Volatile? :)
 			if (other != nullptr) {
 				return;
@@ -556,7 +556,7 @@ void GroundBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 			return;
 		}
 	}
-	int chance = random(1, total_chance);
+	int const chance = random(1, total_chance);
 	uint16_t id = 0;
 	for (std::vector<ItemChanceBlock>::const_iterator it = border_items.begin(); it != border_items.end(); ++it) {
 		if (chance < it->chance) {
@@ -578,7 +578,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 			if (first->getZ() < second->getZ() && second->hasOuterBorder()) {
 				if (first->hasInnerBorder()) {
 					for (std::vector<BorderBlock*>::iterator it = first->borders.begin(); it != first->borders.end(); ++it) {
-						BorderBlock* bb = *it;
+						BorderBlock const* bb = *it;
 						if (bb->outer) {
 							continue;
 						} else if (bb->to == second->getID() || bb->to == 0xFFFFFFFF) {
@@ -588,7 +588,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 					}
 				}
 				for (std::vector<BorderBlock*>::iterator it = second->borders.begin(); it != second->borders.end(); ++it) {
-					BorderBlock* bb = *it;
+					BorderBlock const* bb = *it;
 					if (!bb->outer) {
 						continue;
 					} else if (bb->to == first->getID()) {
@@ -601,7 +601,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 				}
 			} else if (first->hasInnerBorder()) {
 				for (std::vector<BorderBlock*>::iterator it = first->borders.begin(); it != first->borders.end(); ++it) {
-					BorderBlock* bb = *it;
+					BorderBlock const* bb = *it;
 					if (bb->outer) {
 						continue;
 					} else if (bb->to == second->getID()) {
@@ -615,7 +615,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 			}
 		} else if (first->hasInnerZilchBorder()) {
 			for (std::vector<BorderBlock*>::iterator it = first->borders.begin(); it != first->borders.end(); ++it) {
-				BorderBlock* bb = *it;
+				BorderBlock const* bb = *it;
 				if (bb->outer) {
 					continue;
 				} else if (bb->to == 0) {
@@ -626,7 +626,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 		}
 	} else if (second && second->hasOuterZilchBorder()) {
 		for (std::vector<BorderBlock*>::iterator it = second->borders.begin(); it != second->borders.end(); ++it) {
-			BorderBlock* bb = *it;
+			BorderBlock const* bb = *it;
 			if (!bb->outer) {
 				continue;
 			} else if (bb->to == 0) {
@@ -640,13 +640,13 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 }
 
 inline GroundBrush* extractGroundBrushFromTile(BaseMap* map, uint32_t x, uint32_t y, uint32_t z) {
-	Tile* t = map->getTile(x, y, z);
+	Tile const* t = map->getTile(x, y, z);
 	return t ? t->getGroundBrush() : nullptr;
 }
 
 void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 	static const auto extractGroundBrushFromTile = [](BaseMap* map, uint32_t x, uint32_t y, uint32_t z) -> GroundBrush* {
-		Tile* tile = map->getTile(x, y, z);
+		Tile const* tile = map->getTile(x, y, z);
 		if (tile) {
 			return tile->getGroundBrush();
 		}
@@ -664,9 +664,9 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 
 	const Position& position = tile->getPosition();
 
-	uint32_t x = position.x;
-	uint32_t y = position.y;
-	uint32_t z = position.z;
+	uint32_t const x = position.x;
+	uint32_t const y = position.y;
+	uint32_t const z = position.z;
 
 	// Pair of visited / what border type
 	std::pair<bool, GroundBrush*> neighbours[8];
@@ -888,13 +888,13 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 	tile->cleanBorders();
 
 	while (!borderList.empty()) {
-		BorderCluster& borderCluster = borderList.back();
+		BorderCluster const& borderCluster = borderList.back();
 		if (!borderCluster.border) {
 			borderList.pop_back();
 			continue;
 		}
 
-		BorderType directions[4] = {
+		BorderType const directions[4] = {
 			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x000000FF) >> 0),
 			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x0000FF00) >> 8),
 			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x00FF0000) >> 16),
@@ -902,7 +902,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 		};
 
 		for (int32_t i = 0; i < 4; ++i) {
-			BorderType direction = directions[i];
+			BorderType const direction = directions[i];
 			if (direction == BORDER_NONE) {
 				break;
 			}
@@ -941,7 +941,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 			}
 			*/
 			uint32_t matches = 0;
-			for (Item* item : tile->items) {
+			for (Item const* item : tile->items) {
 				if (!item->isBorder()) {
 					break;
 				}
@@ -956,7 +956,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 				}
 
 				// printf("\tInvestigating first item id:%d\n", item->getID());
-				for (uint16_t matchId : specificCaseBlock->items_to_match) {
+				for (uint16_t const matchId : specificCaseBlock->items_to_match) {
 					if (item->getID() == matchId) {
 						// printf("\t\tMatched item id %d\n", item->getID());
 						++matches;
@@ -979,7 +979,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 					}
 
 					bool inc = true;
-					for (uint16_t matchId : specificCaseBlock->items_to_match) {
+					for (uint16_t const matchId : specificCaseBlock->items_to_match) {
 						if (item->getID() == matchId) {
 							if (!replaced && item->getID() == specificCaseBlock->to_replace_id) {
 								// replace the matching border, delete everything else

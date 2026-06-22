@@ -78,7 +78,7 @@ Creature* Creature::deepCopy() const {
 }
 
 const Outfit& Creature::getLookType() const {
-	CreatureType* type = g_creatures[type_name];
+	CreatureType const* type = g_creatures[type_name];
 	if (type) {
 		return type->outfit;
 	}

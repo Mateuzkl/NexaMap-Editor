@@ -121,14 +121,14 @@ bool DoodadBrush::loadAlternative(pugi::xml_node node, wxArrayString& warnings, 
 					continue;
 				}
 
-				int32_t x = attribute.as_int();
+				int32_t const x = attribute.as_int();
 				if (!(attribute = compositeNode.attribute("y"))) {
 					warnings.push_back("Couldn't read positionY values of composite tile node.");
 					continue;
 				}
 
-				int32_t y = attribute.as_int();
-				int32_t z = compositeNode.attribute("z").as_int();
+				int32_t const y = attribute.as_int();
+				int32_t const z = compositeNode.attribute("z").as_int();
 				if (x < -0x7FFF || x > 0x7FFF) {
 					warnings.push_back("Invalid range of x value on composite tile node.");
 					continue;
@@ -210,7 +210,7 @@ bool DoodadBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 
 	const std::string& thicknessString = node.attribute("thickness").as_string();
 	if (!thicknessString.empty()) {
-		size_t slash = thicknessString.find('/');
+		size_t const slash = thicknessString.find('/');
 		if (slash != std::string::npos) {
 			try {
 				thickness = std::stoi(thicknessString.substr(0, slash));
@@ -268,7 +268,7 @@ bool DoodadBrush::ownsItem(Item* item) const {
 	if (item->getDoodadBrush() == this) {
 		return true;
 	}
-	uint16_t id = item->getID();
+	uint16_t const id = item->getID();
 
 	for (std::vector<AlternativeBlock*>::const_iterator alt_iter = alternatives.begin(); alt_iter != alternatives.end(); ++alt_iter) {
 		if ((*alt_iter)->ownsItem(id)) {
@@ -347,7 +347,7 @@ void DoodadBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 }
 
 const CompositeTileList& DoodadBrush::getComposite(int variation) const {
-	static CompositeTileList empty;
+	static CompositeTileList const empty;
 
 	if (alternatives.empty()) {
 		return empty;
@@ -357,7 +357,7 @@ const CompositeTileList& DoodadBrush::getComposite(int variation) const {
 	const AlternativeBlock* ab_ptr = alternatives[variation];
 	ASSERT(ab_ptr);
 
-	int roll = random(1, ab_ptr->composite_chance);
+	int const roll = random(1, ab_ptr->composite_chance);
 	for (std::vector<CompositeBlock>::const_iterator block_iter = ab_ptr->composite_items.begin(); block_iter != ab_ptr->composite_items.end(); ++block_iter) {
 		const CompositeBlock& cb = *block_iter;
 		if (roll <= cb.chance) {
@@ -415,7 +415,7 @@ bool DoodadBrush::hasSingleObjects(int ab) const {
 		return false;
 	}
 	ab %= alternatives.size();
-	AlternativeBlock* ab_ptr = alternatives[ab];
+	AlternativeBlock const* ab_ptr = alternatives[ab];
 	ASSERT(ab_ptr);
 	return ab_ptr->single_chance > 0;
 }
@@ -425,7 +425,7 @@ bool DoodadBrush::hasCompositeObjects(int ab) const {
 		return false;
 	}
 	ab %= alternatives.size();
-	AlternativeBlock* ab_ptr = alternatives[ab];
+	AlternativeBlock const* ab_ptr = alternatives[ab];
 	ASSERT(ab_ptr);
 	return ab_ptr->composite_chance > 0;
 }

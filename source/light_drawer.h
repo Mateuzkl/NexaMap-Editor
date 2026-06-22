@@ -45,14 +45,14 @@ private:
 	void createGLTexture();
 	void unloadGLTexture();
 
-	inline float calculateIntensity(int map_x, int map_y, const Light& light) {
-		int dx = map_x - light.map_x;
-		int dy = map_y - light.map_y;
-		float distance = std::sqrt(dx * dx + dy * dy);
+	static inline float calculateIntensity(int map_x, int map_y, const Light& light) {
+		int const dx = map_x - light.map_x;
+		int const dy = map_y - light.map_y;
+		float const distance = std::sqrt(dx * dx + dy * dy);
 		if (distance > MaxLightIntensity) {
 			return 0.f;
 		}
-		float intensity = (-distance + light.intensity) * 0.2f;
+		float const intensity = (-distance + light.intensity) * 0.2f;
 		if (intensity < 0.01f) {
 			return 0.f;
 		}

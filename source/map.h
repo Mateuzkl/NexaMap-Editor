@@ -203,7 +203,7 @@ private:
 template <typename ForeachType>
 inline void foreach_ItemOnMap(Map& map, ForeachType& foreach, bool selectedTiles) {
 	MapIterator tileiter = map.begin();
-	MapIterator end = map.end();
+	MapIterator const end = map.end();
 	long long done = 0;
 
 	while (tileiter != end) {
@@ -251,7 +251,7 @@ inline void foreach_ItemOnMap(Map& map, ForeachType& foreach, bool selectedTiles
 template <typename ForeachType>
 inline void foreach_TileOnMap(Map& map, ForeachType& foreach) {
 	MapIterator tileiter = map.begin();
-	MapIterator end = map.end();
+	MapIterator const end = map.end();
 	long long done = 0;
 
 	while (tileiter != end) {
@@ -263,7 +263,7 @@ inline void foreach_TileOnMap(Map& map, ForeachType& foreach) {
 template <typename RemoveIfType>
 inline long long remove_if_TileOnMap(Map& map, RemoveIfType& remove_if) {
 	MapIterator tileiter = map.begin();
-	MapIterator end = map.end();
+	MapIterator const end = map.end();
 	long long done = 0;
 	long long removed = 0;
 	long long total = map.getTileCount();
@@ -287,7 +287,7 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 	int64_t removed = 0;
 
 	MapIterator it = map.begin();
-	MapIterator end = map.end();
+	MapIterator const end = map.end();
 
 	while (it != end) {
 		++done;
@@ -326,7 +326,7 @@ inline int64_t RemoveItemDuplicateOnMap(Map& map, RemoveIfType& condition, bool 
 	int64_t removed = 0;
 
 	MapIterator it = map.begin();
-	MapIterator end = map.end();
+	MapIterator const end = map.end();
 
 	while (it != end) {
 		++done;

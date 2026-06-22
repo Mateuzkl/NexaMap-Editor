@@ -64,7 +64,7 @@ PropertiesWindow::~PropertiesWindow() {
 }
 
 void PropertiesWindow::Update() {
-	Container* container = dynamic_cast<Container*>(edit_item);
+	Container const* container = dynamic_cast<Container*>(edit_item);
 	if (container) {
 		for (uint32_t i = 0; i < container->getVolume(); ++i) {
 			container_items[i]->setItem(container->getItem(i));
@@ -95,13 +95,13 @@ wxWindow* PropertiesWindow::createGeneralPanel(wxWindow* parent) {
 }
 
 wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
-	Container* container = (Container*)edit_item;
+	Container const* container = (Container*)edit_item;
 	wxPanel* panel = newd wxPanel(parent, ITEM_PROPERTIES_CONTAINER_TAB);
 	wxSizer* topSizer = newd wxBoxSizer(wxVERTICAL);
 
 	wxSizer* gridSizer = newd wxGridSizer(6, 5, 5);
 
-	bool use_large_sprites = g_settings.getBoolean(Config::USE_LARGE_CONTAINER_ICONS);
+	bool const use_large_sprites = g_settings.getBoolean(Config::USE_LARGE_CONTAINER_ICONS);
 	for (uint32_t i = 0; i < container->getVolume(); ++i) {
 		Item* item = container->getItem(i);
 		ContainerItemButton* containerItemButton = newd ContainerItemButton(panel, use_large_sprites, i, edit_map, item);
@@ -130,7 +130,7 @@ wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
 	attributesGrid = newd wxGrid(panel, ITEM_PROPERTIES_ADVANCED_TAB, wxDefaultPosition, wxSize(-1, 160));
 	topSizer->Add(attributesGrid, wxSizerFlags(1).Expand());
 
-	wxFont time_font(*wxSWISS_FONT);
+	wxFont const time_font(*wxSWISS_FONT);
 	attributesGrid->SetDefaultCellFont(time_font);
 	attributesGrid->CreateGrid(0, 3);
 	attributesGrid->DisableDragRowSize();
@@ -229,7 +229,7 @@ void PropertiesWindow::OnResize(wxSizeEvent& evt) {
 }
 
 void PropertiesWindow::OnNotebookPageChanged(wxNotebookEvent& evt) {
-	wxWindow* page = notebook->GetCurrentPage();
+	wxWindow const* page = notebook->GetCurrentPage();
 
 	// TODO: Save
 
@@ -259,7 +259,7 @@ void PropertiesWindow::saveAttributesPanel() {
 	edit_item->clearAllAttributes();
 	for (int32_t rowIndex = 0; rowIndex < attributesGrid->GetNumberRows(); ++rowIndex) {
 		ItemAttribute attr;
-		wxString type = attributesGrid->GetCellValue(rowIndex, 1);
+		wxString const type = attributesGrid->GetCellValue(rowIndex, 1);
 		if (type == "String") {
 			attr.set(nstr(attributesGrid->GetCellValue(rowIndex, 2)));
 		} else if (type == "Float") {
@@ -283,7 +283,7 @@ void PropertiesWindow::saveAttributesPanel() {
 
 void PropertiesWindow::OnGridValueChanged(wxGridEvent& event) {
 	if (event.GetCol() == 1) {
-		wxString newType = attributesGrid->GetCellValue(event.GetRow(), 1);
+		wxString const newType = attributesGrid->GetCellValue(event.GetRow(), 1);
 		if (newType == event.GetString()) {
 			return;
 		}
@@ -309,7 +309,7 @@ void PropertiesWindow::OnClickOK(wxCommandEvent&) {
 
 void PropertiesWindow::OnClickAddAttribute(wxCommandEvent&) {
 	attributesGrid->AppendRows(1);
-	ItemAttribute attr(0);
+	ItemAttribute const attr(0);
 	SetGridValue(attributesGrid, attributesGrid->GetNumberRows() - 1, "", attr);
 }
 
@@ -319,7 +319,7 @@ void PropertiesWindow::OnClickRemoveAttribute(wxCommandEvent&) {
 		return;
 	}
 
-	int rowIndex = rowIndexes[0];
+	int const rowIndex = rowIndexes[0];
 	attributesGrid->DeleteRows(rowIndex, 1);
 }
 

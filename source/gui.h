@@ -511,11 +511,11 @@ public:
 		g_gui.DestroyLoadBar();
 	}
 
-	void SetLoadDone(int32_t done, const wxString& newmessage = wxEmptyString) {
+	static void SetLoadDone(int32_t done, const wxString& newmessage = wxEmptyString) {
 		g_gui.SetLoadDone(done, newmessage);
 	}
 
-	void SetLoadScale(int32_t from, int32_t to) {
+	static void SetLoadScale(int32_t from, int32_t to) {
 		g_gui.SetLoadScale(from, to);
 	}
 };
