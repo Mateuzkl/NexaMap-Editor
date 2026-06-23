@@ -661,6 +661,309 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 	return true;
 }
 
+void IOMapOTBM::readMapHeaderAttributes(BinaryNode* mapHeaderNode, Map& map) {
+	uint8_t attribute;
+	while (mapHeaderNode->getU8(attribute)) {
+		switch (attribute) {
+			case OTBM_ATTR_DESCRIPTION: {
+				if (!mapHeaderNode->getString(map.description)) {
+					warning("Invalid map description tag");
+				}
+				// std::cout << "Map description: " << mapDescription << std::endl;
+				break;
+			}
+			case OTBM_ATTR_EXT_SPAWN_FILE: {
+				if (!mapHeaderNode->getString(map.spawnfile)) {
+					warning("Invalid map spawnfile tag");
+				}
+				break;
+			}
+			case OTBM_ATTR_EXT_HOUSE_FILE: {
+				if (!mapHeaderNode->getString(map.housefile)) {
+					warning("Invalid map housefile tag");
+				}
+				break;
+			}
+			case OTBM_ATTR_EXT_ZONE_FILE: {
+				if (!mapHeaderNode->getString(map.zonefile)) {
+					warning("Invalid map zonefile tag");
+				}
+				break;
+			}
+			case OTBM_ATTR_EXT_SPAWN_NPC_FILE: {
+				// compatibility: skip RME NPC spawn file tag
+				std::string stringToSkip;
+				if (!mapHeaderNode->getString(stringToSkip)) {
+					warning("Invalid map housefile tag");
+				}
+				break;
+			}
+			default: {
+				warning("Unknown header node.");
+				break;
+			}
+		}
+	}
+}
+
+void IOMapOTBM::readTowns(BinaryNode* mapNode, Map& map) {
+	for (BinaryNode* townNode = mapNode->getChild(); townNode != nullptr; townNode = townNode->advance()) {
+		Town* town = nullptr;
+		uint8_t town_type;
+		if (!townNode->getByte(town_type)) {
+			warning("Invalid town type (1)");
+			continue;
+		}
+		if (town_type != OTBM_TOWN) {
+			warning("Invalid town type (2)");
+			continue;
+		}
+		uint32_t town_id;
+		if (!townNode->getU32(town_id)) {
+			warning("Invalid town id");
+			continue;
+		}
+
+		town = map.towns.getTown(town_id);
+		if (town) {
+			warning("Duplicate town id %d, discarding duplicate", town_id);
+			continue;
+		} else {
+			town = newd Town(town_id);
+			if (!map.towns.addTown(town)) {
+				delete town;
+				continue;
+			}
+		}
+		std::string town_name;
+		if (!townNode->getString(town_name)) {
+			warning("Invalid town name");
+			continue;
+		}
+		town->setName(town_name);
+		Position pos;
+		uint16_t x;
+		uint16_t y;
+		uint8_t z;
+		if (!townNode->getU16(x) || !townNode->getU16(y) || !townNode->getU8(z)) {
+			warning("Invalid town temple position");
+			continue;
+		}
+		pos.x = x;
+		pos.y = y;
+		pos.z = z;
+		town->setTemplePosition(pos);
+		map.getOrCreateTile(pos)->getLocation()->increaseTownCount();
+	}
+}
+
+void IOMapOTBM::readWaypoints(BinaryNode* mapNode, Map& map) {
+	for (BinaryNode* waypointNode = mapNode->getChild(); waypointNode != nullptr; waypointNode = waypointNode->advance()) {
+		uint8_t waypoint_type;
+		if (!waypointNode->getByte(waypoint_type)) {
+			warning("Invalid waypoint type (1)");
+			continue;
+		}
+		if (waypoint_type != OTBM_WAYPOINT) {
+			warning("Invalid waypoint type (2)");
+			continue;
+		}
+
+		Waypoint wp;
+
+		if (!waypointNode->getString(wp.name)) {
+			warning("Invalid waypoint name");
+			continue;
+		}
+		uint16_t x;
+		uint16_t y;
+		uint8_t z;
+		if (!waypointNode->getU16(x) || !waypointNode->getU16(y) || !waypointNode->getU8(z)) {
+			warning("Invalid waypoint position");
+			continue;
+		}
+		wp.pos.x = x;
+		wp.pos.y = y;
+		wp.pos.z = z;
+
+		map.waypoints.addWaypoint(newd Waypoint(wp));
+	}
+}
+
+void IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
+	uint16_t base_x, base_y;
+	uint8_t base_z;
+	if (!mapNode->getU16(base_x) || !mapNode->getU16(base_y) || !mapNode->getU8(base_z)) {
+		warning("Invalid map node, no base coordinate");
+		return;
+	}
+
+	Floor* cachedFloor = nullptr;
+	int cachedFloorX = -1;
+	int cachedFloorY = -1;
+	int cachedFloorZ = -1;
+
+	for (BinaryNode* tileNode = mapNode->getChild(); tileNode != nullptr; tileNode = tileNode->advance()) {
+		Tile* tile = nullptr;
+		uint8_t tile_type;
+		if (!tileNode->getByte(tile_type)) {
+			warning("Invalid tile type");
+			continue;
+		}
+		if (tile_type == OTBM_TILE || tile_type == OTBM_HOUSETILE) {
+			// printf("Start\n");
+			uint8_t x_offset, y_offset;
+			if (!tileNode->getU8(x_offset) || !tileNode->getU8(y_offset)) {
+				warning("Could not read position of tile");
+				continue;
+			}
+			const Position pos(base_x + x_offset, base_y + y_offset, base_z);
+
+			const int floorX = pos.x & ~3;
+			const int floorY = pos.y & ~3;
+			if (!cachedFloor || cachedFloorX != floorX || cachedFloorY != floorY || cachedFloorZ != pos.z) {
+				cachedFloor = map.createLeaf(pos.x, pos.y)->createFloor(pos.x, pos.y, pos.z);
+				cachedFloorX = floorX;
+				cachedFloorY = floorY;
+				cachedFloorZ = pos.z;
+			}
+			TileLocation* tileLocation = &cachedFloor->locs[(pos.x & 3) * 4 + (pos.y & 3)];
+
+			if (tileLocation->get()) {
+				warning("Duplicate tile at %d:%d:%d, discarding duplicate", pos.x, pos.y, pos.z);
+				continue;
+			}
+
+			tile = map.allocator(tileLocation);
+			House* house = nullptr;
+			if (tile_type == OTBM_HOUSETILE) {
+				uint32_t house_id;
+				if (!tileNode->getU32(house_id)) {
+					warning("House tile without house data, discarding tile");
+					continue;
+				}
+				if (house_id) {
+					house = map.houses.getHouse(house_id);
+					if (!house) {
+						house = newd House(map);
+						house->setID(house_id);
+						map.houses.addHouse(house);
+					}
+				} else {
+					warning("Invalid house id from tile %d:%d:%d", pos.x, pos.y, pos.z);
+				}
+			}
+
+			// printf("So far so good\n");
+
+			bool needsFullTileUpdate = false;
+			uint8_t attribute;
+			while (tileNode->getU8(attribute)) {
+				switch (attribute) {
+					case OTBM_ATTR_TILE_FLAGS: {
+						uint32_t flags = 0;
+						if (!tileNode->getU32(flags)) {
+							warning("Invalid tile flags of tile on %d:%d:%d", pos.x, pos.y, pos.z);
+						}
+						tile->setMapFlags(flags & ~LEGACY_TILESTATE_ZONE_BRUSH);
+						if (flags & LEGACY_TILESTATE_ZONE_BRUSH) {
+							uint16_t zoneId = 0;
+							do {
+								if (!tileNode->getU16(zoneId)) {
+									warning("Invalid zone id of tile on %d:%d:%d", pos.x, pos.y, pos.z);
+								}
+
+								if (zoneId != 0) {
+									tile->addZone(zoneId);
+									std::string zoneName = "Zone " + i2s(zoneId);
+									if (!map.zones.hasZone(zoneName) && !map.zones.hasZone(zoneId)) {
+										map.zones.addZone(zoneName, zoneId);
+									}
+								}
+							} while (zoneId != 0);
+						}
+						break;
+					}
+					case OTBM_ATTR_ITEM: {
+						const ItemType* itemType = nullptr;
+						Item* item = Item::Create_OTBM(*this, tileNode, &itemType);
+						if (item == nullptr) {
+							warning("Invalid item at tile %d:%d:%d", pos.x, pos.y, pos.z);
+						}
+						if (item && itemType) {
+							if (((itemType->isGroundTile() || itemType->ground_equivalent != 0) && tile->ground) || (itemType->alwaysOnBottom && !tile->items.empty())) {
+								needsFullTileUpdate = true;
+							}
+							tile->addLoadedItem(item, *itemType);
+						}
+						break;
+					}
+					default: {
+						warning("Unknown tile attribute at %d:%d:%d", pos.x, pos.y, pos.z);
+						break;
+					}
+				}
+			}
+
+			// printf("Didn't die in loop\n");
+
+			for (BinaryNode* itemNode = tileNode->getChild(); itemNode != nullptr; itemNode = itemNode->advance()) {
+				Item* item = nullptr;
+				uint8_t node_type;
+				if (!itemNode->getByte(node_type)) {
+					warning("Unknown item type %d:%d:%d", pos.x, pos.y, pos.z);
+					continue;
+				}
+				if (node_type == OTBM_ITEM) {
+					const ItemType* itemType = nullptr;
+					item = Item::Create_OTBM(*this, itemNode, &itemType);
+					if (item) {
+						if (!item->unserializeItemNode_OTBM(*this, itemNode)) {
+							warning("Couldn't unserialize item attributes at %d:%d:%d", pos.x, pos.y, pos.z);
+						}
+						// reform(&map, tile, item);
+						if (itemType) {
+							if (((itemType->isGroundTile() || itemType->ground_equivalent != 0) && tile->ground) || (itemType->alwaysOnBottom && !tile->items.empty())) {
+								needsFullTileUpdate = true;
+							}
+							tile->addLoadedItem(item, *itemType);
+						}
+					}
+				} else if (node_type == OTBM_TILE_ZONE) {
+					uint16_t zone_count;
+					if (!itemNode->getU16(zone_count)) {
+						warning("Invalid zone count at %d:%d:%d", pos.x, pos.y, pos.z);
+						continue;
+					}
+					for (uint16_t i = 0; i < zone_count; ++i) {
+						uint16_t zone_id;
+						if (!itemNode->getU16(zone_id)) {
+							warning("Invalid zone id at %d:%d:%d", pos.x, pos.y, pos.z);
+							continue;
+						}
+						tile->addZone(zone_id);
+					}
+				} else {
+					warning("Unknown type of tile child node");
+				}
+			}
+
+			if (needsFullTileUpdate) {
+				tile->update();
+			} else {
+				tile->finalizeLoadedState();
+			}
+			if (house) {
+				house->addTile(tile);
+			}
+
+			map.setTile(pos.x, pos.y, pos.z, tile);
+		} else {
+			warning("Unknown type of tile node");
+		}
+	}
+}
+
 bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 	BinaryNode* root = f.getRootNode();
 	if (!root) {
@@ -726,48 +1029,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 		return false;
 	}
 
-	uint8_t attribute;
-	while (mapHeaderNode->getU8(attribute)) {
-		switch (attribute) {
-			case OTBM_ATTR_DESCRIPTION: {
-				if (!mapHeaderNode->getString(map.description)) {
-					warning("Invalid map description tag");
-				}
-				// std::cout << "Map description: " << mapDescription << std::endl;
-				break;
-			}
-			case OTBM_ATTR_EXT_SPAWN_FILE: {
-				if (!mapHeaderNode->getString(map.spawnfile)) {
-					warning("Invalid map spawnfile tag");
-				}
-				break;
-			}
-			case OTBM_ATTR_EXT_HOUSE_FILE: {
-				if (!mapHeaderNode->getString(map.housefile)) {
-					warning("Invalid map housefile tag");
-				}
-				break;
-			}
-			case OTBM_ATTR_EXT_ZONE_FILE: {
-				if (!mapHeaderNode->getString(map.zonefile)) {
-					warning("Invalid map zonefile tag");
-				}
-				break;
-			}
-			case OTBM_ATTR_EXT_SPAWN_NPC_FILE: {
-				// compatibility: skip RME NPC spawn file tag
-				std::string stringToSkip;
-				if (!mapHeaderNode->getString(stringToSkip)) {
-					warning("Invalid map housefile tag");
-				}
-				break;
-			}
-			default: {
-				warning("Unknown header node.");
-				break;
-			}
-		}
-	}
+	readMapHeaderAttributes(mapHeaderNode, map);
 
 	int nodes_loaded = 0;
 
@@ -783,257 +1045,11 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 			continue;
 		}
 		if (node_type == OTBM_TILE_AREA) {
-			uint16_t base_x, base_y;
-			uint8_t base_z;
-			if (!mapNode->getU16(base_x) || !mapNode->getU16(base_y) || !mapNode->getU8(base_z)) {
-				warning("Invalid map node, no base coordinate");
-				continue;
-			}
-
-			Floor* cachedFloor = nullptr;
-			int cachedFloorX = -1;
-			int cachedFloorY = -1;
-			int cachedFloorZ = -1;
-
-			for (BinaryNode* tileNode = mapNode->getChild(); tileNode != nullptr; tileNode = tileNode->advance()) {
-				Tile* tile = nullptr;
-				uint8_t tile_type;
-				if (!tileNode->getByte(tile_type)) {
-					warning("Invalid tile type");
-					continue;
-				}
-				if (tile_type == OTBM_TILE || tile_type == OTBM_HOUSETILE) {
-					// printf("Start\n");
-					uint8_t x_offset, y_offset;
-					if (!tileNode->getU8(x_offset) || !tileNode->getU8(y_offset)) {
-						warning("Could not read position of tile");
-						continue;
-					}
-					const Position pos(base_x + x_offset, base_y + y_offset, base_z);
-
-					const int floorX = pos.x & ~3;
-					const int floorY = pos.y & ~3;
-					if (!cachedFloor || cachedFloorX != floorX || cachedFloorY != floorY || cachedFloorZ != pos.z) {
-						cachedFloor = map.createLeaf(pos.x, pos.y)->createFloor(pos.x, pos.y, pos.z);
-						cachedFloorX = floorX;
-						cachedFloorY = floorY;
-						cachedFloorZ = pos.z;
-					}
-					TileLocation* tileLocation = &cachedFloor->locs[(pos.x & 3) * 4 + (pos.y & 3)];
-
-					if (tileLocation->get()) {
-						warning("Duplicate tile at %d:%d:%d, discarding duplicate", pos.x, pos.y, pos.z);
-						continue;
-					}
-
-					tile = map.allocator(tileLocation);
-					House* house = nullptr;
-					if (tile_type == OTBM_HOUSETILE) {
-						uint32_t house_id;
-						if (!tileNode->getU32(house_id)) {
-							warning("House tile without house data, discarding tile");
-							continue;
-						}
-						if (house_id) {
-							house = map.houses.getHouse(house_id);
-							if (!house) {
-								house = newd House(map);
-								house->setID(house_id);
-								map.houses.addHouse(house);
-							}
-						} else {
-							warning("Invalid house id from tile %d:%d:%d", pos.x, pos.y, pos.z);
-						}
-					}
-
-					// printf("So far so good\n");
-
-					bool needsFullTileUpdate = false;
-					uint8_t attribute;
-					while (tileNode->getU8(attribute)) {
-						switch (attribute) {
-							case OTBM_ATTR_TILE_FLAGS: {
-								uint32_t flags = 0;
-								if (!tileNode->getU32(flags)) {
-									warning("Invalid tile flags of tile on %d:%d:%d", pos.x, pos.y, pos.z);
-								}
-								tile->setMapFlags(flags & ~LEGACY_TILESTATE_ZONE_BRUSH);
-								if (flags & LEGACY_TILESTATE_ZONE_BRUSH) {
-									uint16_t zoneId = 0;
-									do {
-										if (!tileNode->getU16(zoneId)) {
-											warning("Invalid zone id of tile on %d:%d:%d", pos.x, pos.y, pos.z);
-										}
-
-										if (zoneId != 0) {
-											tile->addZone(zoneId);
-											std::string zoneName = "Zone " + i2s(zoneId);
-											if (!map.zones.hasZone(zoneName) && !map.zones.hasZone(zoneId)) {
-												map.zones.addZone(zoneName, zoneId);
-											}
-										}
-									} while (zoneId != 0);
-								}
-								break;
-							}
-							case OTBM_ATTR_ITEM: {
-								const ItemType* itemType = nullptr;
-								Item* item = Item::Create_OTBM(*this, tileNode, &itemType);
-								if (item == nullptr) {
-									warning("Invalid item at tile %d:%d:%d", pos.x, pos.y, pos.z);
-								}
-								if (item && itemType) {
-									if (((itemType->isGroundTile() || itemType->ground_equivalent != 0) && tile->ground) || (itemType->alwaysOnBottom && !tile->items.empty())) {
-										needsFullTileUpdate = true;
-									}
-									tile->addLoadedItem(item, *itemType);
-								}
-								break;
-							}
-							default: {
-								warning("Unknown tile attribute at %d:%d:%d", pos.x, pos.y, pos.z);
-								break;
-							}
-						}
-					}
-
-					// printf("Didn't die in loop\n");
-
-					for (BinaryNode* itemNode = tileNode->getChild(); itemNode != nullptr; itemNode = itemNode->advance()) {
-						Item* item = nullptr;
-						uint8_t node_type;
-						if (!itemNode->getByte(node_type)) {
-							warning("Unknown item type %d:%d:%d", pos.x, pos.y, pos.z);
-							continue;
-						}
-						if (node_type == OTBM_ITEM) {
-							const ItemType* itemType = nullptr;
-							item = Item::Create_OTBM(*this, itemNode, &itemType);
-							if (item) {
-								if (!item->unserializeItemNode_OTBM(*this, itemNode)) {
-									warning("Couldn't unserialize item attributes at %d:%d:%d", pos.x, pos.y, pos.z);
-								}
-								// reform(&map, tile, item);
-								if (itemType) {
-									if (((itemType->isGroundTile() || itemType->ground_equivalent != 0) && tile->ground) || (itemType->alwaysOnBottom && !tile->items.empty())) {
-										needsFullTileUpdate = true;
-									}
-									tile->addLoadedItem(item, *itemType);
-								}
-							}
-						} else if (node_type == OTBM_TILE_ZONE) {
-							uint16_t zone_count;
-							if (!itemNode->getU16(zone_count)) {
-								warning("Invalid zone count at %d:%d:%d", pos.x, pos.y, pos.z);
-								continue;
-							}
-							for (uint16_t i = 0; i < zone_count; ++i) {
-								uint16_t zone_id;
-								if (!itemNode->getU16(zone_id)) {
-									warning("Invalid zone id at %d:%d:%d", pos.x, pos.y, pos.z);
-									continue;
-								}
-								tile->addZone(zone_id);
-							}
-						} else {
-							warning("Unknown type of tile child node");
-						}
-					}
-
-					if (needsFullTileUpdate) {
-						tile->update();
-					} else {
-						tile->finalizeLoadedState();
-					}
-					if (house) {
-						house->addTile(tile);
-					}
-
-					map.setTile(pos.x, pos.y, pos.z, tile);
-				} else {
-					warning("Unknown type of tile node");
-				}
-			}
+			readTileArea(mapNode, map);
 		} else if (node_type == OTBM_TOWNS) {
-			for (BinaryNode* townNode = mapNode->getChild(); townNode != nullptr; townNode = townNode->advance()) {
-				Town* town = nullptr;
-				uint8_t town_type;
-				if (!townNode->getByte(town_type)) {
-					warning("Invalid town type (1)");
-					continue;
-				}
-				if (town_type != OTBM_TOWN) {
-					warning("Invalid town type (2)");
-					continue;
-				}
-				uint32_t town_id;
-				if (!townNode->getU32(town_id)) {
-					warning("Invalid town id");
-					continue;
-				}
-
-				town = map.towns.getTown(town_id);
-				if (town) {
-					warning("Duplicate town id %d, discarding duplicate", town_id);
-					continue;
-				} else {
-					town = newd Town(town_id);
-					if (!map.towns.addTown(town)) {
-						delete town;
-						continue;
-					}
-				}
-				std::string town_name;
-				if (!townNode->getString(town_name)) {
-					warning("Invalid town name");
-					continue;
-				}
-				town->setName(town_name);
-				Position pos;
-				uint16_t x;
-				uint16_t y;
-				uint8_t z;
-				if (!townNode->getU16(x) || !townNode->getU16(y) || !townNode->getU8(z)) {
-					warning("Invalid town temple position");
-					continue;
-				}
-				pos.x = x;
-				pos.y = y;
-				pos.z = z;
-				town->setTemplePosition(pos);
-				map.getOrCreateTile(pos)->getLocation()->increaseTownCount();
-			}
+			readTowns(mapNode, map);
 		} else if (node_type == OTBM_WAYPOINTS) {
-			for (BinaryNode* waypointNode = mapNode->getChild(); waypointNode != nullptr; waypointNode = waypointNode->advance()) {
-				uint8_t waypoint_type;
-				if (!waypointNode->getByte(waypoint_type)) {
-					warning("Invalid waypoint type (1)");
-					continue;
-				}
-				if (waypoint_type != OTBM_WAYPOINT) {
-					warning("Invalid waypoint type (2)");
-					continue;
-				}
-
-				Waypoint wp;
-
-				if (!waypointNode->getString(wp.name)) {
-					warning("Invalid waypoint name");
-					continue;
-				}
-				uint16_t x;
-				uint16_t y;
-				uint8_t z;
-				if (!waypointNode->getU16(x) || !waypointNode->getU16(y) || !waypointNode->getU8(z)) {
-					warning("Invalid waypoint position");
-					continue;
-				}
-				wp.pos.x = x;
-				wp.pos.y = y;
-				wp.pos.z = z;
-
-				map.waypoints.addWaypoint(newd Waypoint(wp));
-			}
+			readWaypoints(mapNode, map);
 		}
 	}
 

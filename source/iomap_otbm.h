@@ -141,6 +141,10 @@ protected:
 	static bool getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver);
 
 	virtual bool loadMap(Map& map, NodeFileReadHandle& handle);
+	void readMapHeaderAttributes(BinaryNode* mapHeaderNode, Map& map);
+	void readTileArea(BinaryNode* mapNode, Map& map);
+	void readTowns(BinaryNode* mapNode, Map& map);
+	void readWaypoints(BinaryNode* mapNode, Map& map);
 	bool loadSpawns(Map& map, const FileName& dir);
 	bool loadSpawns(Map& map, pugi::xml_document& doc);
 	bool loadHouses(Map& map, const FileName& dir);
