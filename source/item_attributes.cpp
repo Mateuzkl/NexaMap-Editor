@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include "item_attributes.h"
+#include <cstring>
 #include "filehandle.h"
 
 ItemAttributes::ItemAttributes() :
@@ -156,17 +157,17 @@ ItemAttribute::ItemAttribute(const std::string& str) :
 
 ItemAttribute::ItemAttribute(int32_t i) :
 	type(ItemAttribute::INTEGER) {
-	*reinterpret_cast<int*>(data) = i;
+	std::memcpy(data, &i, sizeof(i));
 }
 
 ItemAttribute::ItemAttribute(double f) :
 	type(ItemAttribute::DOUBLE) {
-	*reinterpret_cast<double*>(data) = f;
+	std::memcpy(data, &f, sizeof(f));
 }
 
 ItemAttribute::ItemAttribute(bool b) :
 	type(ItemAttribute::BOOLEAN) {
-	*reinterpret_cast<bool*>(data) = b;
+	std::memcpy(data, &b, sizeof(b));
 }
 
 ItemAttribute::ItemAttribute(const ItemAttribute& o) :
@@ -184,13 +185,21 @@ ItemAttribute& ItemAttribute::operator=(const ItemAttribute& o) {
 	if (type == STRING) {
 		new (data) std::string(*reinterpret_cast<const std::string*>(&o.data));
 	} else if (type == INTEGER) {
-		*reinterpret_cast<int32_t*>(data) = *reinterpret_cast<const int32_t*>(&o.data);
+		int32_t val;
+		std::memcpy(&val, &o.data, sizeof(val));
+		std::memcpy(data, &val, sizeof(val));
 	} else if (type == FLOAT) {
-		*reinterpret_cast<float*>(data) = *reinterpret_cast<const float*>(&o.data);
+		float val;
+		std::memcpy(&val, &o.data, sizeof(val));
+		std::memcpy(data, &val, sizeof(val));
 	} else if (type == DOUBLE) {
-		*reinterpret_cast<double*>(data) = *reinterpret_cast<const double*>(&o.data);
+		double val;
+		std::memcpy(&val, &o.data, sizeof(val));
+		std::memcpy(data, &val, sizeof(val));
 	} else if (type == BOOLEAN) {
-		*reinterpret_cast<bool*>(data) = *reinterpret_cast<const bool*>(&o.data);
+		bool val;
+		std::memcpy(&val, &o.data, sizeof(val));
+		std::memcpy(data, &val, sizeof(val));
 	} else {
 		type = NONE;
 	}
@@ -218,19 +227,19 @@ void ItemAttribute::set(const std::string& str) {
 void ItemAttribute::set(int32_t i) {
 	clear();
 	type = INTEGER;
-	*reinterpret_cast<int32_t*>(&data) = i;
+	std::memcpy(&data, &i, sizeof(i));
 }
 
 void ItemAttribute::set(double y) {
 	clear();
 	type = DOUBLE;
-	*reinterpret_cast<double*>(&data) = y;
+	std::memcpy(&data, &y, sizeof(y));
 }
 
 void ItemAttribute::set(bool b) {
 	clear();
 	type = BOOLEAN;
-	*reinterpret_cast<bool*>(&data) = b;
+	std::memcpy(&data, &b, sizeof(b));
 }
 
 const std::string* ItemAttribute::getString() const {
@@ -321,7 +330,7 @@ bool ItemAttribute::unserialize(const IOMap& maphandle, BinaryNode* stream) {
 			if (!stream->getU32(u32)) {
 				return false;
 			}
-			set(*reinterpret_cast<int32_t*>(&u32));
+			int32_t i32; std::memcpy(&i32, &u32, sizeof(i32)); set(i32);
 			break;
 		}
 		case FLOAT: {
@@ -329,7 +338,7 @@ bool ItemAttribute::unserialize(const IOMap& maphandle, BinaryNode* stream) {
 			if (!stream->getU32(u32)) {
 				return false;
 			}
-			set((double)*reinterpret_cast<float*>(&u32));
+			float f; std::memcpy(&f, &u32, sizeof(f)); set((double)f);
 			break;
 		}
 		case DOUBLE: {
@@ -337,7 +346,7 @@ bool ItemAttribute::unserialize(const IOMap& maphandle, BinaryNode* stream) {
 			if (!stream->getU64(u64)) {
 				return false;
 			}
-			set(*reinterpret_cast<double*>(&u64));
+			double d; std::memcpy(&d, &u64, sizeof(d)); set(d);
 			break;
 		}
 		case BOOLEAN: {
@@ -363,13 +372,13 @@ void ItemAttribute::serialize(const IOMap& maphandle, NodeFileWriteHandle& f) co
 			f.addLongString(*getString());
 			break;
 		case INTEGER:
-			f.addU32(*(uint32_t*)getInteger());
+			uint32_t u32; std::memcpy(&u32, getInteger(), sizeof(u32)); f.addU32(u32);
 			break;
 		case DOUBLE:
-			f.addU64(*(uint64_t*)getFloat());
+			uint64_t u64; std::memcpy(&u64, getFloat(), sizeof(u64)); f.addU64(u64);
 			break;
 		case BOOLEAN:
-			f.addU8(*(uint8_t*)getBoolean());
+			uint8_t u8; std::memcpy(&u8, getBoolean(), sizeof(u8)); f.addU8(u8);
 		default:
 			break;
 	}

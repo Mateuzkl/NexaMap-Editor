@@ -18,62 +18,36 @@
 #ifndef RME_CON_VECTOR_H_
 #define RME_CON_VECTOR_H_
 
-#define REALLOC_INCREASE 600
+#include <vector>
 
 template <class T> // This only really works with pointers.. hrhr "T" might be abit misleading.. :o
 class contigous_vector {
 public:
 	contigous_vector(size_t start_size = 7) {
-		start = reinterpret_cast<T*>(malloc(sizeof(T) * start_size));
-		memset(start, 0, sizeof(T) * start_size);
-		sz = start_size;
+		v.resize(start_size, nullptr);
 	}
-	~contigous_vector() {
-		free(start);
-	}
+	~contigous_vector() = default;
 
 	contigous_vector(const contigous_vector&) = delete;
 	contigous_vector& operator=(const contigous_vector&) = delete;
 
-	void resize(size_t new_size) {
-		size_t old_size = sz;
-		start = reinterpret_cast<T*>(realloc(start, sizeof(T) * new_size));
-		memset(start + old_size, 0, sizeof(T) * (new_size - old_size));
-		sz = new_size;
-	}
-	size_t size() {
-		return sz;
-	}
-
-	T& locate(size_t index) {
-		// Masterly inefficient!
-		while (index >= sz) {
-			resize(sz + REALLOC_INCREASE);
-		}
-		return start[index];
-	}
-
-	T at(size_t index) const {
-		if (index >= sz) {
-			return nullptr;
-		}
-		return start[index];
+	size_t size() const {
+		return v.size();
 	}
 
 	void set(size_t index, T value) {
-		locate(index) = value;
+		if (index >= v.size()) {
+			v.resize(index + 1, nullptr);
+		}
+		v[index] = value;
 	}
 
-	T operator[](size_t index) {
-		return at(index);
-	}
-	const T operator[](size_t index) const {
-		return at(index);
+	T operator[](size_t index) const {
+		return index < v.size() ? v[index] : nullptr;
 	}
 
 private:
-	T* start;
-	size_t sz;
+	std::vector<T> v;
 };
 
 #endif
