@@ -17,14 +17,15 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <cstdint>
 #include <numbers>
 
 #ifdef _WIN32
 static void* rmeGetGLProc(const char* name) {
-	auto p = (void*)wglGetProcAddress(name);
-	if (p == nullptr || p == (void*)0x1 || p == (void*)0x2 || p == (void*)0x3 || p == (void*)-1) {
+	auto p = reinterpret_cast<void*>(wglGetProcAddress(name));
+	if (p == nullptr || p == reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1)) || p == reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x2)) || p == reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x3)) || p == reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1))) {
 		static HMODULE gl = LoadLibraryA("opengl32.dll");
-		p = (void*)GetProcAddress(gl, name);
+		p = reinterpret_cast<void*>(GetProcAddress(gl, name));
 	}
 	return p;
 }
@@ -37,7 +38,7 @@ static void* rmeGetGLProc(const char* name) {
 typedef void (*__GLXextFuncPtr)(void);
 extern "C" __GLXextFuncPtr glXGetProcAddressARB(const unsigned char*);
 static void* rmeGetGLProc(const char* name) {
-	void* p = (void*)glXGetProcAddressARB((const GLubyte*)name);
+	void* p = reinterpret_cast<void*>(glXGetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
 	if (!p) {
 		static void* lib = dlopen("libGL.so.1", RTLD_LAZY);
 		if (lib) {
@@ -93,7 +94,7 @@ void GLRenderer::init() {
 		return;
 	}
 
-	if (!gladLoadGLLoader((GLADloadproc)rmeGetGLProc)) {
+	if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(rmeGetGLProc))) {
 		wxLogError("GLRenderer::init — gladLoadGLLoader failed");
 		return;
 	}
@@ -163,13 +164,13 @@ void GLRenderer::init() {
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, x));
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, x)));
 
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, u)));
 
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, r));
+	glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, r)));
 
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -186,13 +187,13 @@ void GLRenderer::init() {
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, STREAM_EBO_CAPACITY * sizeof(GLuint), nullptr, GL_DYNAMIC_DRAW);
 
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, x));
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, x)));
 
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, u)));
 
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, r));
+	glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, r)));
 
 	// Unbind the VAO first so the element-buffer binding stays recorded in streamVAO.
 	glBindVertexArray(0);
@@ -326,7 +327,7 @@ void GLRenderer::flushBatch() {
 		std::memcpy(eboPtr, indexScratch.data(), idxBytes);
 		glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
-		glDrawElementsBaseVertex(GL_TRIANGLES, static_cast<GLsizei>(chunkIdx), GL_UNSIGNED_INT, (void*)(eboOffset * sizeof(GLuint)), static_cast<GLint>(vboOffset));
+		glDrawElementsBaseVertex(GL_TRIANGLES, static_cast<GLsizei>(chunkIdx), GL_UNSIGNED_INT, reinterpret_cast<void*>(eboOffset * sizeof(GLuint)), static_cast<GLint>(vboOffset));
 
 		vboOffset += chunkVerts;
 		eboOffset += chunkIdx;
@@ -468,7 +469,7 @@ void GLRenderer::drawPolygon(const float* vertices, int vertexCount, uint8_t r, 
 	bindState();
 	glUniform1i(loc_useTexture, 0);
 	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(Vertex), verts.data(), GL_DYNAMIC_DRAW);
-	glDrawArrays(GL_TRIANGLE_FAN, 0, (GLsizei)verts.size());
+	glDrawArrays(GL_TRIANGLE_FAN, 0, static_cast<GLsizei>(verts.size()));
 }
 
 void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -483,7 +484,7 @@ void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t
 	bindState();
 	glUniform1i(loc_useTexture, 0);
 	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(Vertex), verts.data(), GL_DYNAMIC_DRAW);
-	glDrawArrays(GL_TRIANGLE_FAN, 0, (GLsizei)verts.size());
+	glDrawArrays(GL_TRIANGLE_FAN, 0, static_cast<GLsizei>(verts.size()));
 }
 
 void GLRenderer::flush() {
