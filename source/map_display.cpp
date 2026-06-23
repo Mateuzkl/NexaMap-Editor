@@ -1855,6 +1855,38 @@ void MapCanvas::OnDelete(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.RefreshView();
 }
 
+std::string MapCanvas::getPositionString(const Position& position) const {
+	std::ostringstream clip;
+	switch (g_settings.getInteger(Config::COPY_POSITION_FORMAT)) {
+		case 0:
+			clip << "{x = " << position.x << ", y = " << position.y << ", z = " << position.z << "}";
+			break;
+		case 1:
+			clip << "{\"x\":" << position.x << ",\"y\":" << position.y << ",\"z\":" << position.z << "}";
+			break;
+		case 2:
+			clip << position.x << ", " << position.y << ", " << position.z;
+			break;
+		case 3:
+			clip << "(" << position.x << ", " << position.y << ", " << position.z << ")";
+			break;
+		case 4:
+			clip << "Position(" << position.x << ", " << position.y << ", " << position.z << ")";
+			break;
+	}
+	return clip.str();
+}
+
+void MapCanvas::copyTextToClipboard(const std::string& text) {
+	if (wxTheClipboard->Open()) {
+		wxTextDataObject* obj = new wxTextDataObject();
+		obj->SetText(wxstr(text));
+		wxTheClipboard->SetData(obj);
+
+		wxTheClipboard->Close();
+	}
+}
+
 void MapCanvas::OnCopyPosition(wxCommandEvent& WXUNUSED(event)) {
 	if (editor.selection.size() == 0) {
 		return;
@@ -1878,32 +1910,10 @@ void MapCanvas::OnCopyPosition(wxCommandEvent& WXUNUSED(event)) {
 		}
 		clip << "}";
 	} else {
-		switch (g_settings.getInteger(Config::COPY_POSITION_FORMAT)) {
-			case 0:
-				clip << "{x = " << minPos.x << ", y = " << minPos.y << ", z = " << minPos.z << "}";
-				break;
-			case 1:
-				clip << "{\"x\":" << minPos.x << ",\"y\":" << minPos.y << ",\"z\":" << minPos.z << "}";
-				break;
-			case 2:
-				clip << minPos.x << ", " << minPos.y << ", " << minPos.z;
-				break;
-			case 3:
-				clip << "(" << minPos.x << ", " << minPos.y << ", " << minPos.z << ")";
-				break;
-			case 4:
-				clip << "Position(" << minPos.x << ", " << minPos.y << ", " << minPos.z << ")";
-				break;
-		}
+		clip << getPositionString(minPos);
 	}
 
-	if (wxTheClipboard->Open()) {
-		wxTextDataObject* obj = new wxTextDataObject();
-		obj->SetText(wxstr(clip.str()));
-		wxTheClipboard->SetData(obj);
-
-		wxTheClipboard->Close();
-	}
+	copyTextToClipboard(clip.str());
 }
 
 void MapCanvas::OnCopyServerId(wxCommandEvent& WXUNUSED(event)) {
@@ -2022,34 +2032,7 @@ void MapCanvas::OnCopyDestination(wxCommandEvent& WXUNUSED(event)) {
 	ASSERT(selected_items.size() > 0);
 	Teleport* teleport = dynamic_cast<Teleport*>(selected_items.front());
 	if (teleport) {
-		const Position& destination = teleport->getDestination();
-
-		std::ostringstream clip;
-		switch (g_settings.getInteger(Config::COPY_POSITION_FORMAT)) {
-			case 0:
-				clip << "{x = " << destination.x << ", y = " << destination.y << ", z = " << destination.z << "}";
-				break;
-			case 1:
-				clip << "{\"x\":" << destination.x << ",\"y\":" << destination.y << ",\"z\":" << destination.z << "}";
-				break;
-			case 2:
-				clip << destination.x << ", " << destination.y << ", " << destination.z;
-				break;
-			case 3:
-				clip << "(" << destination.x << ", " << destination.y << ", " << destination.z << ")";
-				break;
-			case 4:
-				clip << "Position(" << destination.x << ", " << destination.y << ", " << destination.z << ")";
-				break;
-		}
-
-		if (wxTheClipboard->Open()) {
-			wxTextDataObject* obj = new wxTextDataObject();
-			obj->SetText(wxstr(clip.str()));
-			wxTheClipboard->SetData(obj);
-
-			wxTheClipboard->Close();
-		}
+		copyTextToClipboard(getPositionString(teleport->getDestination()));
 	}
 }
 

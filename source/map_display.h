@@ -69,6 +69,9 @@ public:
 	void OnCopyServerId(wxCommandEvent& event);
 	void OnCopyClientId(wxCommandEvent& event);
 	void OnCopyName(wxCommandEvent& event);
+	// Clipboard/position formatting helpers
+	std::string getPositionString(const Position& position) const;
+	void copyTextToClipboard(const std::string& text);
 	void OnBrowseTile(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);
 	void OnDelete(wxCommandEvent& event);
