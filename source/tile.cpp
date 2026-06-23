@@ -535,6 +535,13 @@ uint8_t Tile::getMiniMapColor() const {
 	return 0;
 }
 
+uint16_t Tile::getGroundSpeed() const noexcept {
+	if (ground && !ground->isMetaItem()) {
+		return ground->getGroundSpeed();
+	}
+	return 0;
+}
+
 bool tilePositionLessThan(const Tile* a, const Tile* b) {
 	return a->getPosition() < b->getPosition();
 }

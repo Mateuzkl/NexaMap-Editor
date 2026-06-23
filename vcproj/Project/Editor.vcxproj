@@ -254,9 +254,11 @@
     <ClInclude Include="..\..\source\extension.h" />
     <ClInclude Include="..\..\source\extension_window.h" />
     <ClInclude Include="..\..\source\filehandle.h" />
+    <ClInclude Include="..\..\source\iominimap.h" />
     <ClCompile Include="..\..\source\extension.cpp" />
     <ClCompile Include="..\..\source\extension_window.cpp" />
     <ClCompile Include="..\..\source\filehandle.cpp" />
+    <ClCompile Include="..\..\source\iominimap.cpp" />
     <ClInclude Include="..\..\source\ground_brush.h" />
     <ClCompile Include="..\..\source\ground_brush.cpp" />
     <ClInclude Include="..\..\source\house_brush.h" />

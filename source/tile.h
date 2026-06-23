@@ -175,6 +175,9 @@ public: // Functions
 
 	uint8_t getMiniMapColor() const;
 
+	// Movement speed of the ground item (used for OTMM minimap export).
+	uint16_t getGroundSpeed() const noexcept;
+
 	// Does this tile have ground?
 	bool hasGround() const {
 		return ground != nullptr;

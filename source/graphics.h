@@ -237,6 +237,7 @@ public:
 	uint16_t drawoffset_x;
 	uint16_t drawoffset_y;
 
+	uint16_t ground_speed;
 	uint16_t minimap_color;
 
 	bool has_light = false;

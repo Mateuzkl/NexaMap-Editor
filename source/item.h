@@ -205,6 +205,7 @@ public:
 
 	// Drawing related
 	uint8_t getMiniMapColor() const;
+	uint16_t getGroundSpeed() const;
 	int getHeight() const;
 	std::pair<int, int> getDrawOffset() const;
 

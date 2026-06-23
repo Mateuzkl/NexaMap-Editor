@@ -130,6 +130,9 @@
     <ClInclude Include="..\..\source\iomap.h">
       <Filter>editor\io</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\iominimap.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\iomap_otbm.h">
       <Filter>editor\io</Filter>
     </ClInclude>
@@ -537,6 +540,9 @@
       <Filter>editor\brushes</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\iomap.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\iominimap.cpp">
       <Filter>editor\io</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\iomap_otbm.cpp">

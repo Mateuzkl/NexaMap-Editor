@@ -771,7 +771,13 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 			case DatFlagChargeable:
 				break;
 
-			case DatFlagGround:
+			case DatFlagGround: {
+				uint16_t speed;
+				file.getU16(speed);
+				sType->ground_speed = speed;
+				break;
+			}
+
 			case DatFlagWritable:
 			case DatFlagWritableOnce:
 			case DatFlagCloth:
@@ -1026,6 +1032,7 @@ GameSprite::GameSprite() :
 	draw_height(0),
 	drawoffset_x(0),
 	drawoffset_y(0),
+	ground_speed(0),
 	minimap_color(0) {
 	dc[SPRITE_SIZE_16x16] = nullptr;
 	dc[SPRITE_SIZE_32x32] = nullptr;

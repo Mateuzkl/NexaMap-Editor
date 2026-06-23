@@ -324,6 +324,14 @@ uint8_t Item::getMiniMapColor() const {
 	return 0;
 }
 
+uint16_t Item::getGroundSpeed() const {
+	GameSprite* spr = g_items[id].sprite;
+	if (spr) {
+		return spr->ground_speed;
+	}
+	return 0;
+}
+
 GroundBrush* Item::getGroundBrush() const {
 	ItemType& item_type = g_items.getItemType(id);
 	if (item_type.isGroundTile() && item_type.brush && item_type.brush->isGround()) {

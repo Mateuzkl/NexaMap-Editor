@@ -68,8 +68,6 @@ public: // Functions
 		return map.getError();
 	}
 	bool importMap(FileName filename, int import_x_offset, int import_y_offset, ImportType house_import_type, ImportType spawn_import_type);
-	bool exportMiniMap(FileName filename, int floor /*= GROUND_LAYER*/, bool displaydialog);
-	bool exportSelectionAsMiniMap(FileName directory, wxString fileName);
 
 	// Adds an action to the action queue (this allows the user to undo the action)
 	// Invalidates the action pointer

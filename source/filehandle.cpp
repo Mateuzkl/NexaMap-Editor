@@ -493,6 +493,26 @@ FileWriteHandle::~FileWriteHandle() {
 	////
 }
 
+bool FileWriteHandle::seek(size_t offset, int origin) {
+	if (file) {
+		return fseek(file, static_cast<long>(offset), origin) == 0;
+	}
+	return false;
+}
+
+size_t FileWriteHandle::tell() {
+	if (file) {
+		return static_cast<size_t>(ftell(file));
+	}
+	return 0;
+}
+
+void FileWriteHandle::flush() {
+	if (file) {
+		fflush(file);
+	}
+}
+
 bool FileWriteHandle::addString(const std::string& str) {
 	if (str.size() > 0xFFFF) {
 		error_code = FILE_STRING_TOO_LONG;
