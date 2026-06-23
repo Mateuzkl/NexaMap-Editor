@@ -36,12 +36,10 @@ EVT_LIST_ITEM_SELECTED(PALETTE_WAYPOINT_LISTBOX, WaypointPalettePanel::OnClickWa
 END_EVENT_TABLE()
 
 WaypointPalettePanel::WaypointPalettePanel(wxWindow* parent, wxWindowID id) :
-	PalettePanel(parent, id),
-	map(nullptr) {
+	NamedEntityPalettePanel(parent, id) {
 	wxSizer* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Waypoints");
 
-	waypoint_list = newd wxListCtrl(this, PALETTE_WAYPOINT_LISTBOX, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_EDIT_LABELS | wxLC_NO_HEADER);
-	waypoint_list->InsertColumn(0, "UNNAMED", wxLIST_FORMAT_LEFT, 200);
+	waypoint_list = createEntityList(PALETTE_WAYPOINT_LISTBOX);
 	sidesizer->Add(waypoint_list, 1, wxEXPAND);
 
 	wxSizer* tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -56,20 +54,9 @@ WaypointPalettePanel::~WaypointPalettePanel() {
 	////
 }
 
-void WaypointPalettePanel::OnSwitchIn() {
-	PalettePanel::OnSwitchIn();
-}
-
-void WaypointPalettePanel::OnSwitchOut() {
-	PalettePanel::OnSwitchOut();
-}
-
 void WaypointPalettePanel::SetMap(Map* m) {
 	map = m;
 	this->Enable(m);
-}
-
-void WaypointPalettePanel::SelectFirstBrush() {
 }
 
 Brush* WaypointPalettePanel::GetSelectedBrush() const {
@@ -83,10 +70,6 @@ Brush* WaypointPalettePanel::GetSelectedBrush() const {
 bool WaypointPalettePanel::SelectBrush(const Brush* whatbrush) {
 	ASSERT(whatbrush == g_gui.waypoint_brush);
 	return false;
-}
-
-int WaypointPalettePanel::GetSelectedBrushSize() const {
-	return 0;
 }
 
 PaletteType WaypointPalettePanel::GetType() const {

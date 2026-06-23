@@ -23,7 +23,7 @@
 #include "waypoints.h"
 #include "palette_common.h"
 
-class WaypointPalettePanel : public PalettePanel {
+class WaypointPalettePanel : public NamedEntityPalettePanel {
 public:
 	WaypointPalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY);
 	~WaypointPalettePanel() override;
@@ -31,21 +31,13 @@ public:
 	wxString GetName() const override;
 	PaletteType GetType() const override;
 
-	// Select the first brush
-	void SelectFirstBrush() override;
 	// Returns the currently selected brush (first brush if panel is not loaded)
 	Brush* GetSelectedBrush() const override;
-	// Returns the currently selected brush size
-	int GetSelectedBrushSize() const override;
 	// Select the brush in the parameter, this only changes the look of the panel
 	bool SelectBrush(const Brush* whatbrush) override;
 
 	// Called sometimes?
 	void OnUpdate() override;
-	// Called when this page is about to be displayed
-	void OnSwitchIn() override;
-	// Called when this page is hidden
-	void OnSwitchOut() override;
 
 public:
 	// wxWidgets event handling
@@ -58,7 +50,6 @@ public:
 	void SetMap(Map* map);
 
 protected:
-	Map* map;
 	wxListCtrl* waypoint_list;
 	wxButton* add_waypoint_button;
 	wxButton* remove_waypoint_button;

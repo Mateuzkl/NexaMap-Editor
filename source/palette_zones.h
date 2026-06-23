@@ -10,7 +10,7 @@
 #include "zones.h"
 #include "palette_common.h"
 
-class ZonesPalettePanel : public PalettePanel {
+class ZonesPalettePanel : public NamedEntityPalettePanel {
 public:
 	ZonesPalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY);
 	~ZonesPalettePanel() override;
@@ -18,14 +18,10 @@ public:
 	wxString GetName() const override;
 	PaletteType GetType() const override;
 
-	void SelectFirstBrush() override;
 	Brush* GetSelectedBrush() const override;
-	int GetSelectedBrushSize() const override;
 	bool SelectBrush(const Brush* whatbrush) override;
 
 	void OnUpdate() override;
-	void OnSwitchIn() override;
-	void OnSwitchOut() override;
 
 	void OnClickZone(wxListEvent& event);
 	void OnRightClickZone(wxListEvent& event);
@@ -39,7 +35,6 @@ public:
 	void SetMap(Map* map);
 
 protected:
-	Map* map;
 	wxListCtrl* zone_list;
 	wxButton* add_zone_button;
 	wxButton* remove_zone_button;

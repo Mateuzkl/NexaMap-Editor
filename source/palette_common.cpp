@@ -42,6 +42,37 @@ PalettePanel::~PalettePanel() {
 	////
 }
 
+// ============================================================================
+// Named entity palette (shared base for Waypoints/Zones palettes)
+
+NamedEntityPalettePanel::NamedEntityPalettePanel(wxWindow* parent, wxWindowID id) :
+	PalettePanel(parent, id),
+	map(nullptr) {
+	////
+}
+
+wxListCtrl* NamedEntityPalettePanel::createEntityList(wxWindowID listId) {
+	wxListCtrl* list = newd wxListCtrl(this, listId, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_EDIT_LABELS | wxLC_NO_HEADER);
+	list->InsertColumn(0, "UNNAMED", wxLIST_FORMAT_LEFT, 200);
+	return list;
+}
+
+void NamedEntityPalettePanel::SelectFirstBrush() {
+	////
+}
+
+int NamedEntityPalettePanel::GetSelectedBrushSize() const {
+	return 0;
+}
+
+void NamedEntityPalettePanel::OnSwitchIn() {
+	PalettePanel::OnSwitchIn();
+}
+
+void NamedEntityPalettePanel::OnSwitchOut() {
+	PalettePanel::OnSwitchOut();
+}
+
 PaletteWindow* GetParentPalette(const wxWindow* window) {
 	const wxWindow* w = window;
 	while ((w = w->GetParent()) && dynamic_cast<const PaletteWindow*>(w) == nullptr)

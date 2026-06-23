@@ -22,12 +22,10 @@ EVT_LIST_ITEM_RIGHT_CLICK(PALETTE_ZONES_LISTBOX, ZonesPalettePanel::OnRightClick
 END_EVENT_TABLE()
 
 ZonesPalettePanel::ZonesPalettePanel(wxWindow* parent, wxWindowID id) :
-	PalettePanel(parent, id),
-	map(nullptr) {
+	NamedEntityPalettePanel(parent, id) {
 	wxSizer* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Zones");
 
-	zone_list = newd wxListCtrl(this, PALETTE_ZONES_LISTBOX, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_EDIT_LABELS | wxLC_NO_HEADER);
-	zone_list->InsertColumn(0, "UNNAMED", wxLIST_FORMAT_LEFT, 200);
+	zone_list = createEntityList(PALETTE_ZONES_LISTBOX);
 	sidesizer->Add(zone_list, 1, wxEXPAND);
 
 	wxSizer* top_button_sizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -47,21 +45,9 @@ ZonesPalettePanel::~ZonesPalettePanel() {
 	////
 }
 
-void ZonesPalettePanel::OnSwitchIn() {
-	PalettePanel::OnSwitchIn();
-}
-
-void ZonesPalettePanel::OnSwitchOut() {
-	PalettePanel::OnSwitchOut();
-}
-
 void ZonesPalettePanel::SetMap(Map* m) {
 	map = m;
 	this->Enable(m && m->getVersion().otbm >= MAP_OTBM_3);
-}
-
-void ZonesPalettePanel::SelectFirstBrush() {
-	////
 }
 
 Brush* ZonesPalettePanel::GetSelectedBrush() const {
@@ -80,10 +66,6 @@ Brush* ZonesPalettePanel::GetSelectedBrush() const {
 bool ZonesPalettePanel::SelectBrush(const Brush* whatbrush) {
 	ASSERT(whatbrush == g_gui.zone_brush);
 	return false;
-}
-
-int ZonesPalettePanel::GetSelectedBrushSize() const {
-	return 0;
 }
 
 PaletteType ZonesPalettePanel::GetType() const {

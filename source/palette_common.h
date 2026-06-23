@@ -20,12 +20,15 @@
 
 #include "main.h"
 
+#include <wx/listctrl.h>
+
 #include "dcbutton.h"
 #include "tileset.h"
 #include "gui_ids.h"
 #include "common_windows.h"
 
 class GUI;
+class Map;
 class BrushButton;
 class TilesetCategory;
 class BrushSizePanel;
@@ -103,6 +106,24 @@ protected:
 	int last_brush_size;
 
 	DECLARE_EVENT_TABLE();
+};
+
+// Shared base for simple "named entity" list palettes (e.g. Waypoints, Zones):
+// a single-selection, editable, header-less list with Add/Remove buttons.
+class NamedEntityPalettePanel : public PalettePanel {
+public:
+	NamedEntityPalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY);
+
+	void SelectFirstBrush() override;
+	int GetSelectedBrushSize() const override;
+	void OnSwitchIn() override;
+	void OnSwitchOut() override;
+
+protected:
+	// Creates the standard single-selection, editable, header-less list control.
+	wxListCtrl* createEntityList(wxWindowID listId);
+
+	Map* map;
 };
 
 class BrushSizePanel : public PalettePanel {
