@@ -1396,6 +1396,148 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 	return true;
 }
 
+void IOMapOTBM::writeTiles(Map& map, NodeFileWriteHandle& f) {
+	const IOMapOTBM& self = *this;
+	uint32_t tiles_saved = 0;
+	bool first = true;
+
+	int local_x = -1, local_y = -1, local_z = -1;
+
+	MapIterator map_iterator = map.begin();
+	while (map_iterator != map.end()) {
+		// Update progressbar
+		++tiles_saved;
+		if (tiles_saved % 8192 == 0) {
+			g_gui.SetLoadDone(int(tiles_saved / double(map.getTileCount()) * 100.0));
+		}
+
+		// Get tile
+		Tile* save_tile = (*map_iterator)->get();
+
+		// Is it an empty tile that we can skip? (Leftovers...)
+		if (!save_tile || (save_tile->size() == 0 && !save_tile->hasZone())) {
+			++map_iterator;
+			continue;
+		}
+
+		const Position& pos = save_tile->getPosition();
+
+		// Decide if newd node should be created
+		if (pos.x < local_x || pos.x >= local_x + 256 || pos.y < local_y || pos.y >= local_y + 256 || pos.z != local_z) {
+			// End last node
+			if (!first) {
+				f.endNode();
+			}
+			first = false;
+
+			// Start newd node
+			f.addNode(OTBM_TILE_AREA);
+			f.addU16(local_x = pos.x & 0xFF00);
+			f.addU16(local_y = pos.y & 0xFF00);
+			f.addU8(local_z = pos.z);
+		}
+		f.addNode(save_tile->isHouseTile() ? OTBM_HOUSETILE : OTBM_TILE);
+
+		f.addU8(save_tile->getX() & 0xFF);
+		f.addU8(save_tile->getY() & 0xFF);
+
+		if (save_tile->isHouseTile()) {
+			f.addU32(save_tile->getHouseID());
+		}
+
+		if (save_tile->getMapFlags()) {
+			f.addByte(OTBM_ATTR_TILE_FLAGS);
+			f.addU32(save_tile->getMapFlags());
+		}
+
+		if (save_tile->ground) {
+			Item* ground = save_tile->ground;
+			if (ground->isMetaItem()) {
+				// Do nothing, we don't save metaitems...
+			} else if (ground->hasBorderEquivalent()) {
+				bool found = false;
+				for (Item* item : save_tile->items) {
+					if (item->getGroundEquivalent() == ground->getID()) {
+						// Do nothing
+						// Found equivalent
+						found = true;
+						break;
+					}
+				}
+
+				if (!found) {
+					ground->serializeItemNode_OTBM(self, f);
+				}
+			} else if (ground->isComplex()) {
+				ground->serializeItemNode_OTBM(self, f);
+			} else {
+				f.addByte(OTBM_ATTR_ITEM);
+				ground->serializeItemCompact_OTBM(self, f);
+			}
+		}
+
+		for (Item* item : save_tile->items) {
+			if (!item->isMetaItem()) {
+				item->serializeItemNode_OTBM(self, f);
+			}
+		}
+
+		if (save_tile->hasZone()) {
+			f.addNode(OTBM_TILE_ZONE);
+			f.addU16(save_tile->zones.size());
+			for (const auto& zoneId : save_tile->zones) {
+				f.addU16(zoneId);
+			}
+			f.endNode();
+		}
+
+		f.endNode();
+		++map_iterator;
+	}
+
+	// Only close the last node if one has actually been created
+	if (!first) {
+		f.endNode();
+	}
+}
+
+void IOMapOTBM::writeTowns(Map& map, NodeFileWriteHandle& f) {
+	f.addNode(OTBM_TOWNS);
+	for (const auto& townEntry : map.towns) {
+		Town* town = townEntry.second;
+		const Position& townPosition = town->getTemplePosition();
+		f.addNode(OTBM_TOWN);
+		f.addU32(town->getID());
+		f.addString(town->getName());
+		f.addU16(townPosition.x);
+		f.addU16(townPosition.y);
+		f.addU8(townPosition.z);
+		f.endNode();
+	}
+	f.endNode();
+}
+
+void IOMapOTBM::writeWaypoints(Map& map, NodeFileWriteHandle& f, bool& waypointsWarning) {
+	bool supportWaypoints = version.otbm >= MAP_OTBM_3;
+	if (supportWaypoints || map.waypoints.waypoints.size() > 0) {
+		if (!supportWaypoints) {
+			waypointsWarning = true;
+		}
+
+		f.addNode(OTBM_WAYPOINTS);
+		for (const auto& waypointEntry : map.waypoints) {
+			Waypoint* waypoint = waypointEntry.second;
+			f.addNode(OTBM_WAYPOINT);
+			f.addString(waypoint->name);
+			f.addU16(waypoint->pos.x);
+			f.addU16(waypoint->pos.y);
+			f.addU8(waypoint->pos.z);
+			f.endNode();
+		}
+		f.endNode();
+	}
+}
+
 bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 	/* STOP!
 	 * Before you even think about modifying this, please reconsider.
@@ -1410,7 +1552,6 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 
 	bool waypointsWarning = false;
 
-	const IOMapOTBM& self = *this;
 
 	FileName tmpName;
 	MapVersion mapVersion = map.getVersion();
@@ -1443,140 +1584,11 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 			f.addString(nstr(tmpName.GetFullName()));
 
 			// Start writing tiles
-			uint32_t tiles_saved = 0;
-			bool first = true;
+			writeTiles(map, f);
 
-			int local_x = -1, local_y = -1, local_z = -1;
+			writeTowns(map, f);
 
-			MapIterator map_iterator = map.begin();
-			while (map_iterator != map.end()) {
-				// Update progressbar
-				++tiles_saved;
-				if (tiles_saved % 8192 == 0) {
-					g_gui.SetLoadDone(int(tiles_saved / double(map.getTileCount()) * 100.0));
-				}
-
-				// Get tile
-				Tile* save_tile = (*map_iterator)->get();
-
-				// Is it an empty tile that we can skip? (Leftovers...)
-				if (!save_tile || (save_tile->size() == 0 && !save_tile->hasZone())) {
-					++map_iterator;
-					continue;
-				}
-
-				const Position& pos = save_tile->getPosition();
-
-				// Decide if newd node should be created
-				if (pos.x < local_x || pos.x >= local_x + 256 || pos.y < local_y || pos.y >= local_y + 256 || pos.z != local_z) {
-					// End last node
-					if (!first) {
-						f.endNode();
-					}
-					first = false;
-
-					// Start newd node
-					f.addNode(OTBM_TILE_AREA);
-					f.addU16(local_x = pos.x & 0xFF00);
-					f.addU16(local_y = pos.y & 0xFF00);
-					f.addU8(local_z = pos.z);
-				}
-				f.addNode(save_tile->isHouseTile() ? OTBM_HOUSETILE : OTBM_TILE);
-
-				f.addU8(save_tile->getX() & 0xFF);
-				f.addU8(save_tile->getY() & 0xFF);
-
-				if (save_tile->isHouseTile()) {
-					f.addU32(save_tile->getHouseID());
-				}
-
-				if (save_tile->getMapFlags()) {
-					f.addByte(OTBM_ATTR_TILE_FLAGS);
-					f.addU32(save_tile->getMapFlags());
-				}
-
-				if (save_tile->ground) {
-					Item* ground = save_tile->ground;
-					if (ground->isMetaItem()) {
-						// Do nothing, we don't save metaitems...
-					} else if (ground->hasBorderEquivalent()) {
-						bool found = false;
-						for (Item* item : save_tile->items) {
-							if (item->getGroundEquivalent() == ground->getID()) {
-								// Do nothing
-								// Found equivalent
-								found = true;
-								break;
-							}
-						}
-
-						if (!found) {
-							ground->serializeItemNode_OTBM(self, f);
-						}
-					} else if (ground->isComplex()) {
-						ground->serializeItemNode_OTBM(self, f);
-					} else {
-						f.addByte(OTBM_ATTR_ITEM);
-						ground->serializeItemCompact_OTBM(self, f);
-					}
-				}
-
-				for (Item* item : save_tile->items) {
-					if (!item->isMetaItem()) {
-						item->serializeItemNode_OTBM(self, f);
-					}
-				}
-
-				if (save_tile->hasZone()) {
-					f.addNode(OTBM_TILE_ZONE);
-					f.addU16(save_tile->zones.size());
-					for (const auto& zoneId : save_tile->zones) {
-						f.addU16(zoneId);
-					}
-					f.endNode();
-				}
-
-				f.endNode();
-				++map_iterator;
-			}
-
-			// Only close the last node if one has actually been created
-			if (!first) {
-				f.endNode();
-			}
-
-			f.addNode(OTBM_TOWNS);
-			for (const auto& townEntry : map.towns) {
-				Town* town = townEntry.second;
-				const Position& townPosition = town->getTemplePosition();
-				f.addNode(OTBM_TOWN);
-				f.addU32(town->getID());
-				f.addString(town->getName());
-				f.addU16(townPosition.x);
-				f.addU16(townPosition.y);
-				f.addU8(townPosition.z);
-				f.endNode();
-			}
-			f.endNode();
-
-			bool supportWaypoints = version.otbm >= MAP_OTBM_3;
-			if (supportWaypoints || map.waypoints.waypoints.size() > 0) {
-				if (!supportWaypoints) {
-					waypointsWarning = true;
-				}
-
-				f.addNode(OTBM_WAYPOINTS);
-				for (const auto& waypointEntry : map.waypoints) {
-					Waypoint* waypoint = waypointEntry.second;
-					f.addNode(OTBM_WAYPOINT);
-					f.addString(waypoint->name);
-					f.addU16(waypoint->pos.x);
-					f.addU16(waypoint->pos.y);
-					f.addU8(waypoint->pos.z);
-					f.endNode();
-				}
-				f.endNode();
-			}
+			writeWaypoints(map, f, waypointsWarning);
 		}
 		f.endNode();
 	}

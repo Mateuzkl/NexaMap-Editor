@@ -145,6 +145,9 @@ protected:
 	void readTileArea(BinaryNode* mapNode, Map& map);
 	void readTowns(BinaryNode* mapNode, Map& map);
 	void readWaypoints(BinaryNode* mapNode, Map& map);
+	void writeTiles(Map& map, NodeFileWriteHandle& f);
+	void writeTowns(Map& map, NodeFileWriteHandle& f);
+	void writeWaypoints(Map& map, NodeFileWriteHandle& f, bool& waypointsWarning);
 	bool loadSpawns(Map& map, const FileName& dir);
 	bool loadSpawns(Map& map, pugi::xml_document& doc);
 	bool loadHouses(Map& map, const FileName& dir);
