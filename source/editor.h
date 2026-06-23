@@ -67,7 +67,7 @@ public: // Functions
 	wxString getLoaderError() const {
 		return map.getError();
 	}
-	bool importMap(FileName filename, int import_x_offset, int import_y_offset, ImportType house_import_type, ImportType spawn_import_type);
+	bool importMap(FileName filename, int import_x_offset, int import_y_offset, int import_z_offset, ImportType house_import_type, ImportType spawn_import_type);
 
 	// Adds an action to the action queue (this allows the user to undo the action)
 	// Invalidates the action pointer

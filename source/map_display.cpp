@@ -80,6 +80,7 @@ EVT_MENU(MAP_POPUP_MENU_COPY_NAME, MapCanvas::OnCopyName)
 // ----
 EVT_MENU(MAP_POPUP_MENU_ROTATE, MapCanvas::OnRotateItem)
 EVT_MENU(MAP_POPUP_MENU_GOTO, MapCanvas::OnGotoDestination)
+EVT_MENU(MAP_POPUP_MENU_COPY_DESTINATION, MapCanvas::OnCopyDestination)
 EVT_MENU(MAP_POPUP_MENU_SWITCH_DOOR, MapCanvas::OnSwitchDoor)
 // ----
 EVT_MENU(MAP_POPUP_MENU_SELECT_RAW_BRUSH, MapCanvas::OnSelectRAWBrush)
@@ -2015,6 +2016,43 @@ void MapCanvas::OnGotoDestination(wxCommandEvent& WXUNUSED(event)) {
 	}
 }
 
+void MapCanvas::OnCopyDestination(wxCommandEvent& WXUNUSED(event)) {
+	Tile* tile = editor.selection.getSelectedTile();
+	ItemVector selected_items = tile->getSelectedItems();
+	ASSERT(selected_items.size() > 0);
+	Teleport* teleport = dynamic_cast<Teleport*>(selected_items.front());
+	if (teleport) {
+		const Position& destination = teleport->getDestination();
+
+		std::ostringstream clip;
+		switch (g_settings.getInteger(Config::COPY_POSITION_FORMAT)) {
+			case 0:
+				clip << "{x = " << destination.x << ", y = " << destination.y << ", z = " << destination.z << "}";
+				break;
+			case 1:
+				clip << "{\"x\":" << destination.x << ",\"y\":" << destination.y << ",\"z\":" << destination.z << "}";
+				break;
+			case 2:
+				clip << destination.x << ", " << destination.y << ", " << destination.z;
+				break;
+			case 3:
+				clip << "(" << destination.x << ", " << destination.y << ", " << destination.z << ")";
+				break;
+			case 4:
+				clip << "Position(" << destination.x << ", " << destination.y << ", " << destination.z << ")";
+				break;
+		}
+
+		if (wxTheClipboard->Open()) {
+			wxTextDataObject* obj = new wxTextDataObject();
+			obj->SetText(wxstr(clip.str()));
+			wxTheClipboard->SetData(obj);
+
+			wxTheClipboard->Close();
+		}
+	}
+}
+
 void MapCanvas::OnSwitchDoor(wxCommandEvent& WXUNUSED(event)) {
 	Tile* tile = editor.selection.getSelectedTile();
 
@@ -2488,6 +2526,7 @@ void MapPopupMenu::Update() {
 
 					if (teleport && teleport->hasDestination()) {
 						Append(MAP_POPUP_MENU_GOTO, "&Go To Destination", "Go to the destination of this teleport");
+						Append(MAP_POPUP_MENU_COPY_DESTINATION, "Copy &Destination", "Copy the destination position of this teleport");
 					}
 
 					if (topSelectedItem->isDoor()) {
