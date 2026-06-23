@@ -523,7 +523,6 @@ uint8_t Tile::getMiniMapColor() const {
 	for (ItemVector::const_reverse_iterator item_iter = items.rbegin(); item_iter != items.rend(); ++item_iter) {
 		if ((*item_iter)->getMiniMapColor()) {
 			return (*item_iter)->getMiniMapColor();
-			break;
 		}
 	}
 

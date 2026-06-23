@@ -656,6 +656,186 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	return true;
 }
 
+uint8_t GraphicManager::normalizeSpriteFlag(uint8_t flag) const {
+	if (dat_format >= DAT_FORMAT_1010) {
+		/* In 10.10+ all attributes from 16 and up were
+		 * incremented by 1 to make space for 16 as
+		 * "No Movement Animation" flag.
+		 */
+		if (flag == 16) {
+			flag = DatFlagNoMoveAnimation;
+		} else if (flag > 16) {
+			flag -= 1;
+		}
+	} else if (dat_format >= DAT_FORMAT_86) {
+		/* Default attribute values follow
+		 * the format of 8.6-9.86.
+		 * Therefore no changes here.
+		 */
+	} else if (dat_format >= DAT_FORMAT_78) {
+		/* In 7.80-8.54 all attributes from 8 and higher were
+		 * incremented by 1 to make space for 8 as
+		 * "Item Charges" flag.
+		 */
+		if (flag == 8) {
+			flag = DatFlagChargeable;
+		} else if (flag > 8) {
+			flag -= 1;
+		}
+	} else if (dat_format >= DAT_FORMAT_755) {
+		/* In 7.55-7.72 attributes 23 is "Floor Change". */
+		if (flag == 23) {
+			flag = DatFlagFloorChange;
+		}
+	} else if (dat_format >= DAT_FORMAT_74) {
+		/* In 7.4-7.5 attribute "Ground Border" did not exist
+		 * attributes 1-15 have to be adjusted.
+		 * Several other changes in the format.
+		 */
+		if (flag > 0 && flag <= 15) {
+			flag += 1;
+		} else if (flag == 16) {
+			flag = DatFlagLight;
+		} else if (flag == 17) {
+			flag = DatFlagFloorChange;
+		} else if (flag == 18) {
+			flag = DatFlagFullGround;
+		} else if (flag == 19) {
+			flag = DatFlagElevation;
+		} else if (flag == 20) {
+			flag = DatFlagDisplacement;
+		} else if (flag == 22) {
+			flag = DatFlagMinimapColor;
+		} else if (flag == 23) {
+			flag = DatFlagRotateable;
+		} else if (flag == 24) {
+			flag = DatFlagLyingCorpse;
+		} else if (flag == 25) {
+			flag = DatFlagHangable;
+		} else if (flag == 26) {
+			flag = DatFlagHookSouth;
+		} else if (flag == 27) {
+			flag = DatFlagHookEast;
+		} else if (flag == 28) {
+			flag = DatFlagAnimateAlways;
+		}
+
+		/* "Multi Use" and "Force Use" are swapped */
+		if (flag == DatFlagMultiUse) {
+			flag = DatFlagForceUse;
+		} else if (flag == DatFlagForceUse) {
+			flag = DatFlagMultiUse;
+		}
+	}
+	return flag;
+}
+
+void GraphicManager::readSpriteFlagData(uint8_t flag, uint8_t prev_flag, FileReadHandle& file, GameSprite* sType, wxArrayString& warnings) {
+	switch (flag) {
+		case DatFlagGroundBorder:
+		case DatFlagOnBottom:
+		case DatFlagOnTop:
+		case DatFlagContainer:
+		case DatFlagStackable:
+		case DatFlagForceUse:
+		case DatFlagMultiUse:
+		case DatFlagFluidContainer:
+		case DatFlagSplash:
+		case DatFlagNotWalkable:
+		case DatFlagNotMoveable:
+		case DatFlagBlockProjectile:
+		case DatFlagNotPathable:
+		case DatFlagPickupable:
+		case DatFlagHangable:
+		case DatFlagHookSouth:
+		case DatFlagHookEast:
+		case DatFlagRotateable:
+		case DatFlagDontHide:
+		case DatFlagTranslucent:
+		case DatFlagLyingCorpse:
+		case DatFlagAnimateAlways:
+		case DatFlagFullGround:
+		case DatFlagLook:
+		case DatFlagWrappable:
+		case DatFlagUnwrappable:
+		case DatFlagTopEffect:
+		case DatFlagFloorChange:
+		case DatFlagNoMoveAnimation:
+		case DatFlagChargeable:
+			break;
+
+		case DatFlagGround: {
+			uint16_t speed;
+			file.getU16(speed);
+			sType->ground_speed = speed;
+			break;
+		}
+
+		case DatFlagWritable:
+		case DatFlagWritableOnce:
+		case DatFlagCloth:
+		case DatFlagLensHelp:
+		case DatFlagUsable:
+			file.skip(2);
+			break;
+
+		case DatFlagLight: {
+			uint16_t intensity;
+			uint16_t color;
+			file.getU16(intensity);
+			file.getU16(color);
+			sType->has_light = true;
+			sType->light = SpriteLight { static_cast<uint8_t>(intensity), static_cast<uint8_t>(color) };
+			break;
+		}
+
+		case DatFlagDisplacement: {
+			if (dat_format >= DAT_FORMAT_755) {
+				uint16_t offset_x;
+				uint16_t offset_y;
+				file.getU16(offset_x);
+				file.getU16(offset_y);
+
+				sType->drawoffset_x = offset_x;
+				sType->drawoffset_y = offset_y;
+			} else {
+				sType->drawoffset_x = 8;
+				sType->drawoffset_y = 8;
+			}
+			break;
+		}
+
+		case DatFlagElevation: {
+			uint16_t draw_height;
+			file.getU16(draw_height);
+			sType->draw_height = draw_height;
+			break;
+		}
+
+		case DatFlagMinimapColor: {
+			uint16_t minimap_color;
+			file.getU16(minimap_color);
+			sType->minimap_color = minimap_color;
+			break;
+		}
+
+		case DatFlagMarket: {
+			file.skip(6);
+			std::string marketName;
+			file.getString(marketName);
+			file.skip(4);
+			break;
+		}
+
+		default: {
+			wxString err;
+			err << "Metadata: Unknown flag: " << i2ws(flag) << ". Previous flag: " << i2ws(prev_flag) << ".";
+			warnings.push_back(err);
+			break;
+		}
+	}
+}
+
 bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* sType, wxString& error, wxArrayString& warnings) {
 	uint8_t prev_flag = 0;
 	uint8_t flag = DatFlagLast;
@@ -667,180 +847,9 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 		if (flag == DatFlagLast) {
 			return true;
 		}
-		if (dat_format >= DAT_FORMAT_1010) {
-			/* In 10.10+ all attributes from 16 and up were
-			 * incremented by 1 to make space for 16 as
-			 * "No Movement Animation" flag.
-			 */
-			if (flag == 16) {
-				flag = DatFlagNoMoveAnimation;
-			} else if (flag > 16) {
-				flag -= 1;
-			}
-		} else if (dat_format >= DAT_FORMAT_86) {
-			/* Default attribute values follow
-			 * the format of 8.6-9.86.
-			 * Therefore no changes here.
-			 */
-		} else if (dat_format >= DAT_FORMAT_78) {
-			/* In 7.80-8.54 all attributes from 8 and higher were
-			 * incremented by 1 to make space for 8 as
-			 * "Item Charges" flag.
-			 */
-			if (flag == 8) {
-				flag = DatFlagChargeable;
-			} else if (flag > 8) {
-				flag -= 1;
-			}
-		} else if (dat_format >= DAT_FORMAT_755) {
-			/* In 7.55-7.72 attributes 23 is "Floor Change". */
-			if (flag == 23) {
-				flag = DatFlagFloorChange;
-			}
-		} else if (dat_format >= DAT_FORMAT_74) {
-			/* In 7.4-7.5 attribute "Ground Border" did not exist
-			 * attributes 1-15 have to be adjusted.
-			 * Several other changes in the format.
-			 */
-			if (flag > 0 && flag <= 15) {
-				flag += 1;
-			} else if (flag == 16) {
-				flag = DatFlagLight;
-			} else if (flag == 17) {
-				flag = DatFlagFloorChange;
-			} else if (flag == 18) {
-				flag = DatFlagFullGround;
-			} else if (flag == 19) {
-				flag = DatFlagElevation;
-			} else if (flag == 20) {
-				flag = DatFlagDisplacement;
-			} else if (flag == 22) {
-				flag = DatFlagMinimapColor;
-			} else if (flag == 23) {
-				flag = DatFlagRotateable;
-			} else if (flag == 24) {
-				flag = DatFlagLyingCorpse;
-			} else if (flag == 25) {
-				flag = DatFlagHangable;
-			} else if (flag == 26) {
-				flag = DatFlagHookSouth;
-			} else if (flag == 27) {
-				flag = DatFlagHookEast;
-			} else if (flag == 28) {
-				flag = DatFlagAnimateAlways;
-			}
+		flag = normalizeSpriteFlag(flag);
 
-			/* "Multi Use" and "Force Use" are swapped */
-			if (flag == DatFlagMultiUse) {
-				flag = DatFlagForceUse;
-			} else if (flag == DatFlagForceUse) {
-				flag = DatFlagMultiUse;
-			}
-		}
-
-		switch (flag) {
-			case DatFlagGroundBorder:
-			case DatFlagOnBottom:
-			case DatFlagOnTop:
-			case DatFlagContainer:
-			case DatFlagStackable:
-			case DatFlagForceUse:
-			case DatFlagMultiUse:
-			case DatFlagFluidContainer:
-			case DatFlagSplash:
-			case DatFlagNotWalkable:
-			case DatFlagNotMoveable:
-			case DatFlagBlockProjectile:
-			case DatFlagNotPathable:
-			case DatFlagPickupable:
-			case DatFlagHangable:
-			case DatFlagHookSouth:
-			case DatFlagHookEast:
-			case DatFlagRotateable:
-			case DatFlagDontHide:
-			case DatFlagTranslucent:
-			case DatFlagLyingCorpse:
-			case DatFlagAnimateAlways:
-			case DatFlagFullGround:
-			case DatFlagLook:
-			case DatFlagWrappable:
-			case DatFlagUnwrappable:
-			case DatFlagTopEffect:
-			case DatFlagFloorChange:
-			case DatFlagNoMoveAnimation:
-			case DatFlagChargeable:
-				break;
-
-			case DatFlagGround: {
-				uint16_t speed;
-				file.getU16(speed);
-				sType->ground_speed = speed;
-				break;
-			}
-
-			case DatFlagWritable:
-			case DatFlagWritableOnce:
-			case DatFlagCloth:
-			case DatFlagLensHelp:
-			case DatFlagUsable:
-				file.skip(2);
-				break;
-
-			case DatFlagLight: {
-				uint16_t intensity;
-				uint16_t color;
-				file.getU16(intensity);
-				file.getU16(color);
-				sType->has_light = true;
-				sType->light = SpriteLight { static_cast<uint8_t>(intensity), static_cast<uint8_t>(color) };
-				break;
-			}
-
-			case DatFlagDisplacement: {
-				if (dat_format >= DAT_FORMAT_755) {
-					uint16_t offset_x;
-					uint16_t offset_y;
-					file.getU16(offset_x);
-					file.getU16(offset_y);
-
-					sType->drawoffset_x = offset_x;
-					sType->drawoffset_y = offset_y;
-				} else {
-					sType->drawoffset_x = 8;
-					sType->drawoffset_y = 8;
-				}
-				break;
-			}
-
-			case DatFlagElevation: {
-				uint16_t draw_height;
-				file.getU16(draw_height);
-				sType->draw_height = draw_height;
-				break;
-			}
-
-			case DatFlagMinimapColor: {
-				uint16_t minimap_color;
-				file.getU16(minimap_color);
-				sType->minimap_color = minimap_color;
-				break;
-			}
-
-			case DatFlagMarket: {
-				file.skip(6);
-				std::string marketName;
-				file.getString(marketName);
-				file.skip(4);
-				break;
-			}
-
-			default: {
-				wxString err;
-				err << "Metadata: Unknown flag: " << i2ws(flag) << ". Previous flag: " << i2ws(prev_flag) << ".";
-				warnings.push_back(err);
-				break;
-			}
-		}
+		readSpriteFlagData(flag, prev_flag, file, sType, warnings);
 	}
 
 	return true;

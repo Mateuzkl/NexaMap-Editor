@@ -80,7 +80,7 @@ public:
 
 public:
 	std::string name;
-	int16_t previousId;
+	int16_t previousId = 0;
 	TilesetCategoryArray categories;
 
 protected:

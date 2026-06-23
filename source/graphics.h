@@ -337,6 +337,8 @@ public:
 	bool loadOTFI(const FileName& filename, wxString& error, wxArrayString& warnings);
 	bool loadSpriteMetadata(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* sType, wxString& error, wxArrayString& warnings);
+	uint8_t normalizeSpriteFlag(uint8_t flag) const;
+	void readSpriteFlagData(uint8_t flag, uint8_t prev_flag, FileReadHandle& file, GameSprite* sType, wxArrayString& warnings);
 	bool loadSpriteData(const FileName& datafile, wxString& error, wxArrayString& warnings);
 
 	// Cleans old & unused textures according to config settings

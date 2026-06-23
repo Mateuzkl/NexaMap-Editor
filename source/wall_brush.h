@@ -59,6 +59,8 @@ public:
 	static uint32_t half_border_types[16];
 
 protected:
+	bool parseWallItems(pugi::xml_node childNode, uint32_t alignment, wxArrayString& warnings);
+
 	struct WallType {
 		int chance;
 		uint16_t id;

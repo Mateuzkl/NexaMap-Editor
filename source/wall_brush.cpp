@@ -35,6 +35,152 @@ WallBrush::~WallBrush() {
 	////
 }
 
+bool WallBrush::parseWallItems(pugi::xml_node childNode, uint32_t alignment, wxArrayString& warnings) {
+	for (pugi::xml_node subChildNode = childNode.first_child(); subChildNode; subChildNode = subChildNode.next_sibling()) {
+		const std::string& subChildName = as_lower_str(subChildNode.name());
+		if (subChildName == "item") {
+			uint16_t id = subChildNode.attribute("id").as_ushort();
+			if (id == 0) {
+				warnings.push_back("Could not read id tag of item node\n");
+				break;
+			}
+
+			ItemType& it = g_items[id];
+			if (it.id == 0) {
+				warnings.push_back("There is no itemtype with id " + std::to_string(id));
+				return false;
+			} else if (it.brush && it.brush != this) {
+				warnings.push_back("Itemtype id " + std::to_string(id) + " already has a brush");
+				return false;
+			}
+
+			it.isWall = true;
+			it.brush = this;
+			it.border_alignment = ::BorderType(alignment);
+
+			WallType wt;
+			wt.id = id;
+
+			wall_items[alignment].total_chance += subChildNode.attribute("chance").as_int();
+			wt.chance = wall_items[alignment].total_chance;
+
+			wall_items[alignment].items.push_back(wt);
+		} else if (subChildName == "door") {
+			uint16_t id = subChildNode.attribute("id").as_ushort();
+			if (id == 0) {
+				warnings.push_back("Could not read id tag of door node\n");
+				break;
+			}
+
+			const std::string& type = subChildNode.attribute("type").as_string();
+			if (type.empty()) {
+				warnings.push_back("Could not read type tag of door node\n");
+				continue;
+			}
+
+			bool isOpen;
+			pugi::xml_attribute openAttribute = subChildNode.attribute("open");
+			if (openAttribute) {
+				isOpen = openAttribute.as_bool();
+			} else {
+				isOpen = true;
+				if (type != "window" && type != "any window" && type != "hatch window") {
+					warnings.push_back("Could not read open tag of door node\n");
+					break;
+				}
+			}
+
+			// "locked" checkbox - spawn locked doors
+			bool isLocked;
+			pugi::xml_attribute lockedAttribute = subChildNode.attribute("locked");
+			if (lockedAttribute) {
+				isLocked = lockedAttribute.as_bool();
+			} else {
+				isLocked = false;
+			}
+
+			ItemType& it = g_items[id];
+			if (it.id == 0) {
+				warnings.push_back("There is no itemtype with id " + std::to_string(id));
+				return false;
+			} else if (it.brush && it.brush != this) {
+				warnings.push_back("Itemtype id " + std::to_string(id) + " already has a brush");
+				return false;
+			}
+
+			it.isWall = true;
+			it.brush = this;
+			it.isBrushDoor = true;
+			it.wall_hate_me = subChildNode.attribute("hate").as_bool();
+			it.isOpen = isOpen;
+			it.isLocked = isLocked;
+			it.border_alignment = ::BorderType(alignment);
+
+			DoorType dt;
+			dt.locked = isLocked;
+
+			bool all_windows = false;
+			bool all_doors = false;
+			if (type == "normal") {
+				dt.type = WALL_DOOR_NORMAL;
+			} else if (type == "normal_alt") {
+				dt.type = WALL_DOOR_NORMAL_ALT;
+			} else if (type == "locked") {
+				dt.type = WALL_DOOR_LOCKED;
+			} else if (type == "quest") {
+				dt.type = WALL_DOOR_QUEST;
+			} else if (type == "magic") {
+				dt.type = WALL_DOOR_MAGIC;
+			} else if (type == "archway") {
+				dt.type = WALL_ARCHWAY;
+			} else if (type == "window") {
+				dt.type = WALL_WINDOW;
+			} else if (type == "hatch_window" || type == "hatch window") {
+				dt.type = WALL_HATCH_WINDOW;
+			} else if (type == "any door") {
+				all_doors = true;
+			} else if (type == "any window") {
+				all_windows = true;
+			} else if (type == "any") {
+				all_windows = true;
+				all_doors = true;
+			} else {
+				warnings.push_back("Unknown door type '" + wxstr(type) + "'\n");
+				break;
+			}
+
+			dt.id = id;
+
+			if (all_doors) {
+				dt.type = WALL_DOOR_NORMAL;
+				door_items[alignment].push_back(dt);
+				dt.type = WALL_DOOR_NORMAL_ALT;
+				door_items[alignment].push_back(dt);
+				dt.type = WALL_DOOR_LOCKED;
+				door_items[alignment].push_back(dt);
+				dt.type = WALL_DOOR_QUEST;
+				door_items[alignment].push_back(dt);
+				dt.type = WALL_DOOR_MAGIC;
+				door_items[alignment].push_back(dt);
+				dt.type = WALL_ARCHWAY;
+				door_items[alignment].push_back(dt);
+			}
+
+			if (all_windows) {
+				dt.type = WALL_WINDOW;
+				door_items[alignment].push_back(dt);
+				dt.type = WALL_HATCH_WINDOW;
+				door_items[alignment].push_back(dt);
+			}
+
+			if (!all_doors && !all_windows) {
+				door_items[alignment].push_back(dt);
+			}
+		}
+	}
+	return true;
+}
+
 bool WallBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 	pugi::xml_attribute attribute;
 	if ((attribute = node.attribute("lookid"))) {
@@ -96,147 +242,8 @@ bool WallBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				continue;
 			}
 
-			for (pugi::xml_node subChildNode = childNode.first_child(); subChildNode; subChildNode = subChildNode.next_sibling()) {
-				const std::string& subChildName = as_lower_str(subChildNode.name());
-				if (subChildName == "item") {
-					uint16_t id = subChildNode.attribute("id").as_ushort();
-					if (id == 0) {
-						warnings.push_back("Could not read id tag of item node\n");
-						break;
-					}
-
-					ItemType& it = g_items[id];
-					if (it.id == 0) {
-						warnings.push_back("There is no itemtype with id " + std::to_string(id));
-						return false;
-					} else if (it.brush && it.brush != this) {
-						warnings.push_back("Itemtype id " + std::to_string(id) + " already has a brush");
-						return false;
-					}
-
-					it.isWall = true;
-					it.brush = this;
-					it.border_alignment = ::BorderType(alignment);
-
-					WallType wt;
-					wt.id = id;
-
-					wall_items[alignment].total_chance += subChildNode.attribute("chance").as_int();
-					wt.chance = wall_items[alignment].total_chance;
-
-					wall_items[alignment].items.push_back(wt);
-				} else if (subChildName == "door") {
-					uint16_t id = subChildNode.attribute("id").as_ushort();
-					if (id == 0) {
-						warnings.push_back("Could not read id tag of door node\n");
-						break;
-					}
-
-					const std::string& type = subChildNode.attribute("type").as_string();
-					if (type.empty()) {
-						warnings.push_back("Could not read type tag of door node\n");
-						continue;
-					}
-
-					bool isOpen;
-					pugi::xml_attribute openAttribute = subChildNode.attribute("open");
-					if (openAttribute) {
-						isOpen = openAttribute.as_bool();
-					} else {
-						isOpen = true;
-						if (type != "window" && type != "any window" && type != "hatch window") {
-							warnings.push_back("Could not read open tag of door node\n");
-							break;
-						}
-					}
-
-					// "locked" checkbox - spawn locked doors
-					bool isLocked;
-					pugi::xml_attribute lockedAttribute = subChildNode.attribute("locked");
-					if (lockedAttribute) {
-						isLocked = lockedAttribute.as_bool();
-					} else {
-						isLocked = false;
-					}
-
-					ItemType& it = g_items[id];
-					if (it.id == 0) {
-						warnings.push_back("There is no itemtype with id " + std::to_string(id));
-						return false;
-					} else if (it.brush && it.brush != this) {
-						warnings.push_back("Itemtype id " + std::to_string(id) + " already has a brush");
-						return false;
-					}
-
-					it.isWall = true;
-					it.brush = this;
-					it.isBrushDoor = true;
-					it.wall_hate_me = subChildNode.attribute("hate").as_bool();
-					it.isOpen = isOpen;
-					it.isLocked = isLocked;
-					it.border_alignment = ::BorderType(alignment);
-
-					DoorType dt;
-					dt.locked = isLocked;
-
-					bool all_windows = false;
-					bool all_doors = false;
-					if (type == "normal") {
-						dt.type = WALL_DOOR_NORMAL;
-					} else if (type == "normal_alt") {
-						dt.type = WALL_DOOR_NORMAL_ALT;
-					} else if (type == "locked") {
-						dt.type = WALL_DOOR_LOCKED;
-					} else if (type == "quest") {
-						dt.type = WALL_DOOR_QUEST;
-					} else if (type == "magic") {
-						dt.type = WALL_DOOR_MAGIC;
-					} else if (type == "archway") {
-						dt.type = WALL_ARCHWAY;
-					} else if (type == "window") {
-						dt.type = WALL_WINDOW;
-					} else if (type == "hatch_window" || type == "hatch window") {
-						dt.type = WALL_HATCH_WINDOW;
-					} else if (type == "any door") {
-						all_doors = true;
-					} else if (type == "any window") {
-						all_windows = true;
-					} else if (type == "any") {
-						all_windows = true;
-						all_doors = true;
-					} else {
-						warnings.push_back("Unknown door type '" + wxstr(type) + "'\n");
-						break;
-					}
-
-					dt.id = id;
-
-					if (all_doors) {
-						dt.type = WALL_DOOR_NORMAL;
-						door_items[alignment].push_back(dt);
-						dt.type = WALL_DOOR_NORMAL_ALT;
-						door_items[alignment].push_back(dt);
-						dt.type = WALL_DOOR_LOCKED;
-						door_items[alignment].push_back(dt);
-						dt.type = WALL_DOOR_QUEST;
-						door_items[alignment].push_back(dt);
-						dt.type = WALL_DOOR_MAGIC;
-						door_items[alignment].push_back(dt);
-						dt.type = WALL_ARCHWAY;
-						door_items[alignment].push_back(dt);
-					}
-
-					if (all_windows) {
-						dt.type = WALL_WINDOW;
-						door_items[alignment].push_back(dt);
-						dt.type = WALL_HATCH_WINDOW;
-						door_items[alignment].push_back(dt);
-					}
-
-					if (!all_doors && !all_windows) {
-						door_items[alignment].push_back(dt);
-					}
-				}
+			if (!parseWallItems(childNode, alignment, warnings)) {
+				return false;
 			}
 		} else if (childName == "friend") {
 			const std::string& name = childNode.attribute("name").as_string();
