@@ -269,7 +269,7 @@ struct writeableBlock3 {
 
 class ItemType {
 private:
-	ItemType(const ItemType&) { }
+	ItemType(const ItemType&) = delete;
 
 public:
 	ItemType();
@@ -452,6 +452,8 @@ protected:
 	bool loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 	bool loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 	bool loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
+
+	bool readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxString& error, wxArrayString& warnings);
 
 protected:
 	// Count of GameSprite types

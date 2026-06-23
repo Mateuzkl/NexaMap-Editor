@@ -142,6 +142,159 @@ GroundBrush::~GroundBrush() {
 	borders.clear();
 }
 
+bool GroundBrush::parseBorderSpecificCases(pugi::xml_node childNode, BorderBlock* borderBlock, wxArrayString& warnings) {
+	pugi::xml_attribute attribute;
+	for (pugi::xml_node subChildNode = childNode.first_child(); subChildNode; subChildNode = subChildNode.next_sibling()) {
+		if (as_lower_str(subChildNode.name()) != "specific") {
+			continue;
+		}
+
+		SpecificCaseBlock* specificCaseBlock = nullptr;
+		for (pugi::xml_node superChildNode = subChildNode.first_child(); superChildNode; superChildNode = superChildNode.next_sibling()) {
+			const std::string& superChildName = as_lower_str(superChildNode.name());
+			if (superChildName == "conditions") {
+				for (pugi::xml_node conditionChild = superChildNode.first_child(); conditionChild; conditionChild = conditionChild.next_sibling()) {
+					const std::string& conditionName = as_lower_str(conditionChild.name());
+					if (conditionName == "match_border") {
+						if (!(attribute = conditionChild.attribute("id"))) {
+							continue;
+						}
+
+						const int32_t border_id = attribute.as_int();
+						if (!(attribute = conditionChild.attribute("edge"))) {
+							continue;
+						}
+
+						const int32_t edge_id = AutoBorder::edgeNameToID(attribute.as_string());
+						auto it = g_brushes.borders.find(border_id);
+						if (it == g_brushes.borders.end()) {
+							warnings.push_back("Unknown border id in specific case match block " + std::to_string(border_id));
+							continue;
+						}
+
+						const AutoBorder* autoBorder = it->second;
+						ASSERT(autoBorder != nullptr);
+
+						uint32_t match_itemid = autoBorder->tiles[edge_id];
+						if (!specificCaseBlock) {
+							specificCaseBlock = newd SpecificCaseBlock();
+						}
+						specificCaseBlock->items_to_match.push_back(match_itemid);
+					} else if (conditionName == "match_group") {
+						if (!(attribute = conditionChild.attribute("group"))) {
+							continue;
+						}
+
+						const uint16_t group = attribute.as_ushort();
+						if (!(attribute = conditionChild.attribute("edge"))) {
+							continue;
+						}
+
+						const int32_t edge_id = AutoBorder::edgeNameToID(attribute.as_string());
+						if (!specificCaseBlock) {
+							specificCaseBlock = newd SpecificCaseBlock();
+						}
+
+						specificCaseBlock->match_group = group;
+						specificCaseBlock->group_match_alignment = ::BorderType(edge_id);
+						specificCaseBlock->items_to_match.push_back(group);
+					} else if (conditionName == "match_item") {
+						if (!(attribute = conditionChild.attribute("id"))) {
+							continue;
+						}
+
+						int32_t match_itemid = attribute.as_int();
+						if (!specificCaseBlock) {
+							specificCaseBlock = newd SpecificCaseBlock();
+						}
+
+						specificCaseBlock->match_group = 0;
+						specificCaseBlock->items_to_match.push_back(match_itemid);
+					}
+				}
+			} else if (superChildName == "actions") {
+				for (pugi::xml_node actionChild = superChildNode.first_child(); actionChild; actionChild = actionChild.next_sibling()) {
+					const std::string& actionName = as_lower_str(actionChild.name());
+					if (actionName == "replace_border") {
+						if (!(attribute = actionChild.attribute("id"))) {
+							continue;
+						}
+
+						const int32_t border_id = attribute.as_int();
+						if (!(attribute = actionChild.attribute("edge"))) {
+							continue;
+						}
+
+						const int32_t edge_id = AutoBorder::edgeNameToID(attribute.as_string());
+						if (!(attribute = actionChild.attribute("with"))) {
+							continue;
+						}
+
+						const int32_t with_id = attribute.as_int();
+						auto itt = g_brushes.borders.find(border_id);
+						if (itt == g_brushes.borders.end()) {
+							warnings.push_back("Unknown border id in specific case match block " + std::to_string(border_id));
+							continue;
+						}
+
+						const AutoBorder* autoBorder = itt->second;
+						ASSERT(autoBorder != nullptr);
+
+						ItemType& it = g_items[with_id];
+						if (it.id == 0) {
+							return false;
+						}
+
+						it.isBorder = true;
+						if (!specificCaseBlock) {
+							specificCaseBlock = newd SpecificCaseBlock();
+						}
+
+						specificCaseBlock->to_replace_id = autoBorder->tiles[edge_id];
+						specificCaseBlock->with_id = with_id;
+					} else if (actionName == "replace_item") {
+						if (!(attribute = actionChild.attribute("id"))) {
+							continue;
+						}
+
+						const int32_t to_replace_id = attribute.as_int();
+						if (!(attribute = actionChild.attribute("with"))) {
+							continue;
+						}
+
+						const int32_t with_id = attribute.as_int();
+						ItemType& it = g_items[with_id];
+						if (it.id == 0) {
+							return false;
+						}
+
+						it.isBorder = true;
+						if (!specificCaseBlock) {
+							specificCaseBlock = newd SpecificCaseBlock();
+						}
+
+						specificCaseBlock->to_replace_id = to_replace_id;
+						specificCaseBlock->with_id = with_id;
+					} else if (actionName == "delete_borders") {
+						if (!specificCaseBlock) {
+							specificCaseBlock = newd SpecificCaseBlock();
+						}
+						specificCaseBlock->delete_all = true;
+					}
+				}
+			}
+		}
+		if (specificCaseBlock) {
+			if (attribute = subChildNode.attribute("keep_border")) {
+				specificCaseBlock->keepBorder = attribute.as_bool();
+			}
+
+			borderBlock->specific_cases.push_back(specificCaseBlock);
+		}
+	}
+	return true;
+}
+
 bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 	pugi::xml_attribute attribute;
 	if ((attribute = node.attribute("lookid"))) {
@@ -323,153 +476,8 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				}
 			}
 
-			for (pugi::xml_node subChildNode = childNode.first_child(); subChildNode; subChildNode = subChildNode.next_sibling()) {
-				if (as_lower_str(subChildNode.name()) != "specific") {
-					continue;
-				}
-
-				SpecificCaseBlock* specificCaseBlock = nullptr;
-				for (pugi::xml_node superChildNode = subChildNode.first_child(); superChildNode; superChildNode = superChildNode.next_sibling()) {
-					const std::string& superChildName = as_lower_str(superChildNode.name());
-					if (superChildName == "conditions") {
-						for (pugi::xml_node conditionChild = superChildNode.first_child(); conditionChild; conditionChild = conditionChild.next_sibling()) {
-							const std::string& conditionName = as_lower_str(conditionChild.name());
-							if (conditionName == "match_border") {
-								if (!(attribute = conditionChild.attribute("id"))) {
-									continue;
-								}
-
-								int32_t const border_id = attribute.as_int();
-								if (!(attribute = conditionChild.attribute("edge"))) {
-									continue;
-								}
-
-								int32_t const edge_id = AutoBorder::edgeNameToID(attribute.as_string());
-								auto it = g_brushes.borders.find(border_id);
-								if (it == g_brushes.borders.end()) {
-									warnings.push_back("Unknown border id in specific case match block " + std::to_string(border_id));
-									continue;
-								}
-
-								AutoBorder const* autoBorder = it->second;
-								ASSERT(autoBorder != nullptr);
-
-								uint32_t match_itemid = autoBorder->tiles[edge_id];
-								if (!specificCaseBlock) {
-									specificCaseBlock = newd SpecificCaseBlock();
-								}
-								specificCaseBlock->items_to_match.push_back(match_itemid);
-							} else if (conditionName == "match_group") {
-								if (!(attribute = conditionChild.attribute("group"))) {
-									continue;
-								}
-
-								uint16_t const group = attribute.as_ushort();
-								if (!(attribute = conditionChild.attribute("edge"))) {
-									continue;
-								}
-
-								int32_t const edge_id = AutoBorder::edgeNameToID(attribute.as_string());
-								if (!specificCaseBlock) {
-									specificCaseBlock = newd SpecificCaseBlock();
-								}
-
-								specificCaseBlock->match_group = group;
-								specificCaseBlock->group_match_alignment = ::BorderType(edge_id);
-								specificCaseBlock->items_to_match.push_back(group);
-							} else if (conditionName == "match_item") {
-								if (!(attribute = conditionChild.attribute("id"))) {
-									continue;
-								}
-
-								int32_t match_itemid = attribute.as_int();
-								if (!specificCaseBlock) {
-									specificCaseBlock = newd SpecificCaseBlock();
-								}
-
-								specificCaseBlock->match_group = 0;
-								specificCaseBlock->items_to_match.push_back(match_itemid);
-							}
-						}
-					} else if (superChildName == "actions") {
-						for (pugi::xml_node actionChild = superChildNode.first_child(); actionChild; actionChild = actionChild.next_sibling()) {
-							const std::string& actionName = as_lower_str(actionChild.name());
-							if (actionName == "replace_border") {
-								if (!(attribute = actionChild.attribute("id"))) {
-									continue;
-								}
-
-								int32_t const border_id = attribute.as_int();
-								if (!(attribute = actionChild.attribute("edge"))) {
-									continue;
-								}
-
-								int32_t const edge_id = AutoBorder::edgeNameToID(attribute.as_string());
-								if (!(attribute = actionChild.attribute("with"))) {
-									continue;
-								}
-
-								int32_t const with_id = attribute.as_int();
-								auto itt = g_brushes.borders.find(border_id);
-								if (itt == g_brushes.borders.end()) {
-									warnings.push_back("Unknown border id in specific case match block " + std::to_string(border_id));
-									continue;
-								}
-
-								AutoBorder const* autoBorder = itt->second;
-								ASSERT(autoBorder != nullptr);
-
-								ItemType& it = g_items[with_id];
-								if (it.id == 0) {
-									return false;
-								}
-
-								it.isBorder = true;
-								if (!specificCaseBlock) {
-									specificCaseBlock = newd SpecificCaseBlock();
-								}
-
-								specificCaseBlock->to_replace_id = autoBorder->tiles[edge_id];
-								specificCaseBlock->with_id = with_id;
-							} else if (actionName == "replace_item") {
-								if (!(attribute = actionChild.attribute("id"))) {
-									continue;
-								}
-
-								int32_t const to_replace_id = attribute.as_int();
-								if (!(attribute = actionChild.attribute("with"))) {
-									continue;
-								}
-
-								int32_t const with_id = attribute.as_int();
-								ItemType& it = g_items[with_id];
-								if (it.id == 0) {
-									return false;
-								}
-
-								it.isBorder = true;
-								if (!specificCaseBlock) {
-									specificCaseBlock = newd SpecificCaseBlock();
-								}
-
-								specificCaseBlock->to_replace_id = to_replace_id;
-								specificCaseBlock->with_id = with_id;
-							} else if (actionName == "delete_borders") {
-								if (!specificCaseBlock) {
-									specificCaseBlock = newd SpecificCaseBlock();
-								}
-								specificCaseBlock->delete_all = true;
-							}
-						}
-					}
-				}
-				if (specificCaseBlock) {
-					if (attribute = subChildNode.attribute("keep_border")) {
-						specificCaseBlock->keepBorder = attribute.as_bool();
-					}
-
-					borderBlock->specific_cases.push_back(specificCaseBlock);
-				}
+			if (!parseBorderSpecificCases(childNode, borderBlock, warnings)) {
+				return false;
 			}
 			borders.push_back(borderBlock);
 		} else if (childName == "friend") {

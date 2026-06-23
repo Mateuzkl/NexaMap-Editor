@@ -134,6 +134,202 @@ void ItemDatabase::clear() {
 	}
 }
 
+bool ItemDatabase::readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxString& error, wxArrayString& warnings) {
+	uint8_t attribute;
+	while (itemNode->getU8(attribute)) {
+		uint16_t datalen;
+		if (!itemNode->getU16(datalen)) {
+			warnings.push_back("Invalid item type property");
+			break;
+		}
+
+		switch (attribute) {
+			case ITEM_ATTR_SERVERID: {
+				if (datalen != sizeof(uint16_t)) {
+					error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
+					return false;
+				}
+				if (!itemNode->getU16(t->id)) {
+					warnings.push_back("Invalid item type property (2)");
+				}
+
+				if (max_item_id < t->id) {
+					max_item_id = t->id;
+				}
+				break;
+			}
+
+			case ITEM_ATTR_CLIENTID: {
+				if (datalen != sizeof(uint16_t)) {
+					error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
+					return false;
+				}
+
+				if (!itemNode->getU16(t->clientID)) {
+					warnings.push_back("Invalid item type property (2)");
+				}
+
+				t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
+				break;
+			}
+
+			case ITEM_ATTR_SPEED: {
+				if (datalen != sizeof(uint16_t)) {
+					error = "items.otb: Unexpected data length of speed block (Should be 2 bytes)";
+					return false;
+				}
+
+				// t->speed = itemNode->getU16();
+				if (!itemNode->skip(2)) { // Just skip two bytes, we don't need speed
+					warnings.push_back("Invalid item type property (3)");
+				}
+				break;
+			}
+
+			case ITEM_ATTR_LIGHT2: {
+				if (datalen != sizeof(lightBlock2)) {
+					warnings.push_back("items.otb: Unexpected data length of item light (2) block (Should be " + i2ws(sizeof(lightBlock2)) + " bytes)");
+					break;
+				}
+
+				if (!itemNode->skip(4)) { // Just skip two bytes, we don't need light
+					warnings.push_back("Invalid item type property (4)");
+				}
+
+				// t->lightLevel = itemNode->getU16();
+				// t->lightColor = itemNode->getU16();
+				break;
+			}
+
+			case ITEM_ATTR_TOPORDER: {
+				if (datalen != sizeof(uint8_t)) {
+					warnings.push_back("items.otb: Unexpected data length of item toporder block (Should be 1 byte)");
+					break;
+				}
+
+				uint8_t u8 = 0;
+				if (!itemNode->getU8(u8)) {
+					warnings.push_back("Invalid item type property (5)");
+				}
+
+				t->alwaysOnTopOrder = u8;
+				break;
+			}
+
+			case ITEM_ATTR_NAME: {
+				if (datalen >= 128) {
+					warnings.push_back("items.otb: Unexpected data length of item name block (Should be 128 bytes)");
+					break;
+				}
+
+				uint8_t name[128];
+				memset(&name, 0, 128);
+
+				if (!itemNode->getRAW(name, datalen)) {
+					warnings.push_back("Invalid item type property (6)");
+					break;
+				}
+				t->name = (char*)name;
+				break;
+			}
+
+			case ITEM_ATTR_DESCR: {
+				if (datalen >= 128) {
+					warnings.push_back("items.otb: Unexpected data length of item descr block (Should be 128 bytes)");
+					break;
+				}
+
+				uint8_t description[128];
+				memset(&description, 0, 128);
+
+				if (!itemNode->getRAW(description, datalen)) {
+					warnings.push_back("Invalid item type property (7)");
+					break;
+				}
+
+				t->description = (char*)description;
+				break;
+			}
+
+			case ITEM_ATTR_MAXITEMS: {
+				if (datalen != sizeof(unsigned short)) {
+					warnings.push_back("items.otb: Unexpected data length of item volume block (Should be 2 bytes)");
+					break;
+				}
+
+				if (!itemNode->getU16(t->volume)) {
+					warnings.push_back("Invalid item type property (8)");
+				}
+				break;
+			}
+
+			case ITEM_ATTR_WEIGHT: {
+				if (datalen != sizeof(double)) {
+					warnings.push_back("items.otb: Unexpected data length of item weight block (Should be 8 bytes)");
+					break;
+				}
+				uint8_t w[sizeof(double)];
+				if (!itemNode->getRAW(w, sizeof(double))) {
+					warnings.push_back("Invalid item type property (7)");
+					break;
+				}
+
+				double wi = *reinterpret_cast<double*>(&w);
+				t->weight = wi;
+				break;
+			}
+
+			case ITEM_ATTR_ROTATETO: {
+				if (datalen != sizeof(unsigned short)) {
+					warnings.push_back("items.otb: Unexpected data length of item rotateTo block (Should be 2 bytes)");
+					break;
+				}
+
+				uint16_t rotate;
+				if (!itemNode->getU16(rotate)) {
+					warnings.push_back("Invalid item type property (8)");
+					break;
+				}
+
+				t->rotateTo = rotate;
+				break;
+			}
+
+			case ITEM_ATTR_WRITEABLE3: {
+				if (datalen != sizeof(writeableBlock3)) {
+					warnings.push_back("items.otb: Unexpected data length of item toporder block (Should be 1 byte)");
+					break;
+				}
+
+				uint16_t readOnlyID;
+				uint16_t maxTextLen;
+
+				if (!itemNode->getU16(readOnlyID)) {
+					warnings.push_back("Invalid item type property (9)");
+					break;
+				}
+
+				if (!itemNode->getU16(maxTextLen)) {
+					warnings.push_back("Invalid item type property (10)");
+					break;
+				}
+
+				// t->readOnlyId = wb3->readOnlyId;
+				t->maxTextLen = maxTextLen;
+				break;
+			}
+
+			default: {
+				// skip unknown attributes
+				itemNode->skip(datalen);
+				// warnings.push_back("items.otb: Skipped unknown attribute");
+				break;
+			}
+		}
+	}
+	return true;
+}
+
 bool ItemDatabase::loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArrayString& warnings) {
 	uint8_t u8;
 
@@ -207,197 +403,8 @@ bool ItemDatabase::loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArra
 			t->canReadText = ((flags & FLAG_READABLE) == FLAG_READABLE);
 		}
 
-		uint8_t attribute;
-		while (itemNode->getU8(attribute)) {
-			uint16_t datalen;
-			if (!itemNode->getU16(datalen)) {
-				warnings.push_back("Invalid item type property");
-				break;
-			}
-
-			switch (attribute) {
-				case ITEM_ATTR_SERVERID: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
-						return false;
-					}
-					if (!itemNode->getU16(t->id)) {
-						warnings.push_back("Invalid item type property (2)");
-					}
-
-					if (max_item_id < t->id) {
-						max_item_id = t->id;
-					}
-					break;
-				}
-
-				case ITEM_ATTR_CLIENTID: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
-						return false;
-					}
-
-					if (!itemNode->getU16(t->clientID)) {
-						warnings.push_back("Invalid item type property (2)");
-					}
-
-					t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
-					break;
-				}
-
-				case ITEM_ATTR_SPEED: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of speed block (Should be 2 bytes)";
-						return false;
-					}
-
-					// t->speed = itemNode->getU16();
-					if (!itemNode->skip(2)) { // Just skip two bytes, we don't need speed
-						warnings.push_back("Invalid item type property (3)");
-					}
-					break;
-				}
-
-				case ITEM_ATTR_LIGHT2: {
-					if (datalen != sizeof(lightBlock2)) {
-						warnings.push_back("items.otb: Unexpected data length of item light (2) block (Should be " + i2ws(sizeof(lightBlock2)) + " bytes)");
-						break;
-					}
-
-					if (!itemNode->skip(4)) { // Just skip two bytes, we don't need light
-						warnings.push_back("Invalid item type property (4)");
-					}
-
-					// t->lightLevel = itemNode->getU16();
-					// t->lightColor = itemNode->getU16();
-					break;
-				}
-
-				case ITEM_ATTR_TOPORDER: {
-					if (datalen != sizeof(uint8_t)) {
-						warnings.push_back("items.otb: Unexpected data length of item toporder block (Should be 1 byte)");
-						break;
-					}
-
-					uint8_t u8 = 0;
-					if (!itemNode->getU8(u8)) {
-						warnings.push_back("Invalid item type property (5)");
-					}
-
-					t->alwaysOnTopOrder = u8;
-					break;
-				}
-
-				case ITEM_ATTR_NAME: {
-					if (datalen >= 128) {
-						warnings.push_back("items.otb: Unexpected data length of item name block (Should be 128 bytes)");
-						break;
-					}
-
-					uint8_t name[128];
-					memset(&name, 0, 128);
-
-					if (!itemNode->getRAW(name, datalen)) {
-						warnings.push_back("Invalid item type property (6)");
-						break;
-					}
-					t->name = (char*)name;
-					break;
-				}
-
-				case ITEM_ATTR_DESCR: {
-					if (datalen >= 128) {
-						warnings.push_back("items.otb: Unexpected data length of item descr block (Should be 128 bytes)");
-						break;
-					}
-
-					uint8_t description[128];
-					memset(&description, 0, 128);
-
-					if (!itemNode->getRAW(description, datalen)) {
-						warnings.push_back("Invalid item type property (7)");
-						break;
-					}
-
-					t->description = (char*)description;
-					break;
-				}
-
-				case ITEM_ATTR_MAXITEMS: {
-					if (datalen != sizeof(unsigned short)) {
-						warnings.push_back("items.otb: Unexpected data length of item volume block (Should be 2 bytes)");
-						break;
-					}
-
-					if (!itemNode->getU16(t->volume)) {
-						warnings.push_back("Invalid item type property (8)");
-					}
-					break;
-				}
-
-				case ITEM_ATTR_WEIGHT: {
-					if (datalen != sizeof(double)) {
-						warnings.push_back("items.otb: Unexpected data length of item weight block (Should be 8 bytes)");
-						break;
-					}
-					uint8_t w[sizeof(double)];
-					if (!itemNode->getRAW(w, sizeof(double))) {
-						warnings.push_back("Invalid item type property (7)");
-						break;
-					}
-
-					double wi = *reinterpret_cast<double*>(&w);
-					t->weight = wi;
-					break;
-				}
-
-				case ITEM_ATTR_ROTATETO: {
-					if (datalen != sizeof(unsigned short)) {
-						warnings.push_back("items.otb: Unexpected data length of item rotateTo block (Should be 2 bytes)");
-						break;
-					}
-
-					uint16_t rotate;
-					if (!itemNode->getU16(rotate)) {
-						warnings.push_back("Invalid item type property (8)");
-						break;
-					}
-
-					t->rotateTo = rotate;
-					break;
-				}
-
-				case ITEM_ATTR_WRITEABLE3: {
-					if (datalen != sizeof(writeableBlock3)) {
-						warnings.push_back("items.otb: Unexpected data length of item toporder block (Should be 1 byte)");
-						break;
-					}
-
-					uint16_t readOnlyID;
-					uint16_t maxTextLen;
-
-					if (!itemNode->getU16(readOnlyID)) {
-						warnings.push_back("Invalid item type property (9)");
-						break;
-					}
-
-					if (!itemNode->getU16(maxTextLen)) {
-						warnings.push_back("Invalid item type property (10)");
-						break;
-					}
-
-					// t->readOnlyId = wb3->readOnlyId;
-					t->maxTextLen = maxTextLen;
-					break;
-				}
-
-				default: {
-					// skip unknown attributes
-					itemNode->skip(datalen);
-					// warnings.push_back("items.otb: Skipped unknown attribute");
-					break;
-				}
-			}
+		if (!readOtbItemAttributes(itemNode, t, error, warnings)) {
+			return false;
 		}
 
 		if (t) {
@@ -817,6 +824,83 @@ bool ItemDatabase::loadFromOtb(const FileName& datafile, wxString& error, wxArra
 	return true;
 }
 
+static void parseSlotType(ItemType& it, const std::string& typeValue) {
+	if (typeValue == "head") {
+		it.slot_position |= SLOTP_HEAD;
+	} else if (typeValue == "body") {
+		it.slot_position |= SLOTP_ARMOR;
+	} else if (typeValue == "legs") {
+		it.slot_position |= SLOTP_LEGS;
+	} else if (typeValue == "feet") {
+		it.slot_position |= SLOTP_FEET;
+	} else if (typeValue == "backpack") {
+		it.slot_position |= SLOTP_BACKPACK;
+	} else if (typeValue == "two-handed") {
+		it.slot_position |= SLOTP_TWO_HAND;
+	} else if (typeValue == "right-hand") {
+		it.slot_position &= ~SLOTP_LEFT;
+	} else if (typeValue == "left-hand") {
+		it.slot_position &= ~SLOTP_RIGHT;
+	} else if (typeValue == "necklace") {
+		it.slot_position |= SLOTP_NECKLACE;
+	} else if (typeValue == "ring") {
+		it.slot_position |= SLOTP_RING;
+	} else if (typeValue == "ammo") {
+		it.slot_position |= SLOTP_AMMO;
+	} else if (typeValue == "hand") {
+		it.slot_position |= SLOTP_HAND;
+	}
+}
+
+static void parseWeaponType(ItemType& it, const std::string& typeValue) {
+	if (typeValue == "sword") {
+		it.weapon_type = WEAPON_SWORD;
+	} else if (typeValue == "club") {
+		it.weapon_type = WEAPON_CLUB;
+	} else if (typeValue == "axe") {
+		it.weapon_type = WEAPON_AXE;
+	} else if (typeValue == "shield") {
+		it.weapon_type = WEAPON_SHIELD;
+	} else if (typeValue == "distance") {
+		it.weapon_type = WEAPON_DISTANCE;
+	} else if (typeValue == "wand") {
+		it.weapon_type = WEAPON_WAND;
+	} else if (typeValue == "ammunition") {
+		it.weapon_type = WEAPON_AMMO;
+	}
+}
+
+static void parseFloorChange(ItemType& it, const std::string& value) {
+	if (value == "down") {
+		it.floorChangeDown = true;
+		it.floorChange = true;
+	} else if (value == "north") {
+		it.floorChangeNorth = true;
+		it.floorChange = true;
+	} else if (value == "south") {
+		it.floorChangeSouth = true;
+		it.floorChange = true;
+	} else if (value == "west") {
+		it.floorChangeWest = true;
+		it.floorChange = true;
+	} else if (value == "east") {
+		it.floorChangeEast = true;
+		it.floorChange = true;
+	} else if (value == "northex") {
+		it.floorChange = true;
+	} else if (value == "southex") {
+		it.floorChange = true;
+	} else if (value == "westex") {
+		it.floorChange = true;
+	} else if (value == "eastex") {
+		it.floorChange = true;
+	} else if (value == "southalt") {
+		it.floorChange = true;
+	} else if (value == "eastalt") {
+		it.floorChange = true;
+	}
+}
+
 bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
 	ClientVersionID clientVersion = g_gui.GetCurrentVersionID();
 	if (clientVersion < CLIENT_VERSION_980 && id > 20000 && id < 20100) {
@@ -896,50 +980,12 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
 		} else if (key == "slottype") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
 				std::string typeValue = attribute.as_string();
-				if (typeValue == "head") {
-					it.slot_position |= SLOTP_HEAD;
-				} else if (typeValue == "body") {
-					it.slot_position |= SLOTP_ARMOR;
-				} else if (typeValue == "legs") {
-					it.slot_position |= SLOTP_LEGS;
-				} else if (typeValue == "feet") {
-					it.slot_position |= SLOTP_FEET;
-				} else if (typeValue == "backpack") {
-					it.slot_position |= SLOTP_BACKPACK;
-				} else if (typeValue == "two-handed") {
-					it.slot_position |= SLOTP_TWO_HAND;
-				} else if (typeValue == "right-hand") {
-					it.slot_position &= ~SLOTP_LEFT;
-				} else if (typeValue == "left-hand") {
-					it.slot_position &= ~SLOTP_RIGHT;
-				} else if (typeValue == "necklace") {
-					it.slot_position |= SLOTP_NECKLACE;
-				} else if (typeValue == "ring") {
-					it.slot_position |= SLOTP_RING;
-				} else if (typeValue == "ammo") {
-					it.slot_position |= SLOTP_AMMO;
-				} else if (typeValue == "hand") {
-					it.slot_position |= SLOTP_HAND;
-				}
+				parseSlotType(it, typeValue);
 			}
 		} else if (key == "weapontype") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
 				std::string typeValue = attribute.as_string();
-				if (typeValue == "sword") {
-					it.weapon_type = WEAPON_SWORD;
-				} else if (typeValue == "club") {
-					it.weapon_type = WEAPON_CLUB;
-				} else if (typeValue == "axe") {
-					it.weapon_type = WEAPON_AXE;
-				} else if (typeValue == "shield") {
-					it.weapon_type = WEAPON_SHIELD;
-				} else if (typeValue == "distance") {
-					it.weapon_type = WEAPON_DISTANCE;
-				} else if (typeValue == "wand") {
-					it.weapon_type = WEAPON_WAND;
-				} else if (typeValue == "ammunition") {
-					it.weapon_type = WEAPON_AMMO;
-				}
+				parseWeaponType(it, typeValue);
 			}
 		} else if (key == "rotateto") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
@@ -980,34 +1026,7 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
 		} else if (key == "floorchange") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
 				std::string value = attribute.as_string();
-				if (value == "down") {
-					it.floorChangeDown = true;
-					it.floorChange = true;
-				} else if (value == "north") {
-					it.floorChangeNorth = true;
-					it.floorChange = true;
-				} else if (value == "south") {
-					it.floorChangeSouth = true;
-					it.floorChange = true;
-				} else if (value == "west") {
-					it.floorChangeWest = true;
-					it.floorChange = true;
-				} else if (value == "east") {
-					it.floorChangeEast = true;
-					it.floorChange = true;
-				} else if (value == "northex") {
-					it.floorChange = true;
-				} else if (value == "southex") {
-					it.floorChange = true;
-				} else if (value == "westex") {
-					it.floorChange = true;
-				} else if (value == "eastex") {
-					it.floorChange = true;
-				} else if (value == "southalt") {
-					it.floorChange = true;
-				} else if (value == "eastalt") {
-					it.floorChange = true;
-				}
+				parseFloorChange(it, value);
 			}
 		}
 	}
