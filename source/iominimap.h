@@ -52,7 +52,6 @@ enum {
 // otclient-compatible per-tile flags.
 enum MinimapTileFlags {
 	MinimapTileWasSeen = 1,
-	MinimapTileNotPathable = 2,
 	MinimapTileNotWalkable = 4
 };
 
@@ -66,9 +65,6 @@ struct MinimapTile {
 class MinimapBlock {
 public:
 	void updateTile(int x, int y, const MinimapTile& tile);
-	MinimapTile& getTile(int x, int y) {
-		return m_tiles[getTileIndex(x, y)];
-	}
 	inline uint32_t getTileIndex(int x, int y) const noexcept {
 		return ((y % MMBLOCK_SIZE) * MMBLOCK_SIZE) + (x % MMBLOCK_SIZE);
 	}

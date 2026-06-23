@@ -125,7 +125,6 @@ bool IOMinimap::saveOtmm(const std::string& path) {
 		writer.addU16(65535);
 		writer.addU8(255);
 
-		writer.flush();
 		writer.close();
 	} catch (std::exception& e) {
 		m_error = std::string("Failed to save OTMM minimap: ") + e.what();

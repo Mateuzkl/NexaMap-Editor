@@ -507,12 +507,6 @@ size_t FileWriteHandle::tell() {
 	return 0;
 }
 
-void FileWriteHandle::flush() {
-	if (file) {
-		fflush(file);
-	}
-}
-
 bool FileWriteHandle::addString(const std::string& str) {
 	if (str.size() > 0xFFFF) {
 		error_code = FILE_STRING_TOO_LONG;

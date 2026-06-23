@@ -307,7 +307,6 @@ public:
 	// Random-access helpers (OTMM minimap export rewrites the header offset).
 	bool seek(size_t offset, int origin = SEEK_SET);
 	size_t tell();
-	void flush();
 
 protected:
 	template <class T>
