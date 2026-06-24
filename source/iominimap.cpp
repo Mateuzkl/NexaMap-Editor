@@ -126,6 +126,10 @@ bool IOMinimap::saveOtmm(const std::string& path) {
 		writer.addU8(255);
 
 		writer.close();
+
+	if (m_updateLoadbar) {
+		g_gui.SetLoadDone(100);
+	}
 	} catch (std::exception& e) {
 		m_error = std::string("Failed to save OTMM minimap: ") + e.what();
 		return false;
@@ -201,9 +205,12 @@ bool IOMinimap::saveImage(const std::string& directory, const std::string& name)
 		m_error = "There is not enough memory available to complete the operation.";
 		return false;
 	}
+
+	if (m_updateLoadbar) {
+		g_gui.SetLoadDone(100);
+	}
 	return true;
 }
-
 bool IOMinimap::exportMinimap(const std::string& directory, const std::string& name) {
 	Map& map = m_editor->getMap();
 	if (map.size() == 0) {
@@ -214,7 +221,7 @@ bool IOMinimap::exportMinimap(const std::string& directory, const std::string& n
 	const int max_z = m_floor == -1 ? MAP_MAX_LAYER : m_floor;
 
 	// Per-floor bounding box of all drawable tiles.
-	int min_x[MAP_LAYERS], min_y[MAP_LAYERS], max_x[MAP_LAYERS], max_y[MAP_LAYERS];
+	int min_x[MAP_LAYERS]{}, min_y[MAP_LAYERS]{}, max_x[MAP_LAYERS]{}, max_y[MAP_LAYERS]{};
 	for (int z = min_z; z <= max_z; ++z) {
 		min_x[z] = MAP_MAX_WIDTH + 1;
 		min_y[z] = MAP_MAX_HEIGHT + 1;
@@ -326,8 +333,7 @@ bool IOMinimap::exportSelection(const std::string& directory, const std::string&
 		}
 	}
 
-	const int numtiles = (max_x - min_x) * (max_y - min_y);
-	if (numtiles == 0) {
+	if (min_x > max_x || min_y > max_y) {
 		return false;
 	}
 

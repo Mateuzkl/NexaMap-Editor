@@ -27,7 +27,7 @@
 // Palette Panel
 
 BEGIN_EVENT_TABLE(PalettePanel, wxPanel)
-EVT_TIMER(PALETTE_DELAYED_REFRESH_TIMER, WaypointPalettePanel::OnRefreshTimer)
+EVT_TIMER(PALETTE_DELAYED_REFRESH_TIMER, PalettePanel::OnRefreshTimer)
 END_EVENT_TABLE()
 
 PalettePanel::PalettePanel(wxWindow* parent, wxWindowID id, long style) :

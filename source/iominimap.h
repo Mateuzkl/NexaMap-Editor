@@ -61,6 +61,7 @@ struct MinimapTile {
 	uint8_t color = INVALID_MINIMAP_COLOR;
 	uint8_t speed = 10;
 };
+static_assert(sizeof(MinimapTile) == 3, "MinimapTile must be exactly 3 bytes");
 
 class MinimapBlock {
 public:
@@ -95,6 +96,7 @@ private:
 	bool exportSelection(const std::string& directory, const std::string& name);
 	void readBlocks();
 	inline uint32_t getBlockIndex(const Position& pos) const noexcept {
+		assert(pos.x >= 0 && pos.y >= 0);
 		return ((pos.y / MMBLOCK_SIZE) * (65536 / MMBLOCK_SIZE)) + (pos.x / MMBLOCK_SIZE);
 	}
 
