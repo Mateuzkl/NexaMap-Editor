@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "profiling.h"
 
 #include "ground_brush.h"
 #include "items.h"
@@ -652,6 +653,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 }
 
 void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
+	RME_PROFILE_SCOPE("GroundBrush::doBorders");
 	static const auto extractGroundBrushFromTile = [](BaseMap* map, uint32_t x, uint32_t y, uint32_t z) -> GroundBrush* {
 		Tile const* tile = map->getTile(x, y, z);
 		if (tile) {

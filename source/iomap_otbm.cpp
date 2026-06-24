@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "profiling.h"
 
 #include <wx/file.h>
 
@@ -791,6 +792,7 @@ void IOMapOTBM::readWaypoints(BinaryNode* mapNode, Map& map) {
 }
 
 void IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
+	RME_PROFILE_SCOPE("IOMapOTBM::readTileArea");
 	uint16_t base_x, base_y;
 	uint8_t base_z;
 	if (!mapNode->getU16(base_x) || !mapNode->getU16(base_y) || !mapNode->getU8(base_z)) {
@@ -1397,6 +1399,7 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 }
 
 void IOMapOTBM::writeTiles(Map& map, NodeFileWriteHandle& f) {
+	RME_PROFILE_SCOPE("IOMapOTBM::writeTiles");
 	const IOMapOTBM& self = *this;
 	uint32_t tiles_saved = 0;
 	bool first = true;

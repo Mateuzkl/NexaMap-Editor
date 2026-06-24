@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "profiling.h"
 
 #include "bitmap_font.h"
 
@@ -556,7 +557,7 @@ void MapDrawer::DrawMap() {
 								uint16_t r16 = 0, g16 = 0, b16 = 0;
 								for (const auto& zoneId : tile->zones) {
 									const uint16_t colorIndex = zoneId % colors.size();
-									const Color colour = colors.at(colorIndex);
+									const Color& colour = colors.at(colorIndex);
 
 									r16 += std::get<0>(colour);
 									g16 += std::get<1>(colour);
@@ -1117,11 +1118,13 @@ void MapDrawer::DrawBrush() {
 }
 
 void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, Item* item, bool ephemeral, int red, int green, int blue, int alpha) {
+	RME_PROFILE_SCOPE("MapDrawer::BlitItem(tile)");
 	const Position& pos = tile->getPosition();
 	BlitItem(draw_x, draw_y, pos, item, ephemeral, red, green, blue, alpha, tile);
 }
 
 void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* item, bool ephemeral, int red, int green, int blue, int alpha, const Tile* tile) {
+	RME_PROFILE_SCOPE("MapDrawer::BlitItem(pos)");
 	ItemType& it = g_items[item->getID()];
 
 	// Locked door indicator
@@ -1533,6 +1536,7 @@ void MapDrawer::WriteTooltip(Waypoint* waypoint, std::ostringstream& stream) {
 }
 
 void MapDrawer::DrawTile(TileLocation* location) {
+	RME_PROFILE_SCOPE("MapDrawer::DrawTile");
 	if (!location) {
 		return;
 	}
@@ -1634,7 +1638,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			uint16_t r16 = 0, g16 = 0, b16 = 0;
 			for (const auto& zoneId : tile->zones) {
 				const uint16_t colorIndex = zoneId % colors.size();
-				const Color colour = colors.at(colorIndex);
+				const Color& colour = colors.at(colorIndex);
 
 				r16 += std::get<0>(colour);
 				g16 += std::get<1>(colour);
