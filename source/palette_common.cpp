@@ -763,98 +763,71 @@ void BrushToolPanel::OnSwitchIn() {
 	LoadCurrentContents();
 }
 
-void BrushToolPanel::OnClickGravelButton(wxCommandEvent& event) {
+void BrushToolPanel::onClickToolBrush(Brush* brush) {
 	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.optional_brush);
+	g_gui.SelectBrush(brush);
+}
+
+void BrushToolPanel::OnClickGravelButton(wxCommandEvent& event) {
+	onClickToolBrush(g_gui.optional_brush);
 }
 
 void BrushToolPanel::OnClickEraserButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.eraser);
-}
-
-void BrushToolPanel::OnClickNormalDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.normal_door_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
-}
-
-void BrushToolPanel::OnClickLockedDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.locked_door_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
-}
-
-void BrushToolPanel::OnClickMagicDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.magic_door_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
-}
-
-void BrushToolPanel::OnClickQuestDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.quest_door_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
-}
-
-void BrushToolPanel::OnClickHatchDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.hatch_door_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
-}
-
-void BrushToolPanel::OnClickWindowDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.window_door_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
-}
-
-void BrushToolPanel::OnClickNormalAltDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.normal_door_alt_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
-}
-
-void BrushToolPanel::OnClickArchwayDoorButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.archway_door_brush);
-
-	// read checkbox settings
-	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
+	onClickToolBrush(g_gui.eraser);
 }
 
 void BrushToolPanel::OnClickPZBrushButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.pz_brush);
+	onClickToolBrush(g_gui.pz_brush);
 }
 
 void BrushToolPanel::OnClickNOPVPBrushButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.rook_brush);
+	onClickToolBrush(g_gui.rook_brush);
 }
 
 void BrushToolPanel::OnClickNoLogoutBrushButton(wxCommandEvent& event) {
-	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.nolog_brush);
+	onClickToolBrush(g_gui.nolog_brush);
 }
 
 void BrushToolPanel::OnClickPVPZoneBrushButton(wxCommandEvent& event) {
+	onClickToolBrush(g_gui.pvp_brush);
+}
+
+void BrushToolPanel::onClickDoorBrush(Brush* brush) {
 	g_gui.ActivatePalette(GetParentPalette());
-	g_gui.SelectBrush(g_gui.pvp_brush);
+	g_gui.SelectBrush(brush);
+	g_gui.SetDoorLocked(lockDoorCheckbox->GetValue());
+}
+
+void BrushToolPanel::OnClickNormalDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.normal_door_brush);
+}
+
+void BrushToolPanel::OnClickLockedDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.locked_door_brush);
+}
+
+void BrushToolPanel::OnClickMagicDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.magic_door_brush);
+}
+
+void BrushToolPanel::OnClickQuestDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.quest_door_brush);
+}
+
+void BrushToolPanel::OnClickHatchDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.hatch_door_brush);
+}
+
+void BrushToolPanel::OnClickWindowDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.window_door_brush);
+}
+
+void BrushToolPanel::OnClickNormalAltDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.normal_door_alt_brush);
+}
+
+void BrushToolPanel::OnClickArchwayDoorButton(wxCommandEvent& event) {
+	onClickDoorBrush(g_gui.archway_door_brush);
 }
 
 void BrushToolPanel::OnClickLockDoorCheckbox(wxCommandEvent& event) {

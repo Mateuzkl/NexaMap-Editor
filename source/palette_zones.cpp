@@ -171,7 +171,7 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 				map->zones.addZone(name);
 				auto zoneId = map->zones.getZoneID(name);
 				g_gui.zone_brush->setZone(zoneId);
-				refresh_timer.Start(300, true);
+				refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
 			}
 		}
 	}
@@ -202,7 +202,7 @@ void ZonesPalettePanel::OnClickRemoveZone(wxCommandEvent& event) {
 			map->cleanDeletedZones();
 		}
 		zone_list->DeleteItem(item);
-		refresh_timer.Start(300, true);
+		refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
 	}
 }
 

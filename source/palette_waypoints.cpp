@@ -172,7 +172,7 @@ void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
 				g_gui.waypoint_brush->setWaypoint(nwp);
 
 				// Refresh other palettes
-				refresh_timer.Start(300, true);
+				refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
 			}
 		}
 	}
@@ -207,6 +207,6 @@ void WaypointPalettePanel::OnClickRemoveWaypoint(wxCommandEvent& event) {
 			map->waypoints.removeWaypoint(wp->name);
 		}
 		waypoint_list->DeleteItem(item);
-		refresh_timer.Start(300, true);
+		refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
 	}
 }

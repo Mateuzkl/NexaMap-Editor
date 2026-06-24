@@ -166,6 +166,9 @@ protected:
 	bool saveWaypoints(Map& map, pugi::xml_document& doc);
 	bool saveZones(Map& map, const FileName& dir);
 	bool saveZones(Map& map, pugi::xml_document& doc);
+
+private:
+	static bool prependXmlDeclaration(pugi::xml_document& doc);
 };
 
 #endif

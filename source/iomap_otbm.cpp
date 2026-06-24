@@ -1717,6 +1717,15 @@ static bool saveSidecarXml(const FileName& dir, const std::string& filename, Fil
 	return false;
 }
 
+bool IOMapOTBM::prependXmlDeclaration(pugi::xml_document& doc) {
+	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
+	if (!decl) {
+		return false;
+	}
+	decl.append_attribute("version") = "1.0";
+	return true;
+}
+
 bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	return saveSidecarXml(dir, map.spawnfile, [&](pugi::xml_document& doc) {
 		return saveSpawns(map, doc);
@@ -1724,12 +1733,9 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 }
 
 bool IOMapOTBM::saveSpawns(Map& map, pugi::xml_document& doc) {
-	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
-	if (!decl) {
+	if (!prependXmlDeclaration(doc)) {
 		return false;
 	}
-
-	decl.append_attribute("version") = "1.0";
 
 	CreatureList creatureList;
 
@@ -1793,12 +1799,9 @@ bool IOMapOTBM::saveHouses(Map& map, const FileName& dir) {
 }
 
 bool IOMapOTBM::saveHouses(Map& map, pugi::xml_document& doc) {
-	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
-	if (!decl) {
+	if (!prependXmlDeclaration(doc)) {
 		return false;
 	}
-
-	decl.append_attribute("version") = "1.0";
 
 	pugi::xml_node houseNodes = doc.append_child("houses");
 	for (const auto& houseEntry : map.houses) {
@@ -1831,12 +1834,9 @@ bool IOMapOTBM::saveWaypoints(Map& map, const FileName& dir) {
 }
 
 bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
-	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
-	if (!decl) {
+	if (!prependXmlDeclaration(doc)) {
 		return false;
 	}
-
-	decl.append_attribute("version") = "1.0";
 
 	pugi::xml_node houseNodes = doc.append_child("waypoints");
 	for (const auto& houseEntry : map.houses) {
@@ -1881,12 +1881,9 @@ bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 }
 
 bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {
-	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
-	if (!decl) {
+	if (!prependXmlDeclaration(doc)) {
 		return false;
 	}
-
-	decl.append_attribute("version") = "1.0";
 
 	pugi::xml_node zoneNodes = doc.append_child("zones");
 	std::set<unsigned int> zoneIds;

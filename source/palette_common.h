@@ -32,6 +32,8 @@ class PaletteWindow;
 
 typedef TilesetCategoryType PaletteType;
 
+static constexpr int PALETTE_DELAYED_REFRESH_MS = 300;
+
 // Walks up the parent chain and returns the enclosing PaletteWindow (or nullptr).
 PaletteWindow* GetParentPalette(const wxWindow* window);
 
@@ -227,6 +229,10 @@ public:
 	void OnClickPVPZoneBrushButton(wxCommandEvent& event);
 	// ----
 	void OnClickLockDoorCheckbox(wxCommandEvent& event);
+
+private:
+	void onClickToolBrush(Brush* brush);
+	void onClickDoorBrush(Brush* brush);
 
 public:
 	void DeselectAll() override;
