@@ -176,7 +176,7 @@ void SearchResultWindow::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {
 		if (static_cast<uint32_t>(index) < result_list->GetCount()) {
 			result_list->SetSelection(index);
 		} else if (result_list->GetCount() > 0) {
-			result_list->SetSelection(result_list->GetCount() - 1);
+			result_list->SetSelection(static_cast<int>(result_list->GetCount() - 1));
 		}
 	}
 
@@ -198,7 +198,7 @@ void SearchResultWindow::OnClickRemoveAll(wxCommandEvent& WXUNUSED(event)) {
 
 	std::map<Position, std::vector<ResultData>> groupedResults;
 	for (uint32_t i = 0; i < result_list->GetCount(); ++i) {
-		ResultData* data = GetResultData(i);
+		ResultData* data = GetResultData(static_cast<int32_t>(i));
 		if (data && data->duplicate && data->count > 0) {
 			groupedResults[data->position].push_back(*data);
 		}

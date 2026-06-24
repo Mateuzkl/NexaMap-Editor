@@ -212,7 +212,7 @@ void HousePalettePanel::SelectTown(size_t index) {
 
 		// Select first house
 		SelectHouse(0);
-		town_choice->SetSelection(index);
+		town_choice->SetSelection(static_cast<int>(index));
 		add_house_button->Enable(what_town != nullptr);
 		ASSERT(what_town == nullptr || add_house_button->IsEnabled() || !IsEnabled());
 	}
@@ -227,7 +227,7 @@ void HousePalettePanel::SelectHouse(size_t index) {
 		select_position_button->Enable(true);
 		house_brush_button->Enable(true);
 		// Select the house
-		house_list->SetSelection(index);
+		house_list->SetSelection(static_cast<int>(index));
 		SelectHouseBrush();
 	} else {
 		// No houses :(
@@ -452,7 +452,7 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 	subsizer->AddGrowableCol(1);
 
 	house_name = wxstr(house->name);
-	house_id = i2ws(house->getID());
+	house_id = i2ws(static_cast<int>(house->getID()));
 	house_rent = i2ws(house->rent);
 
 	// House name
@@ -475,7 +475,7 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 			if (town_iter->second->getID() == houseTownId) {
 				found = true;
 			}
-			town_id_field->Append(wxstr(town_iter->second->getName()), newd int(town_iter->second->getID()));
+			town_id_field->Append(wxstr(town_iter->second->getName()), newd int(static_cast<int>(town_iter->second->getID())));
 			if (!found) {
 				++to_select_index;
 			}
@@ -483,7 +483,7 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 
 		if (!found) {
 			if (houseTownId != 0) {
-				town_id_field->Append("Undefined Town (id:" + i2ws(houseTownId) + ")", newd int(houseTownId));
+				town_id_field->Append("Undefined Town (id:" + i2ws(static_cast<int>(houseTownId)) + ")", newd int(static_cast<int>(houseTownId)));
 				++to_select_index;
 			}
 		}
@@ -504,7 +504,7 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 	auto* houseSizer = newd wxFlexGridSizer(2, 10, 10);
 
 	houseSizer->Add(newd wxStaticText(this, wxID_ANY, "ID:"), wxSizerFlags(0).Center());
-	id_field = newd wxSpinCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(40, 20), wxSP_ARROW_KEYS, 1, 0xFFFF, house->getID());
+	id_field = newd wxSpinCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(40, 20), wxSP_ARROW_KEYS, 1, 0xFFFF, static_cast<int>(house->getID()));
 	// id_field->Enable(false);
 	houseSizer->Add(id_field, wxSizerFlags(1).Expand());
 	subsizerRight->Add(houseSizer, wxSizerFlags(1).Expand());

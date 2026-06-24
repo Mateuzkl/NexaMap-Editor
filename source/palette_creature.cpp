@@ -288,7 +288,7 @@ void CreaturePalettePanel::SelectTileset(size_t index) {
 		creature_list->Clear();
 		creature_brush_button->Enable(false);
 	} else {
-		tileset_choice->SetSelection(index);
+		tileset_choice->SetSelection(static_cast<int>(index));
 		RefreshCreatureList();
 		SelectCreature(0);
 	}
@@ -299,7 +299,7 @@ void CreaturePalettePanel::SelectCreature(size_t index) {
 	ASSERT(creature_list->GetCount() >= index);
 
 	if (creature_list->GetCount() > 0) {
-		creature_list->SetSelection(index);
+		creature_list->SetSelection(static_cast<int>(index));
 	}
 
 	SelectCreatureBrush();
@@ -309,7 +309,7 @@ void CreaturePalettePanel::SelectCreature(const std::string& name) {
 	for (size_t i = 0; i < creature_list->GetCount(); ++i) {
 		auto* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(i));
 		if (brush && brush->getName() == name) {
-			creature_list->SetSelection(i);
+			creature_list->SetSelection(static_cast<int>(i));
 			break;
 		}
 	}
@@ -560,11 +560,11 @@ void CreaturePalettePanel::UpdateVisibleCreatureLabel(size_t index) {
 	}
 
 	const bool checked = creature_list->IsChecked(index);
-	const bool selected = creature_list->IsSelected(index);
+	const bool selected = creature_list->IsSelected(static_cast<int>(index));
 	creature_list->SetString(index, GetCreatureLabel(brush));
 	creature_list->Check(index, checked);
 	if (selected) {
-		creature_list->SetSelection(index);
+		creature_list->SetSelection(static_cast<int>(index));
 	}
 }
 

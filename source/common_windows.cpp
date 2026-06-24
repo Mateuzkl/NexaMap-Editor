@@ -884,11 +884,11 @@ void FindDialog::OnKeyDown(wxKeyEvent& event) {
 				if (n == wxNOT_FOUND) {
 					n = 0;
 				} else if (n != amount && n - amount < n) { // latter is needed for unsigned overflow
-					n -= amount;
+					n -= static_cast<ssize_t>(amount);
 				} else {
 					n = 0;
 				}
-				item_list->SetSelection(n);
+				item_list->SetSelection(static_cast<int>(n));
 			}
 			break;
 		}
@@ -903,12 +903,12 @@ void FindDialog::OnKeyDown(wxKeyEvent& event) {
 				if (n == wxNOT_FOUND) {
 					n = 0;
 				} else if (static_cast<uint32_t>(n) < itemcount - amount && itemcount - amount < itemcount) {
-					n += amount;
+					n += static_cast<ssize_t>(amount);
 				} else {
-					n = item_list->GetItemCount() - 1;
+					n = static_cast<ssize_t>(item_list->GetItemCount()) - 1;
 				}
 
-				item_list->SetSelection(n);
+				item_list->SetSelection(static_cast<int>(n));
 			}
 			break;
 		}
@@ -1483,8 +1483,8 @@ void EditTownsDialog::OnClickAdd(wxCommandEvent& WXUNUSED(event)) {
 	editor.map.getOrCreateTile(Position(0, 0, 0))->getLocation()->increaseTownCount();
 
 	BuildListBox(false);
-	UpdateSelection(town_list.size() - 1);
-	town_listbox->SetSelection(town_list.size() - 1);
+	UpdateSelection(static_cast<int>(town_list.size() - 1));
+	town_listbox->SetSelection(static_cast<int>(town_list.size() - 1));
 }
 
 void EditTownsDialog::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {

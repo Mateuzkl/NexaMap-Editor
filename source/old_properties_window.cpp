@@ -220,7 +220,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 				if (town_iter->second->getID() == depot->getDepotID()) {
 					found = true;
 				}
-				depot_id_field->Append(wxstr(town_iter->second->getName()), newd int(town_iter->second->getID()));
+				depot_id_field->Append(wxstr(town_iter->second->getName()), newd int(static_cast<int>(town_iter->second->getID())));
 				if (!found) {
 					++to_select_index;
 				}
@@ -233,7 +233,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 		}
 		depot_id_field->Append("No Town", newd int(0));
 		if (depot->getDepotID() == 0) {
-			to_select_index = depot_id_field->GetCount() - 1;
+			to_select_index = static_cast<int>(depot_id_field->GetCount() - 1);
 		}
 		depot_id_field->SetSelection(to_select_index);
 

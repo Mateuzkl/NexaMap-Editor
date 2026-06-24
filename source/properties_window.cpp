@@ -150,7 +150,7 @@ wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
 
 	// contents
 	ItemAttributeMap attrs = edit_item->getAttributes();
-	attributesGrid->AppendRows(attrs.size());
+	attributesGrid->AppendRows(static_cast<int>(attrs.size()));
 	int i = 0;
 	for (auto aiter = attrs.begin(); aiter != attrs.end(); ++aiter, ++i) {
 		SetGridValue(attributesGrid, i, aiter->first, aiter->second);

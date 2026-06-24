@@ -231,7 +231,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 		frame->Connect(MAIN_FRAME_MENU + ai->second->id, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)(wxEventFunction)(ai->second->handler), nullptr, this);
 	}
 	for (size_t i = 0; i < 10; ++i) {
-		frame->Connect(recentFiles.GetBaseId() + i, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(MainMenuBar::OnOpenRecent), nullptr, this);
+		frame->Connect(static_cast<int>(recentFiles.GetBaseId() + i), wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(MainMenuBar::OnOpenRecent), nullptr, this);
 	}
 }
 
@@ -252,7 +252,7 @@ namespace OnMapRemoveItems {
 
 		bool operator()(Map& map, Item* item, int64_t removed, int64_t done) {
 			if (done % 0x8000 == 0) {
-				g_gui.SetLoadDone((uint32_t)(100 * done / map.getTileCount()));
+				g_gui.SetLoadDone(static_cast<int32_t>((uint32_t)(100 * done / map.getTileCount())));
 			}
 			return item->getID() == itemId && !item->isComplex();
 		}
@@ -956,7 +956,7 @@ namespace OnSearchForItem {
 			}
 
 			if (done % 0x8000 == 0) {
-				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
+				g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(100 * done / map.getTileCount())));
 			}
 
 			if (item->getID() == itemId) {
@@ -1031,7 +1031,7 @@ namespace OnSearchForStuff {
 
 		void operator()(Map& map, Tile* tile, Item* item, long long done) {
 			if (done % 0x8000 == 0) {
-				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
+				g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(100 * done / map.getTileCount())));
 			}
 			Container* container;
 			if ((search_zones && item->isGroundTile() && tile->hasZone()) || (search_unique && item->getUniqueID() > 0) || (search_action && item->getActionID() > 0) || (search_container && ((container = dynamic_cast<Container*>(item)) && container->getItemCount())) || (search_writeable && item->getText().length() > 0)) {
@@ -1484,7 +1484,7 @@ namespace OnMapRemoveCorpses {
 
 		bool operator()(Map& map, Item* item, long long removed, long long done) {
 			if (done % 0x800 == 0) {
-				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
+				g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(100 * done / map.getTileCount())));
 			}
 
 			return g_materials.isInTileset(item, "Corpses") && !item->isComplex();
@@ -1533,7 +1533,7 @@ namespace OnMapRemoveUnreachable {
 
 		bool operator()(Map& map, Tile* tile, long long removed, long long done, long long total) {
 			if (done % 0x1000 == 0) {
-				g_gui.SetLoadDone((unsigned int)(100 * done / total));
+				g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(100 * done / total)));
 			}
 
 			Position pos = tile->getPosition();
@@ -1650,7 +1650,7 @@ void MainMenuBar::OnMapRemoveEmptySpawns(wxCommandEvent& WXUNUSED(event))
 			newtile->spawn = nullptr;
 			if (++removed % 5 == 0) {
 				// update progress bar for each 5 spawns removed
-				g_gui.SetLoadDone(100 * removed / count);
+				g_gui.SetLoadDone(static_cast<int32_t>(100 * removed / count));
 			}
 			action->addChange(newd Change(newtile));
 		}
@@ -1771,8 +1771,8 @@ void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event)) {
 	uint64_t unique_item_count = 0;
 	uint64_t container_count = 0; // Only includes containers containing more than 1 item
 
-	int town_count = map->towns.count();
-	int house_count = map->houses.count();
+	int town_count = static_cast<int>(map->towns.count());
+	int house_count = static_cast<int>(map->houses.count());
 	std::map<uint32_t, uint32_t> town_sqm_count;
 	const Town* largest_town = nullptr;
 	uint64_t largest_town_size = 0;
@@ -1786,7 +1786,7 @@ void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event)) {
 	for (MapIterator mit = map->begin(); mit != map->end(); ++mit) {
 		Tile* tile = (*mit)->get();
 		if (load_counter % 8192 == 0) {
-			g_gui.SetLoadDone((unsigned int)(int64_t(load_counter) * 95ll / int64_t(map->getTileCount())));
+			g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(int64_t(load_counter) * 95ll / int64_t(map->getTileCount()))));
 		}
 
 		if (tile->empty()) {
@@ -1863,7 +1863,7 @@ void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event)) {
 		const House* house = hit->second;
 
 		if (load_counter % 64) {
-			g_gui.SetLoadDone((unsigned int)(95ll + int64_t(load_counter) * 5ll / int64_t(house_count)));
+			g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(95ll + int64_t(load_counter) * 5ll / int64_t(house_count))));
 		}
 
 		if (house->size() > largest_house_size) {
@@ -2256,7 +2256,7 @@ void MainMenuBar::SearchDuplicatedItems(bool onSelection /* = false */) {
 			continue;
 		}
 		if (done % 0x8000 == 0) {
-			g_gui.SetLoadDone(static_cast<unsigned int>(100 * done / map.getTileCount()));
+			g_gui.SetLoadDone(static_cast<int32_t>(static_cast<unsigned int>(100 * done / map.getTileCount())));
 		}
 
 		for (const auto& duplicatedItem : SearchDuplicatedItems::findDuplicatedItems(tile)) {
@@ -2279,7 +2279,7 @@ namespace RemoveDuplicatedItems {
 	struct condition {
 		bool operator()(Map& map, Tile* tile, Item* item, long long removed, long long done) {
 			if (done % 0x8000 == 0) {
-				g_gui.SetLoadDone(static_cast<unsigned int>(100 * done / map.getTileCount()));
+				g_gui.SetLoadDone(static_cast<int32_t>(static_cast<unsigned int>(100 * done / map.getTileCount())));
 			}
 
 			return tile && IsRemovableDuplicatedItem(item);
@@ -2374,7 +2374,7 @@ void MainMenuBar::SearchWallsUponWalls(bool onSelection /* = false */) {
 			continue;
 		}
 		if (done % 0x8000 == 0) {
-			g_gui.SetLoadDone(static_cast<unsigned int>(100 * done / map.getTileCount()));
+			g_gui.SetLoadDone(static_cast<int32_t>(static_cast<unsigned int>(100 * done / map.getTileCount())));
 		}
 
 		if (SearchWallsUponWalls::hasWallsUponWalls(tile)) {
