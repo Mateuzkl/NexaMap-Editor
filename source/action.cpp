@@ -35,9 +35,9 @@ Change::Change(Tile* t) :
 }
 
 Change* Change::Create(House* house, const Position& where) {
-	Change* c = newd Change();
+	auto* c = newd Change();
 	c->type = CHANGE_MOVE_HOUSE_EXIT;
-	std::pair<uint32_t, Position>* p = newd std::pair<uint32_t, Position>;
+	auto* p = newd std::pair<uint32_t, Position>;
 	p->first = house->getID();
 	p->second = where;
 	c->data = p;
@@ -45,9 +45,9 @@ Change* Change::Create(House* house, const Position& where) {
 }
 
 Change* Change::Create(Waypoint* wp, const Position& where) {
-	Change* c = newd Change();
+	auto* c = newd Change();
 	c->type = CHANGE_MOVE_WAYPOINT;
-	std::pair<std::string, Position>* p = newd std::pair<std::string, Position>;
+	auto* p = newd std::pair<std::string, Position>;
 	p->first = wp->name;
 	p->second = where;
 	c->data = p;
@@ -106,7 +106,7 @@ Action::Action(Editor& editor, ActionIdentifier ident) :
 }
 
 Action::~Action() {
-	ChangeList::const_reverse_iterator it = changes.rbegin();
+	auto it = changes.rbegin();
 	while (it != changes.rend()) {
 		delete *it;
 		++it;
@@ -122,7 +122,7 @@ size_t Action::approx_memsize() const {
 size_t Action::memsize() const {
 	uint32_t mem = sizeof(*this);
 	mem += sizeof(Change*) * 3 * changes.size();
-	ChangeList::const_iterator it = changes.begin();
+	auto it = changes.begin();
 	while (it != changes.end()) {
 		Change* c = *it;
 		switch (c->type) {
@@ -216,7 +216,7 @@ void Action::commit(DirtyList* dirty_list) {
 			}
 
 			case CHANGE_MOVE_HOUSE_EXIT: {
-				std::pair<uint32_t, Position>* p = reinterpret_cast<std::pair<uint32_t, Position>*>(c->data);
+				auto* p = reinterpret_cast<std::pair<uint32_t, Position>*>(c->data);
 				ASSERT(p);
 				House* whathouse = editor.map.houses.getHouse(p->first);
 
@@ -229,7 +229,7 @@ void Action::commit(DirtyList* dirty_list) {
 			}
 
 			case CHANGE_MOVE_WAYPOINT: {
-				std::pair<std::string, Position>* p = reinterpret_cast<std::pair<std::string, Position>*>(c->data);
+				auto* p = reinterpret_cast<std::pair<std::string, Position>*>(c->data);
 				ASSERT(p);
 				Waypoint* wp = editor.map.waypoints.getWaypoint(p->first);
 
@@ -272,7 +272,7 @@ void Action::undo(DirtyList* dirty_list) {
 	}
 
 	editor.selection.start(Selection::INTERNAL);
-	ChangeList::reverse_iterator it = changes.rbegin();
+	auto it = changes.rbegin();
 
 	while (it != changes.rend()) {
 		Change* c = *it;
@@ -326,7 +326,7 @@ void Action::undo(DirtyList* dirty_list) {
 			}
 
 			case CHANGE_MOVE_HOUSE_EXIT: {
-				std::pair<uint32_t, Position>* p = reinterpret_cast<std::pair<uint32_t, Position>*>(c->data);
+				auto* p = reinterpret_cast<std::pair<uint32_t, Position>*>(c->data);
 				ASSERT(p);
 				House* whathouse = editor.map.houses.getHouse(p->first);
 				if (whathouse) {
@@ -338,7 +338,7 @@ void Action::undo(DirtyList* dirty_list) {
 			}
 
 			case CHANGE_MOVE_WAYPOINT: {
-				std::pair<std::string, Position>* p = reinterpret_cast<std::pair<std::string, Position>*>(c->data);
+				auto* p = reinterpret_cast<std::pair<std::string, Position>*>(c->data);
 				ASSERT(p);
 				Waypoint* wp = editor.map.waypoints.getWaypoint(p->first);
 
@@ -609,7 +609,7 @@ void ActionQueue::redo() {
 }
 
 void ActionQueue::clear() {
-	for (ActionList::iterator it = actions.begin(); it != actions.end();) {
+	for (auto it = actions.begin(); it != actions.end();) {
 		delete *it;
 		it = actions.erase(it);
 	}
@@ -628,7 +628,7 @@ DirtyList::~DirtyList() {
 void DirtyList::AddPosition(int x, int y, int z) {
 	uint32_t m = ((x >> 2) << 18) | ((y >> 2) << 4);
 	ValueType fi = { m, 0 };
-	SetType::iterator s = iset.find(fi);
+	auto s = iset.find(fi);
 	if (s != iset.end()) {
 		ValueType v = *s;
 		iset.erase(s);

@@ -129,7 +129,7 @@ public:
 
 	// Sets the display type (list or icons)
 	void SetListType(BrushListType ltype);
-	void SetListType(wxString ltype);
+	void SetListType(const wxString& ltype);
 	// Assigns a tileset to this list
 	void AssignTileset(const TilesetCategory* tileset);
 
@@ -175,7 +175,7 @@ public:
 
 	// Sets the display type (list or icons)
 	void SetListType(BrushListType ltype);
-	void SetListType(wxString ltype);
+	void SetListType(const wxString& ltype);
 
 	// Select the first brush
 	void SelectFirstBrush() override;

@@ -32,12 +32,12 @@ public:
 	TilesetContainer tilesets;
 
 	bool loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings);
-	bool loadExtensions(FileName identifier, wxString& error, wxArrayString& warnings);
+	bool loadExtensions(const FileName& identifier, wxString& error, wxArrayString& warnings);
 	void createOtherTileset();
-	void addToTileset(std::string tilesetName, int itemId, TilesetCategoryType categoryType);
+	void addToTileset(const std::string& tilesetName, int itemId, TilesetCategoryType categoryType);
 
-	bool isInTileset(Item* item, std::string tileset) const;
-	bool isInTileset(Brush* brush, std::string tileset) const;
+	bool isInTileset(Item* item, const std::string& tileset) const;
+	bool isInTileset(Brush* brush, const std::string& tileset) const;
 	bool needSave() const {
 		return modified;
 	}

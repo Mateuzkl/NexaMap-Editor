@@ -369,7 +369,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 					continue;
 				}
 
-				AutoBorder* autoBorder = newd AutoBorder(0); // Empty id basically
+				auto* autoBorder = newd AutoBorder(0); // Empty id basically
 				autoBorder->load(childNode, warnings, this, ground_equivalent);
 				optional_border = autoBorder;
 			} else {
@@ -425,7 +425,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				}
 			}
 
-			BorderBlock* borderBlock = newd BorderBlock;
+			auto* borderBlock = newd BorderBlock;
 			borderBlock->super = false;
 			borderBlock->autoborder = autoBorder;
 
@@ -511,12 +511,12 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 			}
 			hate_friends = true;
 		} else if (childName == "clear_borders") {
-			for (std::vector<BorderBlock*>::iterator it = borders.begin();
+			for (auto it = borders.begin();
 				 it != borders.end();
 				 ++it) {
 				BorderBlock* bb = *it;
 				if (bb->autoborder) {
-					for (std::vector<SpecificCaseBlock*>::iterator specific_iter = bb->specific_cases.begin(); specific_iter != bb->specific_cases.end(); ++specific_iter) {
+					for (auto specific_iter = bb->specific_cases.begin(); specific_iter != bb->specific_cases.end(); ++specific_iter) {
 						delete *specific_iter;
 					}
 					if (bb->autoborder->ground) {
@@ -585,7 +585,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 		if (second) {
 			if (first->getZ() < second->getZ() && second->hasOuterBorder()) {
 				if (first->hasInnerBorder()) {
-					for (std::vector<BorderBlock*>::iterator it = first->borders.begin(); it != first->borders.end(); ++it) {
+					for (auto it = first->borders.begin(); it != first->borders.end(); ++it) {
 						BorderBlock const* bb = *it;
 						if (bb->outer) {
 							continue;
@@ -595,7 +595,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 						}
 					}
 				}
-				for (std::vector<BorderBlock*>::iterator it = second->borders.begin(); it != second->borders.end(); ++it) {
+				for (auto it = second->borders.begin(); it != second->borders.end(); ++it) {
 					BorderBlock const* bb = *it;
 					if (!bb->outer) {
 						continue;
@@ -608,7 +608,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 					}
 				}
 			} else if (first->hasInnerBorder()) {
-				for (std::vector<BorderBlock*>::iterator it = first->borders.begin(); it != first->borders.end(); ++it) {
+				for (auto it = first->borders.begin(); it != first->borders.end(); ++it) {
 					BorderBlock const* bb = *it;
 					if (bb->outer) {
 						continue;
@@ -622,7 +622,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 				}
 			}
 		} else if (first->hasInnerZilchBorder()) {
-			for (std::vector<BorderBlock*>::iterator it = first->borders.begin(); it != first->borders.end(); ++it) {
+			for (auto it = first->borders.begin(); it != first->borders.end(); ++it) {
 				BorderBlock const* bb = *it;
 				if (bb->outer) {
 					continue;
@@ -633,7 +633,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 			}
 		}
 	} else if (second && second->hasOuterZilchBorder()) {
-		for (std::vector<BorderBlock*>::iterator it = second->borders.begin(); it != second->borders.end(); ++it) {
+		for (auto it = second->borders.begin(); it != second->borders.end(); ++it) {
 			BorderBlock const* bb = *it;
 			if (!bb->outer) {
 				continue;

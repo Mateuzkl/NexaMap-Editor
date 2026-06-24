@@ -65,7 +65,7 @@ namespace {
 			return nullptr;
 		}
 
-		CreatureType* creatureType = newd CreatureType();
+		auto* creatureType = newd CreatureType();
 		creatureType->name = name;
 		creatureType->isNpc = kind == LuaCreatureKind::Npc;
 		creatureType->standard = false;
@@ -81,7 +81,7 @@ namespace {
 	}
 
 	void addOrUpdateLuaCreature(CreatureMap& creatureMap, CreatureType* creatureType) {
-		CreatureMap::iterator iter = creatureMap.find(as_lower_str(creatureType->name));
+		auto iter = creatureMap.find(as_lower_str(creatureType->name));
 		if (iter == creatureMap.end()) {
 			creatureMap[as_lower_str(creatureType->name)] = creatureType;
 			return;
@@ -153,7 +153,7 @@ CreatureType* CreatureType::loadFromXML(pugi::xml_node node, wxArrayString& warn
 		return nullptr;
 	}
 
-	CreatureType* ct = newd CreatureType();
+	auto* ct = newd CreatureType();
 	ct->name = attribute.as_string();
 	ct->isNpc = tmpType == "npc";
 
@@ -231,7 +231,7 @@ CreatureType* CreatureType::loadFromOTXML(const FileName& filename, pugi::xml_do
 		return nullptr;
 	}
 
-	CreatureType* ct = newd CreatureType();
+	auto* ct = newd CreatureType();
 	if (isNpc) {
 		ct->name = nstr(filename.GetName());
 	} else {
@@ -304,14 +304,14 @@ CreatureDatabase::~CreatureDatabase() {
 }
 
 void CreatureDatabase::clear() {
-	for (CreatureMap::iterator iter = creature_map.begin(); iter != creature_map.end(); ++iter) {
+	for (auto iter = creature_map.begin(); iter != creature_map.end(); ++iter) {
 		delete iter->second;
 	}
 	creature_map.clear();
 }
 
 CreatureType* CreatureDatabase::operator[](const std::string& name) {
-	CreatureMap::iterator iter = creature_map.find(as_lower_str(name));
+	auto iter = creature_map.find(as_lower_str(name));
 	if (iter != creature_map.end()) {
 		return iter->second;
 	}
@@ -321,7 +321,7 @@ CreatureType* CreatureDatabase::operator[](const std::string& name) {
 CreatureType* CreatureDatabase::addMissingCreatureType(const std::string& name, bool isNpc) {
 	assert((*this)[name] == nullptr);
 
-	CreatureType* ct = newd CreatureType();
+	auto* ct = newd CreatureType();
 	ct->name = name;
 	ct->isNpc = isNpc;
 	ct->missing = true;
@@ -334,7 +334,7 @@ CreatureType* CreatureDatabase::addMissingCreatureType(const std::string& name, 
 CreatureType* CreatureDatabase::addCreatureType(const std::string& name, bool isNpc, const Outfit& outfit) {
 	assert((*this)[name] == nullptr);
 
-	CreatureType* ct = newd CreatureType();
+	auto* ct = newd CreatureType();
 	ct->name = name;
 	ct->isNpc = isNpc;
 	ct->missing = false;
@@ -345,7 +345,7 @@ CreatureType* CreatureDatabase::addCreatureType(const std::string& name, bool is
 }
 
 bool CreatureDatabase::hasMissing() const {
-	for (CreatureMap::const_iterator iter = creature_map.begin(); iter != creature_map.end(); ++iter) {
+	for (auto iter = creature_map.begin(); iter != creature_map.end(); ++iter) {
 		if (iter->second->missing) {
 			return true;
 		}

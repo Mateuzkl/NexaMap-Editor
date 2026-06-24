@@ -204,7 +204,7 @@ public:
 
 	void setInteger(uint32_t key, int newval);
 	void setFloat(uint32_t key, float newval);
-	void setString(uint32_t key, std::string newval);
+	void setString(uint32_t key, const std::string& newval);
 
 	static wxConfigBase& getConfigObject();
 	void setDefaults() {

@@ -29,7 +29,7 @@ public:
 
 	// Wrapper functions
 	void AddTab(EditorTab* tab, bool select);
-	void SetTabLabel(int idx, wxString label);
+	void SetTabLabel(int idx, const wxString& label);
 	void SetFocusedTab(int idx);
 	void DeleteTab(int idx);
 	int GetTabCount();

@@ -47,7 +47,7 @@ AddTilesetWindow::AddTilesetWindow(wxWindow* win_parent, TilesetCategoryType cat
 
 	wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, description);
 
-	wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
 
 	uint16_t itemId = 0;
@@ -81,8 +81,8 @@ AddTilesetWindow::AddTilesetWindow(wxWindow* win_parent, TilesetCategoryType cat
 	SetSizerAndFit(topsizer);
 	Centre(wxBOTH);
 
-	item_id_field->Connect(wxEVT_COMMAND_SPINCTRL_UPDATED, wxCommandEventHandler(AddTilesetWindow::OnChangeItemId), NULL, this);
-	item_button->Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(AddTilesetWindow::OnItemClicked), NULL, this);
+	item_id_field->Connect(wxEVT_COMMAND_SPINCTRL_UPDATED, wxCommandEventHandler(AddTilesetWindow::OnChangeItemId), nullptr, this);
+	item_button->Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(AddTilesetWindow::OnItemClicked), nullptr, this);
 }
 
 void AddTilesetWindow::OnChangeItemId(wxCommandEvent& WXUNUSED(event)) {

@@ -286,7 +286,7 @@ void WallBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	bool b = (parameter ? *reinterpret_cast<bool*>(parameter) : false);
 	if (b) {
 		// Find a matching wall item on this tile, and shift the id
-		for (ItemVector::iterator item_iter = tile->items.begin(); item_iter != tile->items.end(); ++item_iter) {
+		for (auto item_iter = tile->items.begin(); item_iter != tile->items.end(); ++item_iter) {
 			Item* item = *item_iter;
 			if (item->isWall()) {
 				WallBrush* wb = item->getWallBrush();
@@ -401,7 +401,7 @@ bool hasMatchingWallBrushAtTile(BaseMap* map, WallBrush* wall_brush, uint32_t x,
 
 uint16_t WallBrush::pickWeightedWallItemId(const WallNode& wn) {
 	int chance = random(1, wn.total_chance);
-	for (std::vector<WallType>::const_iterator iter = wn.items.begin(); iter != wn.items.end(); ++iter) {
+	for (auto iter = wn.items.begin(); iter != wn.items.end(); ++iter) {
 		if (chance <= iter->chance) {
 			return iter->id;
 		}
@@ -418,7 +418,7 @@ void WallBrush::doWalls(BaseMap* map, Tile* tile) {
 	unsigned int z = tile->getPosition().z;
 
 	// Advance the vector to the beginning of the walls
-	ItemVector::iterator it = tile->items.begin();
+	auto it = tile->items.begin();
 	for (; it != tile->items.end() && (*it)->isBorder(); ++it)
 		;
 
@@ -687,7 +687,7 @@ WallDecorationBrush::~WallDecorationBrush() {
 void WallDecorationBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	ASSERT(tile);
 
-	ItemVector::iterator iter = tile->items.begin();
+	auto iter = tile->items.begin();
 
 	bool prefLocked = g_gui.HasDoorLocked();
 
@@ -723,7 +723,7 @@ void WallDecorationBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 				bool close_match = false;
 				bool open = item->isOpen();
 
-				for (std::vector<WallBrush::DoorType>::iterator door_iter = door_items[wall_alignment].begin();
+				for (auto door_iter = door_items[wall_alignment].begin();
 					 door_iter != door_items[wall_alignment].end();
 					 ++door_iter) {
 					WallBrush::DoorType& dt = *door_iter;

@@ -49,7 +49,7 @@ public: // Functions
 	}
 
 	// Map handling
-	void saveMap(FileName filename, bool showdialog); // "" means default filename
+	void saveMap(const FileName& filename, bool showdialog); // "" means default filename
 
 	Map& getMap() noexcept {
 		return map;
@@ -67,7 +67,7 @@ public: // Functions
 	wxString getLoaderError() const {
 		return map.getError();
 	}
-	bool importMap(FileName filename, int import_x_offset, int import_y_offset, int import_z_offset, ImportType house_import_type, ImportType spawn_import_type);
+	bool importMap(const FileName& filename, int import_x_offset, int import_y_offset, int import_z_offset, ImportType house_import_type, ImportType spawn_import_type);
 
 	// Adds an action to the action queue (this allows the user to undo the action)
 	// Invalidates the action pointer

@@ -58,11 +58,11 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	ASSERT(edit_item);
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
-	if (Container* container = dynamic_cast<Container*>(edit_item)) {
+	if (auto* container = dynamic_cast<Container*>(edit_item)) {
 		// Container
 		wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Container Properties");
 
-		wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+		auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 		subsizer->AddGrowableCol(1);
 
 		subsizer->Add(newd wxStaticText(this, wxID_ANY, "ID " + i2ws(item->getID())));
@@ -99,7 +99,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 			}
 
 			Item* item = container->getItem(index);
-			ContainerItemButton* containerItemButton = newd ContainerItemButton(this, use_large_sprites, index, map, item);
+			auto* containerItemButton = newd ContainerItemButton(this, use_large_sprites, index, map, item);
 
 			container_items.push_back(containerItemButton);
 			horizontal_sizer->Add(containerItemButton);
@@ -125,7 +125,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 		// Book
 		wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Writeable Properties");
 
-		wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+		auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 		subsizer->AddGrowableCol(1);
 
 		subsizer->Add(newd wxStaticText(this, wxID_ANY, "ID " + i2ws(item->getID())));
@@ -156,7 +156,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 		// Splash
 		wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Splash Properties");
 
-		wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+		auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 		subsizer->AddGrowableCol(1);
 
 		subsizer->Add(newd wxStaticText(this, wxID_ANY, "ID " + i2ws(item->getID())));
@@ -199,10 +199,10 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 		topsizer->Add(boxsizer, wxSizerFlags(0).Expand().Border(wxALL, 20));
 
 		// SetSize(220, 190);
-	} else if (Depot* depot = dynamic_cast<Depot*>(edit_item)) {
+	} else if (auto* depot = dynamic_cast<Depot*>(edit_item)) {
 		// Depot
 		wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Depot Properties");
-		wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+		auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 
 		subsizer->AddGrowableCol(1);
 		subsizer->Add(newd wxStaticText(this, wxID_ANY, "ID " + i2ws(item->getID())));
@@ -214,7 +214,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 		int to_select_index = 0;
 		if (towns.count() > 0) {
 			bool found = false;
-			for (TownMap::const_iterator town_iter = towns.begin();
+			for (auto town_iter = towns.begin();
 				 town_iter != towns.end();
 				 ++town_iter) {
 				if (town_iter->second->getID() == depot->getDepotID()) {
@@ -245,8 +245,8 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	} else {
 		// Normal item
 		Door* door = dynamic_cast<Door*>(edit_item);
-		Teleport* teleport = dynamic_cast<Teleport*>(edit_item);
-		Podium* podium = dynamic_cast<Podium*>(edit_item);
+		auto* teleport = dynamic_cast<Teleport*>(edit_item);
+		auto* podium = dynamic_cast<Podium*>(edit_item);
 
 		wxString description;
 		if (door) {
@@ -270,7 +270,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 		if(teleport) num_items += 1;
 		*/
 
-		wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+		auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 		subsizer->AddGrowableCol(1);
 
 		subsizer->Add(newd wxStaticText(this, wxID_ANY, "ID " + i2ws(item->getID())));
@@ -374,7 +374,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 			subsizer->Add(newd wxStaticText(this, wxID_ANY, ""));
 
 			// outfit container
-			wxFlexGridSizer* outfitContainer = newd wxFlexGridSizer(2, 10, 10);
+			auto* outfitContainer = newd wxFlexGridSizer(2, 10, 10);
 			const Outfit& outfit = podium->getOutfit();
 
 			outfitContainer->Add(newd wxStaticText(this, wxID_ANY, "Outfit"));
@@ -405,7 +405,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 			outfitContainer->Add(look_addon, wxSizerFlags(3).Expand());
 
 			// mount container
-			wxFlexGridSizer* mountContainer = newd wxFlexGridSizer(2, 10, 10);
+			auto* mountContainer = newd wxFlexGridSizer(2, 10, 10);
 
 			mountContainer->Add(newd wxStaticText(this, wxID_ANY, "Mount"));
 			mountContainer->Add(newd wxStaticText(this, wxID_ANY, ""));
@@ -430,7 +430,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 			look_mountfeet = newd wxSpinCtrl(this, wxID_ANY, i2ws(outfit.lookMountFeet), wxDefaultPosition, wxSize(-1, 20), wxSP_ARROW_KEYS, 0, OUTFIT_COLOR_MAX, outfit.lookMountFeet);
 			mountContainer->Add(look_mountfeet, wxSizerFlags(3).Expand());
 
-			wxFlexGridSizer* propertiesContainer = newd wxFlexGridSizer(3, 10, 10);
+			auto* propertiesContainer = newd wxFlexGridSizer(3, 10, 10);
 			propertiesContainer->Add(subsizer, wxSizerFlags(1).Expand());
 			propertiesContainer->Add(outfitContainer, wxSizerFlags(1).Expand());
 			propertiesContainer->Add(mountContainer, wxSizerFlags(1).Expand());
@@ -494,7 +494,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 	wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Creature Properties");
 
-	wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
 
 	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Creature "));
@@ -552,7 +552,7 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 
 	// if(item->canHoldDescription()) num_items += 1;
 
-	wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
 
 	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Spawn size"));
@@ -594,9 +594,9 @@ OldPropertiesWindow::~OldPropertiesWindow() {
 
 void OldPropertiesWindow::OnFocusChange(wxFocusEvent& event) {
 	wxWindow* win = event.GetWindow();
-	if (wxSpinCtrl* spin = dynamic_cast<wxSpinCtrl*>(win)) {
+	if (auto* spin = dynamic_cast<wxSpinCtrl*>(win)) {
 		spin->SetSelection(-1, -1);
-	} else if (wxTextCtrl* text = dynamic_cast<wxTextCtrl*>(win)) {
+	} else if (auto* text = dynamic_cast<wxTextCtrl*>(win)) {
 		text->SetSelection(-1, -1);
 	}
 }
@@ -695,7 +695,7 @@ void OldPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 			edit_item->setActionID(new_aid);
 
 			// Clean up client data
-		} else if (Depot* depot = dynamic_cast<Depot*>(edit_item)) {
+		} else if (auto* depot = dynamic_cast<Depot*>(edit_item)) {
 			// Depot
 			int* new_depotid = reinterpret_cast<int*>(depot_id_field->GetClientData(depot_id_field->GetSelection()));
 
@@ -703,8 +703,8 @@ void OldPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		} else {
 			// Normal item
 			Door* door = dynamic_cast<Door*>(edit_item);
-			Teleport* teleport = dynamic_cast<Teleport*>(edit_item);
-			Podium* podium = dynamic_cast<Podium*>(edit_item);
+			auto* teleport = dynamic_cast<Teleport*>(edit_item);
+			auto* podium = dynamic_cast<Podium*>(edit_item);
 
 			int new_uid = unique_id_field->GetValue();
 			int new_aid = action_id_field->GetValue();
@@ -881,7 +881,7 @@ void OldPropertiesWindow::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void OldPropertiesWindow::Update() {
-	Container* container = dynamic_cast<Container*>(edit_item);
+	auto* container = dynamic_cast<Container*>(edit_item);
 	if (container) {
 		for (uint32_t i = 0; i < container->getVolume(); ++i) {
 			container_items[i]->setItem(container->getItem(i));

@@ -39,7 +39,7 @@ Selection::~Selection() {
 
 Position Selection::minPosition() const {
 	Position minPos(0x10000, 0x10000, 0x10);
-	for (TileSet::const_iterator tile = tiles.begin(); tile != tiles.end(); ++tile) {
+	for (auto tile = tiles.begin(); tile != tiles.end(); ++tile) {
 		Position pos((*tile)->getPosition());
 		if (minPos.x > pos.x) {
 			minPos.x = pos.x;
@@ -56,7 +56,7 @@ Position Selection::minPosition() const {
 
 Position Selection::maxPosition() const {
 	Position maxPos(0, 0, 0);
-	for (TileSet::const_iterator tile = tiles.begin(); tile != tiles.end(); ++tile) {
+	for (auto tile = tiles.begin(); tile != tiles.end(); ++tile) {
 		Position pos((*tile)->getPosition());
 		if (maxPos.x < pos.x) {
 			maxPos.x = pos.x;
@@ -208,13 +208,13 @@ void Selection::removeInternal(Tile* tile) {
 
 void Selection::clear() {
 	if (session) {
-		for (TileSet::iterator it = tiles.begin(); it != tiles.end(); it++) {
+		for (auto it = tiles.begin(); it != tiles.end(); it++) {
 			Tile* new_tile = (*it)->deepCopy(editor.map);
 			new_tile->deselect();
 			subsession->addChange(newd Change(new_tile));
 		}
 	} else {
-		for (TileSet::iterator it = tiles.begin(); it != tiles.end(); it++) {
+		for (auto it = tiles.begin(); it != tiles.end(); it++) {
 			(*it)->deselect();
 		}
 		tiles.clear();

@@ -39,11 +39,11 @@ Materials::~Materials() {
 }
 
 void Materials::clear() {
-	for (TilesetContainer::iterator iter = tilesets.begin(); iter != tilesets.end(); ++iter) {
+	for (auto iter = tilesets.begin(); iter != tilesets.end(); ++iter) {
 		delete iter->second;
 	}
 
-	for (MaterialsExtensionList::iterator iter = extensions.begin(); iter != extensions.end(); ++iter) {
+	for (auto iter = extensions.begin(); iter != extensions.end(); ++iter) {
 		delete *iter;
 	}
 
@@ -73,7 +73,7 @@ bool Materials::loadMaterials(const FileName& identifier, wxString& error, wxArr
 	return true;
 }
 
-bool Materials::loadExtensions(FileName directoryName, wxString& error, wxArrayString& warnings) {
+bool Materials::loadExtensions(const FileName& directoryName, wxString& error, wxArrayString& warnings) {
 	directoryName.Mkdir(0755, wxPATH_MKDIR_FULL); // Create if it doesn't exist
 
 	wxDir ext_dir(directoryName.GetPath());
@@ -140,7 +140,7 @@ bool Materials::loadExtensions(FileName directoryName, wxString& error, wxArrayS
 		std::string extensionAuthorLink = extensionNode.attribute("authorurl").as_string();
 		extensionAuthorLink.erase(std::remove(extensionAuthorLink.begin(), extensionAuthorLink.end(), '\''));
 
-		MaterialsExtension* materialExtension = newd MaterialsExtension(extensionName, extensionAuthor, extensionDescription);
+		auto* materialExtension = newd MaterialsExtension(extensionName, extensionAuthor, extensionDescription);
 		materialExtension->url = extensionUrl;
 		materialExtension->author_url = extensionAuthorLink;
 
@@ -277,7 +277,7 @@ void Materials::createOtherTileset() {
 		}
 	}
 
-	for (CreatureMap::iterator iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
+	for (auto iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
 		CreatureType* type = iter->second;
 		if (type->in_other_tileset) {
 			if (type->isNpc) {
@@ -326,7 +326,7 @@ bool Materials::unserializeTileset(pugi::xml_node node, wxArrayString& warnings)
 	return true;
 }
 
-void Materials::addToTileset(std::string tilesetName, int itemId, TilesetCategoryType categoryType) {
+void Materials::addToTileset(const std::string& tilesetName, int itemId, TilesetCategoryType categoryType) {
 	ItemType& it = g_items[itemId];
 
 	if (it.id == 0) {
@@ -363,18 +363,18 @@ void Materials::addToTileset(std::string tilesetName, int itemId, TilesetCategor
 	}
 }
 
-bool Materials::isInTileset(Item* item, std::string tilesetName) const {
+bool Materials::isInTileset(Item* item, const std::string& tilesetName) const {
 	const ItemType& it = g_items[item->getID()];
 
 	return it.id != 0 && (isInTileset(it.brush, tilesetName) || isInTileset(it.doodad_brush, tilesetName) || isInTileset(it.raw_brush, tilesetName)) || isInTileset(it.collection_brush, tilesetName);
 }
 
-bool Materials::isInTileset(Brush* brush, std::string tilesetName) const {
+bool Materials::isInTileset(Brush* brush, const std::string& tilesetName) const {
 	if (!brush) {
 		return false;
 	}
 
-	TilesetContainer::const_iterator tilesetiter = tilesets.find(tilesetName);
+	auto tilesetiter = tilesets.find(tilesetName);
 	if (tilesetiter == tilesets.end()) {
 		return false;
 	}

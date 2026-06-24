@@ -85,7 +85,7 @@ bool IOMinimap::saveOtmm(const std::string& path) {
 		writer.addString("OTMM 1.0"); // description
 
 		// go back and rewrite where the map data starts
-		uint32_t start = static_cast<uint32_t>(writer.tell());
+		auto start = static_cast<uint32_t>(writer.tell());
 		writer.seek(4);
 		writer.addU16(static_cast<uint16_t>(start));
 		writer.seek(start);
@@ -102,8 +102,8 @@ bool IOMinimap::saveOtmm(const std::string& path) {
 				auto& block = it.second;
 
 				// write index pos
-				const uint16_t x = static_cast<uint16_t>((index % (65536 / MMBLOCK_SIZE)) * MMBLOCK_SIZE);
-				const uint16_t y = static_cast<uint16_t>((index / (65536 / MMBLOCK_SIZE)) * MMBLOCK_SIZE);
+				const auto x = static_cast<uint16_t>((index % (65536 / MMBLOCK_SIZE)) * MMBLOCK_SIZE);
+				const auto y = static_cast<uint16_t>((index / (65536 / MMBLOCK_SIZE)) * MMBLOCK_SIZE);
 				writer.addU16(x);
 				writer.addU16(y);
 				writer.addU8(z);

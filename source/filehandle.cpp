@@ -234,7 +234,7 @@ DiskNodeFileReadHandle::DiskNodeFileReadHandle(const std::string& name, const st
 
 		if (ver[0] != 0 || ver[1] != 0 || ver[2] != 0 || ver[3] != 0) {
 			bool accepted = false;
-			for (std::vector<std::string>::const_iterator id_iter = acceptable_identifiers.begin(); id_iter != acceptable_identifiers.end(); ++id_iter) {
+			for (auto id_iter = acceptable_identifiers.begin(); id_iter != acceptable_identifiers.end(); ++id_iter) {
 				if (memcmp(ver, id_iter->c_str(), 4) == 0) {
 					accepted = true;
 					break;

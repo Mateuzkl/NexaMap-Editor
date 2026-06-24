@@ -220,7 +220,7 @@ private:
  */
 class FindDialog : public wxDialog {
 public:
-	FindDialog(wxWindow* parent, wxString title);
+	FindDialog(wxWindow* parent, const wxString& title);
 	~FindDialog() override;
 
 	void OnKeyDown(wxKeyEvent&);
@@ -293,22 +293,22 @@ protected:
 class ObjectPropertiesWindowBase : public wxDialog {
 public:
 	ObjectPropertiesWindowBase(
-		wxWindow* parent, wxString title,
+		wxWindow* parent, const wxString& title,
 		const Map* map, const Tile* tile, Item* item,
 		wxPoint position = wxDefaultPosition
 	);
 	ObjectPropertiesWindowBase(
-		wxWindow* parent, wxString title,
+		wxWindow* parent, const wxString& title,
 		const Map* map, const Tile* tile, Spawn* spawn,
 		wxPoint position = wxDefaultPosition
 	);
 	ObjectPropertiesWindowBase(
-		wxWindow* parent, wxString title,
+		wxWindow* parent, const wxString& title,
 		const Map* map, const Tile* tile, Creature* creature,
 		wxPoint position = wxDefaultPosition
 	);
 	ObjectPropertiesWindowBase(
-		wxWindow* parent, wxString title, wxPoint position = wxDefaultPosition
+		wxWindow* parent, const wxString& title, wxPoint position = wxDefaultPosition
 	);
 
 	Item* getItemBeingEdited();

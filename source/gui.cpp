@@ -19,6 +19,8 @@
 
 #include <wx/display.h>
 
+#include <utility>
+
 #include "gui.h"
 #include "main_menubar.h"
 
@@ -435,7 +437,7 @@ void GUI::SaveUserCreatures() {
 	g_creatures.saveToXML(cdb);
 }
 
-void GUI::SaveCurrentMap(FileName filename, bool showdialog) {
+void GUI::SaveCurrentMap(const FileName& filename, bool showdialog) {
 	MapTab* mapTab = GetCurrentMapTab();
 	if (mapTab) {
 		Editor* editor = mapTab->GetEditor();
@@ -828,7 +830,7 @@ void GUI::SavePerspective() {
 	root->GetAuiToolBar()->SavePerspective();
 }
 
-SearchResultWindow* GUI::ShowSearchWindow(wxString caption /* = "Search Results" */, bool duplicateItems /* = false */) {
+SearchResultWindow* GUI::ShowSearchWindow(const wxString& caption /* = "Search Results" */, bool duplicateItems /* = false */) {
 	if (search_result_window == nullptr) {
 		search_result_window = newd SearchResultWindow(root);
 		aui_manager->AddPane(search_result_window, wxAuiPaneInfo().Caption(caption));
@@ -1017,7 +1019,7 @@ void GUI::RefreshView() {
 }
 
 void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
-	progressText = message;
+	progressText = std::move(message);
 
 	progressFrom = 0;
 	progressTo = 100;
@@ -1250,7 +1252,7 @@ void GUI::ChangeFloor(int new_floor) {
 	}
 }
 
-void GUI::SetStatusText(wxString text) {
+void GUI::SetStatusText(const wxString& text) {
 	g_gui.root->SetStatusText(text, 0);
 }
 
@@ -1758,7 +1760,7 @@ void GUI::FillDoodadPreviewBuffer() {
 	}
 }
 
-long GUI::PopupDialog(wxWindow* parent, wxString title, wxString text, long style, wxString confisavename, uint32_t configsavevalue) {
+long GUI::PopupDialog(wxWindow* parent, const wxString& title, const wxString& text, long style, const wxString& confisavename, uint32_t configsavevalue) {
 	if (text.empty()) {
 		return wxID_ANY;
 	}
@@ -1768,10 +1770,10 @@ long GUI::PopupDialog(wxWindow* parent, wxString title, wxString text, long styl
 }
 
 long GUI::PopupDialog(wxString title, wxString text, long style, wxString configsavename, uint32_t configsavevalue) {
-	return g_gui.PopupDialog(g_gui.root, title, text, style, configsavename, configsavevalue);
+	return g_gui.PopupDialog(g_gui.root, std::move(title), std::move(text), style, std::move(configsavename), configsavevalue);
 }
 
-void GUI::ListDialog(wxWindow* parent, wxString title, const wxArrayString& param_items) {
+void GUI::ListDialog(wxWindow* parent, const wxString& title, const wxArrayString& param_items) {
 	if (param_items.empty()) {
 		return;
 	}
@@ -1779,10 +1781,10 @@ void GUI::ListDialog(wxWindow* parent, wxString title, const wxArrayString& para
 	wxArrayString list_items(param_items);
 
 	// Create the window
-	wxDialog* dlg = newd wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
+	auto* dlg = newd wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
 
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
-	wxListBox* item_list = newd wxListBox(dlg, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE);
+	auto* item_list = newd wxListBox(dlg, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE);
 	item_list->SetMinSize(wxSize(500, 300));
 
 	for (size_t i = 0; i != list_items.GetCount();) {
@@ -1810,10 +1812,10 @@ void GUI::ListDialog(wxWindow* parent, wxString title, const wxArrayString& para
 	delete dlg;
 }
 
-void GUI::ShowTextBox(wxWindow* parent, wxString title, wxString content) {
-	wxDialog* dlg = newd wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
+void GUI::ShowTextBox(wxWindow* parent, const wxString& title, const wxString& content) {
+	auto* dlg = newd wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
-	wxTextCtrl* text_field = newd wxTextCtrl(dlg, wxID_ANY, content, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
+	auto* text_field = newd wxTextCtrl(dlg, wxID_ANY, content, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
 	text_field->SetMinSize(wxSize(400, 550));
 	topsizer->Add(text_field, wxSizerFlags(5).Expand());
 
@@ -1875,7 +1877,7 @@ Hotkey::Hotkey(Brush* brush) :
 }
 
 Hotkey::Hotkey(std::string _name) :
-	type(BRUSH), brushname(_name) {
+	type(BRUSH), brushname(std::move(_name)) {
 	////
 }
 

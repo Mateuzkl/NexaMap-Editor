@@ -40,7 +40,7 @@ Map::~Map() {
 	////
 }
 
-bool Map::open(const std::string file) {
+bool Map::open(const std::string& file) {
 	if (file == filename) {
 		return true; // Do not reopen ourselves!
 	}
@@ -128,7 +128,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 
 		std::sort(id_list.begin(), id_list.end());
 
-		ConversionMap::MTM::const_iterator cfmtm = rm.mtm.end();
+		auto cfmtm = rm.mtm.end();
 
 		while (id_list.size()) {
 			cfmtm = rm.mtm.find(id_list);
@@ -149,7 +149,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 				tile->ground = nullptr;
 			}
 
-			for (ItemVector::iterator item_iter = tile->items.begin(); item_iter != tile->items.end();) {
+			for (auto item_iter = tile->items.begin(); item_iter != tile->items.end();) {
 				if (std::find(v.begin(), v.end(), (*item_iter)->getID()) != v.end()) {
 					delete *item_iter;
 					item_iter = tile->items.erase(item_iter);
@@ -159,7 +159,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 			}
 
 			const std::vector<uint16_t>& new_items = cfmtm->second;
-			for (std::vector<uint16_t>::const_iterator iit = new_items.begin(); iit != new_items.end(); ++iit) {
+			for (auto iit = new_items.begin(); iit != new_items.end(); ++iit) {
 				Item* item = Item::Create(*iit);
 				if (item->isGroundTile()) {
 					tile->ground = item;
@@ -171,7 +171,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 		}
 
 		if (tile->ground) {
-			ConversionMap::STM::const_iterator cfstm = rm.stm.find(tile->ground->getID());
+			auto cfstm = rm.stm.find(tile->ground->getID());
 			if (cfstm != rm.stm.end()) {
 				uint16_t aid = tile->ground->getActionID();
 				uint16_t uid = tile->ground->getUniqueID();
@@ -180,7 +180,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 
 				const std::vector<uint16_t>& v = cfstm->second;
 				// conversions << "Converted " << tile->getX() << ":" << tile->getY() << ":" << tile->getZ() << " " << id << " -> ";
-				for (std::vector<uint16_t>::const_iterator iit = v.begin(); iit != v.end(); ++iit) {
+				for (auto iit = v.begin(); iit != v.end(); ++iit) {
 					Item* item = Item::Create(*iit);
 					// conversions << *iit << " ";
 					if (item->isGroundTile()) {
@@ -196,9 +196,9 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 			}
 		}
 
-		for (ItemVector::iterator replace_item_iter = tile->items.begin() + inserted_items; replace_item_iter != tile->items.end();) {
+		for (auto replace_item_iter = tile->items.begin() + inserted_items; replace_item_iter != tile->items.end();) {
 			uint16_t id = (*replace_item_iter)->getID();
-			ConversionMap::STM::const_iterator cf = rm.stm.find(id);
+			auto cf = rm.stm.find(id);
 			if (cf != rm.stm.end()) {
 				// uint16_t aid = (*replace_item_iter)->getActionID();
 				// uint16_t uid = (*replace_item_iter)->getUniqueID();
@@ -206,7 +206,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 
 				replace_item_iter = tile->items.erase(replace_item_iter);
 				const std::vector<uint16_t>& v = cf->second;
-				for (std::vector<uint16_t>::const_iterator iit = v.begin(); iit != v.end(); ++iit) {
+				for (auto iit = v.begin(); iit != v.end(); ++iit) {
 					replace_item_iter = tile->items.insert(replace_item_iter, Item::Create(*iit));
 					// conversions << "Converted " << tile->getX() << ":" << tile->getY() << ":" << tile->getZ() << " " << id << " -> " << *iit << std::endl;
 					++replace_item_iter;
@@ -244,7 +244,7 @@ void Map::cleanInvalidTiles(bool showdialog) {
 			continue;
 		}
 
-		for (ItemVector::iterator item_iter = tile->items.begin(); item_iter != tile->items.end();) {
+		for (auto item_iter = tile->items.begin(); item_iter != tile->items.end();) {
 			if (g_items.typeExists((*item_iter)->getID())) {
 				++item_iter;
 			} else {

@@ -30,19 +30,19 @@ Tileset::Tileset(Brushes& brushes, const std::string& name) :
 }
 
 Tileset::~Tileset() {
-	for (TilesetCategoryArray::iterator iter = categories.begin(); iter != categories.end(); ++iter) {
+	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
 		delete *iter;
 	}
 }
 
 void Tileset::clear() {
-	for (TilesetCategoryArray::iterator iter = categories.begin(); iter != categories.end(); ++iter) {
+	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
 		(*iter)->brushlist.clear();
 	}
 }
 
 bool Tileset::containsBrush(Brush* brush) const {
-	for (TilesetCategoryArray::const_iterator iter = categories.begin(); iter != categories.end(); ++iter) {
+	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
 		if ((*iter)->containsBrush(brush)) {
 			return true;
 		}
@@ -53,18 +53,18 @@ bool Tileset::containsBrush(Brush* brush) const {
 
 TilesetCategory* Tileset::getCategory(TilesetCategoryType type) {
 	ASSERT(type >= TILESET_UNKNOWN && type <= TILESET_HOUSE);
-	for (TilesetCategoryArray::iterator iter = categories.begin(); iter != categories.end(); ++iter) {
+	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
 		if ((*iter)->getType() == type) {
 			return *iter;
 		}
 	}
-	TilesetCategory* tsc = newd TilesetCategory(*this, type);
+	auto* tsc = newd TilesetCategory(*this, type);
 	categories.push_back(tsc);
 	return tsc;
 }
 
 bool TilesetCategory::containsBrush(Brush* brush) const {
-	for (std::vector<Brush*>::const_iterator iter = brushlist.begin(); iter != brushlist.end(); ++iter) {
+	for (auto iter = brushlist.begin(); iter != brushlist.end(); ++iter) {
 		if (*iter == brush) {
 			return true;
 		}
@@ -75,7 +75,7 @@ bool TilesetCategory::containsBrush(Brush* brush) const {
 
 const TilesetCategory* Tileset::getCategory(TilesetCategoryType type) const {
 	ASSERT(type >= TILESET_UNKNOWN && type <= TILESET_HOUSE);
-	for (TilesetCategoryArray::const_iterator iter = categories.begin(); iter != categories.end(); ++iter) {
+	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
 		if ((*iter)->getType() == type) {
 			return *iter;
 		}

@@ -188,17 +188,17 @@ public:
 	void UpdateTitle();
 	void UpdateMenus();
 	void ShowToolbar(ToolBarID id, bool show);
-	void SetStatusText(wxString text);
+	void SetStatusText(const wxString& text);
 
-	long PopupDialog(wxWindow* parent, wxString title, wxString text, long style, wxString configsavename = wxEmptyString, uint32_t configsavevalue = 0);
+	long PopupDialog(wxWindow* parent, const wxString& title, const wxString& text, long style, const wxString& configsavename = wxEmptyString, uint32_t configsavevalue = 0);
 	long PopupDialog(wxString title, wxString text, long style, wxString configsavename = wxEmptyString, uint32_t configsavevalue = 0);
 
-	void ListDialog(wxWindow* parent, wxString title, const wxArrayString& vec);
+	void ListDialog(wxWindow* parent, const wxString& title, const wxArrayString& vec);
 	void ListDialog(const wxString& title, const wxArrayString& vec) {
 		ListDialog(nullptr, title, vec);
 	}
 
-	void ShowTextBox(wxWindow* parent, wxString title, wxString contents);
+	void ShowTextBox(wxWindow* parent, const wxString& title, const wxString& contents);
 	void ShowTextBox(const wxString& title, const wxString& contents) {
 		ShowTextBox(nullptr, title, contents);
 	}
@@ -208,7 +208,7 @@ public:
 	wxGLContext* GetGLContext(wxGLCanvas* win);
 
 	// Search Results
-	SearchResultWindow* ShowSearchWindow(wxString caption = "Search Results", bool duplicateItems = false);
+	SearchResultWindow* ShowSearchWindow(const wxString& caption = "Search Results", bool duplicateItems = false);
 
 	// Minimap
 	void CreateMinimap();
@@ -340,7 +340,7 @@ public:
 	Map& GetCurrentMap();
 	int GetOpenMapCount();
 	bool ShouldSave();
-	void SaveCurrentMap(FileName filename, bool showdialog); // "" means default filename
+	void SaveCurrentMap(const FileName& filename, bool showdialog); // "" means default filename
 	void SaveCurrentMap(bool showdialog = true) {
 		SaveCurrentMap(wxString(""), showdialog);
 	}

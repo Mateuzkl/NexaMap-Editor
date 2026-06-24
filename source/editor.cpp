@@ -40,7 +40,7 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	wxArrayString warnings;
 	bool ok = true;
 
-	ClientVersionID defaultVersion = ClientVersionID(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION));
+	auto defaultVersion = ClientVersionID(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION));
 	if (defaultVersion == CLIENT_VERSION_NONE) {
 		defaultVersion = ClientVersion::getLatestVersion()->getID();
 	}
@@ -150,7 +150,7 @@ void Editor::addAction(Action* action, int stacking_delay) {
 	g_gui.UpdateMenus();
 }
 
-void Editor::saveMap(FileName filename, bool showdialog) {
+void Editor::saveMap(const FileName& filename, bool showdialog) {
 	std::string savefile = filename.GetFullPath().mb_str(wxConvUTF8).data();
 	bool save_as = false;
 	bool save_otgz = false;
@@ -236,11 +236,11 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 	{
 		std::string n = nstr(g_gui.GetLocalDataDirectory()) + ".saving.txt";
 		std::ofstream f(n.c_str(), std::ios::trunc | std::ios::out);
-		f << backup_otbm << std::endl
-		  << backup_house << std::endl
-		  << backup_spawn << std::endl
-		  << backup_waypoint << std::endl
-		  << backup_zones << std::endl;
+		f << backup_otbm << '\n'
+		  << backup_house << '\n'
+		  << backup_spawn << '\n'
+		  << backup_waypoint << '\n'
+		  << backup_zones << '\n';
 	}
 
 	{
@@ -372,7 +372,7 @@ void Editor::saveMap(FileName filename, bool showdialog) {
 	map.clearChanges();
 }
 
-bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offset, int import_z_offset, ImportType house_import_type, ImportType spawn_import_type) {
+bool Editor::importMap(const FileName& filename, int import_x_offset, int import_y_offset, int import_z_offset, ImportType house_import_type, ImportType spawn_import_type) {
 	selection.clear();
 	actionQueue->clear();
 
@@ -398,7 +398,7 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 	std::map<uint32_t, uint32_t> house_id_map;
 
 	if (house_import_type != IMPORT_DONT) {
-		for (TownMap::iterator tit = imported_map.towns.begin(); tit != imported_map.towns.end();) {
+		for (auto tit = imported_map.towns.begin(); tit != imported_map.towns.end();) {
 			Town* imported_town = tit->second;
 			Town* current_town = map.towns.getTown(imported_town->getID());
 
@@ -471,7 +471,7 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 #endif
 		}
 
-		for (HouseMap::iterator hit = imported_map.houses.begin(); hit != imported_map.houses.end();) {
+		for (auto hit = imported_map.houses.begin(); hit != imported_map.houses.end();) {
 			House* imported_house = hit->second;
 			House* current_house = map.houses.getHouse(imported_house->getID());
 			imported_house->townid = town_id_map[imported_house->townid];
@@ -560,7 +560,7 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 
 	std::map<Position, Spawn*> spawn_map;
 	if (spawn_import_type != IMPORT_DONT) {
-		for (SpawnPositionList::iterator siter = imported_map.spawns.begin(); siter != imported_map.spawns.end();) {
+		for (auto siter = imported_map.spawns.begin(); siter != imported_map.spawns.end();) {
 			Position old_spawn_pos = *siter;
 			Position new_spawn_pos = *siter + offset;
 			switch (spawn_import_type) {
@@ -572,7 +572,7 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 						ASSERT(imported_tile->spawn);
 						spawn_map[new_spawn_pos] = imported_tile->spawn;
 
-						SpawnPositionList::iterator next = siter;
+						auto next = siter;
 						bool cont = true;
 						Position next_spawn;
 
@@ -600,7 +600,7 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 	}
 
 	// Plain merge of waypoints, very simple! :)
-	for (WaypointMap::iterator iter = imported_map.waypoints.begin(); iter != imported_map.waypoints.end(); ++iter) {
+	for (auto iter = imported_map.waypoints.begin(); iter != imported_map.waypoints.end(); ++iter) {
 		iter->second->pos += offset;
 	}
 
@@ -663,9 +663,9 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 		}
 
 		if (offset != Position(0, 0, 0)) {
-			for (ItemVector::iterator iter = import_tile->items.begin(); iter != import_tile->items.end(); ++iter) {
+			for (auto iter = import_tile->items.begin(); iter != import_tile->items.end(); ++iter) {
 				Item* item = *iter;
-				if (Teleport* teleport = dynamic_cast<Teleport*>(item)) {
+				if (auto* teleport = dynamic_cast<Teleport*>(item)) {
 					teleport->setDestination(teleport->getDestination() + offset);
 				}
 			}
@@ -680,7 +680,7 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 		map.setTile(new_pos, import_tile, true);
 	}
 
-	for (std::map<Position, Spawn*>::iterator spawn_iter = spawn_map.begin(); spawn_iter != spawn_map.end(); ++spawn_iter) {
+	for (auto spawn_iter = spawn_map.begin(); spawn_iter != spawn_map.end(); ++spawn_iter) {
 		Position pos = spawn_iter->first;
 		TileLocation* location = map.createTileL(pos);
 		Tile* tile = location->get();
@@ -822,7 +822,7 @@ void Editor::clearInvalidHouseTiles(bool showdialog) {
 
 	Houses& houses = map.houses;
 
-	HouseMap::iterator iter = houses.begin();
+	auto iter = houses.begin();
 	while (iter != houses.end()) {
 		House* h = iter->second;
 		if (map.towns.getTown(h->townid) == nullptr) {
@@ -900,7 +900,7 @@ void Editor::moveSelection(Position offset) {
 	TileSet tmp_storage;
 
 	// Update the tiles with the newd positions
-	for (TileSet::iterator it = selection.begin(); it != selection.end(); ++it) {
+	for (auto it = selection.begin(); it != selection.end(); ++it) {
 		// First we get the old tile and it's position
 		Tile* tile = (*it);
 		// const Position pos = tile->getPosition();
@@ -916,7 +916,7 @@ void Editor::moveSelection(Position offset) {
 		// Get all the selected items from the NEW source tile and iterate through them
 		// This transfers ownership to the temporary tile
 		ItemVector tile_selection = new_src_tile->popSelectedItems();
-		for (ItemVector::iterator iit = tile_selection.begin(); iit != tile_selection.end(); iit++) {
+		for (auto iit = tile_selection.begin(); iit != tile_selection.end(); iit++) {
 			// Add the copied item to the newd destination tile,
 			Item* item = (*iit);
 			tmp_storage_tile->addItem(item);
@@ -955,7 +955,7 @@ void Editor::moveSelection(Position offset) {
 		action = actionQueue->createAction(batchAction);
 		TileList borderize_tiles;
 		// Go through all modified (selected) tiles (might be slow)
-		for (TileSet::iterator it = tmp_storage.begin(); it != tmp_storage.end(); ++it) {
+		for (auto it = tmp_storage.begin(); it != tmp_storage.end(); ++it) {
 			Position pos = (*it)->getPosition();
 			// Go through all neighbours
 			Tile* t;
@@ -1000,7 +1000,7 @@ void Editor::moveSelection(Position offset) {
 		borderize_tiles.sort();
 		borderize_tiles.unique();
 		// Do le borders!
-		for (TileList::iterator it = borderize_tiles.begin(); it != borderize_tiles.end(); ++it) {
+		for (auto it = borderize_tiles.begin(); it != borderize_tiles.end(); ++it) {
 			Tile* tile = *it;
 			Tile* new_tile = (*it)->deepCopy(map);
 			if (doborders) {
@@ -1020,7 +1020,7 @@ void Editor::moveSelection(Position offset) {
 
 	// New action for adding the destination tiles
 	action = actionQueue->createAction(batchAction);
-	for (TileSet::iterator it = tmp_storage.begin(); it != tmp_storage.end(); ++it) {
+	for (auto it = tmp_storage.begin(); it != tmp_storage.end(); ++it) {
 		Tile* tile = (*it);
 		const Position old_pos = tile->getPosition();
 		Position new_pos;
@@ -1062,7 +1062,7 @@ void Editor::moveSelection(Position offset) {
 		action = actionQueue->createAction(batchAction);
 		TileList borderize_tiles;
 		// Go through all modified (selected) tiles (might be slow)
-		for (TileSet::iterator it = selection.begin(); it != selection.end(); it++) {
+		for (auto it = selection.begin(); it != selection.end(); it++) {
 			bool add_me = false; // If this tile is touched
 			Position pos = (*it)->getPosition();
 			// Go through all neighbours
@@ -1120,7 +1120,7 @@ void Editor::moveSelection(Position offset) {
 		borderize_tiles.sort();
 		borderize_tiles.unique();
 		// Do le borders!
-		for (TileList::iterator it = borderize_tiles.begin(); it != borderize_tiles.end(); it++) {
+		for (auto it = borderize_tiles.begin(); it != borderize_tiles.end(); it++) {
 			Tile* tile = *it;
 			if (tile->ground) {
 				if (tile->ground->getGroundBrush()) {
@@ -1161,14 +1161,14 @@ void Editor::destroySelection() {
 		BatchAction* batch = actionQueue->createBatch(ACTION_DELETE_TILES);
 		Action* action = actionQueue->createAction(batch);
 
-		for (TileSet::iterator it = selection.begin(); it != selection.end(); ++it) {
+		for (auto it = selection.begin(); it != selection.end(); ++it) {
 			tile_count++;
 
 			Tile* tile = *it;
 			Tile* newtile = tile->deepCopy(map);
 
 			ItemVector tile_selection = newtile->popSelectedItems();
-			for (ItemVector::iterator iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
+			for (auto iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
 				++item_count;
 				// Delete the items from the tile
 				delete *iit;
@@ -1204,7 +1204,7 @@ void Editor::destroySelection() {
 			tilestoborder.unique();
 
 			action = actionQueue->createAction(batch);
-			for (PositionList::iterator it = tilestoborder.begin(); it != tilestoborder.end(); ++it) {
+			for (auto it = tilestoborder.begin(); it != tilestoborder.end(); ++it) {
 				TileLocation* location = map.createTileL(*it);
 				Tile* tile = location->get();
 
@@ -1473,7 +1473,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 
 	if (brush->isOptionalBorder()) {
 		// We actually need to do borders, but on the same tiles we draw to
-		for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+		for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
@@ -1501,7 +1501,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 		}
 	} else {
 
-		for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+		for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
@@ -1532,7 +1532,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 		BatchAction* batch = actionQueue->createBatch(ACTION_DRAW);
 		Action* action = actionQueue->createAction(batch);
 
-		for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+		for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
@@ -1620,7 +1620,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 		BatchAction* batch = actionQueue->createBatch(ACTION_DRAW);
 		Action* action = actionQueue->createAction(batch);
 
-		for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+		for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
@@ -1671,7 +1671,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 			g_gui.doodad_buffer_map->clear();
 			BaseMap* draw_map = g_gui.doodad_buffer_map;
 
-			for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+			for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 				TileLocation* location = map.createTileL(*it);
 				Tile* tile = location->get();
 				if (tile) {
@@ -1685,7 +1685,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 					draw_map->setTile(*it, new_tile, true);
 				}
 			}
-			for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+			for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 				// Get the correct tiles from the draw map instead of the editor map
 				Tile* tile = draw_map->getTile(*it);
 				if (tile) {
@@ -1697,7 +1697,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 			// Commit
 			batch->addAndCommitAction(action);
 		} else {
-			for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+			for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 				TileLocation* location = map.createTileL(*it);
 				Tile* tile = location->get();
 				if (tile) {
@@ -1742,7 +1742,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 		DoorBrush* door_brush = brush->asDoor();
 
 		// Loop is kind of redundant since there will only ever be one index.
-		for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+		for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
@@ -1784,7 +1784,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 		addBatch(batch, 2);
 	} else {
 		Action* action = actionQueue->createAction(ACTION_DRAW);
-		for (PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+		for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {

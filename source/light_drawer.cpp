@@ -41,7 +41,7 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 		return;
 	}
 
-	const size_t bufferSize = static_cast<size_t>(w * h * PixelFormatRGBA);
+	const auto bufferSize = static_cast<size_t>(w * h * PixelFormatRGBA);
 	if (buffer.size() != bufferSize) {
 		buffer.resize(bufferSize);
 	}
@@ -64,9 +64,9 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 					continue;
 				}
 				wxColor const light_color = colorFromEightBit(light.color);
-				uint8_t const red = static_cast<uint8_t>(light_color.Red() * intensity);
-				uint8_t const green = static_cast<uint8_t>(light_color.Green() * intensity);
-				uint8_t const blue = static_cast<uint8_t>(light_color.Blue() * intensity);
+				auto const red = static_cast<uint8_t>(light_color.Red() * intensity);
+				auto const green = static_cast<uint8_t>(light_color.Green() * intensity);
+				auto const blue = static_cast<uint8_t>(light_color.Blue() * intensity);
 				buffer[color_index] = std::max(buffer[color_index], red);
 				buffer[color_index + 1] = std::max(buffer[color_index + 1], green);
 				buffer[color_index + 2] = std::max(buffer[color_index + 2], blue);

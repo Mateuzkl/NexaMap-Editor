@@ -56,7 +56,7 @@ DatDebugViewListBox::~DatDebugViewListBox() {
 }
 
 void DatDebugViewListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
-	SpriteMap::const_iterator spr_iter = sprites.find(int(n));
+	auto spr_iter = sprites.find(int(n));
 	if (spr_iter != sprites.end()) {
 		spr_iter->second->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
 	}

@@ -77,7 +77,7 @@ CreaturePalettePanel::CreaturePalettePanel(wxWindow* parent, wxWindowID id) :
 
 	// sidesizer->Add(180, 1, wxEXPAND);
 
-	wxFlexGridSizer* grid = newd wxFlexGridSizer(4, 3, 10, 10);
+	auto* grid = newd wxFlexGridSizer(4, 3, 10, 10);
 	grid->AddGrowableCol(1);
 
 	grid->Add(newd wxStaticText(this, wxID_ANY, "Spawntime"));
@@ -133,7 +133,7 @@ Brush* CreaturePalettePanel::GetSelectedBrush() const {
 		if (selection == wxNOT_FOUND) {
 			return nullptr;
 		}
-		Brush* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(selection));
+		auto* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(selection));
 		if (brush && brush->isCreature()) {
 			g_gui.SetSpawnTime(creature_spawntime_spin->GetValue());
 			return brush;
@@ -169,10 +169,10 @@ bool CreaturePalettePanel::SelectBrush(const Brush* whatbrush) {
 	if (whatbrush->isCreature()) {
 		int current_index = tileset_choice->GetSelection();
 		if (current_index != wxNOT_FOUND) {
-			const TilesetCategory* tsc = reinterpret_cast<const TilesetCategory*>(tileset_choice->GetClientData(current_index));
+			const auto* tsc = reinterpret_cast<const TilesetCategory*>(tileset_choice->GetClientData(current_index));
 			// tsc is nullptr when "All" tileset is selected; skip iteration to avoid crash
 			if (tsc) {
-				for (BrushVector::const_iterator iter = tsc->brushlist.begin(); iter != tsc->brushlist.end(); ++iter) {
+				for (auto iter = tsc->brushlist.begin(); iter != tsc->brushlist.end(); ++iter) {
 					if (*iter == whatbrush) {
 						SelectCreature(whatbrush->getName());
 						return true;
@@ -183,11 +183,11 @@ bool CreaturePalettePanel::SelectBrush(const Brush* whatbrush) {
 		// Not in the current display, search the hidden one's
 		for (size_t i = 0; i < tileset_choice->GetCount(); ++i) {
 			if (current_index != (int)i) {
-				const TilesetCategory* tsc = reinterpret_cast<const TilesetCategory*>(tileset_choice->GetClientData(i));
+				const auto* tsc = reinterpret_cast<const TilesetCategory*>(tileset_choice->GetClientData(i));
 				if (!tsc) {
 					continue;
 				}
-				for (BrushVector::const_iterator iter = tsc->brushlist.begin();
+				for (auto iter = tsc->brushlist.begin();
 					 iter != tsc->brushlist.end();
 					 ++iter) {
 					if (*iter == whatbrush) {
@@ -244,7 +244,7 @@ void CreaturePalettePanel::OnUpdate() {
 				}
 			}
 		} else if (iter->second->name == "NPCs" || iter->second->name == "Others") {
-			Tileset* ts = const_cast<Tileset*>(iter->second);
+			auto* ts = const_cast<Tileset*>(iter->second);
 			TilesetCategory* rtsc = ts->getCategory(TILESET_CREATURE);
 			entries.push_back({ wxstr(ts->name), rtsc });
 			for (Brush* brush : rtsc->brushlist) {
@@ -305,9 +305,9 @@ void CreaturePalettePanel::SelectCreature(size_t index) {
 	SelectCreatureBrush();
 }
 
-void CreaturePalettePanel::SelectCreature(std::string name) {
+void CreaturePalettePanel::SelectCreature(const std::string& name) {
 	for (size_t i = 0; i < creature_list->GetCount(); ++i) {
-		Brush* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(i));
+		auto* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(i));
 		if (brush && brush->getName() == name) {
 			creature_list->SetSelection(i);
 			break;
@@ -429,7 +429,7 @@ void CreaturePalettePanel::OnChangeCreatureNameSearch(wxCommandEvent& event) {
 	const int selection = creature_list->GetSelection();
 	std::string preferredSelection;
 	if (selection != wxNOT_FOUND) {
-		if (Brush* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(selection))) {
+		if (auto* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(selection))) {
 			preferredSelection = brush->getName();
 		}
 	}
@@ -499,7 +499,7 @@ std::vector<CreatureBrush*> CreaturePalettePanel::GetCurrentCreatureBrushes() co
 		return brushes;
 	}
 
-	const TilesetCategory* tsc = reinterpret_cast<const TilesetCategory*>(tileset_choice->GetClientData(tileset_choice->GetSelection()));
+	const auto* tsc = reinterpret_cast<const TilesetCategory*>(tileset_choice->GetClientData(tileset_choice->GetSelection()));
 	if (!tsc) {
 		return all_creature_brushes;
 	}
@@ -518,7 +518,7 @@ CreatureBrush* CreaturePalettePanel::GetCreatureBrush(size_t index) const {
 		return nullptr;
 	}
 
-	Brush* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(index));
+	auto* brush = reinterpret_cast<Brush*>(creature_list->GetClientData(index));
 	if (brush && brush->isCreature()) {
 		return brush->asCreature();
 	}

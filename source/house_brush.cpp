@@ -53,7 +53,7 @@ void HouseBrush::undraw(BaseMap* map, Tile* tile) {
 	tile->setHouse(nullptr);
 	if (g_settings.getInteger(Config::AUTO_ASSIGN_DOORID)) {
 		// Is there a door? If so, remove any door id it has
-		for (ItemVector::iterator it = tile->items.begin();
+		for (auto it = tile->items.begin();
 			 it != tile->items.end();
 			 ++it) {
 			if (Door* door = dynamic_cast<Door*>(*it)) {
@@ -70,7 +70,7 @@ void HouseBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	tile->setPZ(true);
 	if (g_settings.getInteger(Config::HOUSE_BRUSH_REMOVE_ITEMS)) {
 		// Remove loose items
-		for (ItemVector::iterator it = tile->items.begin();
+		for (auto it = tile->items.begin();
 			 it != tile->items.end();
 			 /*..*/) {
 			Item* item = *it;
@@ -84,7 +84,7 @@ void HouseBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	}
 	if (g_settings.getInteger(Config::AUTO_ASSIGN_DOORID)) {
 		// Is there a door? If so, find an empty ID and assign it (if the door doesn't already have an id.
-		for (ItemVector::iterator it = tile->items.begin();
+		for (auto it = tile->items.begin();
 			 it != tile->items.end();
 			 ++it) {
 			if (Door* door = dynamic_cast<Door*>(*it)) {

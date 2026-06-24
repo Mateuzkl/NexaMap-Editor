@@ -29,6 +29,8 @@
 #include "gui.h"
 #include "application.h"
 #include "common_windows.h"
+
+#include <utility>
 #include "positionctrl.h"
 
 #include "iominimap.h"
@@ -55,7 +57,7 @@ MapPropertiesWindow::MapPropertiesWindow(wxWindow* parent, MapTab* view, Editor&
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 
-	wxFlexGridSizer* grid_sizer = newd wxFlexGridSizer(2, 10, 10);
+	auto* grid_sizer = newd wxFlexGridSizer(2, 10, 10);
 	grid_sizer->AddGrowableCol(1);
 
 	// Description
@@ -196,7 +198,7 @@ struct MapConversionContext {
 
 	void operator()(Map& map, Tile* tile, long long done) {
 		if (tile->creature) {
-			CreatureMap::iterator f = creature_types.find(tile->creature->getName());
+			auto f = creature_types.find(tile->creature->getName());
 			if (f == creature_types.end()) {
 				CreatureInfo info = {
 					tile->creature->getName(),
@@ -265,7 +267,7 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 			}
 
 			// Remove all creatures that were present are present in the new version
-			for (MapConversionContext::CreatureMap::iterator cs = conversion_context.creature_types.begin(); cs != conversion_context.creature_types.end();) {
+			for (auto cs = conversion_context.creature_types.begin(); cs != conversion_context.creature_types.end();) {
 				if (g_creatures[cs->first]) {
 					cs = conversion_context.creature_types.erase(cs);
 				} else {
@@ -276,7 +278,7 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 			if (conversion_context.creature_types.size() > 0) {
 				int add = g_gui.PopupDialog(this, "Unrecognized creatures", "There were creatures on the old version that are not present in this and were on the map, do you want to add them to this version as well?", wxYES | wxNO);
 				if (add == wxID_YES) {
-					for (MapConversionContext::CreatureMap::iterator cs = conversion_context.creature_types.begin(); cs != conversion_context.creature_types.end(); ++cs) {
+					for (auto cs = conversion_context.creature_types.begin(); cs != conversion_context.creature_types.end(); ++cs) {
 						MapConversionContext::CreatureInfo info = cs->second;
 						g_creatures.addCreatureType(info.name, info.is_npc, info.outfit);
 					}
@@ -337,14 +339,14 @@ END_EVENT_TABLE()
 ImportMapWindow::ImportMapWindow(wxWindow* parent, Editor& editor) :
 	wxDialog(parent, wxID_ANY, "Import Map", wxDefaultPosition, wxSize(350, 315)),
 	editor(editor) {
-	wxBoxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+	auto* sizer = newd wxBoxSizer(wxVERTICAL);
 	wxStaticBoxSizer* tmpsizer;
 
 	// File
 	tmpsizer = newd wxStaticBoxSizer(new wxStaticBox(this, wxID_ANY, "Map File"), wxHORIZONTAL);
 	file_text_field = newd wxTextCtrl(tmpsizer->GetStaticBox(), wxID_ANY, "", wxDefaultPosition, wxSize(230, 23));
 	tmpsizer->Add(file_text_field, 0, wxALL, 5);
-	wxButton* browse_button = newd wxButton(tmpsizer->GetStaticBox(), MAP_WINDOW_FILE_BUTTON, "Browse...", wxDefaultPosition, wxSize(80, 23));
+	auto* browse_button = newd wxButton(tmpsizer->GetStaticBox(), MAP_WINDOW_FILE_BUTTON, "Browse...", wxDefaultPosition, wxSize(80, 23));
 	tmpsizer->Add(browse_button, 0, wxALL, 5);
 	sizer->Add(tmpsizer, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 5);
 
@@ -388,7 +390,7 @@ ImportMapWindow::ImportMapWindow(wxWindow* parent, Editor& editor) :
 	sizer->Add(tmpsizer, 1, wxEXPAND | wxLEFT | wxRIGHT, 5);
 
 	// OK/Cancel buttons
-	wxBoxSizer* buttons = newd wxBoxSizer(wxHORIZONTAL);
+	auto* buttons = newd wxBoxSizer(wxHORIZONTAL);
 	buttons->Add(newd wxButton(this, wxID_OK, "Ok"), 0, wxALL, 5);
 	buttons->Add(newd wxButton(this, wxID_CANCEL, "Cancel"), 0, wxALL, 5);
 	sizer->Add(buttons, wxSizerFlags(1).Center());
@@ -549,7 +551,7 @@ void ExportMiniMapWindow::OnExportTypeChange(wxCommandEvent& event) {
 }
 
 void ExportMiniMapWindow::OnClickBrowse(wxCommandEvent& WXUNUSED(event)) {
-	wxDirDialog dialog(NULL, "Select the output folder", "", wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+	wxDirDialog dialog(nullptr, "Select the output folder", "", wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
 	if (dialog.ShowModal() == wxID_OK) {
 		const wxString& directory = dialog.GetPath();
 		directory_text_field->ChangeValue(directory);
@@ -676,7 +678,7 @@ ExportTilesetsWindow::ExportTilesetsWindow(wxWindow* parent, Editor& editor) :
 ExportTilesetsWindow::~ExportTilesetsWindow() = default;
 
 void ExportTilesetsWindow::OnClickBrowse(wxCommandEvent& WXUNUSED(event)) {
-	wxDirDialog dialog(NULL, "Select the output folder", "", wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+	wxDirDialog dialog(nullptr, "Select the output folder", "", wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
 	if (dialog.ShowModal() == wxID_OK) {
 		const wxString& directory = dialog.GetPath();
 		directory_text_field->ChangeValue(directory);
@@ -714,7 +716,7 @@ void ExportTilesetsWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 			{ "Collection", TILESET_COLLECTION },
 			{ "Raw", TILESET_RAW }
 		};
-		for (TilesetContainer::iterator iter = g_materials.tilesets.begin(); iter != g_materials.tilesets.end(); ++iter) {
+		for (auto iter = g_materials.tilesets.begin(); iter != g_materials.tilesets.end(); ++iter) {
 			std::string _data = iter->second->name;
 			std::transform(_data.begin(), _data.end(), _data.begin(), [](unsigned char c) { return std::tolower(c); });
 			if (_data == "others") {
@@ -840,7 +842,7 @@ EVT_BUTTON(wxID_OK, FindDialog::OnClickOK)
 EVT_BUTTON(wxID_CANCEL, FindDialog::OnClickCancel)
 END_EVENT_TABLE()
 
-FindDialog::FindDialog(wxWindow* parent, wxString title) :
+FindDialog::FindDialog(wxWindow* parent, const wxString& title) :
 	wxDialog(g_gui.root, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX),
 	idle_input_timer(this),
 	result_brush(nullptr),
@@ -946,7 +948,7 @@ void FindDialog::RefreshContents() {
 // Find Brush Dialog (Jump to brush)
 
 FindBrushDialog::FindBrushDialog(wxWindow* parent, wxString title) :
-	FindDialog(parent, title) {
+	FindDialog(parent, std::move(title)) {
 	RefreshContents();
 }
 
@@ -975,7 +977,7 @@ void FindBrushDialog::OnClickOKInternal() {
 
 			if (do_search) {
 				const BrushMap& map = g_brushes.getMap();
-				for (BrushMap::const_iterator iter = map.begin(); iter != map.end(); ++iter) {
+				for (auto iter = map.begin(); iter != map.end(); ++iter) {
 					const Brush* brush = iter->second;
 					if (as_lower_str(brush->getName()).find(search_string) == std::string::npos) {
 						continue;
@@ -1038,7 +1040,7 @@ void FindBrushDialog::RefreshContentsInternal() {
 		// We store the raws so they display last of all results
 		std::deque<const RAWBrush*> raws;
 
-		for (BrushMap::const_iterator iter = brushes_map.begin(); iter != brushes_map.end(); ++iter) {
+		for (auto iter = brushes_map.begin(); iter != brushes_map.end(); ++iter) {
 			const Brush* brush = iter->second;
 
 			if (as_lower_str(brush->getName()).find(search_string) == std::string::npos) {
@@ -1240,7 +1242,7 @@ void SortableListBox::DoSort() {
 // ============================================================================
 // Object properties base
 
-ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, wxString title, const Map* map, const Tile* tile, Item* item, wxPoint position /* = wxDefaultPosition */) :
+ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, const wxString& title, const Map* map, const Tile* tile, Item* item, wxPoint position /* = wxDefaultPosition */) :
 	wxDialog(parent, wxID_ANY, title, position, wxSize(600, 400), wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER),
 	edit_map(map),
 	edit_tile(tile),
@@ -1250,7 +1252,7 @@ ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, wxStrin
 	////
 }
 
-ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, wxString title, const Map* map, const Tile* tile, Creature* creature, wxPoint position /* = wxDefaultPosition */) :
+ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, const wxString& title, const Map* map, const Tile* tile, Creature* creature, wxPoint position /* = wxDefaultPosition */) :
 	wxDialog(parent, wxID_ANY, title, position, wxSize(600, 400), wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER),
 	edit_map(map),
 	edit_tile(tile),
@@ -1260,7 +1262,7 @@ ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, wxStrin
 	////
 }
 
-ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, wxString title, const Map* map, const Tile* tile, Spawn* spawn, wxPoint position /* = wxDefaultPosition */) :
+ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, const wxString& title, const Map* map, const Tile* tile, Spawn* spawn, wxPoint position /* = wxDefaultPosition */) :
 	wxDialog(parent, wxID_ANY, title, position, wxSize(600, 400), wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER),
 	edit_map(map),
 	edit_tile(tile),
@@ -1270,7 +1272,7 @@ ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, wxStrin
 	////
 }
 
-ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, wxString title, wxPoint position /* = wxDefaultPosition */) :
+ObjectPropertiesWindowBase::ObjectPropertiesWindowBase(wxWindow* parent, const wxString& title, wxPoint position /* = wxDefaultPosition */) :
 	wxDialog(parent, wxID_ANY, title, position, wxSize(600, 400), wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER) {
 	////
 }
@@ -1346,7 +1348,7 @@ EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
 }
 
 EditTownsDialog::~EditTownsDialog() {
-	for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+	for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 		delete *town_iter;
 	}
 }
@@ -1360,7 +1362,7 @@ void EditTownsDialog::BuildListBox(bool doselect) {
 	if (doselect && id_field->GetValue().ToLong(&tmplong)) {
 		uint32_t old_town_id = tmplong;
 
-		for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+		for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 			if (old_town_id == (*town_iter)->getID()) {
 				selection_before = (*town_iter)->getID();
 				break;
@@ -1368,7 +1370,7 @@ void EditTownsDialog::BuildListBox(bool doselect) {
 		}
 	}
 
-	for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+	for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 		Town* town = *town_iter;
 		town_name_list.Add(wxstr(town->getName()));
 		if (max_town_id < town->getID()) {
@@ -1383,7 +1385,7 @@ void EditTownsDialog::BuildListBox(bool doselect) {
 	if (doselect) {
 		if (selection_before) {
 			int i = 0;
-			for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+			for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 				if (selection_before == (*town_iter)->getID()) {
 					town_listbox->SetSelection(i);
 					return;
@@ -1405,7 +1407,7 @@ void EditTownsDialog::UpdateSelection(int new_selection) {
 
 			Town* old_town = nullptr;
 
-			for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+			for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 				if (old_town_id == (*town_iter)->getID()) {
 					old_town = *town_iter;
 					break;
@@ -1492,7 +1494,7 @@ void EditTownsDialog::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {
 
 		Town* town = nullptr;
 
-		std::vector<Town*>::iterator town_iter = town_list.begin();
+		auto town_iter = town_list.begin();
 
 		int selection_index = 0;
 		while (town_iter != town_list.end()) {
@@ -1508,7 +1510,7 @@ void EditTownsDialog::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {
 		}
 
 		Map& map = editor.map;
-		for (HouseMap::iterator house_iter = map.houses.begin(); house_iter != map.houses.end(); ++house_iter) {
+		for (auto house_iter = map.houses.begin(); house_iter != map.houses.end(); ++house_iter) {
 			House* house = house_iter->second;
 			if (house->townid == town->getID()) {
 				g_gui.PopupDialog(this, "Error", "You cannot delete a town which still has houses associated with it.", wxOK);
@@ -1537,7 +1539,7 @@ void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 
 			Town* old_town = nullptr;
 
-			for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+			for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 				if (old_town_id == (*town_iter)->getID()) {
 					old_town = *town_iter;
 					break;
@@ -1569,7 +1571,7 @@ void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		Towns& towns = editor.map.towns;
 
 		// Verify the newd information
-		for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+		for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 			Town* town = *town_iter;
 			if (town->getName() == "") {
 				g_gui.PopupDialog(this, "Error", "You can't have a town with an empty name.", wxOK);
@@ -1587,7 +1589,7 @@ void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		towns.clear();
 
 		// Build the newd town map
-		for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+		for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 			towns.addTown(*town_iter);
 		}
 		town_list.clear();

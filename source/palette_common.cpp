@@ -50,7 +50,7 @@ NamedEntityPalettePanel::NamedEntityPalettePanel(wxWindow* parent, wxWindowID id
 }
 
 wxListCtrl* NamedEntityPalettePanel::createEntityList(wxWindowID listId) {
-	wxListCtrl* list = newd wxListCtrl(this, listId, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_EDIT_LABELS | wxLC_NO_HEADER);
+	auto* list = newd wxListCtrl(this, listId, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_EDIT_LABELS | wxLC_NO_HEADER);
 	list->InsertColumn(0, "UNNAMED", wxLIST_FORMAT_LEFT, 200);
 	return list;
 }
@@ -95,20 +95,20 @@ PaletteWindow* PalettePanel::GetParentPalette() const {
 }
 
 void PalettePanel::InvalidateContents() {
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->InvalidateContents();
 	}
 }
 
 void PalettePanel::LoadCurrentContents() {
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->OnSwitchIn();
 	}
 	Fit();
 }
 
 void PalettePanel::LoadAllContents() {
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->LoadAllContents();
 	}
 }
@@ -127,7 +127,7 @@ void PalettePanel::AddToolPanel(PalettePanel* panel) {
 }
 
 void PalettePanel::SetToolbarIconSize(bool large_icons) {
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->SetToolbarIconSize(large_icons);
 	}
 }
@@ -179,13 +179,13 @@ bool PalettePanel::SelectBrush(const Brush* whatbrush) {
 }
 
 void PalettePanel::OnUpdateBrushSize(BrushShape shape, int size) {
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->OnUpdateBrushSize(shape, size);
 	}
 }
 
 void PalettePanel::OnSwitchIn() {
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->OnSwitchIn();
 	}
 	g_gui.ActivatePalette(GetParentPalette());
@@ -194,13 +194,13 @@ void PalettePanel::OnSwitchIn() {
 
 void PalettePanel::OnSwitchOut() {
 	last_brush_size = g_gui.GetBrushSize();
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->OnSwitchOut();
 	}
 }
 
 void PalettePanel::OnUpdate() {
-	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
+	for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->OnUpdate();
 	}
 }

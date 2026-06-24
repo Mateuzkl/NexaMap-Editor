@@ -197,11 +197,11 @@ GraphicManager::GraphicManager() :
 }
 
 GraphicManager::~GraphicManager() {
-	for (SpriteMap::iterator iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
+	for (auto iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
 		delete iter->second;
 	}
 
-	for (ImageMap::iterator iter = image_space.begin(); iter != image_space.end(); ++iter) {
+	for (auto iter = image_space.begin(); iter != image_space.end(); ++iter) {
 		delete iter->second;
 	}
 
@@ -264,7 +264,7 @@ bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
 
 void GraphicManager::clear() {
 	SpriteMap new_sprite_space;
-	for (SpriteMap::iterator iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
+	for (auto iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
 		if (iter->first >= 0) { // Don't clean internal sprites
 			delete iter->second;
 		} else {
@@ -272,7 +272,7 @@ void GraphicManager::clear() {
 		}
 	}
 
-	for (ImageMap::iterator iter = image_space.begin(); iter != image_space.end(); ++iter) {
+	for (auto iter = image_space.begin(); iter != image_space.end(); ++iter) {
 		delete iter->second;
 	}
 
@@ -299,7 +299,7 @@ void GraphicManager::clear() {
 }
 
 void GraphicManager::cleanSoftwareSprites() {
-	for (SpriteMap::iterator iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
+	for (auto iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
 		if (iter->first >= 0) { // Don't clean internal sprites
 			iter->second->unloadDC();
 		}
@@ -307,7 +307,7 @@ void GraphicManager::cleanSoftwareSprites() {
 }
 
 Sprite* GraphicManager::getSprite(int id) {
-	SpriteMap::iterator it = sprite_space.find(id);
+	auto it = sprite_space.find(id);
 	if (it != sprite_space.end()) {
 		return it->second;
 	}
@@ -319,7 +319,7 @@ GameSprite* GraphicManager::getCreatureSprite(int id) {
 		return nullptr;
 	}
 
-	SpriteMap::iterator it = sprite_space.find(id + item_count);
+	auto it = sprite_space.find(id + item_count);
 	if (it != sprite_space.end()) {
 		return static_cast<GameSprite*>(it->second);
 	}
@@ -331,7 +331,7 @@ GameSprite* GraphicManager::getEditorSprite(int id) {
 		return nullptr;
 	}
 
-	SpriteMap::iterator it = sprite_space.find(id);
+	auto it = sprite_space.find(id);
 	if (it != sprite_space.end()) {
 		return dynamic_cast<GameSprite*>(it->second);
 	}
@@ -510,8 +510,8 @@ bool GraphicManager::loadOTFI(const FileName& filename, wxString& error, wxArray
 		has_transparency = node->valueAt<bool>("transparency");
 		has_frame_durations = node->valueAt<bool>("frame-durations");
 		has_frame_groups = node->valueAt<bool>("frame-groups");
-		std::string metadata = node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat");
-		std::string sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
+		auto metadata = node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat");
+		auto sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
 		metadata_file = wxFileName(filename.GetFullPath(), wxString(metadata));
 		sprites_file = wxFileName(filename.GetFullPath(), wxString(sprites));
 		otfi_found = true;
@@ -563,7 +563,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	uint16_t id = minID;
 	// loop through all ItemDatabase until we reach the end of file
 	while (id <= maxID) {
-		GameSprite* sType = newd GameSprite();
+		auto* sType = newd GameSprite();
 		sprite_space[id] = sType;
 
 		sType->id = id;
@@ -643,7 +643,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 				}
 
 				if (image_space[sprite_id] == nullptr) {
-					GameSprite::NormalImage* img = newd GameSprite::NormalImage();
+					auto* img = newd GameSprite::NormalImage();
 					img->id = sprite_id;
 					image_space[sprite_id] = img;
 				}
@@ -898,15 +898,15 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 
 	// Now read individual sprites
 	int id = 1;
-	for (std::vector<uint32_t>::iterator sprite_iter = sprite_indexes.begin(); sprite_iter != sprite_indexes.end(); ++sprite_iter, ++id) {
+	for (auto sprite_iter = sprite_indexes.begin(); sprite_iter != sprite_indexes.end(); ++sprite_iter, ++id) {
 		uint32_t index = *sprite_iter + 3;
 		fh.seek(index);
 		uint16_t size;
 		safe_get(U16, size);
 
-		ImageMap::iterator it = image_space.find(id);
+		auto it = image_space.find(id);
 		if (it != image_space.end()) {
-			GameSprite::NormalImage* spr = dynamic_cast<GameSprite::NormalImage*>(it->second);
+			auto* spr = dynamic_cast<GameSprite::NormalImage*>(it->second);
 			if (spr && size > 0) {
 				if (spr->size > 0) {
 					wxString ss;
@@ -986,14 +986,14 @@ void GraphicManager::garbageCollection() {
 	if (g_settings.getInteger(Config::TEXTURE_MANAGEMENT)) {
 		int t = time(nullptr);
 		if (loaded_textures > g_settings.getInteger(Config::TEXTURE_CLEAN_THRESHOLD) && t - lastclean > g_settings.getInteger(Config::TEXTURE_CLEAN_PULSE)) {
-			ImageMap::iterator iit = image_space.begin();
+			auto iit = image_space.begin();
 			while (iit != image_space.end()) {
 				iit->second->clean(t);
 				++iit;
 			}
-			SpriteMap::iterator sit = sprite_space.begin();
+			auto sit = sprite_space.begin();
 			while (sit != sprite_space.end()) {
-				GameSprite* gs = dynamic_cast<GameSprite*>(sit->second);
+				auto* gs = dynamic_cast<GameSprite*>(sit->second);
 				if (gs) {
 					gs->clean(t);
 				}
@@ -1049,7 +1049,7 @@ GameSprite::GameSprite() :
 
 GameSprite::~GameSprite() {
 	unloadDC();
-	for (std::list<TemplateImage*>::iterator iter = instanced_templates.begin(); iter != instanced_templates.end(); ++iter) {
+	for (auto iter = instanced_templates.begin(); iter != instanced_templates.end(); ++iter) {
 		delete *iter;
 	}
 
@@ -1057,7 +1057,7 @@ GameSprite::~GameSprite() {
 }
 
 void GameSprite::clean(int time) {
-	for (std::list<TemplateImage*>::iterator iter = instanced_templates.begin();
+	for (auto iter = instanced_templates.begin();
 		 iter != instanced_templates.end();
 		 ++iter) {
 		(*iter)->clean(time);
@@ -1122,12 +1122,12 @@ GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _layer, int _
 
 GameSprite::TemplateImage* GameSprite::getTemplateImage(int sprite_index, const Outfit& outfit) {
 	if (instanced_templates.empty()) {
-		TemplateImage* img = newd TemplateImage(this, sprite_index, outfit);
+		auto* img = newd TemplateImage(this, sprite_index, outfit);
 		instanced_templates.push_back(img);
 		return img;
 	}
 	// While this is linear lookup, it is very rare for the list to contain more than 4-8 entries, so it's faster than a hashmap anyways.
-	for (std::list<TemplateImage*>::iterator iter = instanced_templates.begin(); iter != instanced_templates.end(); ++iter) {
+	for (auto iter = instanced_templates.begin(); iter != instanced_templates.end(); ++iter) {
 		TemplateImage* img = *iter;
 		if (img->sprite_index == sprite_index) {
 			uint32_t lookHash = img->lookHead << 24 | img->lookBody << 16 | img->lookLegs << 8 | img->lookFeet;
@@ -1136,7 +1136,7 @@ GameSprite::TemplateImage* GameSprite::getTemplateImage(int sprite_index, const 
 			}
 		}
 	}
-	TemplateImage* img = newd TemplateImage(this, sprite_index, outfit);
+	auto* img = newd TemplateImage(this, sprite_index, outfit);
 	instanced_templates.push_back(img);
 	return img;
 }
@@ -1314,7 +1314,7 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 	}
 
 	const int pixels_data_size = SPRITE_PIXELS * SPRITE_PIXELS * 3;
-	uint8_t* data = newd uint8_t[pixels_data_size];
+	auto* data = newd uint8_t[pixels_data_size];
 	uint8_t bpp = g_gui.gfx.hasTransparency() ? 4 : 3;
 	int write = 0;
 	int read = 0;
@@ -1363,7 +1363,7 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 	}
 
 	const int pixels_data_size = SPRITE_PIXELS_SIZE * 4;
-	uint8_t* data = newd uint8_t[pixels_data_size];
+	auto* data = newd uint8_t[pixels_data_size];
 	bool use_alpha = g_gui.gfx.hasTransparency();
 	uint8_t bpp = use_alpha ? 4 : 3;
 	int write = 0;
@@ -1439,7 +1439,7 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 			glBindTexture(GL_TEXTURE_2D, tex);
 			glTexSubImage2D(GL_TEXTURE_2D, 0, px, py, CW, CW, GL_RGBA, GL_UNSIGNED_BYTE, padded.data());
 
-			float fs = static_cast<float>(g_gui.gfx.getAtlasSize());
+			auto fs = static_cast<float>(g_gui.gfx.getAtlasSize());
 			atlas_tex = tex;
 			au0 = (px + PAD) / fs;
 			av0 = (py + PAD) / fs;
@@ -1503,7 +1503,7 @@ void GameSprite::EditorImage::createGLTexture(GLuint textureId) {
 	}
 
 	const int imageSize = SPRITE_PIXELS_SIZE * 4;
-	GLubyte* imageData = new GLubyte[imageSize];
+	auto* imageData = new GLubyte[imageSize];
 	int write = 0;
 
 	wxNativePixelData::Iterator it(data);
@@ -1697,9 +1697,9 @@ void GameSprite::TemplateImage::unloadGLTexture(GLuint unused) {
 }
 
 GameSprite* GameSprite::createFromBitmap(const wxArtID& bitmapId) {
-	GameSprite::EditorImage* image = new GameSprite::EditorImage(bitmapId);
+	auto* image = new GameSprite::EditorImage(bitmapId);
 
-	GameSprite* sprite = new GameSprite();
+	auto* sprite = new GameSprite();
 	sprite->width = 1;
 	sprite->height = 1;
 	sprite->layers = 1;

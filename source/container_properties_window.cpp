@@ -106,7 +106,7 @@ void ContainerItemButton::OnEditItem(wxCommandEvent& WXUNUSED(event)) {
 	wxPoint newDialogAt;
 	wxWindow* w = this;
 	while ((w = w->GetParent())) {
-		if (ObjectPropertiesWindowBase* o = dynamic_cast<ObjectPropertiesWindowBase*>(w)) {
+		if (auto* o = dynamic_cast<ObjectPropertiesWindowBase*>(w)) {
 			newDialogAt = o->GetPosition();
 			break;
 		}
@@ -168,7 +168,7 @@ void ContainerItemButton::setItem(Item* item) {
 
 ObjectPropertiesWindowBase* ContainerItemButton::getParentContainerWindow() {
 	for (wxWindow* window = GetParent(); window != nullptr; window = window->GetParent()) {
-		ObjectPropertiesWindowBase* propertyWindow = dynamic_cast<ObjectPropertiesWindowBase*>(window);
+		auto* propertyWindow = dynamic_cast<ObjectPropertiesWindowBase*>(window);
 		if (propertyWindow) {
 			return propertyWindow;
 		}

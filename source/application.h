@@ -70,7 +70,7 @@ public:
 	bool DoQuerySave(bool doclose = true);
 	bool DoQuerySaveTileset(bool doclose = true);
 	bool DoQueryImportCreatures();
-	bool LoadMap(FileName name);
+	bool LoadMap(const FileName& name);
 
 	void AddRecentFile(const FileName& file);
 	void LoadRecentFiles();

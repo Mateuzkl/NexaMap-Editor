@@ -19,10 +19,12 @@
 
 #include "extension.h"
 
+#include <utility>
+
 MaterialsExtension::MaterialsExtension(std::string name, std::string author, std::string description) :
-	name(name),
-	author(author),
-	description(description),
+	name(std::move(name)),
+	author(std::move(author)),
+	description(std::move(description)),
 	for_all_versions(false) {
 	////
 }

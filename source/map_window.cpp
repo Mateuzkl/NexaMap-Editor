@@ -37,7 +37,7 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 
 	gem = newd DCButton(this, MAP_WINDOW_GEM, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_16x16, EDITOR_SPRITE_SELECTION_GEM);
 
-	wxFlexGridSizer* topsizer = newd wxFlexGridSizer(2, 0, 0);
+	auto* topsizer = newd wxFlexGridSizer(2, 0, 0);
 
 	topsizer->AddGrowableCol(0);
 	topsizer->AddGrowableRow(0);
@@ -60,13 +60,13 @@ void MapWindow::ShowReplaceItemsDialog(bool selectionOnly) {
 	}
 
 	replaceItemsDialog = new ReplaceItemsDialog(this, selectionOnly);
-	replaceItemsDialog->Connect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnReplaceItemsDialogClose), NULL, this);
+	replaceItemsDialog->Connect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnReplaceItemsDialogClose), nullptr, this);
 	replaceItemsDialog->Show();
 }
 
 void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent& event) {
 	if (replaceItemsDialog) {
-		replaceItemsDialog->Disconnect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnReplaceItemsDialogClose), NULL, this);
+		replaceItemsDialog->Disconnect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnReplaceItemsDialogClose), nullptr, this);
 		replaceItemsDialog->Destroy();
 		replaceItemsDialog = nullptr;
 	}

@@ -290,7 +290,7 @@ void MapCanvas::ShowPositionIndicator(const Position& position) {
 	}
 }
 
-void MapCanvas::TakeScreenshot(wxFileName path, wxString format) {
+void MapCanvas::TakeScreenshot(wxFileName path, const wxString& format) {
 	int screensize_x, screensize_y;
 	GetViewBox(&view_scroll_x, &view_scroll_y, &screensize_x, &screensize_y);
 
@@ -1073,10 +1073,10 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 					ASSERT(remainder == 0);
 
 					editor.selection.start(); // Start a selection session
-					for (std::vector<SelectionThread*>::iterator iter = threads.begin(); iter != threads.end(); ++iter) {
+					for (auto iter = threads.begin(); iter != threads.end(); ++iter) {
 						(*iter)->Execute();
 					}
-					for (std::vector<SelectionThread*>::iterator iter = threads.begin(); iter != threads.end(); ++iter) {
+					for (auto iter = threads.begin(); iter != threads.end(); ++iter) {
 						editor.selection.join(*iter);
 					}
 					editor.selection.finish(); // Finish the selection session
@@ -1879,7 +1879,7 @@ std::string MapCanvas::getPositionString(const Position& position) const {
 
 void MapCanvas::copyTextToClipboard(const std::string& text) {
 	if (wxTheClipboard->Open()) {
-		wxTextDataObject* obj = new wxTextDataObject();
+		auto* obj = new wxTextDataObject();
 		obj->SetText(wxstr(text));
 		wxTheClipboard->SetData(obj);
 
@@ -1926,7 +1926,7 @@ void MapCanvas::OnCopyServerId(wxCommandEvent& WXUNUSED(event)) {
 
 		const Item* item = selected_items.front();
 
-		wxTextDataObject* obj = new wxTextDataObject();
+		auto* obj = new wxTextDataObject();
 		obj->SetText(i2ws(item->getID()));
 		wxTheClipboard->SetData(obj);
 
@@ -1944,7 +1944,7 @@ void MapCanvas::OnCopyClientId(wxCommandEvent& WXUNUSED(event)) {
 
 		const Item* item = selected_items.front();
 
-		wxTextDataObject* obj = new wxTextDataObject();
+		auto* obj = new wxTextDataObject();
 		obj->SetText(i2ws(item->getClientID()));
 		wxTheClipboard->SetData(obj);
 
@@ -1962,7 +1962,7 @@ void MapCanvas::OnCopyName(wxCommandEvent& WXUNUSED(event)) {
 
 		const Item* item = selected_items.front();
 
-		wxTextDataObject* obj = new wxTextDataObject();
+		auto* obj = new wxTextDataObject();
 		obj->SetText(wxstr(item->getName()));
 		wxTheClipboard->SetData(obj);
 
@@ -2019,7 +2019,7 @@ void MapCanvas::OnGotoDestination(wxCommandEvent& WXUNUSED(event)) {
 	Tile* tile = editor.selection.getSelectedTile();
 	ItemVector selected_items = tile->getSelectedItems();
 	ASSERT(selected_items.size() > 0);
-	Teleport* teleport = dynamic_cast<Teleport*>(selected_items.front());
+	auto* teleport = dynamic_cast<Teleport*>(selected_items.front());
 	if (teleport) {
 		Position pos = teleport->getDestination();
 		g_gui.SetScreenCenterPosition(pos);
@@ -2030,7 +2030,7 @@ void MapCanvas::OnCopyDestination(wxCommandEvent& WXUNUSED(event)) {
 	Tile* tile = editor.selection.getSelectedTile();
 	ItemVector selected_items = tile->getSelectedItems();
 	ASSERT(selected_items.size() > 0);
-	Teleport* teleport = dynamic_cast<Teleport*>(selected_items.front());
+	auto* teleport = dynamic_cast<Teleport*>(selected_items.front());
 	if (teleport) {
 		copyTextToClipboard(getPositionString(teleport->getDestination()));
 	}
@@ -2259,7 +2259,7 @@ void MapCanvas::OnSelectMoveTo(wxCommandEvent& WXUNUSED(event)) {
 
 	Item* item = nullptr;
 	int count = 0;
-	for (ItemVector::iterator it = selected_items.begin(); it != selected_items.end(); ++it) {
+	for (auto it = selected_items.begin(); it != selected_items.end(); ++it) {
 		++count;
 		if ((*it)->isSelected()) {
 			item = *it;
@@ -2309,7 +2309,7 @@ void MapCanvas::OnProperties(wxCommandEvent& WXUNUSED(event)) {
 
 		Item* item = nullptr;
 		int count = 0;
-		for (ItemVector::iterator it = selected_items.begin(); it != selected_items.end(); ++it) {
+		for (auto it = selected_items.begin(); it != selected_items.end(); ++it) {
 			++count;
 			if ((*it)->isSelected()) {
 				item = *it;
@@ -2500,7 +2500,7 @@ void MapPopupMenu::Update() {
 			}
 
 			if (topSelectedItem || topCreature || topItem) {
-				Teleport* teleport = dynamic_cast<Teleport*>(topSelectedItem);
+				auto* teleport = dynamic_cast<Teleport*>(topSelectedItem);
 				if (topSelectedItem && (topSelectedItem->isBrushDoor() || topSelectedItem->isRoteable() || teleport)) {
 
 					if (topSelectedItem->isRoteable()) {

@@ -672,7 +672,7 @@ void MapDrawer::DrawGrid() {
 	lines.reserve(static_cast<size_t>((end_y - start_y) + (end_x - start_x)) * 4);
 
 	for (int y = start_y; y < end_y; ++y) {
-		float py = static_cast<float>(y * TileSize - view_scroll_y);
+		auto py = static_cast<float>(y * TileSize - view_scroll_y);
 		lines.push_back(static_cast<float>(start_x * TileSize - view_scroll_x));
 		lines.push_back(py);
 		lines.push_back(static_cast<float>(end_x * TileSize - view_scroll_x));
@@ -680,7 +680,7 @@ void MapDrawer::DrawGrid() {
 	}
 
 	for (int x = start_x; x < end_x; ++x) {
-		float px = static_cast<float>(x * TileSize - view_scroll_x);
+		auto px = static_cast<float>(x * TileSize - view_scroll_x);
 		lines.push_back(px);
 		lines.push_back(static_cast<float>(start_y * TileSize - view_scroll_y));
 		lines.push_back(px);
@@ -698,7 +698,7 @@ void MapDrawer::DrawDraggingShadow() {
 
 	// Draw dragging shadow
 	if (!editor.selection.isBusy() && dragging && !options.ingame) {
-		for (TileSet::iterator tit = editor.selection.begin(); tit != editor.selection.end(); tit++) {
+		for (auto tit = editor.selection.begin(); tit != editor.selection.end(); tit++) {
 			Tile* tile = *tit;
 			Position pos = tile->getPosition();
 
@@ -1239,7 +1239,7 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 		alpha /= 2;
 	}
 
-	Podium* podium = dynamic_cast<Podium*>(item);
+	auto* podium = dynamic_cast<Podium*>(item);
 	if (it.isPodium() && !podium->hasShowPlatform() && !options.ingame) {
 		if (options.show_tech_items) {
 			alpha /= 2;
@@ -1494,7 +1494,7 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 		}
 	}
 
-	Teleport* tp = dynamic_cast<Teleport*>(item);
+	auto* tp = dynamic_cast<Teleport*>(item);
 	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty()) {
 		return;
 	}
@@ -1685,7 +1685,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 	if (!only_colors) {
 		if (zoom < 10.0 || !options.hide_items_when_zoomed) {
 			// items on tile
-			for (ItemVector::iterator it = tile->items.begin(); it != tile->items.end(); it++) {
+			for (auto it = tile->items.begin(); it != tile->items.end(); it++) {
 				// item tooltip
 				if (show_tooltips && map_z == floor) {
 					WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
@@ -2001,7 +2001,7 @@ void MapDrawer::MakeTooltip(int screenx, int screeny, const std::string& text, u
 		return;
 	}
 
-	MapTooltip* tooltip = newd MapTooltip(screenx, screeny, text, r, g, b);
+	auto* tooltip = newd MapTooltip(screenx, screeny, text, r, g, b);
 	tooltip->checkLineEnding();
 	tooltips.push_back(tooltip);
 }
@@ -2194,11 +2194,11 @@ void MapDrawer::UpdateCPUUsage() {
 	memcpy(&user, &fuser, sizeof(FILETIME));
 
 	if (last_now_time.QuadPart != 0) {
-		double process_diff = static_cast<double>(
+		auto process_diff = static_cast<double>(
 			(sys.QuadPart - last_sys_time.QuadPart) +
 			(user.QuadPart - last_cpu_time.QuadPart)
 		);
-		double system_diff = static_cast<double>(now.QuadPart - last_now_time.QuadPart);
+		auto system_diff = static_cast<double>(now.QuadPart - last_now_time.QuadPart);
 
 		if (system_diff > 0) {
 			current_cpu = (process_diff / system_diff) * 100.0;

@@ -115,7 +115,7 @@ bool TableBrush::canDraw(BaseMap* map, const Position& position) const {
 }
 
 void TableBrush::undraw(BaseMap* map, Tile* t) {
-	ItemVector::iterator it = t->items.begin();
+	auto it = t->items.begin();
 	while (it != t->items.end()) {
 		if ((*it)->isTable()) {
 			TableBrush const* tb = (*it)->getTableBrush();
@@ -240,7 +240,7 @@ void TableBrush::doTables(BaseMap* map, Tile* tile) {
 			}
 		}
 
-		BorderType const bt = static_cast<BorderType>(table_types[tiledata]);
+		auto const bt = static_cast<BorderType>(table_types[tiledata]);
 		TableNode const& tn = table_brush->table_items[static_cast<int32_t>(bt)];
 		if (tn.total_chance == 0) {
 			return;

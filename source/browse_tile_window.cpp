@@ -53,7 +53,7 @@ BrowseTileListBox::~BrowseTileListBox() {
 }
 
 void BrowseTileListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
-	ItemsMap::const_iterator item_iterator = items.find(int(n));
+	auto item_iterator = items.find(int(n));
 	Item* item = item_iterator->second;
 
 	Sprite* sprite = g_gui.gfx.getSprite(item->getClientID());
@@ -100,7 +100,7 @@ void BrowseTileListBox::RemoveSelected() {
 
 	// Delete the items from the tile
 	ItemVector tile_selection = edit_tile->popSelectedItems(true);
-	for (ItemVector::iterator iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
+	for (auto iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
 		delete *iit;
 	}
 
@@ -110,7 +110,7 @@ void BrowseTileListBox::RemoveSelected() {
 
 void BrowseTileListBox::UpdateItems() {
 	int n = 0;
-	for (ItemVector::reverse_iterator it = edit_tile->items.rbegin(); it != edit_tile->items.rend(); ++it) {
+	for (auto it = edit_tile->items.rbegin(); it != edit_tile->items.rend(); ++it) {
 		items[n] = (*it);
 		++n;
 	}
@@ -143,7 +143,7 @@ BrowseTileWindow::BrowseTileWindow(wxWindow* parent, Tile* tile, wxPoint positio
 	pos << "x=" << tile->getX() << ",  y=" << tile->getY() << ",  z=" << tile->getZ();
 
 	wxSizer* infoSizer = newd wxBoxSizer(wxVERTICAL);
-	wxBoxSizer* buttons = newd wxBoxSizer(wxHORIZONTAL);
+	auto* buttons = newd wxBoxSizer(wxHORIZONTAL);
 	delete_button = newd wxButton(this, wxID_REMOVE, "Delete");
 	delete_button->Enable(false);
 	buttons->Add(delete_button);
@@ -173,12 +173,12 @@ BrowseTileWindow::BrowseTileWindow(wxWindow* parent, Tile* tile, wxPoint positio
 	SetSizerAndFit(sizer);
 
 	// Connect Events
-	item_list->Connect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(BrowseTileWindow::OnItemSelected), NULL, this);
+	item_list->Connect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(BrowseTileWindow::OnItemSelected), nullptr, this);
 }
 
 BrowseTileWindow::~BrowseTileWindow() {
 	// Disconnect Events
-	item_list->Disconnect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(BrowseTileWindow::OnItemSelected), NULL, this);
+	item_list->Disconnect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(BrowseTileWindow::OnItemSelected), nullptr, this);
 }
 
 void BrowseTileWindow::OnItemSelected(wxCommandEvent& WXUNUSED(event)) {

@@ -39,7 +39,7 @@ void BaseMap::clear(bool del) {
 		Tile* t = (*map_iter)->get();
 		pos_vec.push_back(t->getPosition());
 	}
-	for (PositionVector::iterator pos_iter = pos_vec.begin(); pos_iter != pos_vec.end(); ++pos_iter) {
+	for (auto pos_iter = pos_vec.begin(); pos_iter != pos_vec.end(); ++pos_iter) {
 		setTile(*pos_iter, nullptr, del);
 	}
 }
@@ -85,7 +85,7 @@ TileLocation* BaseMap::getTileL(int x, int y, int z) {
 
 const TileLocation* BaseMap::getTileL(int x, int y, int z) const {
 	// Don't create static const maps!
-	BaseMap* self = const_cast<BaseMap*>(this);
+	auto* self = const_cast<BaseMap*>(this);
 	return self->getTileL(x, y, z);
 }
 
@@ -178,7 +178,7 @@ MapIterator::~MapIterator() {
 }
 
 MapIterator::MapIterator(const MapIterator& other) {
-	for (std::vector<MapIterator::NodeIndex>::const_iterator it = other.nodestack.begin(); it != other.nodestack.end(); it++) {
+	for (auto it = other.nodestack.begin(); it != other.nodestack.end(); it++) {
 		nodestack.push_back(MapIterator::NodeIndex(*it));
 	}
 	local_i = other.local_i;

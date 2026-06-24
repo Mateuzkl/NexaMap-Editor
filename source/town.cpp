@@ -37,7 +37,7 @@ void Towns::clear() {
 }
 
 bool Towns::addTown(Town* town) {
-	TownMap::iterator const it = find(town->getID());
+	auto const it = find(town->getID());
 	if (it != end()) {
 		return false;
 	}
@@ -47,7 +47,7 @@ bool Towns::addTown(Town* town) {
 
 uint32_t Towns::getEmptyID() {
 	uint32_t empty = 0;
-	for (TownMap::iterator it = begin(); it != end(); ++it) {
+	for (auto it = begin(); it != end(); ++it) {
 		if (it->second->getID() > empty) {
 			empty = it->second->getID();
 		}
@@ -56,7 +56,7 @@ uint32_t Towns::getEmptyID() {
 }
 
 Town* Towns::getTown(std::string& name) {
-	for (TownMap::iterator it = begin(); it != end(); ++it) {
+	for (auto it = begin(); it != end(); ++it) {
 		if (it->second->getName() == name) {
 			return it->second;
 		}
@@ -65,7 +65,7 @@ Town* Towns::getTown(std::string& name) {
 }
 
 Town* Towns::getTown(uint32_t id) {
-	TownMap::iterator const it = find(id);
+	auto const it = find(id);
 	if (it != end()) {
 		return it->second;
 	}

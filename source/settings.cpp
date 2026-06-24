@@ -119,7 +119,7 @@ void Settings::setFloat(uint32_t key, float newval) {
 	}
 }
 
-void Settings::setString(uint32_t key, std::string newval) {
+void Settings::setString(uint32_t key, const std::string& newval) {
 	if (key > Config::LAST) {
 		return;
 	}
@@ -410,7 +410,7 @@ void Settings::save(bool endoftheworld) {
 	IO(SAVE);
 #ifdef __WINDOWS__
 	if (use_file_cfg) {
-		wxFileConfig* conf = dynamic_cast<wxFileConfig*>(wxConfig::Get());
+		auto* conf = dynamic_cast<wxFileConfig*>(wxConfig::Get());
 		if (!conf) {
 			return;
 		}

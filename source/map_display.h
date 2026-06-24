@@ -126,7 +126,7 @@ public:
 	Position GetCursorPosition() const;
 
 	void ShowPositionIndicator(const Position& position);
-	void TakeScreenshot(wxFileName path, wxString format);
+	void TakeScreenshot(wxFileName path, const wxString& format);
 
 protected:
 	void getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill = false);

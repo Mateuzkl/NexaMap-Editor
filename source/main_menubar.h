@@ -184,7 +184,7 @@ public:
 	void Update();
 	void UpdateFloorMenu(); // Only concerns the floor menu
 
-	void AddRecentFile(FileName file);
+	void AddRecentFile(const FileName& file);
 	void LoadRecentFiles();
 	void SaveRecentFiles();
 	std::vector<wxString> GetRecentFiles();

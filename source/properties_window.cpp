@@ -74,19 +74,19 @@ void PropertiesWindow::Update() {
 }
 
 wxWindow* PropertiesWindow::createGeneralPanel(wxWindow* parent) {
-	wxPanel* panel = newd wxPanel(parent, ITEM_PROPERTIES_GENERAL_TAB);
-	wxFlexGridSizer* gridsizer = newd wxFlexGridSizer(2, 10, 10);
+	auto* panel = newd wxPanel(parent, ITEM_PROPERTIES_GENERAL_TAB);
+	auto* gridsizer = newd wxFlexGridSizer(2, 10, 10);
 	gridsizer->AddGrowableCol(1);
 
 	gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "ID " + i2ws(edit_item->getID())));
 	gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "\"" + wxstr(edit_item->getName()) + "\""));
 
 	gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "Action ID"));
-	wxSpinCtrl* action_id_field = newd wxSpinCtrl(panel, wxID_ANY, i2ws(edit_item->getActionID()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getActionID());
+	auto* action_id_field = newd wxSpinCtrl(panel, wxID_ANY, i2ws(edit_item->getActionID()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getActionID());
 	gridsizer->Add(action_id_field, wxSizerFlags(1).Expand());
 
 	gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "Unique ID"));
-	wxSpinCtrl* unique_id_field = newd wxSpinCtrl(panel, wxID_ANY, i2ws(edit_item->getUniqueID()), wxDefaultPosition, wxSize(-1, 20), wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getUniqueID());
+	auto* unique_id_field = newd wxSpinCtrl(panel, wxID_ANY, i2ws(edit_item->getUniqueID()), wxDefaultPosition, wxSize(-1, 20), wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getUniqueID());
 	gridsizer->Add(unique_id_field, wxSizerFlags(1).Expand());
 
 	panel->SetSizerAndFit(gridsizer);
@@ -95,8 +95,8 @@ wxWindow* PropertiesWindow::createGeneralPanel(wxWindow* parent) {
 }
 
 wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
-	Container const* container = static_cast<const Container*>(edit_item);
-	wxPanel* panel = newd wxPanel(parent, ITEM_PROPERTIES_CONTAINER_TAB);
+	auto const* container = static_cast<const Container*>(edit_item);
+	auto* panel = newd wxPanel(parent, ITEM_PROPERTIES_CONTAINER_TAB);
 	wxSizer* topSizer = newd wxBoxSizer(wxVERTICAL);
 
 	wxSizer* gridSizer = newd wxGridSizer(6, 5, 5);
@@ -104,7 +104,7 @@ wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
 	bool const use_large_sprites = g_settings.getBoolean(Config::USE_LARGE_CONTAINER_ICONS);
 	for (uint32_t i = 0; i < container->getVolume(); ++i) {
 		Item* item = container->getItem(i);
-		ContainerItemButton* containerItemButton = newd ContainerItemButton(panel, use_large_sprites, i, edit_map, item);
+		auto* containerItemButton = newd ContainerItemButton(panel, use_large_sprites, i, edit_map, item);
 
 		container_items.push_back(containerItemButton);
 		gridSizer->Add(containerItemButton, wxSizerFlags(0));
@@ -124,7 +124,7 @@ wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
 }
 
 wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
-	wxPanel* panel = newd wxPanel(parent, wxID_ANY);
+	auto* panel = newd wxPanel(parent, wxID_ANY);
 	wxSizer* topSizer = newd wxBoxSizer(wxVERTICAL);
 
 	attributesGrid = newd wxGrid(panel, ITEM_PROPERTIES_ADVANCED_TAB, wxDefaultPosition, wxSize(-1, 160));
@@ -152,7 +152,7 @@ wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
 	ItemAttributeMap attrs = edit_item->getAttributes();
 	attributesGrid->AppendRows(attrs.size());
 	int i = 0;
-	for (ItemAttributeMap::iterator aiter = attrs.begin(); aiter != attrs.end(); ++aiter, ++i) {
+	for (auto aiter = attrs.begin(); aiter != attrs.end(); ++aiter, ++i) {
 		SetGridValue(attributesGrid, i, aiter->first, aiter->second);
 	}
 

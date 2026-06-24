@@ -51,7 +51,7 @@ public:
 protected:
 	void SelectTileset(size_t index);
 	void SelectCreature(size_t index);
-	void SelectCreature(std::string name);
+	void SelectCreature(const std::string& name);
 
 public:
 	// Event handling

@@ -150,8 +150,8 @@ bool HousePalettePanel::SelectBrush(const Brush* whatbrush) {
 	}
 
 	if (whatbrush->isHouse() && map) {
-		const HouseBrush* house_brush = static_cast<const HouseBrush*>(whatbrush);
-		for (HouseMap::iterator house_iter = map->houses.begin(); house_iter != map->houses.end(); ++house_iter) {
+		const auto* house_brush = static_cast<const HouseBrush*>(whatbrush);
+		for (auto house_iter = map->houses.begin(); house_iter != map->houses.end(); ++house_iter) {
 			if (house_iter->second->getID() == house_brush->getHouseID()) {
 				for (uint32_t i = 0; i < town_choice->GetCount(); ++i) {
 					Town* town = reinterpret_cast<Town*>(town_choice->GetClientData(i));
@@ -195,7 +195,7 @@ void HousePalettePanel::SelectTown(size_t index) {
 		// Clear the old houselist
 		house_list->Clear();
 
-		for (HouseMap::iterator house_iter = map->houses.begin(); house_iter != map->houses.end(); ++house_iter) {
+		for (auto house_iter = map->houses.begin(); house_iter != map->houses.end(); ++house_iter) {
 			if (what_town) {
 				if (house_iter->second->townid == what_town->getID()) {
 					house_list->Append(wxstr(house_iter->second->getDescription()), house_iter->second);
@@ -278,7 +278,7 @@ void HousePalettePanel::OnUpdate() {
 
 	if (map->towns.count() != 0) {
 		// Create choice control
-		for (TownMap::iterator town_iter = map->towns.begin(); town_iter != map->towns.end(); ++town_iter) {
+		for (auto town_iter = map->towns.begin(); town_iter != map->towns.end(); ++town_iter) {
 			town_choice->Append(wxstr(town_iter->second->getName()), town_iter->second);
 		}
 		town_choice->Append("No Town", (void*)(nullptr));
@@ -316,7 +316,7 @@ void HousePalettePanel::OnListBoxChange(wxCommandEvent& event) {
 }
 
 void HousePalettePanel::OnListBoxDoubleClick(wxCommandEvent& event) {
-	House* house = reinterpret_cast<House*>(event.GetClientData());
+	auto* house = reinterpret_cast<House*>(event.GetClientData());
 	// I find it extremly unlikely that one actually wants the exit at 0,0,0, so just treat it as the null value
 	if (house && house->getExit() != Position(0, 0, 0)) {
 		g_gui.SetScreenCenterPosition(house->getExit());
@@ -338,7 +338,7 @@ void HousePalettePanel::OnClickAddHouse(wxCommandEvent& event) {
 		return;
 	}
 
-	House* new_house = newd House(*map);
+	auto* new_house = newd House(*map);
 	new_house->setID(map->houses.getEmptyID());
 
 	std::ostringstream os;
@@ -364,7 +364,7 @@ void HousePalettePanel::OnClickEditHouse(wxCommandEvent& event) {
 		return;
 	}
 	int selection = house_list->GetSelection();
-	House* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
+	auto* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
 	if (house) {
 		wxDialog* d = newd EditHouseDialog(g_gui.root, map, house);
 		int ret = d->ShowModal();
@@ -384,7 +384,7 @@ void HousePalettePanel::OnClickEditHouse(wxCommandEvent& event) {
 void HousePalettePanel::OnClickRemoveHouse(wxCommandEvent& event) {
 	int selection = house_list->GetSelection();
 	if (selection != wxNOT_FOUND) {
-		House* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
+		auto* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
 		map->houses.removeHouse(house);
 		house_list->Delete(selection);
 		refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
@@ -445,10 +445,10 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 	// main properties window box
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 	wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "House Properties");
-	wxFlexGridSizer* housePropContainer = newd wxFlexGridSizer(2, 10, 10);
+	auto* housePropContainer = newd wxFlexGridSizer(2, 10, 10);
 	housePropContainer->AddGrowableCol(1);
 
-	wxFlexGridSizer* subsizer = newd wxFlexGridSizer(2, 10, 10);
+	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
 
 	house_name = wxstr(house->name);
@@ -471,7 +471,7 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 
 	if (towns.count() > 0) {
 		bool found = false;
-		for (TownMap::const_iterator town_iter = towns.begin(); town_iter != towns.end(); ++town_iter) {
+		for (auto town_iter = towns.begin(); town_iter != towns.end(); ++town_iter) {
 			if (town_iter->second->getID() == houseTownId) {
 				found = true;
 			}
@@ -498,10 +498,10 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 	subsizer->Add(rent_field, wxSizerFlags(1).Expand());
 
 	// Right column
-	wxFlexGridSizer* subsizerRight = newd wxFlexGridSizer(1, 10, 10);
+	auto* subsizerRight = newd wxFlexGridSizer(1, 10, 10);
 
 	// house ID
-	wxFlexGridSizer* houseSizer = newd wxFlexGridSizer(2, 10, 10);
+	auto* houseSizer = newd wxFlexGridSizer(2, 10, 10);
 
 	houseSizer->Add(newd wxStaticText(this, wxID_ANY, "ID:"), wxSizerFlags(0).Center());
 	id_field = newd wxSpinCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(40, 20), wxSP_ARROW_KEYS, 1, 0xFFFF, house->getID());
@@ -540,9 +540,9 @@ EditHouseDialog::~EditHouseDialog() {
 
 void EditHouseDialog::OnFocusChange(wxFocusEvent& event) {
 	wxWindow* win = event.GetWindow();
-	if (wxSpinCtrl* spin = dynamic_cast<wxSpinCtrl*>(win)) {
+	if (auto* spin = dynamic_cast<wxSpinCtrl*>(win)) {
 		spin->SetSelection(-1, -1);
-	} else if (wxTextCtrl* text = dynamic_cast<wxTextCtrl*>(win)) {
+	} else if (auto* text = dynamic_cast<wxTextCtrl*>(win)) {
 		text->SetSelection(-1, -1);
 	}
 }

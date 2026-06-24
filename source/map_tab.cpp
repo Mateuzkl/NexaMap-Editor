@@ -98,7 +98,7 @@ Map* MapTab::GetMap() const {
 
 void MapTab::VisibilityCheck() {
 	EditorTab* editorTab = aui->GetCurrentTab();
-	MapTab* mapTab = dynamic_cast<MapTab*>(editorTab);
+	auto* mapTab = dynamic_cast<MapTab*>(editorTab);
 	UpdateDialogs(mapTab && HasSameReference(mapTab));
 }
 

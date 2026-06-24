@@ -353,7 +353,7 @@ wxChoice* PreferencesWindow::AddPaletteStyleChoice(wxWindow* parent, wxSizer* si
 	wxStaticText* text;
 	sizer->Add(text = newd wxStaticText(parent, wxID_ANY, short_description), 0);
 
-	wxChoice* choice = newd wxChoice(parent, wxID_ANY);
+	auto* choice = newd wxChoice(parent, wxID_ANY);
 	sizer->Add(choice, 0);
 
 	choice->Append("Large Icons");
@@ -510,7 +510,7 @@ wxNotebookPage* PreferencesWindow::CreateClientPage() {
 
 	// Default client version choice control
 	default_version_choice = newd wxChoice(client_page, wxID_ANY);
-	wxStaticText* default_client_tooltip = newd wxStaticText(client_page, wxID_ANY, "Default client version:");
+	auto* default_client_tooltip = newd wxStaticText(client_page, wxID_ANY, "Default client version:");
 	options_sizer->Add(default_client_tooltip, 0, wxLEFT | wxTOP, 5);
 	options_sizer->Add(default_version_choice, 0, wxTOP, 5);
 	SetWindowToolTip(default_client_tooltip, default_version_choice, "This will decide what client version will be used when new maps are created.");
@@ -525,7 +525,7 @@ wxNotebookPage* PreferencesWindow::CreateClientPage() {
 	topsizer->Add(options_sizer, wxSizerFlags(0).Expand());
 	topsizer->AddSpacer(10);
 
-	wxScrolledWindow* client_list_window = newd wxScrolledWindow(client_page, wxID_ANY, wxDefaultPosition, wxDefaultSize);
+	auto* client_list_window = newd wxScrolledWindow(client_page, wxID_ANY, wxDefaultPosition, wxDefaultSize);
 	client_list_window->SetMinSize(FROM_DIP(this, wxSize(450, 450)));
 	auto* client_list_sizer = newd wxFlexGridSizer(2, 10, 10);
 	client_list_sizer->AddGrowableCol(1);
@@ -538,10 +538,10 @@ wxNotebookPage* PreferencesWindow::CreateClientPage() {
 
 		default_version_choice->Append(wxstr(version->getName()));
 
-		wxStaticText* tmp_text = newd wxStaticText(client_list_window, wxID_ANY, wxString(version->getName()));
+		auto* tmp_text = newd wxStaticText(client_list_window, wxID_ANY, wxString(version->getName()));
 		client_list_sizer->Add(tmp_text, wxSizerFlags(0).Expand());
 
-		wxDirPickerCtrl* dir_picker = newd wxDirPickerCtrl(client_list_window, wxID_ANY, version->getClientPath().GetFullPath());
+		auto* dir_picker = newd wxDirPickerCtrl(client_list_window, wxID_ANY, version->getClientPath().GetFullPath());
 		version_dir_pickers.push_back(dir_picker);
 		client_list_sizer->Add(dir_picker, wxSizerFlags(0).Border(wxRIGHT, 10).Expand());
 
@@ -557,13 +557,13 @@ wxNotebookPage* PreferencesWindow::CreateClientPage() {
 		version_counter++;
 	}
 
-	wxStaticText* monsters_lua_text = newd wxStaticText(client_list_window, wxID_ANY, "Monsters Lua directory:");
+	auto* monsters_lua_text = newd wxStaticText(client_list_window, wxID_ANY, "Monsters Lua directory:");
 	client_list_sizer->Add(monsters_lua_text, wxSizerFlags(0).Expand());
 	monsters_lua_dir_picker = newd wxDirPickerCtrl(client_list_window, wxID_ANY, wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY)));
 	client_list_sizer->Add(monsters_lua_dir_picker, wxSizerFlags(0).Border(wxRIGHT, 10).Expand());
 	SetWindowToolTip(monsters_lua_text, monsters_lua_dir_picker, "Path to server monster Lua files.");
 
-	wxStaticText* npcs_lua_text = newd wxStaticText(client_list_window, wxID_ANY, "NPCs Lua directory:");
+	auto* npcs_lua_text = newd wxStaticText(client_list_window, wxID_ANY, "NPCs Lua directory:");
 	client_list_sizer->Add(npcs_lua_text, wxSizerFlags(0).Expand());
 	npcs_lua_dir_picker = newd wxDirPickerCtrl(client_list_window, wxID_ANY, wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY)));
 	client_list_sizer->Add(npcs_lua_dir_picker, wxSizerFlags(0).Border(wxRIGHT, 10).Expand());

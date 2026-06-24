@@ -98,9 +98,9 @@ bool Application::OnInit() {
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-	std::cout << "This is free software: you are free to change and redistribute it." << std::endl;
-	std::cout << "There is NO WARRANTY, to the extent permitted by law." << std::endl;
-	std::cout << "Review COPYING in RME distribution for details." << std::endl;
+	std::cout << "This is free software: you are free to change and redistribute it." << '\n';
+	std::cout << "There is NO WARRANTY, to the extent permitted by law." << '\n';
+	std::cout << "Review COPYING in RME distribution for details." << '\n';
 	mt_seed(time(nullptr));
 	srand(time(nullptr));
 
@@ -475,7 +475,7 @@ bool MainFrame::DoQueryImportCreatures() {
 		if (ret == wxID_YES) {
 			bool missingMonsters = false;
 			bool missingNpcs = false;
-			for (CreatureDatabase::iterator iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
+			for (auto iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
 				if (!iter->second->missing) {
 					continue;
 				}
@@ -528,7 +528,7 @@ void MainFrame::UpdateFloorMenu() {
 	menu_bar->UpdateFloorMenu();
 }
 
-bool MainFrame::LoadMap(FileName name) {
+bool MainFrame::LoadMap(const FileName& name) {
 	return g_gui.LoadMap(name);
 }
 

@@ -41,6 +41,6 @@ void Spawns::removeSpawn(Tile* tile) {
 }
 
 std::ostream& operator<<(std::ostream& os, const Spawn& spawn) {
-	os << &spawn << ":: -> " << spawn.getSize() << std::endl;
+	os << &spawn << ":: -> " << spawn.getSize() << '\n';
 	return os;
 }

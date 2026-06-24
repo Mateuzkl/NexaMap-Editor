@@ -1115,7 +1115,7 @@ bool IOMapOTBM::loadSpawns(Map& map, pugi::xml_document& doc) {
 			continue;
 		}
 
-		Spawn* spawn = newd Spawn(radius);
+		auto* spawn = newd Spawn(radius);
 		if (!tile) {
 			tile = map.allocator(map.createTileL(spawnPosition));
 			map.setTile(spawnPosition, tile);
@@ -1199,7 +1199,7 @@ bool IOMapOTBM::loadSpawns(Map& map, pugi::xml_document& doc) {
 				type = g_creatures.addMissingCreatureType(name, isNpc);
 			}
 
-			Creature* creature = newd Creature(type);
+			auto* creature = newd Creature(type);
 			creature->setDirection(direction);
 			creature->setSpawnTime(spawntime);
 			creature->setWeight(weight);
@@ -1208,7 +1208,7 @@ bool IOMapOTBM::loadSpawns(Map& map, pugi::xml_document& doc) {
 			if (creatureTile->getLocation()->getSpawnCount() == 0) {
 				// No spawn, create a newd one
 				ASSERT(creatureTile->spawn == nullptr);
-				Spawn* spawn = newd Spawn(5);
+				auto* spawn = newd Spawn(5);
 				creatureTile->spawn = spawn;
 				map.addSpawn(creatureTile);
 			}

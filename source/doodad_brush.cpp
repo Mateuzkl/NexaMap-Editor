@@ -38,7 +38,7 @@ DoodadBrush::DoodadBrush() :
 }
 
 DoodadBrush::~DoodadBrush() {
-	for (std::vector<AlternativeBlock*>::iterator alt_iter = alternatives.begin(); alt_iter != alternatives.end(); ++alt_iter) {
+	for (auto alt_iter = alternatives.begin(); alt_iter != alternatives.end(); ++alt_iter) {
 		delete *alt_iter;
 	}
 }
@@ -50,18 +50,18 @@ DoodadBrush::AlternativeBlock::AlternativeBlock() :
 }
 
 DoodadBrush::AlternativeBlock::~AlternativeBlock() {
-	for (std::vector<CompositeBlock>::iterator composite_iter = composite_items.begin(); composite_iter != composite_items.end(); ++composite_iter) {
+	for (auto composite_iter = composite_items.begin(); composite_iter != composite_items.end(); ++composite_iter) {
 		CompositeTileList& tv = composite_iter->items;
 
-		for (CompositeTileList::iterator compt_iter = tv.begin(); compt_iter != tv.end(); ++compt_iter) {
+		for (auto compt_iter = tv.begin(); compt_iter != tv.end(); ++compt_iter) {
 			ItemVector& items = compt_iter->second;
-			for (ItemVector::iterator iiter = items.begin(); iiter != items.end(); ++iiter) {
+			for (auto iiter = items.begin(); iiter != items.end(); ++iiter) {
 				delete *iiter;
 			}
 		}
 	}
 
-	for (std::vector<SingleBlock>::iterator single_iter = single_items.begin(); single_iter != single_items.end(); ++single_iter) {
+	for (auto single_iter = single_items.begin(); single_iter != single_items.end(); ++single_iter) {
 		delete single_iter->item;
 	}
 }
@@ -243,18 +243,18 @@ bool DoodadBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 }
 
 bool DoodadBrush::AlternativeBlock::ownsItem(uint16_t id) const {
-	for (std::vector<SingleBlock>::const_iterator single_iter = single_items.begin(); single_iter != single_items.end(); ++single_iter) {
+	for (auto single_iter = single_items.begin(); single_iter != single_items.end(); ++single_iter) {
 		if (single_iter->item->getID() == id) {
 			return true;
 		}
 	}
 
-	for (std::vector<CompositeBlock>::const_iterator composite_iter = composite_items.begin(); composite_iter != composite_items.end(); ++composite_iter) {
+	for (auto composite_iter = composite_items.begin(); composite_iter != composite_items.end(); ++composite_iter) {
 		const CompositeTileList& ctl = composite_iter->items;
-		for (CompositeTileList::const_iterator comp_iter = ctl.begin(); comp_iter != ctl.end(); ++comp_iter) {
+		for (auto comp_iter = ctl.begin(); comp_iter != ctl.end(); ++comp_iter) {
 			const ItemVector& items = comp_iter->second;
 
-			for (ItemVector::const_iterator item_iter = items.begin(), item_end = items.end(); item_iter != item_end; ++item_iter) {
+			for (auto item_iter = items.begin(), item_end = items.end(); item_iter != item_end; ++item_iter) {
 				if ((*item_iter)->getID() == id) {
 					return true;
 				}
@@ -270,7 +270,7 @@ bool DoodadBrush::ownsItem(Item* item) const {
 	}
 	uint16_t const id = item->getID();
 
-	for (std::vector<AlternativeBlock*>::const_iterator alt_iter = alternatives.begin(); alt_iter != alternatives.end(); ++alt_iter) {
+	for (auto alt_iter = alternatives.begin(); alt_iter != alternatives.end(); ++alt_iter) {
 		if ((*alt_iter)->ownsItem(id)) {
 			return true;
 		}
@@ -280,7 +280,7 @@ bool DoodadBrush::ownsItem(Item* item) const {
 
 void DoodadBrush::undraw(BaseMap* map, Tile* tile) {
 	// Remove all doodad-related
-	for (ItemVector::iterator item_iter = tile->items.begin(); item_iter != tile->items.end();) {
+	for (auto item_iter = tile->items.begin(); item_iter != tile->items.end();) {
 		Item* item = *item_iter;
 		if (item->getDoodadBrush() != nullptr) {
 			if (item->isComplex() && g_settings.getInteger(Config::ERASER_LEAVE_UNIQUE)) {
@@ -331,7 +331,7 @@ void DoodadBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	ASSERT(ab_ptr);
 
 	int roll = random(1, ab_ptr->single_chance);
-	for (std::vector<SingleBlock>::const_iterator block_iter = ab_ptr->single_items.begin(); block_iter != ab_ptr->single_items.end(); ++block_iter) {
+	for (auto block_iter = ab_ptr->single_items.begin(); block_iter != ab_ptr->single_items.end(); ++block_iter) {
 		const SingleBlock& sb = *block_iter;
 		if (roll <= sb.chance) {
 			// Use this!
@@ -358,7 +358,7 @@ const CompositeTileList& DoodadBrush::getComposite(int variation) const {
 	ASSERT(ab_ptr);
 
 	int const roll = random(1, ab_ptr->composite_chance);
-	for (std::vector<CompositeBlock>::const_iterator block_iter = ab_ptr->composite_items.begin(); block_iter != ab_ptr->composite_items.end(); ++block_iter) {
+	for (auto block_iter = ab_ptr->composite_items.begin(); block_iter != ab_ptr->composite_items.end(); ++block_iter) {
 		const CompositeBlock& cb = *block_iter;
 		if (roll <= cb.chance) {
 			return cb.items;

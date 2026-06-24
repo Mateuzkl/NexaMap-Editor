@@ -338,7 +338,7 @@ bool ItemDatabase::loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArra
 			continue;
 		}
 
-		ItemType* t = newd ItemType();
+		auto* t = newd ItemType();
 		t->group = ItemGroup_t(u8);
 
 		switch (t->group) {
@@ -425,7 +425,7 @@ bool ItemDatabase::loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArra
 			continue;
 		}
 
-		ItemType* t = newd ItemType();
+		auto* t = newd ItemType();
 		t->group = ItemGroup_t(u8);
 
 		switch (t->group) {
@@ -592,7 +592,7 @@ bool ItemDatabase::loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArra
 			continue;
 		}
 
-		ItemType* t = newd ItemType();
+		auto* t = newd ItemType();
 		t->group = ItemGroup_t(u8);
 
 		switch (t->group) {

@@ -112,13 +112,13 @@ void SearchResultWindow::AddPosition(wxString description, Position pos) {
 }
 
 void SearchResultWindow::AddDuplicateItem(const Position& pos, uint16_t itemId, uint16_t count) {
-	ResultData* data = newd ResultData(pos, itemId, count);
+	auto* data = newd ResultData(pos, itemId, count);
 	result_list->Append(wxString::Format("item: %d, count: %d, pos: (%d,%d,%d)", itemId, count, pos.x, pos.y, pos.z), data);
 	UpdateButtons();
 }
 
 void SearchResultWindow::OnClickResult(wxCommandEvent& event) {
-	ResultData* data = reinterpret_cast<ResultData*>(event.GetClientData());
+	auto* data = reinterpret_cast<ResultData*>(event.GetClientData());
 	if (data) {
 		g_gui.SetScreenCenterPosition(data->position);
 	}

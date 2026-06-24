@@ -26,6 +26,8 @@
 #include "otml.h"
 #include <wx/dir.h>
 
+#include <utility>
+
 // Static methods to load/save
 
 ClientVersion::VersionMap ClientVersion::client_versions;
@@ -129,7 +131,7 @@ void ClientVersion::loadVersions() {
 }
 
 void ClientVersion::unloadVersions() {
-	for (VersionMap::iterator it = client_versions.begin(); it != client_versions.end(); ++it) {
+	for (auto it = client_versions.begin(); it != client_versions.end(); ++it) {
 		delete it->second;
 	}
 	client_versions.clear();
@@ -161,7 +163,7 @@ void ClientVersion::loadOTBInfo(pugi::xml_node otbNode) {
 		return;
 	}
 
-	OtbFormatVersion versionId = static_cast<OtbFormatVersion>(attribute.as_uint());
+	auto versionId = static_cast<OtbFormatVersion>(attribute.as_uint());
 	if (versionId < OTB_VERSION_1 || versionId > OTB_VERSION_3) {
 		wxLogError("Node 'otb' unrecognized format version (version 1..3 supported).");
 		return;
@@ -196,7 +198,7 @@ void ClientVersion::loadVersion(pugi::xml_node versionNode) {
 		return;
 	}
 
-	ClientVersion* version = newd ClientVersion(otb_versions[otbVersionName], versionName, wxstr(dataPath));
+	auto* version = newd ClientVersion(otb_versions[otbVersionName], versionName, wxstr(dataPath));
 
 	bool should_be_default = versionNode.attribute("default").as_bool();
 	version->visible = versionNode.attribute("visible").as_bool();
@@ -328,7 +330,7 @@ void ClientVersion::loadVersionExtensions(pugi::xml_node versionNode) {
 void ClientVersion::saveVersions() {
 	nlohmann::json vers_obj = nlohmann::json::array();
 
-	for (VersionMap::iterator i = client_versions.begin(); i != client_versions.end(); ++i) {
+	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
 		ClientVersion* version = i->second;
 		vers_obj.push_back({
 			{"id", version->getName()},
@@ -341,24 +343,24 @@ void ClientVersion::saveVersions() {
 // Client version class
 
 ClientVersion::ClientVersion(OtbVersion otb, std::string versionName, wxString path) :
-	otb(otb),
-	name(versionName),
+	otb(std::move(otb)),
+	name(std::move(versionName)),
 	visible(false),
 	preferred_map_version(MAP_OTBM_UNKNOWN),
-	data_path(path) {
+	data_path(std::move(path)) {
 	////
 }
 
 ClientVersion* ClientVersion::get(ClientVersionID id) {
-	VersionMap::iterator i = client_versions.find(id);
+	auto i = client_versions.find(id);
 	if (i == client_versions.end()) {
 		return nullptr;
 	}
 	return i->second;
 }
 
-ClientVersion* ClientVersion::get(std::string id) {
-	for (VersionMap::iterator i = client_versions.begin(); i != client_versions.end(); ++i) {
+ClientVersion* ClientVersion::get(const std::string& id) {
+	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
 		if (i->second->getName() == id) {
 			return i->second;
 		}
@@ -368,7 +370,7 @@ ClientVersion* ClientVersion::get(std::string id) {
 
 ClientVersionList ClientVersion::getAllVisible() {
 	ClientVersionList l;
-	for (VersionMap::iterator i = client_versions.begin(); i != client_versions.end(); ++i) {
+	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
 		if (i->second->isVisible()) {
 			l.push_back(i->second);
 		}
@@ -378,9 +380,9 @@ ClientVersionList ClientVersion::getAllVisible() {
 
 ClientVersionList ClientVersion::getAllForOTBMVersion(MapVersionID id) {
 	ClientVersionList list;
-	for (VersionMap::iterator i = client_versions.begin(); i != client_versions.end(); ++i) {
+	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
 		if (i->second->isVisible()) {
-			for (std::vector<MapVersionID>::iterator v = i->second->map_versions_supported.begin(); v != i->second->map_versions_supported.end(); ++v) {
+			for (auto v = i->second->map_versions_supported.begin(); v != i->second->map_versions_supported.end(); ++v) {
 				if (*v == id) {
 					list.push_back(i->second);
 				}
@@ -423,8 +425,8 @@ bool ClientVersion::hasValidPaths() {
 		OTMLDocumentPtr doc = OTMLDocument::parse(otfi.GetFullPath().ToStdString());
 		if (doc->size() != 0 && doc->hasChildAt("DatSpr")) {
 			OTMLNodePtr node = doc->get("DatSpr");
-			std::string metadata = node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat");
-			std::string sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
+			auto metadata = node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat");
+			auto sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
 			metadata_path = wxFileName(client_path.GetFullPath(), wxString(metadata));
 			sprites_path = wxFileName(client_path.GetFullPath(), wxString(sprites));
 		}
@@ -496,7 +498,7 @@ bool ClientVersion::loadValidPaths() {
 }
 
 DatFormat ClientVersion::getDatFormatForSignature(uint32_t signature) const {
-	for (std::vector<ClientData>::const_iterator iter = data_versions.begin(); iter != data_versions.end(); ++iter) {
+	for (auto iter = data_versions.begin(); iter != data_versions.end(); ++iter) {
 		if (iter->datSignature == signature) {
 			return iter->datFormat;
 		}

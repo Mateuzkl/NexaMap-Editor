@@ -188,7 +188,7 @@ void WelcomeDialogButton::OnMouseLeave(const wxMouseEvent& event) {
 
 RecentMapsPanel::RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const wxColour& base_colour, const std::vector<wxString>& recent_files) :
 	wxPanel(parent, wxID_ANY) {
-	wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+	auto* sizer = new wxBoxSizer(wxVERTICAL);
 	for (const wxString& file : recent_files) {
 		auto* recent_item = newd RecentItem(this, base_colour, file);
 		sizer->Add(recent_item, 0, wxEXPAND);
@@ -211,8 +211,8 @@ RecentItem::RecentItem(wxWindow* parent, const wxColour& base_colour, const wxSt
 	m_file_path->SetToolTip(m_item_text);
 	m_file_path->SetFont(GetFont().Smaller());
 	m_file_path->SetForegroundColour(m_text_colour);
-	wxBoxSizer* mainSizer = newd wxBoxSizer(wxHORIZONTAL);
-	wxBoxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+	auto* mainSizer = newd wxBoxSizer(wxHORIZONTAL);
+	auto* sizer = newd wxBoxSizer(wxVERTICAL);
 	sizer->Add(m_title);
 	sizer->Add(m_file_path, 1, wxTOP, FROM_DIP(this, 2));
 	mainSizer->Add(sizer, 0, wxEXPAND | wxALL, FROM_DIP(this, 8));

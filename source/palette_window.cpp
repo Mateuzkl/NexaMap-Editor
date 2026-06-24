@@ -103,14 +103,14 @@ PaletteWindow::~PaletteWindow() {
 }
 
 PalettePanel* PaletteWindow::CreateTerrainPalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	BrushPalettePanel* panel = newd BrushPalettePanel(parent, tilesets, TILESET_TERRAIN);
+	auto* panel = newd BrushPalettePanel(parent, tilesets, TILESET_TERRAIN);
 	panel->SetListType(wxstr(g_settings.getString(Config::PALETTE_TERRAIN_STYLE)));
 
-	BrushToolPanel* tool_panel = newd BrushToolPanel(panel);
+	auto* tool_panel = newd BrushToolPanel(panel);
 	tool_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_TERRAIN_TOOLBAR));
 	panel->AddToolPanel(tool_panel);
 
-	BrushSizePanel* size_panel = newd BrushSizePanel(panel);
+	auto* size_panel = newd BrushSizePanel(panel);
 	size_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_TERRAIN_TOOLBAR));
 	panel->AddToolPanel(size_panel);
 
@@ -118,11 +118,11 @@ PalettePanel* PaletteWindow::CreateTerrainPalette(wxWindow* parent, const Tilese
 }
 
 PalettePanel* PaletteWindow::CreateCollectionPalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	BrushPalettePanel* panel = newd BrushPalettePanel(parent, tilesets, TILESET_COLLECTION);
+	auto* panel = newd BrushPalettePanel(parent, tilesets, TILESET_COLLECTION);
 	panel->SetListType(wxstr(g_settings.getString(Config::PALETTE_COLLECTION_STYLE)));
 
 	// terrain palette tools
-	BrushToolPanel* tool_panel = newd BrushToolPanel(panel);
+	auto* tool_panel = newd BrushToolPanel(panel);
 	tool_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_COLLECTION_TOOLBAR));
 	panel->AddToolPanel(tool_panel);
 
@@ -130,7 +130,7 @@ PalettePanel* PaletteWindow::CreateCollectionPalette(wxWindow* parent, const Til
 	panel->AddToolPanel(newd BrushThicknessPanel(panel));
 
 	// brush size tools
-	BrushSizePanel* size_panel = newd BrushSizePanel(panel);
+	auto* size_panel = newd BrushSizePanel(panel);
 	size_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_COLLECTION_TOOLBAR));
 	panel->AddToolPanel(size_panel);
 
@@ -138,12 +138,12 @@ PalettePanel* PaletteWindow::CreateCollectionPalette(wxWindow* parent, const Til
 }
 
 PalettePanel* PaletteWindow::CreateDoodadPalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	BrushPalettePanel* panel = newd BrushPalettePanel(parent, tilesets, TILESET_DOODAD);
+	auto* panel = newd BrushPalettePanel(parent, tilesets, TILESET_DOODAD);
 	panel->SetListType(wxstr(g_settings.getString(Config::PALETTE_DOODAD_STYLE)));
 
 	panel->AddToolPanel(newd BrushThicknessPanel(panel));
 
-	BrushSizePanel* size_panel = newd BrushSizePanel(panel);
+	auto* size_panel = newd BrushSizePanel(panel);
 	size_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_DOODAD_SIZEBAR));
 	panel->AddToolPanel(size_panel);
 
@@ -151,44 +151,44 @@ PalettePanel* PaletteWindow::CreateDoodadPalette(wxWindow* parent, const Tileset
 }
 
 PalettePanel* PaletteWindow::CreateItemPalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	BrushPalettePanel* panel = newd BrushPalettePanel(parent, tilesets, TILESET_ITEM);
+	auto* panel = newd BrushPalettePanel(parent, tilesets, TILESET_ITEM);
 	panel->SetListType(wxstr(g_settings.getString(Config::PALETTE_ITEM_STYLE)));
 
-	BrushSizePanel* size_panel = newd BrushSizePanel(panel);
+	auto* size_panel = newd BrushSizePanel(panel);
 	size_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_ITEM_SIZEBAR));
 	panel->AddToolPanel(size_panel);
 	return panel;
 }
 
 PalettePanel* PaletteWindow::CreateHousePalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	HousePalettePanel* panel = newd HousePalettePanel(parent);
+	auto* panel = newd HousePalettePanel(parent);
 
-	BrushSizePanel* size_panel = newd BrushSizePanel(panel);
+	auto* size_panel = newd BrushSizePanel(panel);
 	size_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_HOUSE_SIZEBAR));
 	panel->AddToolPanel(size_panel);
 	return panel;
 }
 
 PalettePanel* PaletteWindow::CreateWaypointPalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	WaypointPalettePanel* panel = newd WaypointPalettePanel(parent);
+	auto* panel = newd WaypointPalettePanel(parent);
 	return panel;
 }
 
 PalettePanel* PaletteWindow::CreateZonesPalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	ZonesPalettePanel* panel = newd ZonesPalettePanel(parent);
+	auto* panel = newd ZonesPalettePanel(parent);
 	return panel;
 }
 
 PalettePanel* PaletteWindow::CreateCreaturePalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	CreaturePalettePanel* panel = newd CreaturePalettePanel(parent);
+	auto* panel = newd CreaturePalettePanel(parent);
 	return panel;
 }
 
 PalettePanel* PaletteWindow::CreateRAWPalette(wxWindow* parent, const TilesetContainer& tilesets) {
-	BrushPalettePanel* panel = newd BrushPalettePanel(parent, tilesets, TILESET_RAW);
+	auto* panel = newd BrushPalettePanel(parent, tilesets, TILESET_RAW);
 	panel->SetListType(wxstr(g_settings.getString(Config::PALETTE_RAW_STYLE)));
 
-	BrushSizePanel* size_panel = newd BrushSizePanel(panel);
+	auto* size_panel = newd BrushSizePanel(panel);
 	size_panel->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_RAW_SIZEBAR));
 	panel->AddToolPanel(size_panel);
 
@@ -233,7 +233,7 @@ void PaletteWindow::LoadCurrentContents() {
 	if (!choicebook) {
 		return;
 	}
-	PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
+	auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
 	panel->LoadCurrentContents();
 	Fit();
 	Refresh();
@@ -245,7 +245,7 @@ void PaletteWindow::InvalidateContents() {
 		return;
 	}
 	for (size_t iz = 0; iz < choicebook->GetPageCount(); ++iz) {
-		PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetPage(iz));
+		auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetPage(iz));
 		panel->InvalidateContents();
 	}
 	LoadCurrentContents();
@@ -272,7 +272,7 @@ void PaletteWindow::SelectPage(PaletteType id) {
 	}
 
 	for (size_t iz = 0; iz < choicebook->GetPageCount(); ++iz) {
-		PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetPage(iz));
+		auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetPage(iz));
 		if (panel->GetType() == id) {
 			choicebook->SetSelection(iz);
 			break;
@@ -284,7 +284,7 @@ Brush* PaletteWindow::GetSelectedBrush() const {
 	if (!choicebook) {
 		return nullptr;
 	}
-	PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
+	auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
 	return panel->GetSelectedBrush();
 }
 
@@ -292,7 +292,7 @@ int PaletteWindow::GetSelectedBrushSize() const {
 	if (!choicebook) {
 		return 0;
 	}
-	PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
+	auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
 	return panel->GetSelectedBrushSize();
 }
 
@@ -300,7 +300,7 @@ PaletteType PaletteWindow::GetSelectedPage() const {
 	if (!choicebook) {
 		return TILESET_UNKNOWN;
 	}
-	PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
+	auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
 	ASSERT(panel);
 	return panel->GetType();
 }
@@ -414,13 +414,13 @@ void PaletteWindow::OnSwitchingPage(wxChoicebookEvent& event) {
 	}
 
 	wxWindow* old_page = choicebook->GetPage(choicebook->GetSelection());
-	PalettePanel* old_panel = dynamic_cast<PalettePanel*>(old_page);
+	auto* old_panel = dynamic_cast<PalettePanel*>(old_page);
 	if (old_panel) {
 		old_panel->OnSwitchOut();
 	}
 
 	wxWindow* page = choicebook->GetPage(event.GetSelection());
-	PalettePanel* panel = dynamic_cast<PalettePanel*>(page);
+	auto* panel = dynamic_cast<PalettePanel*>(page);
 	if (panel) {
 		panel->OnSwitchIn();
 	}
@@ -437,7 +437,7 @@ void PaletteWindow::OnUpdateBrushSize(BrushShape shape, int size) {
 	if (!choicebook) {
 		return;
 	}
-	PalettePanel* page = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
+	auto* page = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
 	ASSERT(page);
 	page->OnUpdateBrushSize(shape, size);
 }

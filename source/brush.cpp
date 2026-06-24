@@ -50,7 +50,7 @@ Brushes::~Brushes() {
 }
 
 void Brushes::clear() {
-	for (auto brushEntry : brushes) {
+	for (const auto& brushEntry : brushes) {
 		delete brushEntry.second;
 	}
 	brushes.clear();
@@ -177,7 +177,7 @@ bool Brushes::unserializeBorder(pugi::xml_node node, wxArrayString& warnings) {
 		return false;
 	}
 
-	AutoBorder* border = newd AutoBorder(id);
+	auto* border = newd AutoBorder(id);
 	border->load(node, warnings);
 	borders[id] = border;
 	return true;
@@ -365,7 +365,7 @@ void DoorBrush::switchDoor(Item* item) {
 	uint16_t oppositeVariant = 0; // give locked/unlocked variant if preferred is unavailable
 	bool prefLocked = g_gui.HasDoorLocked();
 
-	for (std::vector<WallBrush::DoorType>::iterator iter = wb->door_items[wall_alignment].begin(); iter != wb->door_items[wall_alignment].end(); ++iter) {
+	for (auto iter = wb->door_items[wall_alignment].begin(); iter != wb->door_items[wall_alignment].end(); ++iter) {
 		WallBrush::DoorType& dt = *iter;
 		if (dt.type == doortype) {
 			ASSERT(dt.id);
@@ -418,7 +418,7 @@ bool DoorBrush::canDraw(BaseMap* map, const Position& position) const {
 
 	WallBrush* test_brush = wb;
 	do {
-		for (std::vector<WallBrush::DoorType>::iterator iter = test_brush->door_items[wall_alignment].begin();
+		for (auto iter = test_brush->door_items[wall_alignment].begin();
 			 iter != test_brush->door_items[wall_alignment].end();
 			 ++iter) {
 			WallBrush::DoorType& dt = *iter;
@@ -453,7 +453,7 @@ bool DoorBrush::canDraw(BaseMap* map, const Position& position) const {
 }
 
 void DoorBrush::undraw(BaseMap* map, Tile* tile) {
-	for (ItemVector::iterator it = tile->items.begin(); it != tile->items.end(); ++it) {
+	for (auto it = tile->items.begin(); it != tile->items.end(); ++it) {
 		Item* item = *it;
 		if (item->isBrushDoor()) {
 			item->getWallBrush()->draw(map, tile, nullptr);
@@ -466,7 +466,7 @@ void DoorBrush::undraw(BaseMap* map, Tile* tile) {
 }
 
 void DoorBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
-	for (ItemVector::iterator item_iter = tile->items.begin(); item_iter != tile->items.end();) {
+	for (auto item_iter = tile->items.begin(); item_iter != tile->items.end();) {
 		Item* item = *item_iter;
 		if (!item->isWall()) {
 			++item_iter;
@@ -497,7 +497,7 @@ void DoorBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 
 		WallBrush* test_brush = wb;
 		do {
-			for (std::vector<WallBrush::DoorType>::iterator iter = test_brush->door_items[wall_alignment].begin();
+			for (auto iter = test_brush->door_items[wall_alignment].begin();
 				 iter != test_brush->door_items[wall_alignment].end();
 				 ++iter) {
 				WallBrush::DoorType& dt = *iter;
@@ -572,7 +572,7 @@ void DoorBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 				WallBrush* brush = item->getWallBrush();
 				if (brush && brush->isWallDecoration()) {
 					// We got a decoration!
-					for (std::vector<WallBrush::DoorType>::iterator it = brush->door_items[wall_alignment].begin(); it != brush->door_items[wall_alignment].end(); ++it) {
+					for (auto it = brush->door_items[wall_alignment].begin(); it != brush->door_items[wall_alignment].end(); ++it) {
 						WallBrush::DoorType& dt = (*it);
 						if (dt.type == doortype) {
 							ASSERT(dt.id);

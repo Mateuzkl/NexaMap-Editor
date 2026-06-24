@@ -32,9 +32,9 @@ END_EVENT_TABLE()
 
 ExtensionsDialog::ExtensionsDialog(wxWindow* parent) :
 	wxDialog(parent, wxID_ANY, "Extensions", wxDefaultPosition, wxSize(600, 500), wxRESIZE_BORDER | wxCAPTION) {
-	wxBoxSizer* topSizer = new wxBoxSizer(wxVERTICAL);
+	auto* topSizer = new wxBoxSizer(wxVERTICAL);
 
-	wxHtmlWindow* htmlWindow = new wxHtmlWindow(this, wxID_ANY, wxDefaultPosition, wxSize(550, 400));
+	auto* htmlWindow = new wxHtmlWindow(this, wxID_ANY, wxDefaultPosition, wxSize(550, 400));
 	htmlWindow->SetPage(HTML());
 	topSizer->Add(htmlWindow, wxSizerFlags(1).DoubleBorder().Expand());
 
@@ -79,7 +79,7 @@ void ExtensionsDialog::OnClickOpenFolder(wxCommandEvent& evt) {
 
 wxString ExtensionsDialog::HTML() const {
 	wxString markup;
-	for (MaterialsExtensionList::const_iterator me = g_materials.getExtensions().begin(); me != g_materials.getExtensions().end(); ++me) {
+	for (auto me = g_materials.getExtensions().begin(); me != g_materials.getExtensions().end(); ++me) {
 		markup << HTMLForExtension(*me);
 		markup << "<hr>";
 	}

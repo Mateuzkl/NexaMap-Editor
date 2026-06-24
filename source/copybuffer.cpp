@@ -63,7 +63,7 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	int item_count = 0;
 	copyPos = Position(0xFFFF, 0xFFFF, floor);
 
-	for (TileSet::iterator it = editor.selection.begin(); it != editor.selection.end(); ++it) {
+	for (auto it = editor.selection.begin(); it != editor.selection.end(); ++it) {
 		++tile_count;
 
 		Tile* tile = *it;
@@ -77,7 +77,7 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 		}
 
 		ItemVector tile_selection = tile->getSelectedItems();
-		for (ItemVector::iterator iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
+		for (auto iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
 			++item_count;
 			// Copy items to copybuffer
 			copied_tile->addItem((*iit)->deepCopy());
@@ -124,7 +124,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 
 	PositionList tilestoborder;
 
-	for (TileSet::iterator it = editor.selection.begin(); it != editor.selection.end(); ++it) {
+	for (auto it = editor.selection.begin(); it != editor.selection.end(); ++it) {
 		tile_count++;
 
 		Tile* tile = *it;
@@ -141,7 +141,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 		}
 
 		ItemVector tile_selection = newtile->popSelectedItems();
-		for (ItemVector::iterator iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
+		for (auto iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
 			item_count++;
 			// Add items to copybuffer
 			copied_tile->addItem(*iit);
@@ -185,7 +185,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
 		action = editor.actionQueue->createAction(batch);
-		for (PositionList::iterator it = tilestoborder.begin(); it != tilestoborder.end(); ++it) {
+		for (auto it = tilestoborder.begin(); it != tilestoborder.end(); ++it) {
 			TileLocation* location = editor.map.createTileL(*it);
 			if (location->get()) {
 				Tile* new_tile = location->get()->deepCopy(editor.map);

@@ -33,7 +33,7 @@ Container::~Container() {
 
 Item* Container::deepCopy() const {
 	Item* copy = Item::deepCopy();
-	Container* copyContainer = dynamic_cast<Container*>(copy);
+	auto* copyContainer = dynamic_cast<Container*>(copy);
 	if (copyContainer) {
 		for (Item const* item : contents) {
 			copyContainer->contents.push_back(item->deepCopy());
@@ -61,7 +61,7 @@ Teleport::Teleport(const uint16_t type) :
 }
 
 Item* Teleport::deepCopy() const {
-	Teleport* copy = static_cast<Teleport*>(Item::deepCopy());
+	auto* copy = static_cast<Teleport*>(Item::deepCopy());
 	copy->destination = destination;
 	return copy;
 }
@@ -88,7 +88,7 @@ Depot::Depot(const uint16_t type) :
 
 Item* Depot::deepCopy() const {
 	Item* copy = Item::deepCopy();
-	Depot* copy_depot = dynamic_cast<Depot*>(copy);
+	auto* copy_depot = dynamic_cast<Depot*>(copy);
 	if (copy_depot) {
 		copy_depot->depotId = depotId;
 	}
@@ -103,7 +103,7 @@ Podium::Podium(const uint16_t type) :
 }
 
 Item* Podium::deepCopy() const {
-	Podium* copy = static_cast<Podium*>(Item::deepCopy());
+	auto* copy = static_cast<Podium*>(Item::deepCopy());
 	copy->outfit = outfit;
 	copy->showOutfit = showOutfit;
 	copy->showMount = showMount;

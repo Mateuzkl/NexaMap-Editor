@@ -66,7 +66,7 @@ void MapTabbook::CycleTab(bool forward) {
 void MapTabbook::OnNotebookPageClose(wxAuiNotebookEvent& evt) {
 	EditorTab* editorTab = GetTab(evt.GetInt());
 
-	MapTab* mapTab = dynamic_cast<MapTab*>(editorTab);
+	auto* mapTab = dynamic_cast<MapTab*>(editorTab);
 	if (mapTab && mapTab->IsUniqueReference() && mapTab->GetMap()) {
 		g_gui.RefreshPalettes(nullptr, false);
 		g_gui.UpdateMenus();
@@ -152,7 +152,7 @@ void MapTabbook::OnSwitchEditorMode(EditorMode mode) {
 	}
 }
 
-void MapTabbook::SetTabLabel(int idx, wxString label) {
+void MapTabbook::SetTabLabel(int idx, const wxString& label) {
 	if (notebook) {
 		notebook->SetPageText(idx, label);
 	}

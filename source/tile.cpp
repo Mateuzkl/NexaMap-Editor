@@ -449,7 +449,7 @@ void Tile::deselect() {
 }
 
 Item* Tile::getTopSelectedItem() {
-	for (ItemVector::reverse_iterator iter = items.rbegin(); iter != items.rend(); ++iter) {
+	for (auto iter = items.rbegin(); iter != items.rend(); ++iter) {
 		if ((*iter)->isSelected() && !(*iter)->isMetaItem()) {
 			return *iter;
 		}
@@ -520,7 +520,7 @@ uint8_t Tile::getMiniMapColor() const {
 		return minimapColor;
 	}
 
-	for (ItemVector::const_reverse_iterator item_iter = items.rbegin(); item_iter != items.rend(); ++item_iter) {
+	for (auto item_iter = items.rbegin(); item_iter != items.rend(); ++item_iter) {
 		if ((*item_iter)->getMiniMapColor()) {
 			return (*item_iter)->getMiniMapColor();
 		}
@@ -785,7 +785,7 @@ void Tile::deselectGround() {
 	if (ground) {
 		ground->deselect();
 	}
-	ItemVector::iterator it = items.begin();
+	auto it = items.begin();
 	while (it != items.end()) {
 		if ((*it)->isBorder()) {
 			(*it)->deselect();
@@ -826,7 +826,7 @@ void Tile::removeHouseExit(House* h) {
 		return;
 	}
 
-	for (std::vector<uint32_t>::iterator it = house_exits->begin(); it != house_exits->end(); ++it) {
+	for (auto it = house_exits->begin(); it != house_exits->end(); ++it) {
 		if (*it == h->getID()) {
 			house_exits->erase(it);
 			return;

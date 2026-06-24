@@ -257,7 +257,7 @@ void GLRenderer::ensureQuadIndices(size_t quadCount) {
 	}
 	indexScratch.reserve(quadCount * 6);
 	for (size_t q = haveQuads; q < quadCount; ++q) {
-		GLuint const base = static_cast<GLuint>(q * 4);
+		auto const base = static_cast<GLuint>(q * 4);
 		indexScratch.push_back(base + 0);
 		indexScratch.push_back(base + 1);
 		indexScratch.push_back(base + 2);
@@ -463,6 +463,7 @@ void GLRenderer::drawPolygon(const float* vertices, int vertexCount, uint8_t r, 
 	}
 	flushBatch();
 	std::vector<Vertex> verts;
+	verts.reserve(vertexCount);
 	for (int i = 0; i < vertexCount; ++i) {
 		verts.push_back({ vertices[i * 2], vertices[i * 2 + 1], 0, 0, r, g, b, a });
 	}
@@ -478,6 +479,7 @@ void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t
 	}
 	flushBatch();
 	std::vector<Vertex> verts;
+	verts.reserve(vertexCount);
 	for (int i = 0; i < vertexCount; ++i) {
 		verts.push_back({ vertices[i * 2], vertices[i * 2 + 1], 0, 0, r, g, b, a });
 	}

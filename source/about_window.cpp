@@ -320,7 +320,7 @@ void GamePanel::OnKeyDown(wxKeyEvent& event) {
 			if (dead) {
 				return;
 			}
-			wxDialog* dlg = (wxDialog*)GetParent();
+			auto* dlg = (wxDialog*)GetParent();
 			dlg->EndModal(0);
 			break;
 		}
