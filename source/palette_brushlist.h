@@ -20,6 +20,7 @@
 
 #include "main.h"
 #include "palette_common.h"
+#include "palette_brush_tool.h"
 
 enum BrushListType {
 	BRUSHLIST_LARGE_ICONS,

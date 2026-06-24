@@ -313,6 +313,8 @@
     <ClCompile Include="..\..\source\process_com.cpp" />
     <ClInclude Include="..\..\source\palette_brushlist.h" />
     <ClCompile Include="..\..\source\palette_brushlist.cpp" />
+    <ClInclude Include="..\..\source\palette_brush_tool.h" />
+    <ClCompile Include="..\..\source\palette_brush_tool.cpp" />
     <ClInclude Include="..\..\source\palette_common.h" />
     <ClCompile Include="..\..\source\palette_common.cpp" />
     <ClInclude Include="..\..\source\palette_creature.h" />

@@ -37,18 +37,6 @@ static constexpr int PALETTE_DELAYED_REFRESH_MS = 300;
 // Walks up the parent chain and returns the enclosing PaletteWindow (or nullptr).
 PaletteWindow* GetParentPalette(const wxWindow* window);
 
-class BrushButton : public ItemToggleButton {
-public:
-	BrushButton(wxWindow* parent, Brush* brush, RenderSize, uint32_t id = wxID_ANY);
-	~BrushButton() override;
-
-	Brush* brush;
-
-	void OnKey(wxKeyEvent& event);
-
-	DECLARE_EVENT_TABLE()
-};
-
 class PalettePanel : public wxPanel {
 public:
 	PalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY, long style = wxTAB_TRAVERSAL);
@@ -191,82 +179,6 @@ protected:
 	DCButton* brushsize6Button;
 	DCButton* brushsize8Button;
 	DCButton* brushsize11Button;
-
-	DECLARE_EVENT_TABLE()
-};
-
-class BrushToolPanel : public PalettePanel {
-public:
-	BrushToolPanel(wxWindow* parent);
-	~BrushToolPanel() override;
-
-	// Interface
-	// Flushes this panel and consequent views will feature reloaded data
-	void InvalidateContents() override;
-	// Loads the currently displayed page
-	void LoadCurrentContents() override;
-	// Loads all content in this panel
-	void LoadAllContents() override;
-
-	wxString GetName() const override;
-	void SetToolbarIconSize(bool large) override;
-
-	// Returns the currently selected brush (First brush if panel is not loaded)
-	Brush* GetSelectedBrush() const override;
-	// Select the brush in the parameter, this only changes the look of the panel
-	bool SelectBrush(const Brush* whatbrush) override;
-
-	// Called when this page is displayed
-	void OnSwitchIn() override;
-
-	// wxWidgets event handling
-	void OnClickGravelButton(wxCommandEvent& event);
-	void OnClickEraserButton(wxCommandEvent& event);
-	// ----
-	void OnClickNormalDoorButton(wxCommandEvent& event);
-	void OnClickLockedDoorButton(wxCommandEvent& event);
-	void OnClickMagicDoorButton(wxCommandEvent& event);
-	void OnClickQuestDoorButton(wxCommandEvent& event);
-	void OnClickHatchDoorButton(wxCommandEvent& event);
-	void OnClickWindowDoorButton(wxCommandEvent& event);
-	void OnClickNormalAltDoorButton(wxCommandEvent& event);
-	void OnClickArchwayDoorButton(wxCommandEvent& event);
-	// ----
-	void OnClickPZBrushButton(wxCommandEvent& event);
-	void OnClickNOPVPBrushButton(wxCommandEvent& event);
-	void OnClickNoLogoutBrushButton(wxCommandEvent& event);
-	void OnClickPVPZoneBrushButton(wxCommandEvent& event);
-	// ----
-	void OnClickLockDoorCheckbox(wxCommandEvent& event);
-
-private:
-	void onClickToolBrush(Brush* brush);
-	void onClickDoorBrush(Brush* brush);
-
-public:
-	void DeselectAll() override;
-
-	bool loaded;
-	bool large_icons;
-
-	BrushButton* optionalBorderButton;
-	BrushButton* eraserButton;
-	// ----
-	BrushButton* normalDoorButton;
-	BrushButton* lockedDoorButton;
-	BrushButton* magicDoorButton;
-	BrushButton* questDoorButton;
-	BrushButton* hatchDoorButton;
-	BrushButton* windowDoorButton;
-	BrushButton* normalDoorAltButton;
-	BrushButton* archwayDoorButton;
-	// ----
-	BrushButton* pzBrushButton;
-	BrushButton* nopvpBrushButton;
-	BrushButton* nologBrushButton;
-	BrushButton* pvpzoneBrushButton;
-
-	wxCheckBox* lockDoorCheckbox;
 
 	DECLARE_EVENT_TABLE()
 };

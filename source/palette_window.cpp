@@ -23,6 +23,7 @@
 
 #include "palette_window.h"
 #include "palette_brushlist.h"
+#include "palette_brush_tool.h"
 #include "palette_house.h"
 #include "palette_creature.h"
 #include "palette_waypoints.h"

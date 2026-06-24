@@ -63,6 +63,7 @@ ${CMAKE_CURRENT_LIST_DIR}/old_properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/otml.h
 ${CMAKE_CURRENT_LIST_DIR}/outfit.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_brushlist.h
+${CMAKE_CURRENT_LIST_DIR}/palette_brush_tool.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.h
@@ -162,6 +163,7 @@ ${CMAKE_CURRENT_LIST_DIR}/numbertextctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/object_pool.cpp
 ${CMAKE_CURRENT_LIST_DIR}/old_properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_brushlist.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_brush_tool.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.cpp

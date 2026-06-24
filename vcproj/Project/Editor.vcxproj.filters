@@ -188,6 +188,9 @@
     <ClInclude Include="..\..\source\palette_brushlist.h">
       <Filter>gui\palette</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\palette_brush_tool.h">
+      <Filter>gui\palette</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\palette_common.h">
       <Filter>gui\palette</Filter>
     </ClInclude>
@@ -480,6 +483,9 @@
       <Filter>gui</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\palette_brushlist.cpp">
+      <Filter>gui\palette</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\palette_brush_tool.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\palette_common.cpp">
