@@ -394,9 +394,11 @@ void Settings::load() {
 		filename.Assign(wxStandardPaths::Get().GetUserConfigDir() + "/.rme/editor.cfg");
 		if (filename.FileExists()) {
 			wxFileInputStream file(filename.GetFullPath());
+			// NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) - ownership transferred to wxConfig::Set below.
 			conf = newd wxFileConfig(file);
 		} else {
 			wxStringInputStream dummy("");
+			// NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) - ownership transferred to wxConfig::Set below.
 			conf = newd wxFileConfig(dummy, wxConvAuto());
 		}
 		g_settings.setInteger(Config::INDIRECTORY_INSTALLATION, 0);

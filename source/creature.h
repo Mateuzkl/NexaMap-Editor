@@ -30,6 +30,7 @@ enum Direction {
 	DIRECTION_LAST = WEST
 };
 
+// NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange) - Direction(LAST+1) is the loop end-sentinel, never indexed.
 IMPLEMENT_INCREMENT_OP(Direction)
 
 class Creature {

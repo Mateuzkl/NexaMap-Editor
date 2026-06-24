@@ -948,7 +948,7 @@ void FindDialog::RefreshContents() {
 // Find Brush Dialog (Jump to brush)
 
 FindBrushDialog::FindBrushDialog(wxWindow* parent, wxString title) :
-	FindDialog(parent, std::move(title)) {
+	FindDialog(parent, title) {
 	RefreshContents();
 }
 

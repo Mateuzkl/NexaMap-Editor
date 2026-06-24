@@ -370,6 +370,7 @@ void FindItemDialog::RefreshContentsInternal() {
 				continue;
 			}
 
+			// NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange) - out-of-range selection falls through to the no-filter branch below.
 			auto selection = (SearchItemType)types_radio_box->GetSelection();
 			if ((selection == SearchItemType::Depot && !item.isDepot()) || (selection == SearchItemType::Mailbox && !item.isMailbox()) || (selection == SearchItemType::TrashHolder && !item.isTrashHolder()) || (selection == SearchItemType::Container && !item.isContainer()) || (selection == SearchItemType::Door && !item.isDoor()) || (selection == SearchItemType::MagicField && !item.isMagicField()) || (selection == SearchItemType::Teleport && !item.isTeleport()) || (selection == SearchItemType::Bed && !item.isBed()) || (selection == SearchItemType::Key && !item.isKey()) || (selection == SearchItemType::Podium && !item.isPodium())) {
 				continue;

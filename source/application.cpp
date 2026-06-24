@@ -109,6 +109,7 @@ bool Application::OnInit() {
 
 	// Tell that we are the real thing
 	wxAppConsole::SetInstance(this);
+	// NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) - wxArtProvider::Push takes ownership.
 	wxArtProvider::Push(new ArtProvider());
 
 	// Load some internal stuff

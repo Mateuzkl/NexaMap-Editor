@@ -149,7 +149,7 @@ void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
 					g_gui.RefreshPalettes();
 				}
 			} else {
-				Waypoint* nwp = newd Waypoint(*wp);
+				auto* nwp = newd Waypoint(*wp);
 				nwp->name = wpname;
 
 				Waypoint* rwp = map->waypoints.getWaypoint(oldwpname);
@@ -172,7 +172,7 @@ void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
 
 void WaypointPalettePanel::OnClickAddWaypoint(wxCommandEvent& event) {
 	if (map) {
-		Waypoint* wp = newd Waypoint();
+		auto* wp = newd Waypoint();
 		if (MapTab* mapTab = g_gui.GetCurrentMapTab()) {
 			wp->pos = mapTab->GetScreenCenterPosition();
 		}

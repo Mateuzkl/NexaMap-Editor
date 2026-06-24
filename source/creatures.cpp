@@ -120,6 +120,7 @@ CreatureType::CreatureType(const CreatureType& ct) :
 	////
 }
 
+// NOLINTNEXTLINE(bugprone-unhandled-self-assignment) - members are value/non-owning pointers; self-assign is safe.
 CreatureType& CreatureType::operator=(const CreatureType& ct) {
 	isNpc = ct.isNpc;
 	missing = ct.missing;

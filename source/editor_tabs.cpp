@@ -51,7 +51,7 @@ void MapTabbook::CycleTab(bool forward) {
 		return;
 	}
 
-	int32_t pageCount = static_cast<int32_t>(notebook->GetPageCount());
+	auto pageCount = static_cast<int32_t>(notebook->GetPageCount());
 	int32_t currentSelection = notebook->GetSelection();
 
 	int32_t selection;

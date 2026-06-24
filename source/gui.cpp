@@ -1770,7 +1770,7 @@ long GUI::PopupDialog(wxWindow* parent, const wxString& title, const wxString& t
 }
 
 long GUI::PopupDialog(wxString title, wxString text, long style, wxString configsavename, uint32_t configsavevalue) {
-	return g_gui.PopupDialog(g_gui.root, std::move(title), std::move(text), style, std::move(configsavename), configsavevalue);
+	return g_gui.PopupDialog(g_gui.root, title, text, style, configsavename, configsavevalue);
 }
 
 void GUI::ListDialog(wxWindow* parent, const wxString& title, const wxArrayString& param_items) {
