@@ -264,7 +264,7 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage() {
 	SetWindowToolTip(icon_background_choice, tmp, "The color of the secondary cursor on the map (for houses and flags).");
 
 	// Screenshot dir
-	subsizer->Add(tmp = newd wxStaticText(graphics_page, wxID_ANY, "Screenshot directory: "), 0);
+	subsizer->Add(newd wxStaticText(graphics_page, wxID_ANY, "Screenshot directory: "), 0);
 	screenshot_directory_picker = newd wxDirPickerCtrl(graphics_page, wxID_ANY);
 	subsizer->Add(screenshot_directory_picker, 1, wxEXPAND);
 	wxString ss = wxstr(g_settings.getString(Config::SCREENSHOT_DIRECTORY));

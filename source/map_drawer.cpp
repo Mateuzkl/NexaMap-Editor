@@ -375,14 +375,6 @@ inline int getFloorAdjustment(int floor) {
 }
 
 void MapDrawer::DrawMap() {
-	int center_x = start_x + int(screensize_x * zoom / 64);
-	int center_y = start_y + int(screensize_y * zoom / 64);
-	int offset_y = 2;
-	int box_start_map_x = center_x - view_scroll_x;
-	int box_start_map_y = center_y - view_scroll_x + offset_y;
-	int box_end_map_x = center_x + ClientMapWidth;
-	int box_end_map_y = center_y + ClientMapHeight + offset_y;
-
 	Brush* brush = g_gui.GetCurrentBrush();
 
 	// The current house we're drawing

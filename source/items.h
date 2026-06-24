@@ -444,6 +444,10 @@ protected:
 	bool loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 	bool loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 
+	// Shared OTB attribute parsing used by loadFromOtbVer2/Ver3 (common cases only).
+	enum class OtbAttributeResult { Handled, Unhandled, FatalError };
+	OtbAttributeResult parseCommonOtbItemAttribute(BinaryNode* itemNode, ItemType* t, uint8_t attribute, uint16_t datalen, wxString& error, wxArrayString& warnings);
+
 	bool readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxString& error, wxArrayString& warnings);
 
 protected:

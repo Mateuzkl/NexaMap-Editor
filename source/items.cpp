@@ -413,6 +413,85 @@ bool ItemDatabase::loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArra
 	return true;
 }
 
+ItemDatabase::OtbAttributeResult ItemDatabase::parseCommonOtbItemAttribute(BinaryNode* itemNode, ItemType* t, uint8_t attribute, uint16_t datalen, wxString& error, wxArrayString& warnings) {
+	switch (attribute) {
+		case ITEM_ATTR_SERVERID: {
+			if (datalen != sizeof(uint16_t)) {
+				error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
+				return OtbAttributeResult::FatalError;
+			}
+
+			if (!itemNode->getU16(t->id)) {
+				warnings.push_back("Invalid item type property (2)");
+			}
+
+			if (max_item_id < t->id) {
+				max_item_id = t->id;
+			}
+			return OtbAttributeResult::Handled;
+		}
+
+		case ITEM_ATTR_CLIENTID: {
+			if (datalen != sizeof(uint16_t)) {
+				error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
+				return OtbAttributeResult::FatalError;
+			}
+
+			if (!itemNode->getU16(t->clientID)) {
+				warnings.push_back("Invalid item type property (2)");
+			}
+
+			t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
+			return OtbAttributeResult::Handled;
+		}
+
+		case ITEM_ATTR_SPEED: {
+			if (datalen != sizeof(uint16_t)) {
+				error = "items.otb: Unexpected data length of speed block (Should be 2 bytes)";
+				return OtbAttributeResult::FatalError;
+			}
+
+			// t->speed = itemNode->getU16();
+			if (!itemNode->skip(2)) { // Just skip two bytes, we don't need speed
+				warnings.push_back("Invalid item type property (3)");
+			}
+			return OtbAttributeResult::Handled;
+		}
+
+		case ITEM_ATTR_LIGHT2: {
+			if (datalen != sizeof(lightBlock2)) {
+				warnings.push_back("items.otb: Unexpected data length of item light (2) block (Should be " + i2ws(sizeof(lightBlock2)) + " bytes)");
+				return OtbAttributeResult::Handled;
+			}
+
+			if (!itemNode->skip(4)) { // Just skip two bytes, we don't need light
+				warnings.push_back("Invalid item type property (4)");
+			}
+
+			// t->lightLevel = itemNode->getU16();
+			// t->lightColor = itemNode->getU16();
+			return OtbAttributeResult::Handled;
+		}
+
+		case ITEM_ATTR_TOPORDER: {
+			if (datalen != sizeof(uint8_t)) {
+				warnings.push_back("items.otb: Unexpected data length of item toporder block (Should be 1 byte)");
+				return OtbAttributeResult::Handled;
+			}
+
+			uint8_t u8 = 0;
+			if (!itemNode->getU8(u8)) {
+				warnings.push_back("Invalid item type property (5)");
+			}
+			t->alwaysOnTopOrder = u8;
+			return OtbAttributeResult::Handled;
+		}
+
+		default:
+			return OtbAttributeResult::Unhandled;
+	}
+}
+
 bool ItemDatabase::loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArrayString& warnings) {
 	uint8_t u8;
 	for (; itemNode != nullptr; itemNode = itemNode->advance()) {
@@ -487,88 +566,13 @@ bool ItemDatabase::loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArra
 				break;
 			}
 
-			switch (attribute) {
-				case ITEM_ATTR_SERVERID: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
-						delete t;
-						return false;
-					}
-
-					if (!itemNode->getU16(t->id)) {
-						warnings.push_back("Invalid item type property (2)");
-					}
-
-					if (max_item_id < t->id) {
-						max_item_id = t->id;
-					}
-					break;
-				}
-
-				case ITEM_ATTR_CLIENTID: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
-						delete t;
-						return false;
-					}
-
-					if (!itemNode->getU16(t->clientID)) {
-						warnings.push_back("Invalid item type property (2)");
-					}
-
-					t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
-					break;
-				}
-
-				case ITEM_ATTR_SPEED: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of speed block (Should be 2 bytes)";
-						delete t;
-						return false;
-					}
-
-					// t->speed = itemNode->getU16();
-					if (!itemNode->skip(2)) { // Just skip two bytes, we don't need speed
-						warnings.push_back("Invalid item type property (3)");
-					}
-					break;
-				}
-
-				case ITEM_ATTR_LIGHT2: {
-					if (datalen != sizeof(lightBlock2)) {
-						warnings.push_back("items.otb: Unexpected data length of item light (2) block (Should be " + i2ws(sizeof(lightBlock2)) + " bytes)");
-						break;
-					}
-
-					if (!itemNode->skip(4)) { // Just skip two bytes, we don't need light
-						warnings.push_back("Invalid item type property (4)");
-					}
-
-					// t->lightLevel = itemNode->getU16();
-					// t->lightColor = itemNode->getU16();
-					break;
-				}
-
-				case ITEM_ATTR_TOPORDER: {
-					if (datalen != sizeof(uint8_t)) {
-						warnings.push_back("items.otb: Unexpected data length of item toporder block (Should be 1 byte)");
-						break;
-					}
-
-					uint8_t u8 = 0;
-					if (!itemNode->getU8(u8)) {
-						warnings.push_back("Invalid item type property (5)");
-					}
-					t->alwaysOnTopOrder = u8;
-					break;
-				}
-
-				default: {
-					// skip unknown attributes
-					itemNode->skip(datalen);
-					// warnings.push_back("items.otb: Skipped unknown attribute");
-					break;
-				}
+			const OtbAttributeResult result = parseCommonOtbItemAttribute(itemNode, t, attribute, datalen, error, warnings);
+			if (result == OtbAttributeResult::FatalError) {
+				delete t;
+				return false;
+			}
+			if (result == OtbAttributeResult::Unhandled) {
+				itemNode->skip(datalen); // skip unknown attributes
 			}
 		}
 
@@ -650,101 +654,25 @@ bool ItemDatabase::loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArra
 				break;
 			}
 
-			switch (attribute) {
-				case ITEM_ATTR_SERVERID: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
-						delete t;
-						return false;
-					}
-
-					if (!itemNode->getU16(t->id)) {
-						warnings.push_back("Invalid item type property (2)");
-					}
-
-					if (max_item_id < t->id) {
-						max_item_id = t->id;
-					}
-					break;
-				}
-
-				case ITEM_ATTR_CLIENTID: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
-						delete t;
-						return false;
-					}
-
-					if (!itemNode->getU16(t->clientID)) {
-						warnings.push_back("Invalid item type property (2)");
-					}
-
-					t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
-					break;
-				}
-
-				case ITEM_ATTR_SPEED: {
-					if (datalen != sizeof(uint16_t)) {
-						error = "items.otb: Unexpected data length of speed block (Should be 2 bytes)";
-						delete t;
-						return false;
-					}
-
-					// t->speed = itemNode->getU16();
-					if (!itemNode->skip(2)) { // Just skip two bytes, we don't need speed
-						warnings.push_back("Invalid item type property (3)");
-					}
-					break;
-				}
-
-				case ITEM_ATTR_LIGHT2: {
-					if (datalen != sizeof(lightBlock2)) {
-						warnings.push_back("items.otb: Unexpected data length of item light (2) block (Should be " + i2ws(sizeof(lightBlock2)) + " bytes)");
-						break;
-					}
-					if (!itemNode->skip(4)) { // Just skip two bytes, we don't need light
-						warnings.push_back("Invalid item type property (4)");
-					}
-
-					// t->lightLevel = itemNode->getU16();
-					// t->lightColor = itemNode->getU16();
-					break;
-				}
-
-				case ITEM_ATTR_TOPORDER: {
-					if (datalen != sizeof(uint8_t)) {
-						warnings.push_back("items.otb: Unexpected data length of item toporder block (Should be 1 byte)");
-						break;
-					}
-
+			if (attribute == ITEM_ATTR_CLASSIFICATION) {
+				if (datalen != sizeof(uint8_t)) {
+					warnings.push_back("items.otb: Unexpected data length of item classification block (Should be 1 byte)");
+				} else {
 					if (!itemNode->getU8(u8)) {
 						warnings.push_back("Invalid item type property (5)");
 					}
-
-					t->alwaysOnTopOrder = u8;
-					break;
-				}
-
-				case ITEM_ATTR_CLASSIFICATION: {
-					if (datalen != sizeof(uint8_t)) {
-						warnings.push_back("items.otb: Unexpected data length of item classification block (Should be 1 byte)");
-						break;
-					}
-
-					if (!itemNode->getU8(u8)) {
-						warnings.push_back("Invalid item type property (5)");
-					}
-
 					t->classification = u8;
-					break;
 				}
+				continue;
+			}
 
-				default: {
-					// skip unknown attributes
-					itemNode->skip(datalen);
-					// warnings.push_back("items.otb: Skipped unknown attribute");
-					break;
-				}
+			const OtbAttributeResult result = parseCommonOtbItemAttribute(itemNode, t, attribute, datalen, error, warnings);
+			if (result == OtbAttributeResult::FatalError) {
+				delete t;
+				return false;
+			}
+			if (result == OtbAttributeResult::Unhandled) {
+				itemNode->skip(datalen); // skip unknown attributes
 			}
 		}
 
