@@ -117,6 +117,15 @@ protected:
 	// Creates the standard single-selection, editable, header-less list control.
 	wxListCtrl* createEntityList(wxWindowID listId);
 
+	// Disables hotkeys before inline label editing begins.
+	void OnBeginEditLabel(wxListEvent& event);
+
+	// Returns the index of the selected item in the list, or -1 if none.
+	static long getSelectedIndex(wxListCtrl* list);
+
+	// Returns the text of the item at the given index.
+	static std::string getSelectedName(wxListCtrl* list, long index);
+
 	Map* map;
 };
 

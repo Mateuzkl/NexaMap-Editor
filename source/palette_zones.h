@@ -25,7 +25,6 @@ public:
 
 	void OnClickZone(wxListEvent& event);
 	void OnRightClickZone(wxListEvent& event);
-	void OnBeginEditZoneLabel(wxListEvent& event);
 	void OnEditZoneLabel(wxListEvent& event);
 	void OnClickAddZone(wxCommandEvent& event);
 	void OnClickRemoveZone(wxCommandEvent& event);

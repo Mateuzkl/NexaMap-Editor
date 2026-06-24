@@ -15,7 +15,7 @@ EVT_BUTTON(PALETTE_ZONES_REMOVE_ZONE, ZonesPalettePanel::OnClickRemoveZone)
 EVT_BUTTON(PALETTE_ZONES_IMPORT_ZONE, ZonesPalettePanel::OnClickImportZone)
 EVT_BUTTON(PALETTE_ZONES_EXPORT_ZONE, ZonesPalettePanel::OnClickExportZone)
 
-EVT_LIST_BEGIN_LABEL_EDIT(PALETTE_ZONES_LISTBOX, ZonesPalettePanel::OnBeginEditZoneLabel)
+EVT_LIST_BEGIN_LABEL_EDIT(PALETTE_ZONES_LISTBOX, NamedEntityPalettePanel::OnBeginEditLabel)
 EVT_LIST_END_LABEL_EDIT(PALETTE_ZONES_LISTBOX, ZonesPalettePanel::OnEditZoneLabel)
 EVT_LIST_ITEM_SELECTED(PALETTE_ZONES_LISTBOX, ZonesPalettePanel::OnClickZone)
 EVT_LIST_ITEM_RIGHT_CLICK(PALETTE_ZONES_LISTBOX, ZonesPalettePanel::OnRightClickZone)
@@ -56,9 +56,9 @@ Brush* ZonesPalettePanel::GetSelectedBrush() const {
 		return g_gui.zone_brush;
 	}
 
-	long item = zone_list->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	long item = getSelectedIndex(zone_list);
 	g_gui.zone_brush->setZone(
-		item == -1 || !map->zones.hasZone(nstr(zone_list->GetItemText(item))) ? 0 : map->zones.getZoneID(nstr(zone_list->GetItemText(item)))
+		item == -1 || !map->zones.hasZone(getSelectedName(zone_list, item)) ? 0 : map->zones.getZoneID(getSelectedName(zone_list, item))
 	);
 	return g_gui.zone_brush;
 }
@@ -133,14 +133,7 @@ void ZonesPalettePanel::OnRightClickZone(wxListEvent& event) {
 	}
 }
 
-void ZonesPalettePanel::OnBeginEditZoneLabel(wxListEvent& event) {
-	g_gui.DisableHotkeys();
-}
-
 void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
-	// END_LABEL_EDIT fires exactly once after OnBeginEditZoneLabel disabled hotkeys
-	// (whether committed, cancelled, or vetoed). Always restore them here so shortcuts
-	// don't stay dead after adding/renaming a zone.
 	g_gui.EnableHotkeys();
 
 	if (!map) {
@@ -148,7 +141,7 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 	}
 
 	std::string name = nstr(event.GetLabel());
-	std::string oldName = nstr(zone_list->GetItemText(event.GetIndex()));
+	std::string oldName = getSelectedName(zone_list, event.GetIndex());
 
 	if (event.IsEditCancelled()) {
 		return;
@@ -194,9 +187,9 @@ void ZonesPalettePanel::OnClickRemoveZone(wxCommandEvent& event) {
 		return;
 	}
 
-	long item = zone_list->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	long item = getSelectedIndex(zone_list);
 	if (item != -1) {
-		std::string name = nstr(zone_list->GetItemText(item));
+		std::string name = getSelectedName(zone_list, item);
 		if (map->zones.hasZone(name)) {
 			map->zones.removeZone(name);
 			map->cleanDeletedZones();

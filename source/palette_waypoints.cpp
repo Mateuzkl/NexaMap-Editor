@@ -30,7 +30,7 @@ BEGIN_EVENT_TABLE(WaypointPalettePanel, PalettePanel)
 EVT_BUTTON(PALETTE_WAYPOINT_ADD_WAYPOINT, WaypointPalettePanel::OnClickAddWaypoint)
 EVT_BUTTON(PALETTE_WAYPOINT_REMOVE_WAYPOINT, WaypointPalettePanel::OnClickRemoveWaypoint)
 
-EVT_LIST_BEGIN_LABEL_EDIT(PALETTE_WAYPOINT_LISTBOX, WaypointPalettePanel::OnBeginEditWaypointLabel)
+EVT_LIST_BEGIN_LABEL_EDIT(PALETTE_WAYPOINT_LISTBOX, NamedEntityPalettePanel::OnBeginEditLabel)
 EVT_LIST_END_LABEL_EDIT(PALETTE_WAYPOINT_LISTBOX, WaypointPalettePanel::OnEditWaypointLabel)
 EVT_LIST_ITEM_SELECTED(PALETTE_WAYPOINT_LISTBOX, WaypointPalettePanel::OnClickWaypoint)
 END_EVENT_TABLE()
@@ -60,9 +60,9 @@ void WaypointPalettePanel::SetMap(Map* m) {
 }
 
 Brush* WaypointPalettePanel::GetSelectedBrush() const {
-	long item = waypoint_list->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	long item = getSelectedIndex(waypoint_list);
 	g_gui.waypoint_brush->setWaypoint(
-		item == -1 ? nullptr : map->waypoints.getWaypoint(nstr(waypoint_list->GetItemText(item)))
+		item == -1 ? nullptr : map->waypoints.getWaypoint(getSelectedName(waypoint_list, item))
 	);
 	return g_gui.waypoint_brush;
 }
@@ -122,19 +122,11 @@ void WaypointPalettePanel::OnClickWaypoint(wxListEvent& event) {
 	}
 }
 
-void WaypointPalettePanel::OnBeginEditWaypointLabel(wxListEvent& event) {
-	// We need to disable all hotkeys, so we can type properly
-	g_gui.DisableHotkeys();
-}
-
 void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
-	// END_LABEL_EDIT fires exactly once after OnBeginEditWaypointLabel disabled hotkeys
-	// (whether the edit was committed, cancelled, or vetoed). Always restore them here,
-	// otherwise every keyboard shortcut stays dead after adding/renaming a waypoint.
 	g_gui.EnableHotkeys();
 
 	std::string wpname = nstr(event.GetLabel());
-	std::string oldwpname = nstr(waypoint_list->GetItemText(event.GetIndex()));
+	std::string oldwpname = getSelectedName(waypoint_list, event.GetIndex());
 	Waypoint* wp = map->waypoints.getWaypoint(oldwpname);
 
 	if (event.IsEditCancelled()) {
@@ -197,9 +189,9 @@ void WaypointPalettePanel::OnClickRemoveWaypoint(wxCommandEvent& event) {
 		return;
 	}
 
-	long item = waypoint_list->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	long item = getSelectedIndex(waypoint_list);
 	if (item != -1) {
-		Waypoint* wp = map->waypoints.getWaypoint(nstr(waypoint_list->GetItemText(item)));
+		Waypoint* wp = map->waypoints.getWaypoint(getSelectedName(waypoint_list, item));
 		if (wp) {
 			if (map->getTile(wp->pos)) {
 				map->getTileL(wp->pos)->decreaseWaypointCount();

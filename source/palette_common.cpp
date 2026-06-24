@@ -21,7 +21,6 @@
 #include "brush.h"
 #include "sprites.h"
 #include "gui.h"
-#include "palette_waypoints.h"
 
 // ============================================================================
 // Palette Panel
@@ -70,6 +69,18 @@ void NamedEntityPalettePanel::OnSwitchIn() {
 
 void NamedEntityPalettePanel::OnSwitchOut() {
 	PalettePanel::OnSwitchOut();
+}
+
+void NamedEntityPalettePanel::OnBeginEditLabel(wxListEvent& WXUNUSED(event)) {
+	g_gui.DisableHotkeys();
+}
+
+long NamedEntityPalettePanel::getSelectedIndex(wxListCtrl* list) {
+	return list->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+}
+
+std::string NamedEntityPalettePanel::getSelectedName(wxListCtrl* list, long index) {
+	return nstr(list->GetItemText(index));
 }
 
 PaletteWindow* GetParentPalette(const wxWindow* window) {
