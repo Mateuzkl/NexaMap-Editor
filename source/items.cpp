@@ -398,6 +398,7 @@ bool ItemDatabase::loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArra
 		}
 
 		if (!readOtbItemAttributes(itemNode, t, error, warnings)) {
+			delete t;
 			return false;
 		}
 
@@ -490,6 +491,7 @@ bool ItemDatabase::loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArra
 				case ITEM_ATTR_SERVERID: {
 					if (datalen != sizeof(uint16_t)) {
 						error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
+						delete t;
 						return false;
 					}
 
@@ -506,6 +508,7 @@ bool ItemDatabase::loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArra
 				case ITEM_ATTR_CLIENTID: {
 					if (datalen != sizeof(uint16_t)) {
 						error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
+						delete t;
 						return false;
 					}
 
@@ -520,6 +523,7 @@ bool ItemDatabase::loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArra
 				case ITEM_ATTR_SPEED: {
 					if (datalen != sizeof(uint16_t)) {
 						error = "items.otb: Unexpected data length of speed block (Should be 2 bytes)";
+						delete t;
 						return false;
 					}
 
@@ -650,6 +654,7 @@ bool ItemDatabase::loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArra
 				case ITEM_ATTR_SERVERID: {
 					if (datalen != sizeof(uint16_t)) {
 						error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
+						delete t;
 						return false;
 					}
 
@@ -666,6 +671,7 @@ bool ItemDatabase::loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArra
 				case ITEM_ATTR_CLIENTID: {
 					if (datalen != sizeof(uint16_t)) {
 						error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
+						delete t;
 						return false;
 					}
 
@@ -680,6 +686,7 @@ bool ItemDatabase::loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArra
 				case ITEM_ATTR_SPEED: {
 					if (datalen != sizeof(uint16_t)) {
 						error = "items.otb: Unexpected data length of speed block (Should be 2 bytes)";
+						delete t;
 						return false;
 					}
 

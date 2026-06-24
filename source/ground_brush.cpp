@@ -242,6 +242,7 @@ bool GroundBrush::parseBorderSpecificCases(pugi::xml_node childNode, BorderBlock
 
 						ItemType& it = g_items[with_id];
 						if (it.id == 0) {
+							delete specificCaseBlock;
 							return false;
 						}
 
@@ -265,6 +266,7 @@ bool GroundBrush::parseBorderSpecificCases(pugi::xml_node childNode, BorderBlock
 						const int32_t with_id = attribute.as_int();
 						ItemType& it = g_items[with_id];
 						if (it.id == 0) {
+							delete specificCaseBlock;
 							return false;
 						}
 
@@ -439,6 +441,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 					Brush const* tobrush = g_brushes.getBrush(value);
 					if (!tobrush) {
 						warnings.push_back("To brush " + wxstr(value) + " doesn't exist.");
+						delete borderBlock;
 						continue;
 					}
 					borderBlock->to = tobrush->getID();
@@ -477,6 +480,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 			}
 
 			if (!parseBorderSpecificCases(childNode, borderBlock, warnings)) {
+				delete borderBlock;
 				return false;
 			}
 			borders.push_back(borderBlock);

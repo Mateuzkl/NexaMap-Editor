@@ -937,7 +937,7 @@ void MapDrawer::DrawBrush() {
 							int cx = x * TileSize - view_scroll_x - getFloorAdjustment(floor);
 							if (brush->isOptionalBorder()) {
 								glColorCheck(brush, Position(x, y, floor));
-							} else {
+							} else if (raw_brush) {
 								DrawRawBrush(cx, cy, raw_brush->getItemType(), 160, 160, 160, 160);
 							}
 						}
