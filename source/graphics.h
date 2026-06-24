@@ -265,10 +265,10 @@ struct FrameDuration {
 		return uniform_random(min, max);
 	};
 
-	void setValues(int min, int max) {
-		ASSERT(min <= max);
-		this->min = min;
-		this->max = max;
+	void setValues(int min_, int max_) {
+		ASSERT(min_ <= max_);
+		this->min = min_;
+		this->max = max_;
 	}
 };
 

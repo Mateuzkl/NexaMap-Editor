@@ -227,8 +227,8 @@ inline void foreach_ItemOnMap(Map& map, ForeachType& foreach, bool selectedTiles
 
 				do {
 					container = containers.front();
-					ItemVector& v = container->getVector();
-					for (ItemVector::iterator containeriter = v.begin(); containeriter != v.end(); ++containeriter) {
+					const auto& v = container->getVector();
+					for (auto containeriter = v.begin(); containeriter != v.end(); ++containeriter) {
 						Item* i = *containeriter;
 						Container* c = dynamic_cast<Container*>(i);
 						foreach (map, tile, i, done)

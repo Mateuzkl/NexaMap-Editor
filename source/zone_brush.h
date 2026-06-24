@@ -19,10 +19,6 @@ public:
 		return static_cast<ZoneBrush*>(this);
 	}
 
-	bool load(pugi::xml_node node, wxArrayString& warnings) override {
-		return true;
-	}
-
 	bool canDraw(BaseMap* map, const Position& position) const override;
 	void draw(BaseMap* map, Tile* tile, void* parameter) override;
 	void undraw(BaseMap* map, Tile* tile) override;

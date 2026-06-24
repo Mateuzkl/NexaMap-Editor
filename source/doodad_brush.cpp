@@ -51,10 +51,10 @@ DoodadBrush::AlternativeBlock::AlternativeBlock() :
 
 DoodadBrush::AlternativeBlock::~AlternativeBlock() {
 	for (auto composite_iter = composite_items.begin(); composite_iter != composite_items.end(); ++composite_iter) {
-		CompositeTileList& tv = composite_iter->items;
+		const auto& tv = composite_iter->items;
 
 		for (auto compt_iter = tv.begin(); compt_iter != tv.end(); ++compt_iter) {
-			ItemVector& items = compt_iter->second;
+			const auto& items = compt_iter->second;
 			for (auto iiter = items.begin(); iiter != items.end(); ++iiter) {
 				delete *iiter;
 			}
@@ -234,19 +234,15 @@ bool DoodadBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 		if (as_lower_str(childNode.name()) != "alternate") {
 			continue;
 		}
-		if (!loadAlternative(childNode, warnings)) {
-			return false;
-		}
+		loadAlternative(childNode, warnings);
 	}
 	loadAlternative(node, warnings, alternatives.empty() ? nullptr : alternatives.back());
 	return true;
 }
 
 bool DoodadBrush::AlternativeBlock::ownsItem(uint16_t id) const {
-	for (auto single_iter = single_items.begin(); single_iter != single_items.end(); ++single_iter) {
-		if (single_iter->item->getID() == id) {
-			return true;
-		}
+	if (std::any_of(single_items.begin(), single_items.end(), [id](const auto& s) { return s.item->getID() == id; })) {
+		return true;
 	}
 
 	for (auto composite_iter = composite_items.begin(); composite_iter != composite_items.end(); ++composite_iter) {
@@ -264,18 +260,13 @@ bool DoodadBrush::AlternativeBlock::ownsItem(uint16_t id) const {
 	return false;
 }
 
-bool DoodadBrush::ownsItem(Item* item) const {
+bool DoodadBrush::ownsItem(const Item* item) const {
 	if (item->getDoodadBrush() == this) {
 		return true;
 	}
 	uint16_t const id = item->getID();
 
-	for (auto alt_iter = alternatives.begin(); alt_iter != alternatives.end(); ++alt_iter) {
-		if ((*alt_iter)->ownsItem(id)) {
-			return true;
-		}
-	}
-	return false;
+	return std::any_of(alternatives.begin(), alternatives.end(), [id](const auto* alt) { return alt->ownsItem(id); });
 }
 
 void DoodadBrush::undraw(BaseMap* map, Tile* tile) {

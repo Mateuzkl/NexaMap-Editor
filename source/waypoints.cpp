@@ -41,7 +41,7 @@ Waypoint* Waypoints::getWaypoint(std::string name) {
 	return iter->second;
 }
 
-Waypoint* Waypoints::getWaypoint(TileLocation* location) {
+Waypoint* Waypoints::getWaypoint(const TileLocation* location) {
 	if (!location) {
 		return nullptr;
 	}

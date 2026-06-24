@@ -139,7 +139,7 @@ constexpr int PixelFormatRGB = 3;
 constexpr int PixelFormatRGBA = 4;
 
 // wxString conversions
-#define nstr(str) std::string((const char*)(str.mb_str(wxConvUTF8)))
+#define nstr(str) std::string(static_cast<const char*>((str).mb_str(wxConvUTF8)))
 #define wxstr(str) wxString((str).c_str(), wxConvUTF8)
 
 // increment & decrement definitions

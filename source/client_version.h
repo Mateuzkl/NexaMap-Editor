@@ -268,7 +268,7 @@ private:
 	static OtbMap otb_versions;
 };
 
-inline int VersionComparisonPredicate(ClientVersion* a, ClientVersion* b) {
+inline int VersionComparisonPredicate(const ClientVersion* a, const ClientVersion* b) {
 	if (a->getID() < b->getID()) {
 		return 1;
 	}

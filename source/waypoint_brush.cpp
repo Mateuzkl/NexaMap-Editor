@@ -33,7 +33,7 @@ WaypointBrush::~WaypointBrush() {
 	////
 }
 
-void WaypointBrush::setWaypoint(Waypoint* wp) {
+void WaypointBrush::setWaypoint(const Waypoint* wp) {
 	if (wp) {
 		waypoint_name = wp->name;
 	} else {
@@ -41,7 +41,7 @@ void WaypointBrush::setWaypoint(Waypoint* wp) {
 	}
 }
 
-std::string WaypointBrush::getWaypoint() const {
+const std::string& WaypointBrush::getWaypoint() const {
 	return waypoint_name;
 }
 

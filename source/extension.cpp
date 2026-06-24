@@ -50,12 +50,9 @@ bool MaterialsExtension::isForVersion(uint16_t versionId) {
 		return true;
 	}
 
-	for (ClientVersion const* version : version_list) {
-		if (version->getID() == versionId) {
-			return true;
-		}
-	}
-	return false;
+	return std::any_of(version_list.begin(), version_list.end(), [versionId](ClientVersion const* version) {
+		return version->getID() == versionId;
+	});
 }
 
 std::string MaterialsExtension::getVersionString() {

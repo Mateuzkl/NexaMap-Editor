@@ -21,7 +21,7 @@
 
 #include <utility>
 
-Creature::Creature(CreatureType* ctype) :
+Creature::Creature(const CreatureType* ctype) :
 	direction(SOUTH), spawntime(0), weight(0), saved(false), selected(false) {
 	if (ctype) {
 		type_name = ctype->name;

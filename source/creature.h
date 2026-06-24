@@ -35,7 +35,7 @@ IMPLEMENT_INCREMENT_OP(Direction)
 
 class Creature {
 public:
-	Creature(CreatureType* ctype);
+	Creature(const CreatureType* ctype);
 	Creature(std::string type_name);
 	~Creature();
 
@@ -68,22 +68,22 @@ public:
 	int getSpawnTime() const {
 		return spawntime;
 	}
-	void setSpawnTime(int spawntime) {
-		this->spawntime = spawntime;
+	void setSpawnTime(int spawntime_) {
+		this->spawntime = spawntime_;
 	}
 
 	int getWeight() const {
 		return weight;
 	}
-	void setWeight(int weight) {
-		this->weight = static_cast<uint8_t>(std::max(0, std::min(weight, 100)));
+	void setWeight(int weight_) {
+		this->weight = static_cast<uint8_t>(std::max(0, std::min(weight_, 100)));
 	}
 
 	Direction getDirection() const {
 		return direction;
 	}
-	void setDirection(Direction direction) {
-		this->direction = direction;
+	void setDirection(Direction direction_) {
+		this->direction = direction_;
 	}
 
 protected:

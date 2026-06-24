@@ -28,7 +28,6 @@
 #include "wall_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
-#include "map.h"
 #include "object_pool.h"
 
 void* Tile::operator new(size_t size) {
@@ -204,14 +203,9 @@ bool Tile::hasProperty(enum ITEMPROPERTY prop) const {
 		return true;
 	}
 
-	ItemVector::const_iterator iit;
-	for (iit = items.begin(); iit != items.end(); ++iit) {
-		if ((*iit)->hasProperty(prop)) {
-			return true;
-		}
-	}
-
-	return false;
+	return std::find_if(items.begin(), items.end(), [prop](Item* item) {
+		return item->hasProperty(prop);
+	}) != items.end();
 }
 
 int Tile::getIndexOf(Item* item) const {
@@ -449,10 +443,11 @@ void Tile::deselect() {
 }
 
 Item* Tile::getTopSelectedItem() {
-	for (auto iter = items.rbegin(); iter != items.rend(); ++iter) {
-		if ((*iter)->isSelected() && !(*iter)->isMetaItem()) {
-			return *iter;
-		}
+	auto iter = std::find_if(items.rbegin(), items.rend(), [](Item* item) {
+		return item->isSelected() && !item->isMetaItem();
+	});
+	if (iter != items.rend()) {
+		return *iter;
 	}
 	if (ground && ground->isSelected() && !ground->isMetaItem()) {
 		return ground;
@@ -508,7 +503,7 @@ ItemVector Tile::getSelectedItems(bool unzoomed) {
 			if ((*it)->isSelected()) {
 				selected_items.push_back(*it);
 			}
-			it++;
+			++it;
 		}
 	}
 
@@ -520,10 +515,11 @@ uint8_t Tile::getMiniMapColor() const {
 		return minimapColor;
 	}
 
-	for (auto item_iter = items.rbegin(); item_iter != items.rend(); ++item_iter) {
-		if ((*item_iter)->getMiniMapColor()) {
-			return (*item_iter)->getMiniMapColor();
-		}
+	auto item_iter = std::find_if(items.rbegin(), items.rend(), [](Item* item) {
+		return item->getMiniMapColor() != 0;
+	});
+	if (item_iter != items.rend()) {
+		return (*item_iter)->getMiniMapColor();
 	}
 
 	// check ground too
@@ -598,7 +594,7 @@ void Tile::update() {
 
 	ItemVector::const_iterator iter = items.begin();
 	while (iter != items.end()) {
-		Item* i = *iter;
+		const auto* i = *iter;
 		if (i->isSelected()) {
 			statflags |= TILESTATE_SELECTED;
 		}
@@ -609,7 +605,7 @@ void Tile::update() {
 			minimapColor = i->getMiniMapColor();
 		}
 
-		ItemType& it = g_items[i->getID()];
+		const auto& it = g_items[i->getID()];
 		if (it.unpassable) {
 			statflags |= TILESTATE_BLOCKING;
 		}
@@ -796,7 +792,7 @@ void Tile::deselectGround() {
 	}
 }
 
-void Tile::setHouse(House* _house) {
+void Tile::setHouse(const House* _house) {
 	house_id = (_house ? _house->getID() : 0);
 }
 
@@ -804,11 +800,11 @@ void Tile::setHouseID(uint32_t newHouseId) {
 	house_id = newHouseId;
 }
 
-bool Tile::isTownExit(Map& map) const {
+bool Tile::isTownExit(const BaseMap& map) const {
 	return location->getTownCount() > 0;
 }
 
-void Tile::addHouseExit(House* h) {
+void Tile::addHouseExit(const House* h) {
 	if (!h) {
 		return;
 	}
@@ -816,7 +812,7 @@ void Tile::addHouseExit(House* h) {
 	house_exits->push_back(h->getID());
 }
 
-void Tile::removeHouseExit(House* h) {
+void Tile::removeHouseExit(const House* h) {
 	if (!h) {
 		return;
 	}
@@ -826,10 +822,10 @@ void Tile::removeHouseExit(House* h) {
 		return;
 	}
 
-	for (auto it = house_exits->begin(); it != house_exits->end(); ++it) {
-		if (*it == h->getID()) {
-			house_exits->erase(it);
-			return;
-		}
+	auto it = std::find_if(house_exits->begin(), house_exits->end(), [&](uint32_t exitId) {
+		return exitId == h->getID();
+	});
+	if (it != house_exits->end()) {
+		house_exits->erase(it);
 	}
 }

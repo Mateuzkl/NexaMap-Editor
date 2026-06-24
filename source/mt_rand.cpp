@@ -38,7 +38,7 @@ typedef struct
 
 static inline unsigned long
 mt_get(void* vstate) {
-	auto* state = (mt_state_t*)vstate;
+	auto* state = static_cast<mt_state_t*>(vstate);
 
 	unsigned long k;
 	unsigned long int* const mt = state->mt;
@@ -85,7 +85,7 @@ mt_get_double(void* vstate) {
 
 static void
 mt_set(void* vstate, unsigned long int s) {
-	auto* state = (mt_state_t*)vstate;
+	auto* state = static_cast<mt_state_t*>(vstate);
 	int i;
 
 	if (s == 0) {

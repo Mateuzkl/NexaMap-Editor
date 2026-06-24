@@ -18,7 +18,6 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
-#include <numbers>
 
 #ifdef _WIN32
 static void* rmeGetGLProc(const char* name) {

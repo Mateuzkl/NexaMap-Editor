@@ -49,7 +49,7 @@ public:
 	void loadBrush(pugi::xml_node node, wxArrayString& warnings);
 	void clear();
 
-	bool containsBrush(Brush* brush) const;
+	bool containsBrush(const Brush* brush) const;
 
 protected:
 	TilesetCategoryType type;
@@ -76,7 +76,7 @@ public:
 	void loadCategory(pugi::xml_node node, wxArrayString& warnings);
 	void clear();
 
-	bool containsBrush(Brush* brush) const;
+	bool containsBrush(const Brush* brush) const;
 
 public:
 	std::string name;

@@ -21,6 +21,7 @@
 #include "position.h"
 #include "item.h"
 #include "map_region.h"
+#include <algorithm>
 #include <set>
 #include <unordered_set>
 
@@ -240,14 +241,14 @@ public: // Functions
 	bool isHouseTile() const;
 	uint32_t getHouseID() const;
 	void setHouseID(uint32_t newHouseId);
-	void addHouseExit(House* h);
-	void removeHouseExit(House* h);
+	void addHouseExit(const House* h);
+	void removeHouseExit(const House* h);
 	bool isHouseExit() const;
-	bool isTownExit(Map& map) const;
+	bool isTownExit(const BaseMap& map) const;
 	const HouseExitList* getHouseExits() const;
 	HouseExitList* getHouseExits();
 	bool hasHouseExit(uint32_t exit) const;
-	void setHouse(House* house);
+	void setHouse(const House* house);
 
 	// Mapflags (PZ, PVPZONE etc.)
 	void setMapFlags(uint16_t _flags);
@@ -339,11 +340,7 @@ inline bool Tile::isHouseExit() const {
 inline bool Tile::hasHouseExit(uint32_t exit) const {
 	const HouseExitList* house_exits = getHouseExits();
 	if (house_exits) {
-		for (HouseExitList::const_iterator iter = house_exits->begin(); iter != house_exits->end(); ++iter) {
-			if (*iter == exit) {
-				return true;
-			}
-		}
+		return std::any_of(house_exits->begin(), house_exits->end(), [exit](uint32_t e) { return e == exit; });
 	}
 	return false;
 }

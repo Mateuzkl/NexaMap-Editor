@@ -155,7 +155,7 @@ protected:
 	virtual void updateUniqueIds(Tile* old_tile, Tile* new_tile) { }
 
 	template <typename Fn>
-	void forEachFloorTileLocation(Floor& floor, Fn& fn) {
+	static void forEachFloorTileLocation(Floor& floor, Fn& fn) {
 		for (TileLocation& location : floor.locs) {
 			if (location.get()) {
 				fn(&location);
@@ -164,7 +164,7 @@ protected:
 	}
 
 	template <typename Fn>
-	void forEachLeafTileLocation(const QTreeNode& node, Fn& fn) {
+	static void forEachLeafTileLocation(const QTreeNode& node, Fn& fn) {
 		for (Floor* floor : node.array) {
 			if (floor) {
 				forEachFloorTileLocation(*floor, fn);
@@ -173,7 +173,7 @@ protected:
 	}
 
 	template <typename Fn>
-	void forEachTileLocation(const QTreeNode& node, Fn& fn) {
+	static void forEachTileLocation(const QTreeNode& node, Fn& fn) {
 		if (node.isLeaf) {
 			forEachLeafTileLocation(node, fn);
 			return;

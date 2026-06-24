@@ -82,14 +82,11 @@ namespace {
 
 		for (std::size_t unit = 0; unit < kLookupCount; ++unit) {
 			const std::size_t bytes = unit * kAlignment;
-			uint16_t selected = kFallbackClass;
 
-			for (uint16_t i = 0; i < kClassCount; ++i) {
-				if (bytes <= kClassSizes[i]) {
-					selected = i;
-					break;
-				}
-			}
+			auto sit = std::find_if(kClassSizes.begin(), kClassSizes.end(), [bytes](std::size_t size) {
+				return bytes <= size;
+			});
+			uint16_t selected = static_cast<uint16_t>(sit != kClassSizes.end() ? static_cast<uint16_t>(sit - kClassSizes.begin()) : kFallbackClass);
 
 			lookup[unit] = selected;
 		}

@@ -161,7 +161,7 @@ void Settings::IO(IOMode mode) {
 		} else if (mode == SAVE) {                         \
 			conf->Write(#key, getInteger(key));            \
 		} else if (mode == LOAD) {                         \
-			setInteger(key, conf->Read(#key, long(dflt))); \
+			setInteger(key, conf->Read(#key, static_cast<long>(dflt))); \
 		}                                                  \
 	} while (false)
 #define IntToSave(key, dflt)                               \
@@ -171,7 +171,7 @@ void Settings::IO(IOMode mode) {
 		} else if (mode == SAVE) {                         \
 			conf->Write(#key, getInteger(key##_TO_SAVE));  \
 		} else if (mode == LOAD) {                         \
-			setInteger(key, conf->Read(#key, (long)dflt)); \
+			setInteger(key, conf->Read(#key, static_cast<long>(dflt))); \
 			setInteger(key##_TO_SAVE, getInteger(key));    \
 		}                                                  \
 	} while (false)
@@ -438,8 +438,8 @@ void Settings::save(bool endoftheworld) {
 	}
 #endif
 	if (endoftheworld) {
-		wxConfigBase const* conf = dynamic_cast<wxConfigBase*>(wxConfig::Get());
+		wxConfigBase const* cfg = dynamic_cast<wxConfigBase*>(wxConfig::Get());
 		wxConfig::Set(nullptr);
-		delete conf;
+		delete cfg;
 	}
 }

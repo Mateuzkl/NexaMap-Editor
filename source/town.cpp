@@ -55,13 +55,11 @@ uint32_t Towns::getEmptyID() {
 	return empty + 1;
 }
 
-Town* Towns::getTown(std::string& name) {
-	for (auto it = begin(); it != end(); ++it) {
-		if (it->second->getName() == name) {
-			return it->second;
-		}
-	}
-	return nullptr;
+Town* Towns::getTown(const std::string& name) {
+	auto it = std::find_if(begin(), end(), [&](const auto& pair) {
+		return pair.second->getName() == name;
+	});
+	return it != end() ? it->second : nullptr;
 }
 
 Town* Towns::getTown(uint32_t id) {

@@ -75,7 +75,7 @@ public:
 	bool doNewBorders() const {
 		return do_new_borders;
 	}
-	bool ownsItem(Item* item) const;
+	bool ownsItem(const Item* item) const;
 
 	bool canSmear() const override {
 		return draggable;

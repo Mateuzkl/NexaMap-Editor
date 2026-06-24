@@ -106,7 +106,7 @@ void replaceString(std::string& str, const std::string& sought, const std::strin
 	size_t const soughtLen = sought.length();
 	size_t const replaceLen = replacement.length();
 	while ((pos = str.find(sought, start)) != std::string::npos) {
-		str = str.substr(0, pos) + replacement + str.substr(pos + soughtLen);
+		str.replace(pos, soughtLen, replacement);
 		start = pos + replaceLen;
 	}
 }
@@ -148,14 +148,14 @@ std::string as_upper_str(const std::string& other) {
 	return ret;
 }
 
-bool isFalseString(std::string& str) {
+bool isFalseString(const std::string& str) {
 	if (str == "false" || str == "0" || str == "" || str == "no" || str == "not") {
 		return true;
 	}
 	return false;
 }
 
-bool isTrueString(std::string& str) {
+bool isTrueString(const std::string& str) {
 	return !isFalseString(str);
 }
 
@@ -180,12 +180,12 @@ int random(int high) {
 
 std::wstring string2wstring(const std::string& utf8string) {
 	wxString const s(utf8string.c_str(), wxConvUTF8);
-	return std::wstring((const wchar_t*)s.c_str());
+	return std::wstring(static_cast<const wchar_t*>(s.c_str()));
 }
 
 std::string wstring2string(const std::wstring& widestring) {
 	wxString const s(widestring.c_str());
-	return std::string((const char*)s.mb_str(wxConvUTF8));
+	return std::string(static_cast<const char*>(s.mb_str(wxConvUTF8)));
 }
 
 bool posFromClipboard(Position& position, const int mapWidth /* = MAP_MAX_WIDTH */, const int mapHeight /* = MAP_MAX_HEIGHT */) {

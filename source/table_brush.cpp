@@ -134,7 +134,7 @@ void TableBrush::undraw(BaseMap* map, Tile* t) {
 void TableBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	undraw(map, tile); // Remove old
 
-	TableNode& tn = table_items[0];
+	const auto& tn = table_items[0];
 	if (tn.total_chance <= 0) {
 		return;
 	}
@@ -154,7 +154,7 @@ void TableBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	}
 }
 
-bool hasMatchingTableBrushAtTile(BaseMap* map, TableBrush* table_brush, uint32_t x, uint32_t y, uint32_t z) {
+bool hasMatchingTableBrushAtTile(BaseMap* map, const TableBrush* table_brush, uint32_t x, uint32_t y, uint32_t z) {
 	Tile* t = map->getTile(x, y, z);
 	if (!t) {
 		return false;

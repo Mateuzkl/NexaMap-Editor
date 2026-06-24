@@ -70,7 +70,7 @@ public:
 	bool addTown(Town* town);
 	uint32_t getEmptyID();
 
-	Town* getTown(std::string& townname);
+	Town* getTown(const std::string& townname);
 	Town* getTown(uint32_t _townid);
 
 	TownMap::const_iterator begin() const {

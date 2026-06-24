@@ -26,7 +26,7 @@ class GroundBrush : public TerrainBrush {
 protected:
 	struct BorderBlock;
 
-	bool parseBorderSpecificCases(pugi::xml_node childNode, BorderBlock* borderBlock, wxArrayString& warnings);
+	static bool parseBorderSpecificCases(pugi::xml_node childNode, BorderBlock* borderBlock, wxArrayString& warnings);
 
 public:
 	static void init();

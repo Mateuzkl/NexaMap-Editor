@@ -41,44 +41,38 @@ void Tileset::clear() {
 	}
 }
 
-bool Tileset::containsBrush(Brush* brush) const {
-	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
-		if ((*iter)->containsBrush(brush)) {
-			return true;
-		}
-	}
-
-	return false;
+bool Tileset::containsBrush(const Brush* brush) const {
+	return std::any_of(categories.begin(), categories.end(), [&](const auto* cat) {
+		return cat->containsBrush(brush);
+	});
 }
 
 TilesetCategory* Tileset::getCategory(TilesetCategoryType type) {
 	ASSERT(type >= TILESET_UNKNOWN && type <= TILESET_HOUSE);
-	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
-		if ((*iter)->getType() == type) {
-			return *iter;
-		}
+	auto iter = std::find_if(categories.begin(), categories.end(), [type](const auto* cat) {
+		return cat->getType() == type;
+	});
+	if (iter != categories.end()) {
+		return *iter;
 	}
 	auto* tsc = newd TilesetCategory(*this, type);
 	categories.push_back(tsc);
 	return tsc;
 }
 
-bool TilesetCategory::containsBrush(Brush* brush) const {
-	for (auto iter = brushlist.begin(); iter != brushlist.end(); ++iter) {
-		if (*iter == brush) {
-			return true;
-		}
-	}
-
-	return false;
+bool TilesetCategory::containsBrush(const Brush* brush) const {
+	return std::any_of(brushlist.begin(), brushlist.end(), [&](const auto* b) {
+		return b == brush;
+	});
 }
 
 const TilesetCategory* Tileset::getCategory(TilesetCategoryType type) const {
 	ASSERT(type >= TILESET_UNKNOWN && type <= TILESET_HOUSE);
-	for (auto iter = categories.begin(); iter != categories.end(); ++iter) {
-		if ((*iter)->getType() == type) {
-			return *iter;
-		}
+	auto iter = std::find_if(categories.begin(), categories.end(), [type](const auto* cat) {
+		return cat->getType() == type;
+	});
+	if (iter != categories.end()) {
+		return *iter;
 	}
 	return nullptr;
 }
@@ -193,11 +187,11 @@ void TilesetCategory::loadBrush(pugi::xml_node node, wxArrayString& warnings) {
 		if (brush) {
 			auto insertPosition = brushlist.end();
 			if (!brushName.empty()) {
-				for (auto itt = brushlist.begin(); itt != brushlist.end(); ++itt) {
-					if ((*itt)->getName() == brushName) {
-						insertPosition = ++itt;
-						break;
-					}
+				auto itt = std::find_if(brushlist.begin(), brushlist.end(), [&](const auto* b) {
+					return b->getName() == brushName;
+				});
+				if (itt != brushlist.end()) {
+					insertPosition = std::next(itt);
 				}
 			}
 			brush->flagAsVisible();
@@ -261,11 +255,11 @@ void TilesetCategory::loadBrush(pugi::xml_node node, wxArrayString& warnings) {
 
 		auto insertPosition = brushlist.end();
 		if (!brushName.empty()) {
-			for (auto itt = brushlist.begin(); itt != brushlist.end(); ++itt) {
-				if ((*itt)->getName() == brushName) {
-					insertPosition = ++itt;
-					break;
-				}
+			auto itt = std::find_if(brushlist.begin(), brushlist.end(), [&](const auto* b) {
+				return b->getName() == brushName;
+			});
+			if (itt != brushlist.end()) {
+				insertPosition = std::next(itt);
 			}
 		}
 		brushlist.insert(insertPosition, tempBrushVector.begin(), tempBrushVector.end());

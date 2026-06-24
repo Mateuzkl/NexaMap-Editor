@@ -37,19 +37,11 @@ public:
 		return static_cast<WaypointBrush*>(this);
 	}
 
-	// Not used
-	bool load(pugi::xml_node node, wxArrayString& warnings) override {
-		return true;
-	}
-
 	bool canDraw(BaseMap* map, const Position& position) const override;
 	// Will ASSERT
 	void draw(BaseMap* map, Tile* tile, void* parameter) override;
 	void undraw(BaseMap* map, Tile* tile) override;
 
-	bool canDrag() const override {
-		return false;
-	}
 	bool canSmear() const override {
 		return false;
 	}
@@ -57,8 +49,8 @@ public:
 		return true;
 	}
 
-	std::string getWaypoint() const;
-	void setWaypoint(Waypoint* wp);
+	const std::string& getWaypoint() const;
+	void setWaypoint(const Waypoint* wp);
 	int getLookID() const override {
 		return 0;
 	} // We don't have a graphic

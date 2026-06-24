@@ -52,6 +52,7 @@ void Houses::addHouse(House* new_house) {
 	ASSERT(new_house);
 	auto it = houses.find(new_house->id);
 	ASSERT(it == houses.end());
+	(void)it;
 	new_house->map = &map;
 	if (new_house->id > max_house_id) {
 		max_house_id = new_house->id;
@@ -131,7 +132,7 @@ void House::clean() {
 size_t House::size() const {
 	size_t count = 0;
 	for (auto pos_iter = tiles.begin(); pos_iter != tiles.end(); ++pos_iter) {
-		Tile* tile = map->getTile(*pos_iter);
+		const Tile* tile = map->getTile(*pos_iter);
 		if (tile && !tile->isBlocking()) {
 			++count;
 		}
@@ -147,12 +148,12 @@ void House::addTile(Tile* tile) {
 
 void House::removeTile(Tile* tile) {
 	ASSERT(tile);
-	for (auto tile_iter = tiles.begin(); tile_iter != tiles.end(); ++tile_iter) {
-		if (*tile_iter == tile->getPosition()) {
-			tiles.erase(tile_iter);
-			tile->setHouse(nullptr);
-			return;
-		}
+	auto it = std::find_if(tiles.begin(), tiles.end(), [&](const Position& pos) {
+		return pos == tile->getPosition();
+	});
+	if (it != tiles.end()) {
+		tiles.erase(it);
+		tile->setHouse(nullptr);
 	}
 }
 
@@ -161,7 +162,7 @@ uint8_t House::getEmptyDoorID() const {
 	for (auto tile_iter = tiles.begin(); tile_iter != tiles.end(); ++tile_iter) {
 		if (const Tile* tile = map->getTile(*tile_iter)) {
 			for (auto item_iter = tile->items.begin(); item_iter != tile->items.end(); ++item_iter) {
-				if (Door* door = dynamic_cast<Door*>(*item_iter)) {
+				if (const auto* door = dynamic_cast<Door*>(*item_iter)) {
 					taken.insert(door->getDoorID());
 				}
 			}
@@ -178,12 +179,12 @@ uint8_t House::getEmptyDoorID() const {
 	return 255;
 }
 
-Position House::getDoorPositionByID(uint8_t id) const {
+Position House::getDoorPositionByID(uint8_t id_) const {
 	for (auto tile_iter = tiles.begin(); tile_iter != tiles.end(); ++tile_iter) {
 		if (const Tile* tile = map->getTile(*tile_iter)) {
 			for (auto item_iter = tile->items.begin(); item_iter != tile->items.end(); ++item_iter) {
-				if (Door* door = dynamic_cast<Door*>(*item_iter)) {
-					if (door->getDoorID() == id) {
+				if (const auto* door = dynamic_cast<Door*>(*item_iter)) {
+					if (door->getDoorID() == id_) {
 						return *tile_iter;
 					}
 				}

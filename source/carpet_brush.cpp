@@ -177,12 +177,9 @@ void CarpetBrush::doCarpets(BaseMap* map, Tile* tile) {
 			return false;
 		}
 
-		for (Item const* item : tile->items) {
-			if (item->getCarpetBrush() == carpetBrush) {
-				return true;
-			}
-		}
-		return false;
+		return std::any_of(tile->items.begin(), tile->items.end(), [&](Item const* item) {
+			return item->getCarpetBrush() == carpetBrush;
+		});
 	};
 
 	ASSERT(tile);

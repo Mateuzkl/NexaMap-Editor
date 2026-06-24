@@ -63,8 +63,8 @@ std::string as_upper_str(const std::string& other);
 
 // isFalseString returns true if the string is either "0", "false", "no", "not" or blank
 // isTrueString returns the opposite value of isFalseString
-bool isFalseString(std::string& str);
-bool isTrueString(std::string& str);
+bool isFalseString(const std::string& str);
+bool isTrueString(const std::string& str);
 
 // Generates a random number between low and high using the mersenne twister
 int random(int high);

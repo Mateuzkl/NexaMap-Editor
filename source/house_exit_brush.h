@@ -37,11 +37,6 @@ public:
 		return static_cast<HouseExitBrush*>(this);
 	}
 
-	// Not used
-	bool load(pugi::xml_node node, wxArrayString& warnings) override {
-		return true;
-	}
-
 	bool canDraw(BaseMap* map, const Position& position) const override;
 	// Will ASSERT
 	void draw(BaseMap* map, Tile* tile, void* parameter) override;
@@ -54,7 +49,7 @@ public:
 		return true;
 	}
 
-	void setHouse(House* house);
+	void setHouse(const House* house);
 
 	uint32_t getHouseID() const;
 	int getLookID() const override {

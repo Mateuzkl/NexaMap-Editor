@@ -19,6 +19,7 @@
 
 #include "item_attributes.h"
 #include <cstring>
+#include <new>
 #include "filehandle.h"
 
 ItemAttributes::ItemAttributes() :
@@ -146,7 +147,8 @@ const bool* ItemAttributes::getBooleanAttribute(const std::string& key) const {
 // Without using newd to allocate them
 
 ItemAttribute::ItemAttribute() :
-	type(ItemAttribute::NONE) {
+	type(ItemAttribute::NONE),
+	data{} {
 	////
 }
 
@@ -258,7 +260,7 @@ const int32_t* ItemAttribute::getInteger() const {
 
 const double* ItemAttribute::getFloat() const {
 	if (type == DOUBLE) {
-		return reinterpret_cast<const double*>(&data);
+		return std::launder(reinterpret_cast<const double*>(&data));
 	}
 	return nullptr;
 }

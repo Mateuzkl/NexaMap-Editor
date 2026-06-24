@@ -58,7 +58,7 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 			buffer[color_index + 2] = global_color.Blue();
 			buffer[color_index + 3] = 140; // global_color.Alpha();
 
-			for (auto& light : lights) {
+			for (const auto& light : lights) {
 				float const intensity = calculateIntensity(mx, my, light);
 				if (intensity == 0.f) {
 					continue;

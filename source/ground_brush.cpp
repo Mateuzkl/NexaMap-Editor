@@ -571,11 +571,11 @@ void GroundBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	}
 	int const chance = random(1, total_chance);
 	uint16_t id = 0;
-	for (std::vector<ItemChanceBlock>::const_iterator it = border_items.begin(); it != border_items.end(); ++it) {
-		if (chance < it->chance) {
-			id = it->id;
-			break;
-		}
+	auto it = std::find_if(border_items.begin(), border_items.end(), [chance](const ItemChanceBlock& item) {
+		return chance < item.chance;
+	});
+	if (it != border_items.end()) {
+		id = it->id;
 	}
 	if (id == 0) {
 		id = border_items.front().id;
@@ -776,26 +776,22 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 						if (!only_mountain) {
 							const BorderBlock* borderBlock = getBrushTo(borderBrush, other);
 							if (borderBlock) {
-								bool found = false;
-								for (BorderCluster& borderCluster : borderList) {
-									if (borderCluster.border == borderBlock->autoborder) {
-										borderCluster.alignment |= tiledata;
-										if (borderCluster.z < other->getZ()) {
-											borderCluster.z = other->getZ();
-										}
+								auto bit = std::find_if(borderList.begin(), borderList.end(), [&](const BorderCluster& bc) {
+									return bc.border == borderBlock->autoborder;
+								});
 
-										if (!borderBlock->specific_cases.empty()) {
-											if (std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
-												specificList.push_back(borderBlock);
-											}
-										}
-
-										found = true;
-										break;
+								if (bit != borderList.end()) {
+									bit->alignment |= tiledata;
+									if (bit->z < other->getZ()) {
+										bit->z = other->getZ();
 									}
-								}
 
-								if (!found) {
+									if (!borderBlock->specific_cases.empty()) {
+										if (std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
+											specificList.push_back(borderBlock);
+										}
+									}
+								} else {
 									BorderCluster borderCluster;
 									borderCluster.alignment = tiledata;
 									borderCluster.z = other->getZ();
@@ -965,12 +961,9 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 				}
 
 				// printf("\tInvestigating first item id:%d\n", item->getID());
-				for (uint16_t const matchId : specificCaseBlock->items_to_match) {
-					if (item->getID() == matchId) {
-						// printf("\t\tMatched item id %d\n", item->getID());
-						++matches;
-					}
-				}
+				matches += static_cast<uint32_t>(std::count_if(specificCaseBlock->items_to_match.begin(), specificCaseBlock->items_to_match.end(), [item](uint16_t matchId) {
+					return item->getID() == matchId;
+				}));
 			}
 
 			// printf("\t\t%d matches of %d\n", matches, scb->items_to_match.size());

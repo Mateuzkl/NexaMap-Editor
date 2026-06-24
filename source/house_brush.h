@@ -38,11 +38,6 @@ public:
 		return static_cast<HouseBrush*>(this);
 	}
 
-	// Not used
-	bool load(pugi::xml_node node, wxArrayString& warnings) override {
-		return true;
-	}
-
 	// You can always draw house tiles!
 	bool canDraw(BaseMap* map, const Position& position) const override {
 		return true;
