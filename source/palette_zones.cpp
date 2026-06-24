@@ -8,6 +8,7 @@
 #include "palette_zones.h"
 #include "zone_brush.h"
 #include "map.h"
+#include "iomap_otbm.h"
 
 BEGIN_EVENT_TABLE(ZonesPalettePanel, PalettePanel)
 EVT_BUTTON(PALETTE_ZONES_ADD_ZONE, ZonesPalettePanel::OnClickAddZone)
@@ -210,31 +211,9 @@ void ZonesPalettePanel::OnClickExportZone(wxCommandEvent& event) {
 	}
 	std::string filepath = nstr(dlg.GetPath());
 	pugi::xml_document doc;
-	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
-	decl.append_attribute("version") = "1.0";
-	pugi::xml_node zones_node = doc.append_child("zones");
-	std::unordered_map<unsigned int, std::vector<Position>> zone_positions;
-	for (MapIterator miter = map->begin(); miter != map->end(); ++miter) {
-		Tile* tile = (*miter)->get();
-		if (!tile || tile->size() == 0) {
-			continue;
-		}
-		for (const auto& zone_id : tile->zones) {
-			zone_positions[zone_id].push_back(tile->getPosition());
-		}
-	}
-	for (const auto& zone : map->zones.zones) {
-		const std::string& name = zone.first;
-		unsigned int id = zone.second;
-		pugi::xml_node zone_node = zones_node.append_child("zone");
-		zone_node.append_attribute("name").set_value(name.c_str());
-		zone_node.append_attribute("id").set_value(id);
-		for (const auto& pos : zone_positions[id]) {
-			pugi::xml_node pos_node = zone_node.append_child("position");
-			pos_node.append_attribute("x").set_value(pos.x);
-			pos_node.append_attribute("y").set_value(pos.y);
-			pos_node.append_attribute("z").set_value(pos.z);
-		}
+	if (!IOMapOTBM::saveZones(*map, doc)) {
+		g_gui.SetStatusText("Failed to export zones.");
+		return;
 	}
 	if (doc.save_file(filepath.c_str(), "\t", pugi::format_default, pugi::encoding_utf8)) {
 		g_gui.SetStatusText("Zones exported successfully to " + filepath);

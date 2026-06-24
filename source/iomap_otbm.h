@@ -137,6 +137,8 @@ public:
 	bool loadMap(Map& map, const FileName& identifier) override;
 	bool saveMap(Map& map, const FileName& identifier) override;
 
+	static bool saveZones(Map& map, pugi::xml_document& doc);
+
 protected:
 	static bool getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver);
 
@@ -165,7 +167,6 @@ protected:
 	bool saveWaypoints(Map& map, const FileName& dir);
 	bool saveWaypoints(Map& map, pugi::xml_document& doc);
 	bool saveZones(Map& map, const FileName& dir);
-	bool saveZones(Map& map, pugi::xml_document& doc);
 
 private:
 	static bool prependXmlDeclaration(pugi::xml_document& doc);
