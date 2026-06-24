@@ -27,12 +27,7 @@
 #include "gui_ids.h"
 #include "common_windows.h"
 
-class GUI;
 class Map;
-class BrushButton;
-class TilesetCategory;
-class BrushSizePanel;
-class BrushPalettePanel;
 class PaletteWindow;
 
 typedef TilesetCategoryType PaletteType;
@@ -43,7 +38,6 @@ PaletteWindow* GetParentPalette(const wxWindow* window);
 class BrushButton : public ItemToggleButton {
 public:
 	BrushButton(wxWindow* parent, Brush* brush, RenderSize, uint32_t id = wxID_ANY);
-	BrushButton(wxWindow* parent, Brush* brush, RenderSize, EditorSprite* espr, uint32_t id = wxID_ANY);
 	~BrushButton() override;
 
 	Brush* brush;
@@ -96,8 +90,6 @@ public:
 	virtual void OnUpdate();
 	// When the palette should do a delayed refresh (necessary for multiple palettes)
 	void OnRefreshTimer(wxTimerEvent&);
-
-	void RefreshOtherPalettes();
 
 protected:
 	typedef std::vector<PalettePanel*> ToolBarList;

@@ -37,7 +37,6 @@ class RAWBrush;
 
 class ItemType;
 class GameSprite;
-class GameSprite;
 class ItemDatabase;
 
 extern ItemDatabase g_items;
@@ -218,13 +217,6 @@ enum ShootTypeOtb_t {
 
 // 1-byte aligned structs
 #pragma pack(1)
-
-struct VERSIONINFO {
-	uint32_t dwMajorVersion;
-	uint32_t dwMinorVersion;
-	uint32_t dwBuildNumber;
-	uint8_t CSDVersion[128];
-};
 
 struct decayBlock2 {
 	uint16_t decayTo;
@@ -431,7 +423,6 @@ public:
 
 	bool typeExists(int id) const;
 	ItemType& getItemType(int id);
-	ItemType& getItemIdByClientID(int spriteId);
 
 	bool loadFromOtb(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings);
@@ -458,12 +449,7 @@ protected:
 protected:
 	// Count of GameSprite types
 	uint16_t item_count;
-	uint16_t effect_count;
-	uint16_t monster_count;
-	uint16_t distance_count;
 
-	uint16_t minclientID;
-	uint16_t maxclientID;
 	uint16_t max_item_id;
 
 	friend class GameSprite;

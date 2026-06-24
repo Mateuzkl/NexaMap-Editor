@@ -647,11 +647,6 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 	return nullptr;
 }
 
-inline GroundBrush* extractGroundBrushFromTile(BaseMap* map, uint32_t x, uint32_t y, uint32_t z) {
-	Tile const* t = map->getTile(x, y, z);
-	return t ? t->getGroundBrush() : nullptr;
-}
-
 void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 	static const auto extractGroundBrushFromTile = [](BaseMap* map, uint32_t x, uint32_t y, uint32_t z) -> GroundBrush* {
 		Tile const* tile = map->getTile(x, y, z);

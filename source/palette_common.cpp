@@ -21,7 +21,6 @@
 #include "brush.h"
 #include "sprites.h"
 #include "gui.h"
-#include "common_windows.h"
 #include "palette_waypoints.h"
 
 // ============================================================================
@@ -193,10 +192,6 @@ void PalettePanel::OnUpdate() {
 	for (ToolBarList::iterator iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 		(*iter)->OnUpdate();
 	}
-}
-
-void PalettePanel::RefreshOtherPalettes() {
-	refresh_timer.Start(100, true);
 }
 
 void PalettePanel::OnRefreshTimer(wxTimerEvent&) {

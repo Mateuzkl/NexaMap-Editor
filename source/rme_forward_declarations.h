@@ -22,7 +22,7 @@ class Map;
 class Tile;
 class TileLocation;
 class Item;
-class container;
+class Container;
 class Spawn;
 struct Outfit;
 class House;
