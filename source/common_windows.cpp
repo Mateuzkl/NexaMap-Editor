@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "theme.h"
 
 #include "materials.h"
 #include "brush.h"
@@ -1095,6 +1096,8 @@ FindDialogListBox::FindDialogListBox(wxWindow* parent, wxWindowID id) :
 	wxVListBox(parent, id, wxDefaultPosition, wxDefaultSize, wxLB_SINGLE),
 	cleared(false),
 	no_matches(false) {
+	SetBackgroundColour(Theme::Get(Theme::Role::Background));
+	SetForegroundColour(Theme::Get(Theme::Role::Text));
 	Clear();
 }
 
@@ -1149,13 +1152,9 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 		}
 
 		if (IsSelected(n)) {
-			if (HasFocus()) {
-				dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-			} else {
-				dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-			}
+			dc.SetTextForeground(Theme::Get(Theme::Role::TextOnAccent));
 		} else {
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
+			dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 		}
 
 		dc.DrawText(wxstr(brushlist[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);

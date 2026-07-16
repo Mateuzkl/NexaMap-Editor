@@ -19,6 +19,8 @@
 #define RME_CREATURE_H_
 
 #include "creatures.h"
+#include "position.h"
+#include "spawn_format.h"
 
 enum Direction {
 	NORTH = 0,
@@ -72,11 +74,19 @@ public:
 		this->spawntime = spawntime_;
 	}
 
-	int getWeight() const {
+	uint32_t getWeight() const {
 		return weight;
 	}
 	void setWeight(int weight_) {
-		this->weight = static_cast<uint8_t>(std::max(0, std::min(weight_, 100)));
+		this->weight = static_cast<uint32_t>(std::max(0, weight_));
+		spawn_weight_explicit = true;
+	}
+	void setSpawnWeight(uint32_t weight_, bool explicitWeight) {
+		weight = weight_;
+		spawn_weight_explicit = explicitWeight;
+	}
+	bool hasSpawnWeight() const {
+		return spawn_weight_explicit;
 	}
 
 	Direction getDirection() const {
@@ -84,15 +94,65 @@ public:
 	}
 	void setDirection(Direction direction_) {
 		this->direction = direction_;
+		spawn_direction_explicit = true;
+	}
+	void setSpawnDirection(Direction direction_, bool explicitDirection) {
+		direction = direction_;
+		spawn_direction_explicit = explicitDirection;
+	}
+	bool hasSpawnDirection() const {
+		return spawn_direction_explicit;
+	}
+
+	void setSpawnType(bool npc) {
+		spawn_type_override = true;
+		spawn_is_npc = npc;
+	}
+	void setSpawnAttributes(const SpawnAttributeMap& attributes) {
+		spawn_attributes = attributes;
+	}
+	const SpawnAttributeMap& getSpawnAttributes() const {
+		return spawn_attributes;
+	}
+	void setAlternativeKind(SpawnAlternativeKind kind) {
+		alternative_kind = kind;
+	}
+	SpawnAlternativeKind getAlternativeKind() const {
+		return alternative_kind;
+	}
+	void addSpawnAlternative(const SpawnVariantData& alternative) {
+		spawn_alternatives.push_back(alternative);
+	}
+	const std::vector<SpawnVariantData>& getSpawnAlternatives() const {
+		return spawn_alternatives;
+	}
+	void setSpawnSource(const Position& position) {
+		spawn_source = position;
+		has_spawn_source = true;
+	}
+	bool hasSpawnSource() const {
+		return has_spawn_source;
+	}
+	const Position& getSpawnSource() const {
+		return spawn_source;
 	}
 
 protected:
 	std::string type_name;
 	Direction direction;
 	int spawntime;
-	uint8_t weight;
+	uint32_t weight;
 	bool saved;
 	bool selected;
+	bool spawn_weight_explicit = false;
+	bool spawn_direction_explicit = true;
+	bool spawn_type_override = false;
+	bool spawn_is_npc = false;
+	bool has_spawn_source = false;
+	Position spawn_source;
+	SpawnAttributeMap spawn_attributes;
+	SpawnAlternativeKind alternative_kind = SpawnAlternativeKind::None;
+	std::vector<SpawnVariantData> spawn_alternatives;
 };
 
 inline void Creature::save() {
@@ -108,6 +168,9 @@ inline bool Creature::isSaved() {
 }
 
 inline bool Creature::isNpc() const {
+	if (spawn_type_override) {
+		return spawn_is_npc;
+	}
 	CreatureType const* type = g_creatures[type_name];
 	if (type) {
 		return type->isNpc;

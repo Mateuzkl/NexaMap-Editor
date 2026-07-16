@@ -151,7 +151,6 @@ protected:
 	void writeTowns(Map& map, NodeFileWriteHandle& f);
 	void writeWaypoints(Map& map, NodeFileWriteHandle& f, bool& waypointsWarning);
 	bool loadSpawns(Map& map, const FileName& dir);
-	bool loadSpawns(Map& map, pugi::xml_document& doc);
 	bool loadHouses(Map& map, const FileName& dir);
 	bool loadHouses(Map& map, pugi::xml_document& doc);
 	bool loadWaypoints(Map& map, const FileName& dir);
@@ -161,7 +160,6 @@ protected:
 
 	virtual bool saveMap(Map& map, NodeFileWriteHandle& handle);
 	bool saveSpawns(Map& map, const FileName& dir);
-	bool saveSpawns(Map& map, pugi::xml_document& doc);
 	bool saveHouses(Map& map, const FileName& dir);
 	bool saveHouses(Map& map, pugi::xml_document& doc);
 	bool saveWaypoints(Map& map, const FileName& dir);

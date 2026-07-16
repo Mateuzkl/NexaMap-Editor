@@ -26,6 +26,8 @@
 
 #include "preferences.h"
 
+#include <wx/statline.h>
+
 BEGIN_EVENT_TABLE(PreferencesWindow, wxDialog)
 EVT_BUTTON(wxID_OK, PreferencesWindow::OnClickOK)
 EVT_BUTTON(wxID_CANCEL, PreferencesWindow::OnClickCancel)
@@ -43,7 +45,7 @@ PreferencesWindow::PreferencesWindow(wxWindow* parent, bool clientVersionSelecte
 	book->AddPage(CreateGeneralPage(), "General", true);
 	book->AddPage(CreateEditorPage(), "Editor");
 	book->AddPage(CreateGraphicsPage(), "Graphics");
-	book->AddPage(CreateUIPage(), "Interface");
+	book->AddPage(CreateUIPage(), "Interface && Theme");
 	book->AddPage(CreateClientPage(), "Client Version", clientVersionSelected);
 
 	sizer->Add(book, 1, wxEXPAND | wxALL, 10);
@@ -388,6 +390,22 @@ wxNotebookPage* PreferencesWindow::CreateUIPage() {
 	wxNotebookPage* ui_page = newd wxPanel(book, wxID_ANY);
 
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+	auto* theme_sizer = newd wxFlexGridSizer(2, 10, 10);
+	theme_sizer->AddGrowableCol(1);
+	auto* theme_label = newd wxStaticText(ui_page, wxID_ANY, "Theme:");
+	theme_choice = newd wxChoice(ui_page, wxID_ANY);
+	theme_choice->Append("System Default");
+	theme_choice->Append("Dark");
+	theme_choice->Append("Light");
+	const int current_theme = g_settings.getInteger(Config::THEME);
+	theme_choice->SetSelection(current_theme >= 0 && current_theme <= 2 ? current_theme : 0);
+	const wxString theme_tooltip = "Apply the system theme or force the editor into a specific dark or light appearance. Restart required.";
+	theme_label->SetToolTip(theme_tooltip);
+	theme_choice->SetToolTip(theme_tooltip);
+	theme_sizer->Add(theme_label, 0, wxALIGN_CENTER_VERTICAL);
+	theme_sizer->Add(theme_choice, 0, wxEXPAND);
+	sizer->Add(theme_sizer, 0, wxEXPAND | wxALL, 6);
+	sizer->Add(newd wxStaticLine(ui_page), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
 
 	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
@@ -695,6 +713,11 @@ void PreferencesWindow::Apply() {
 	*/
 
 	// Interface
+	const int selected_theme = theme_choice->GetSelection();
+	if (selected_theme != wxNOT_FOUND && selected_theme != g_settings.getInteger(Config::THEME)) {
+		g_settings.setInteger(Config::THEME, selected_theme);
+		must_restart = true;
+	}
 	SetPaletteStyleChoice(terrain_palette_style_choice, Config::PALETTE_TERRAIN_STYLE);
 	SetPaletteStyleChoice(collection_palette_style_choice, Config::PALETTE_COLLECTION_STYLE);
 	SetPaletteStyleChoice(doodad_palette_style_choice, Config::PALETTE_DOODAD_STYLE);

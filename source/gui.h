@@ -151,7 +151,7 @@ public:
 	void SetLoadScale(int32_t from, int32_t to);
 
 	void ShowWelcomeDialog(const wxBitmap& icon);
-	void FinishWelcomeDialog();
+	void FinishWelcomeDialog(bool showMainWindow = true);
 	bool IsWelcomeDialogShown();
 
 	/**
@@ -333,7 +333,7 @@ public:
 	Editor* GetCurrentEditor();
 	MapTab* GetCurrentMapTab() const;
 	void CycleTab(bool forward = true);
-	bool CloseAllEditors();
+	bool CloseAllEditors(bool querySave = true);
 	void NewMapView();
 
 	// Map
@@ -351,6 +351,7 @@ public:
 	bool LoadMap(const FileName& fileName);
 
 protected:
+	bool ConfigureSpawnSaveAs(const FileName& mapFilename);
 	bool LoadDataFiles(wxString& error, wxArrayString& warnings);
 	ClientVersion* getLoadedVersion() const {
 		return loaded_version == CLIENT_VERSION_NONE ? nullptr : ClientVersion::get(loaded_version);

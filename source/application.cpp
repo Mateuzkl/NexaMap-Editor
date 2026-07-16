@@ -23,15 +23,21 @@
 #include "preferences.h"
 #include "main_menubar.h"
 #include "artprovider.h"
+#include "theme.h"
 
 #include "materials.h"
 #include "map.h"
 #include "map_tab.h"
 
+#include <cstdlib>
+#include <filesystem>
 #include <set>
+#include <streambuf>
+#include <utility>
 
 #include <wx/snglinst.h>
 #include <wx/dir.h>
+#include <wx/stackwalk.h>
 
 #include "../brushes/icon/editor_icon.xpm"
 
@@ -74,20 +80,133 @@ EVT_SET_FOCUS(MapScrollBar::OnFocus)
 EVT_MOUSEWHEEL(MapScrollBar::OnWheel)
 END_EVENT_TABLE()
 
-// The Visual Studio project links as a Windows subsystem application, which
-// needs WinMain while the existing main() below is kept for other toolchains.
-#ifdef __WINDOWS__
-wxIMPLEMENT_WXWIN_MAIN
-#endif
 wxIMPLEMENT_APP_NO_MAIN(Application);
 
-int main(int argc, char** argv) {
-	wxEntryStart(argc, argv);
-	wxApp::SetInstance(newd Application());
-	wxEntry();
-	wxEntryCleanup();
-	return 0;
+namespace {
+
+class TeeStreamBuffer final : public std::streambuf {
+public:
+	TeeStreamBuffer(std::streambuf* consoleBuffer, std::streambuf* logBuffer) :
+		consoleBuffer(consoleBuffer), logBuffer(logBuffer) {
+	}
+
+protected:
+	int_type overflow(int_type character) override {
+		if (traits_type::eq_int_type(character, traits_type::eof())) {
+			return traits_type::not_eof(character);
+		}
+
+		const char value = traits_type::to_char_type(character);
+		consoleBuffer->sputc(value);
+		if (traits_type::eq_int_type(logBuffer->sputc(value), traits_type::eof())) {
+			return traits_type::eof();
+		}
+		return character;
+	}
+
+	std::streamsize xsputn(const char* text, std::streamsize size) override {
+		const std::streamsize consoleSize = consoleBuffer->sputn(text, size);
+		const std::streamsize logSize = logBuffer->sputn(text, size);
+		return std::min(consoleSize, logSize);
+	}
+
+	int sync() override {
+		consoleBuffer->pubsync();
+		return logBuffer->pubsync();
+	}
+
+private:
+	std::streambuf* consoleBuffer;
+	std::streambuf* logBuffer;
+};
+
+class ConsoleLogTarget final : public wxLog {
+protected:
+	void DoLogText(const wxString& message) override {
+		const wxScopedCharBuffer utf8 = message.ToUTF8();
+		std::cerr << "[wx] " << (utf8 ? utf8.data() : "") << std::endl;
+	}
+};
+
+#if wxUSE_STACKWALKER && wxUSE_ON_FATAL_EXCEPTION
+class DiagnosticStackWalker final : public wxStackWalker {
+protected:
+	void OnStackFrame(const wxStackFrame& frame) override {
+		std::cerr << "  #" << frame.GetLevel() << " "
+		          << frame.GetName().ToStdString();
+		if (frame.HasSourceLocation()) {
+			std::cerr << " at " << frame.GetFileName().ToStdString()
+			          << ":" << frame.GetLine();
+		} else if (!frame.GetModule().IsEmpty()) {
+			std::cerr << " in " << frame.GetModule().ToStdString();
+		}
+		std::cerr << " [" << frame.GetAddress() << "]" << std::endl;
+	}
+};
+#endif
+
+template <typename EntryPoint>
+int RunApplication(EntryPoint&& entryPoint) {
+	try {
+		std::cerr << "[info] RME starting" << std::endl;
+		const int exitCode = std::forward<EntryPoint>(entryPoint)();
+		std::cerr << "[info] RME stopped with code " << exitCode << std::endl;
+		return exitCode;
+	} catch (const std::exception& exception) {
+		std::cerr << "[critical] Unhandled startup/shutdown exception: "
+		          << exception.what() << std::endl;
+	} catch (...) {
+		std::cerr << "[critical] Unknown startup/shutdown exception" << std::endl;
+	}
+	return EXIT_FAILURE;
 }
+
+template <typename EntryPoint>
+int RunWithDiagnostics(const std::filesystem::path& executablePath, EntryPoint&& entryPoint) {
+	const std::filesystem::path logPath = executablePath.parent_path() / "rme.log";
+	std::ofstream logFile(logPath, std::ios::out | std::ios::app);
+	if (!logFile) {
+		std::cerr << "[warning] Could not open diagnostic log: " << logPath.string() << std::endl;
+		return RunApplication(std::forward<EntryPoint>(entryPoint));
+	}
+
+	TeeStreamBuffer outputBuffer(std::cout.rdbuf(), logFile.rdbuf());
+	TeeStreamBuffer errorBuffer(std::cerr.rdbuf(), logFile.rdbuf());
+	std::streambuf* const originalOutputBuffer = std::cout.rdbuf(&outputBuffer);
+	std::streambuf* const originalErrorBuffer = std::cerr.rdbuf(&errorBuffer);
+	std::cout << std::unitbuf;
+	std::cerr << std::unitbuf;
+
+	std::cerr << std::endl << "=== RME diagnostic session ===" << std::endl;
+	std::cerr << "[info] Diagnostic log: " << logPath.string() << std::endl;
+	const int exitCode = RunApplication(std::forward<EntryPoint>(entryPoint));
+
+	std::cout.rdbuf(originalOutputBuffer);
+	std::cerr.rdbuf(originalErrorBuffer);
+	return exitCode;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+	return RunWithDiagnostics(
+		std::filesystem::absolute(argv[0]),
+		[&] { return wxEntry(argc, argv); }
+	);
+}
+
+#ifdef __WINDOWS__
+extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wxCmdLineArgType commandLine, int showCommand) {
+	wxDISABLE_DEBUG_SUPPORT();
+	std::array<wchar_t, 32768> executablePath {};
+	const DWORD pathLength = GetModuleFileNameW(nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
+	const std::filesystem::path path = pathLength > 0 ? std::filesystem::path(executablePath.data()) : std::filesystem::path("rme.exe");
+	return RunWithDiagnostics(
+		path,
+		[&] { return wxEntry(hInstance, hPrevInstance, commandLine, showCommand); }
+	);
+}
+#endif
 
 Application::~Application() {
 	// Destroy
@@ -97,6 +216,39 @@ bool Application::OnInit() {
 #if defined __DEBUG_MODE__ && defined __WINDOWS__
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
+	// Load the persisted theme before creating any windows.
+	g_settings.load();
+	const int rawTheme = g_settings.getInteger(Config::THEME);
+	const int theme = rawTheme >= 0 && rawTheme <= 2 ? rawTheme : 0;
+	Theme::SetType(static_cast<Theme::Type>(theme));
+#if wxCHECK_VERSION(3, 3, 0)
+	switch (theme) {
+		case 1:
+			SetAppearance(wxApp::Appearance::Dark);
+			std::cerr << "[info] Theme: Dark" << std::endl;
+			break;
+		case 2:
+			SetAppearance(wxApp::Appearance::Light);
+			std::cerr << "[info] Theme: Light" << std::endl;
+			break;
+		case 0:
+		default:
+			SetAppearance(wxApp::Appearance::System);
+			std::cerr << "[info] Theme: System Default" << std::endl;
+			break;
+	}
+#ifdef __WXMSW__
+	if (theme == 1) {
+		MSWEnableDarkMode(wxApp::DarkMode_Always);
+	} else if (theme == 0) {
+		MSWEnableDarkMode(wxApp::DarkMode_Auto);
+	}
+#endif
+#endif
+	// Keep the normal wxWidgets UI logger and mirror all messages to the
+	// diagnostic console/file stream.
+	wxLog::GetActiveTarget();
+	new wxLogChain(new ConsoleLogTarget());
 
 	std::cout << "This is free software: you are free to change and redistribute it." << '\n';
 	std::cout << "There is NO WARRANTY, to the extent permitted by law." << '\n';
@@ -113,7 +265,6 @@ bool Application::OnInit() {
 	wxArtProvider::Push(new ArtProvider());
 
 	// Load some internal stuff
-	g_settings.load();
 	FixVersionDiscrapencies();
 	g_gui.LoadHotkeys();
 	ClientVersion::loadVersions();
@@ -150,8 +301,9 @@ bool Application::OnInit() {
 
 	g_gui.gfx.loadEditorSprites();
 
-#ifndef __DEBUG_MODE__
-	// wxHandleFatalExceptions(true);
+	// Let wxWidgets report fatal platform exceptions through OnFatalException().
+#ifdef __RELEASE__
+	wxHandleFatalExceptions(true);
 #endif
 	m_file_to_open = wxEmptyString;
 	ParseCommandLineMap(m_file_to_open);
@@ -299,7 +451,42 @@ int Application::OnExit() {
 	wxDELETE(m_proc_server);
 	wxDELETE(m_single_instance_checker);
 #endif
-	return 1;
+	if (m_restart_requested) {
+		std::vector<wxString> arguments;
+		arguments.push_back(wxStandardPaths::Get().GetExecutablePath());
+		for (int index = 1; index < argc; ++index) {
+			arguments.emplace_back(argv[index]);
+		}
+		std::vector<const wxChar*> argument_pointers;
+		argument_pointers.reserve(arguments.size() + 1);
+		for (const wxString& argument : arguments) {
+			argument_pointers.push_back(argument.c_str());
+		}
+		argument_pointers.push_back(nullptr);
+		if (wxExecute(argument_pointers.data(), wxEXEC_ASYNC) == 0) {
+			wxLogError("The application closed normally, but could not start the new instance.");
+		}
+	}
+	return 0;
+}
+
+bool Application::RequestApplicationRestart() {
+	if (m_restart_requested || !g_gui.root) {
+		return false;
+	}
+	m_restart_requested = true;
+	if (!g_gui.root->Close()) {
+		m_restart_requested = false;
+		return false;
+	}
+	return true;
+}
+
+int Application::OnRun() {
+	std::cerr << "[info] Application event loop started" << std::endl;
+	const int exitCode = wxApp::OnRun();
+	std::cerr << "[info] Application event loop stopped with code " << exitCode << std::endl;
+	return exitCode;
 }
 
 void Application::ShutdownServices() {
@@ -310,7 +497,35 @@ void Application::ShutdownServices() {
 }
 
 void Application::OnFatalException() {
-	////
+	std::cerr << "[critical] Fatal platform exception: RME crashed" << std::endl;
+#if wxUSE_STACKWALKER && wxUSE_ON_FATAL_EXCEPTION
+	std::cerr << "[critical] Crash stack trace:" << std::endl;
+	DiagnosticStackWalker stackWalker;
+	stackWalker.WalkFromException(64);
+#endif
+}
+
+bool Application::OnExceptionInMainLoop() {
+	try {
+		throw;
+	} catch (const std::exception& exception) {
+		std::cerr << "[error] Exception while handling an event: "
+		          << exception.what() << std::endl;
+	} catch (...) {
+		std::cerr << "[error] Unknown exception while handling an event" << std::endl;
+	}
+	return false;
+}
+
+void Application::OnUnhandledException() {
+	try {
+		throw;
+	} catch (const std::exception& exception) {
+		std::cerr << "[error] Unhandled application exception: "
+		          << exception.what() << std::endl;
+	} catch (...) {
+		std::cerr << "[error] Unknown unhandled application exception" << std::endl;
+	}
 }
 
 bool Application::ParseCommandLineMap(wxString& fileName) {
@@ -536,9 +751,7 @@ bool MainFrame::LoadMap(const FileName& name) {
 void MainFrame::OnExit(wxCloseEvent& event) {
 	// clicking 'x' button
 
-	// Ask to save changed maps WITHOUT destroying the editors. Destroying large
-	// maps synchronously on the GUI thread is what freezes the window on close;
-	// since we exit(0) right after, the OS reclaims the memory instantly.
+	// Ask to save changed maps before starting the normal destruction sequence.
 	std::set<Map*> prompted;
 	for (int i = 0; i < g_gui.tabbook->GetTabCount(); ++i) {
 		auto* mapTab = dynamic_cast<MapTab*>(g_gui.tabbook->GetTab(i));
@@ -557,16 +770,18 @@ void MainFrame::OnExit(wxCloseEvent& event) {
 		}
 	}
 
-	// Persist only the cheap state, then exit immediately to avoid the slow
-	// teardown of large maps (CloseAllEditors/Destroy) that can freeze on close.
+	// The close has been authorized. Persist state and release editor resources
+	// through the normal wxWidgets lifecycle before the event loop ends.
 	g_gui.SaveHotkeys();
 	g_gui.SavePerspective();
 	g_gui.root->SaveRecentFiles();
-	g_gui.SaveUserCreatures();
 	ClientVersion::saveVersions();
+	g_gui.FinishWelcomeDialog(false);
+	g_gui.CloseAllEditors(false);
+	g_gui.UnloadVersion();
+	ClientVersion::unloadVersions();
 	g_settings.save(true);
-	static_cast<Application&>(wxGetApp()).ShutdownServices();
-	exit(0);
+	Destroy();
 }
 
 void MainFrame::AddRecentFile(const FileName& file) {

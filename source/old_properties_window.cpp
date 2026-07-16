@@ -31,6 +31,8 @@
 #include "old_properties_window.h"
 #include "container_properties_window.h"
 
+#include <limits>
+
 // ============================================================================
 // Old Properties Window
 
@@ -515,7 +517,8 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	subsizer->Add(direction_field, wxSizerFlags(1).Expand());
 
 	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Weight"));
-	creature_weight_field = newd wxSpinCtrl(this, wxID_ANY, i2ws(edit_creature->getWeight()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, edit_creature->getWeight());
+	const int editableWeight = static_cast<int>(std::min<uint32_t>(edit_creature->getWeight(), std::numeric_limits<int>::max()));
+	creature_weight_field = newd wxSpinCtrl(this, wxID_ANY, i2ws(editableWeight), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::numeric_limits<int>::max(), editableWeight);
 	subsizer->Add(creature_weight_field, wxSizerFlags(1).Expand());
 
 	boxsizer->Add(subsizer, wxSizerFlags(1).Expand());

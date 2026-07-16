@@ -1,5 +1,3 @@
-#include <glad/glad.h>
-
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#ifndef NOMINMAX
@@ -11,6 +9,8 @@
 #else
 	#include <dlfcn.h>
 #endif
+
+#include <glad/glad.h>
 
 #include "main.h"
 #include "gl_renderer.h"

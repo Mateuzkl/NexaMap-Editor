@@ -30,6 +30,24 @@
 
 Settings g_settings;
 
+namespace {
+	bool SaveFileConfigAtomically(wxFileConfig& config, const wxString& filename) {
+		const wxString temporary_filename = filename + ".tmp";
+		{
+			wxFileOutputStream output(temporary_filename);
+			if (!output.IsOk() || !config.Save(output) || !output.IsOk()) {
+				wxRemoveFile(temporary_filename);
+				return false;
+			}
+		}
+		if (!wxRenameFile(temporary_filename, filename, true)) {
+			wxRemoveFile(temporary_filename);
+			return false;
+		}
+		return true;
+	}
+}
+
 Settings::Settings() :
 	store(Config::LAST)
 #ifdef __WINDOWS__
@@ -328,6 +346,8 @@ void Settings::IO(IOMode mode) {
 	String(PALETTE_DOODAD_STYLE, "large icons");
 	String(PALETTE_ITEM_STYLE, "listbox");
 	String(PALETTE_RAW_STYLE, "listbox");
+	Int(THEME, 0);
+	Int(ACTIVE_THEME, -1);
 
 	section("Window");
 	String(PALETTE_LAYOUT, "name=02c30f6048629894000011bc00000002;caption=Palette;state=2099148;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=245;besth=100;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=-1;floath=-1");
@@ -417,8 +437,13 @@ void Settings::save(bool endoftheworld) {
 			return;
 		}
 		FileName const filename("editor.cfg");
-		wxFileOutputStream file(filename.GetFullPath());
-		conf->Save(file);
+		if (!SaveFileConfigAtomically(*conf, filename.GetFullPath())) {
+			wxLogError("Could not save settings to " + filename.GetFullPath() + ".");
+		}
+	} else if (wxConfig::Get()) {
+		if (!wxConfig::Get()->Flush()) {
+			wxLogError("Could not flush settings to the system configuration store.");
+		}
 	}
 #else
 	wxFileConfig* conf = dynamic_cast<wxFileConfig*>(wxConfig::Get());
@@ -427,14 +452,16 @@ void Settings::save(bool endoftheworld) {
 	}
 	FileName filename("./editor.cfg");
 	if (filename.FileExists()) { // Use local file if it exists
-		wxFileOutputStream file(filename.GetFullPath());
-		conf->Save(file);
+		if (!SaveFileConfigAtomically(*conf, filename.GetFullPath())) {
+			wxLogError("Could not save settings to " + filename.GetFullPath() + ".");
+		}
 	} else { // Else use global (user-specific) conf
 		wxString path = wxStandardPaths::Get().GetUserConfigDir() + "/.rme/editor.cfg";
 		filename.Assign(path);
 		filename.Mkdir(0755, wxPATH_MKDIR_FULL);
-		wxFileOutputStream file(filename.GetFullPath());
-		conf->Save(file);
+		if (!SaveFileConfigAtomically(*conf, filename.GetFullPath())) {
+			wxLogError("Could not save settings to " + filename.GetFullPath() + ".");
+		}
 	}
 #endif
 	if (endoftheworld) {

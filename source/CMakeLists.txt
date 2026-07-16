@@ -5,6 +5,7 @@ ${CMAKE_CURRENT_LIST_DIR}/application.h
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.h
 ${CMAKE_CURRENT_LIST_DIR}/basemap.h
 ${CMAKE_CURRENT_LIST_DIR}/bitmap_font.h
+${CMAKE_CURRENT_LIST_DIR}/border_workspace_window.h
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_enums.h
@@ -28,6 +29,7 @@ ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
 ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.h
+${CMAKE_CURRENT_LIST_DIR}/file_transaction.h
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.h
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.h
 ${CMAKE_CURRENT_LIST_DIR}/graphics.h
@@ -54,6 +56,7 @@ ${CMAKE_CURRENT_LIST_DIR}/map_drawer.h
 ${CMAKE_CURRENT_LIST_DIR}/map_region.h
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.h
 ${CMAKE_CURRENT_LIST_DIR}/map_window.h
+${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.h
 ${CMAKE_CURRENT_LIST_DIR}/mt_rand.h
@@ -81,7 +84,10 @@ ${CMAKE_CURRENT_LIST_DIR}/result_window.h
 ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
+${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
+${CMAKE_CURRENT_LIST_DIR}/spawn_format.h
+${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/sprites.h
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.h
@@ -109,6 +115,7 @@ ${CMAKE_CURRENT_LIST_DIR}/application.cpp
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.cpp
 ${CMAKE_CURRENT_LIST_DIR}/basemap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/bitmap_font.cpp
+${CMAKE_CURRENT_LIST_DIR}/border_workspace_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tables.cpp
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.cpp
@@ -155,6 +162,7 @@ ${CMAKE_CURRENT_LIST_DIR}/map_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_region.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/materials.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mkpch.cpp
@@ -178,8 +186,12 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
+${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_format.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_format_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap76-74.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap81.cpp

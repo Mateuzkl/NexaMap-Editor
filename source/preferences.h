@@ -89,6 +89,7 @@ protected:
 	*/
 
 	// Interface
+	wxChoice* theme_choice;
 	wxChoice* terrain_palette_style_choice;
 	wxChoice* collection_palette_style_choice;
 	wxChoice* doodad_palette_style_choice;

@@ -37,17 +37,23 @@ private:
 
 class WelcomeDialogPanel : public wxPanel {
 public:
-	WelcomeDialogPanel(WelcomeDialog* parent, const wxSize& size, const wxString& title_text, const wxString& version_text, const wxColour& base_colour, const wxBitmap& rme_logo, const std::vector<wxString>& recent_files);
-	void OnPaint(const wxPaintEvent& event);
+	WelcomeDialogPanel(WelcomeDialog* parent, const wxString& title_text, const wxString& version_text, const wxColour& base_colour, const wxBitmap& rme_logo, const std::vector<wxString>& recent_files);
+	void OnThemeChanged(const wxCommandEvent& event);
 	void updateInputs();
 
 private:
-	wxBitmap m_rme_logo;
-	wxString m_title_text;
-	wxString m_version_text;
+	void SetThemeSelection(int theme);
+	void UpdateThemeStatus();
+
 	wxColour m_text_colour;
 	wxColour m_background_colour;
 	wxCheckBox* m_show_welcome_dialog_checkbox;
+	wxRadioButton* m_system_theme_radio;
+	wxRadioButton* m_dark_theme_radio;
+	wxRadioButton* m_light_theme_radio;
+	wxStaticText* m_theme_status_label;
+	int m_active_theme = 0;
+	bool m_theme_prompt_open = false;
 };
 
 class WelcomeDialogButton : public wxPanel {
@@ -90,6 +96,8 @@ public:
 private:
 	wxColour m_text_colour;
 	wxColour m_text_colour_hover;
+	wxColour m_background_colour;
+	wxColour m_background_colour_hover;
 	wxStaticText* m_title;
 	wxStaticText* m_file_path;
 	wxString m_item_text;

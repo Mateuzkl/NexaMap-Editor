@@ -114,6 +114,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <PrecompiledHeaderFile>main.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>comctl32.lib;Rpcrt4.lib;WS2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -122,7 +123,7 @@
       <GenerateMapFile>true</GenerateMapFile>
       <MapFileName>$(TargetName).map</MapFileName>
       <MapExports>true</MapExports>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>
       <IgnoreSpecificDefaultLibraries>wxscintillad.lib</IgnoreSpecificDefaultLibraries>
     </Link>
@@ -139,7 +140,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <PrecompiledHeaderFile>main.h</PrecompiledHeaderFile>
-      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -149,7 +150,7 @@
       <GenerateMapFile>true</GenerateMapFile>
       <MapFileName>$(TargetName).map</MapFileName>
       <MapExports>true</MapExports>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>wxscintillad.lib</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
@@ -234,6 +235,10 @@
     <ClInclude Include="..\..\source\otml.h" />
     <ClInclude Include="..\..\source\browse_tile_window.h" />
     <ClCompile Include="..\..\source\browse_tile_window.cpp" />
+    <ClInclude Include="..\..\source\border_workspace_window.h" />
+    <ClCompile Include="..\..\source\border_workspace_window.cpp" />
+    <ClInclude Include="..\..\source\materials_workbench_window.h" />
+    <ClCompile Include="..\..\source\materials_workbench_window.cpp" />
     <ClInclude Include="..\..\source\positionctrl.h" />
     <ClCompile Include="..\..\source\main_toolbar.cpp" />
     <ClCompile Include="..\..\source\positionctrl.cpp" />
@@ -253,6 +258,7 @@
     <ClCompile Include="..\..\source\eraser_brush.cpp" />
     <ClInclude Include="..\..\source\extension.h" />
     <ClInclude Include="..\..\source\extension_window.h" />
+    <ClInclude Include="..\..\source\file_transaction.h" />
     <ClInclude Include="..\..\source\filehandle.h" />
     <ClInclude Include="..\..\source\iominimap.h" />
     <ClCompile Include="..\..\source\extension.cpp" />
@@ -282,6 +288,8 @@
     <ClInclude Include="..\..\source\rme_forward_declarations.h" />
     <ClInclude Include="..\..\source\settings.h" />
     <ClCompile Include="..\..\source\settings.cpp" />
+    <ClInclude Include="..\..\source\theme.h" />
+    <ClCompile Include="..\..\source\theme.cpp" />
     <ClInclude Include="..\..\source\spawn_brush.h" />
     <ClCompile Include="..\..\source\spawn_brush.cpp" />
     <ClInclude Include="..\..\source\table_brush.h" />
@@ -386,6 +394,11 @@
     <ClInclude Include="..\..\source\position.h" />
     <ClInclude Include="..\..\source\spawn.h" />
     <ClCompile Include="..\..\source\spawn.cpp" />
+    <ClInclude Include="..\..\source\spawn_format.h" />
+    <ClCompile Include="..\..\source\spawn_format.cpp" />
+    <ClCompile Include="..\..\source\spawn_format_map.cpp" />
+    <ClInclude Include="..\..\source\spawn_export_window.h" />
+    <ClCompile Include="..\..\source\spawn_export_window.cpp" />
     <ClCompile Include="..\..\source\templatemap76-74.cpp" />
     <ClCompile Include="..\..\source\templatemap81.cpp" />
     <ClCompile Include="..\..\source\templatemap854.cpp" />

@@ -21,6 +21,7 @@
 #include "tile.h"
 #include "graphics.h"
 #include "browse_tile_window.h"
+#include "theme.h"
 
 // ============================================================================
 //
@@ -45,6 +46,9 @@ protected:
 
 BrowseTileListBox::BrowseTileListBox(wxWindow* parent, wxWindowID id, Tile* tile) :
 	wxVListBox(parent, id, wxDefaultPosition, wxSize(200, 180), wxLB_MULTIPLE), edit_tile(tile) {
+	SetBackgroundColour(Theme::Get(Theme::Role::Background));
+	SetForegroundColour(Theme::Get(Theme::Role::Text));
+	SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
 	UpdateItems();
 }
 
@@ -63,14 +67,10 @@ void BrowseTileListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 
 	if (IsSelected(n)) {
 		item->select();
-		if (HasFocus()) {
-			dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-		} else {
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-		}
+		dc.SetTextForeground(Theme::Get(Theme::Role::TextOnAccent));
 	} else {
 		item->deselect();
-		dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
+		dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 	}
 
 	wxString label;

@@ -130,6 +130,12 @@ public:
 	const std::string& getSpawnFilename() const {
 		return spawnfile;
 	}
+	const std::string& getSpawnNpcFilename() const {
+		return spawnNpcFile;
+	}
+	SpawnFormat getSpawnFormat() const {
+		return spawnFormat;
+	}
 	const std::string& getZoneFilename() const {
 		return zonefile;
 	}
@@ -140,6 +146,18 @@ public:
 	void setMapDescription(const std::string& new_description);
 	void setHouseFilename(const std::string& new_housefile);
 	void setSpawnFilename(const std::string& new_spawnfile);
+	void setSpawnNpcFilename(const std::string& new_spawnfile) {
+		spawnNpcFile = new_spawnfile;
+	}
+	void setSpawnFormat(SpawnFormat format) {
+		spawnFormat = format;
+	}
+	void setSpawnSaveTarget(SpawnFormat format, const std::string& primaryFile, const std::string& npcFile) {
+		spawnFormat = format;
+		spawnfile = primaryFile;
+		spawnNpcFile = npcFile;
+		spawnFilenamesExplicit = true;
+	}
 	void setZoneFilename(const std::string& new_zonefile);
 
 	void flagAsNamed() {
@@ -173,9 +191,12 @@ protected:
 	uint16_t width, height;
 
 	std::string spawnfile; // The maps spawnfile
+	std::string spawnNpcFile; // Canary/Crystal NPC spawnfile
 	std::string housefile; // The housefile
 	std::string waypointfile; // The waypoints file (stores extended waypoint information such as id, preferred icon and matching town)
 	std::string zonefile; // The zonefile
+	SpawnFormat spawnFormat = SpawnFormat::Tfs;
+	bool spawnFilenamesExplicit = false;
 
 public:
 	Towns towns;
@@ -188,6 +209,7 @@ protected:
 
 	friend class IOMapOTBM;
 	friend class Editor;
+	friend class SpawnMapAdapter;
 
 public:
 	Waypoints waypoints;

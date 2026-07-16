@@ -19,6 +19,7 @@
 #include "profiling.h"
 
 #include "bitmap_font.h"
+#include "theme.h"
 
 #ifdef __WINDOWS__
 	#include <windows.h>
@@ -461,7 +462,7 @@ void MapDrawer::DrawMap() {
 						}
 
 						std::ostringstream tooltip;
-						tooltip << "zone id: ";
+						tooltip << "Zone ID: ";
 						size_t zones = tile->zones.size();
 						for (const auto& zoneId : tile->zones) {
 							tooltip << zoneId;
@@ -1507,24 +1508,24 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 			}
 		}
 	} else {
-		stream << "id: " << id << "\n";
+		stream << "Item ID: " << id << "\n";
 	}
 
 	if (action > 0) {
-		stream << "aid: " << action << "\n";
+		stream << "Action ID: " << action << "\n";
 	}
 	if (unique > 0) {
-		stream << "uid: " << unique << "\n";
+		stream << "Unique ID: " << unique << "\n";
 	}
 	if (doorId > 0) {
-		stream << "door id: " << static_cast<int>(doorId) << "\n";
+		stream << "Door ID: " << static_cast<int>(doorId) << "\n";
 	}
 	if (!text.empty()) {
-		stream << "text: " << text << "\n";
+		stream << "Text: " << text << "\n";
 	}
 	if (tp) {
 		Position dest = tp->getDestination();
-		stream << "destination: " << dest.x << ", " << dest.y << ", " << dest.z << "\n";
+		stream << "Destination: " << dest.x << ", " << dest.y << ", " << dest.z << "\n";
 	}
 }
 
@@ -1532,7 +1533,7 @@ void MapDrawer::WriteTooltip(Waypoint* waypoint, std::ostringstream& stream) {
 	if (stream.tellp() > 0) {
 		stream << "\n";
 	}
-	stream << "wp: " << waypoint->name << "\n";
+	stream << "Waypoint: " << waypoint->name << "\n";
 }
 
 void MapDrawer::DrawTile(TileLocation* location) {
@@ -1934,17 +1935,23 @@ void MapDrawer::DrawTooltips() {
 
 		// background
 		{
+			const wxColour background = Theme::Get(Theme::Role::TooltipBackground);
 			float poly[16];
 			for (int i = 0; i < 8; ++i) {
 				poly[i * 2] = vertexes[i][0];
 				poly[i * 2 + 1] = vertexes[i][1];
 			}
-			renderer->drawPolygon(poly, 8, tooltip->r, tooltip->g, tooltip->b, 255);
+			renderer->drawPolygon(poly, 8, background.Red(), background.Green(), background.Blue(), 245);
 			renderer->flush();
 		}
 
 		// borders
 		{
+			const wxColour themedBorder = Theme::Get(Theme::Role::TooltipBorder);
+			const bool defaultBorder = tooltip->r == 255 && tooltip->g == 255 && tooltip->b == 255;
+			const uint8_t borderR = defaultBorder ? themedBorder.Red() : tooltip->r;
+			const uint8_t borderG = defaultBorder ? themedBorder.Green() : tooltip->g;
+			const uint8_t borderB = defaultBorder ? themedBorder.Blue() : tooltip->b;
 			float seg[32];
 			for (int i = 0; i < 8; ++i) {
 				seg[i * 4] = vertexes[i][0];
@@ -1952,24 +1959,31 @@ void MapDrawer::DrawTooltips() {
 				seg[i * 4 + 2] = vertexes[i + 1][0];
 				seg[i * 4 + 3] = vertexes[i + 1][1];
 			}
-			renderer->drawLines(seg, 8, 0, 0, 0, 255, 1.0f);
+			renderer->drawLines(seg, 8, borderR, borderG, borderB, 255, 1.5f);
 			renderer->flush();
 		}
 
 		// text
 		if (zoom <= 1.0) {
+			const wxColour labelColour = Theme::Get(Theme::Role::TooltipLabel);
+			const wxColour valueColour = Theme::Get(Theme::Role::TooltipValue);
 			renderer->flushAndUnbind();
 			startx += (3.0f * scale);
 			starty += (14.0f * scale);
-			glColor4ub(0, 0, 0, 255);
+			glColor4ub(labelColour.Red(), labelColour.Green(), labelColour.Blue(), 255);
 			glRasterPos2f(startx, starty);
 			char_count = 0;
 			line_char_count = 0;
+			bool valuePart = false;
 			for (const char* c = text; *c != '\0'; c++) {
-				if (*c == '\n' || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
+				const bool explicitLineBreak = *c == '\n';
+				if (explicitLineBreak || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
 					starty += (14.0f * scale);
 					glRasterPos2f(startx, starty);
 					line_char_count = 0;
+					if (explicitLineBreak) {
+						valuePart = false;
+					}
 				}
 				char_count++;
 				line_char_count++;
@@ -1980,7 +1994,12 @@ void MapDrawer::DrawTooltips() {
 						break;
 					}
 				} else if (!iscntrl(*c)) {
+					const wxColour& colour = valuePart ? valueColour : labelColour;
+					glColor4ub(colour.Red(), colour.Green(), colour.Blue(), 255);
 					drawBitmapChar(rme_bitmap_helvetica_12, *c);
+					if (*c == ':') {
+						valuePart = true;
+					}
 				}
 			}
 		}

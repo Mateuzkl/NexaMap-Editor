@@ -35,6 +35,7 @@ namespace MenuBar {
 		IMPORT_MINIMAP,
 		EXPORT_MINIMAP,
 		EXPORT_TILESETS,
+		EXPORT_SPAWNS,
 		RELOAD_DATA,
 		RECENT_FILES,
 		PREFERENCES,
@@ -132,6 +133,8 @@ namespace MenuBar {
 		WIN_MINIMAP,
 		NEW_PALETTE,
 		TAKE_SCREENSHOT,
+		MATERIALS_WORKBENCH,
+		BORDER_WORKSPACE,
 		SELECT_TERRAIN,
 		SELECT_DOODAD,
 		SELECT_ITEM,
@@ -213,6 +216,7 @@ public:
 	void OnImportMinimap(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);
 	void OnExportTilesets(wxCommandEvent& event);
+	void OnExportSpawns(wxCommandEvent& event);
 	void OnReloadDataFiles(wxCommandEvent& event);
 
 	// Edit Menu
@@ -288,6 +292,8 @@ public:
 	void OnMinimapWindow(wxCommandEvent& event);
 	void OnNewPalette(wxCommandEvent& event);
 	void OnTakeScreenshot(wxCommandEvent& event);
+	void OnMaterialsWorkbench(wxCommandEvent& event);
+	void OnBorderWorkspace(wxCommandEvent& event);
 	void OnSelectTerrainPalette(wxCommandEvent& event);
 	void OnSelectDoodadPalette(wxCommandEvent& event);
 	void OnSelectItemPalette(wxCommandEvent& event);

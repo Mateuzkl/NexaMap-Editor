@@ -225,8 +225,20 @@
     <ClInclude Include="..\..\source\settings.h">
       <Filter>common</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\theme.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\file_transaction.h">
+      <Filter>common</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\spawn.h">
       <Filter>objects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\spawn_format.h">
+      <Filter>objects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\spawn_export_window.h">
+      <Filter>gui</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\sprites.h">
       <Filter>gui\graphics</Filter>
@@ -305,6 +317,12 @@
       <Filter>editor</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\browse_tile_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\border_workspace_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\materials_workbench_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\positionctrl.h">
@@ -410,6 +428,9 @@
     <ClCompile Include="..\..\source\settings.cpp">
       <Filter>common</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\theme.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\dcbutton.cpp">
       <Filter>gui\controls</Filter>
     </ClCompile>
@@ -445,6 +466,15 @@
     </ClCompile>
     <ClCompile Include="..\..\source\spawn.cpp">
       <Filter>objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\spawn_format.cpp">
+      <Filter>objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\spawn_format_map.cpp">
+      <Filter>objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\spawn_export_window.cpp">
+      <Filter>gui</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\tile.cpp">
       <Filter>objects</Filter>
@@ -579,6 +609,12 @@
       <Filter>editor</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\browse_tile_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\border_workspace_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\materials_workbench_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\positionctrl.cpp">

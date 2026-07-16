@@ -23,6 +23,7 @@
 #include "add_tileset_window.h"
 #include "add_item_window.h"
 #include "materials.h"
+#include "theme.h"
 
 // ============================================================================
 // Brush Palette Panel
@@ -557,6 +558,9 @@ END_EVENT_TABLE()
 BrushListBox::BrushListBox(wxWindow* parent, const TilesetCategory* tileset) :
 	wxVListBox(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLB_SINGLE),
 	BrushBoxInterface(tileset) {
+	SetBackgroundColour(Theme::Get(Theme::Role::Background));
+	SetForegroundColour(Theme::Get(Theme::Role::Text));
+	SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
 	SetItemCount(tileset->size());
 }
 
@@ -600,13 +604,9 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
 		spr->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
 	}
 	if (IsSelected(n)) {
-		if (HasFocus()) {
-			dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-		} else {
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-		}
+		dc.SetTextForeground(Theme::Get(Theme::Role::TextOnAccent));
 	} else {
-		dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
+		dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 	}
 	dc.DrawText(wxstr(tileset->brushlist[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);
 }

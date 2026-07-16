@@ -18,6 +18,8 @@
 #ifndef RME_SPAWN_H_
 #define RME_SPAWN_H_
 
+#include "spawn_format.h"
+
 class Tile;
 
 class Spawn {
@@ -31,6 +33,12 @@ public:
 	Spawn* deepCopy() {
 		Spawn* copy = newd Spawn(size);
 		copy->selected = selected;
+		copy->mixedAttributes = mixedAttributes;
+		copy->monsterAttributes = monsterAttributes;
+		copy->npcAttributes = npcAttributes;
+		copy->hasMixedSource = hasMixedSource;
+		copy->hasMonsterSource = hasMonsterSource;
+		copy->hasNpcSource = hasNpcSource;
 		return copy;
 	}
 
@@ -53,16 +61,56 @@ public:
 	}
 
 	void setSize(int newsize) {
-		ASSERT(size < 100);
+		ASSERT(newsize >= 0 && newsize <= 255);
 		size = newsize;
 	}
 	int getSize() const {
 		return size;
 	}
 
+	void setSourceAttributes(SpawnAreaKind kind, const SpawnAttributeMap& attributes) {
+		switch (kind) {
+			case SpawnAreaKind::Monsters: monsterAttributes = attributes; hasMonsterSource = true; break;
+			case SpawnAreaKind::Npcs: npcAttributes = attributes; hasNpcSource = true; break;
+			case SpawnAreaKind::Mixed: mixedAttributes = attributes; hasMixedSource = true; break;
+		}
+	}
+	bool hasSourceKind(SpawnAreaKind kind) const {
+		if (kind == SpawnAreaKind::Monsters) {
+			return hasMonsterSource;
+		}
+		if (kind == SpawnAreaKind::Npcs) {
+			return hasNpcSource;
+		}
+		return hasMixedSource;
+	}
+
+	SpawnAttributeMap getSourceAttributes(SpawnAreaKind kind) const {
+		if (kind == SpawnAreaKind::Monsters) {
+			return monsterAttributes;
+		}
+		if (kind == SpawnAreaKind::Npcs) {
+			return npcAttributes;
+		}
+		SpawnAttributeMap attributes = mixedAttributes;
+		for (const auto& [name, value] : monsterAttributes) {
+			attributes.try_emplace(name, value);
+		}
+		for (const auto& [name, value] : npcAttributes) {
+			attributes.try_emplace(name, value);
+		}
+		return attributes;
+	}
+
 protected:
 	int size;
 	bool selected;
+	SpawnAttributeMap mixedAttributes;
+	SpawnAttributeMap monsterAttributes;
+	SpawnAttributeMap npcAttributes;
+	bool hasMixedSource = false;
+	bool hasMonsterSource = false;
+	bool hasNpcSource = false;
 };
 
 typedef std::set<Position> SpawnPositionList;

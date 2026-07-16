@@ -25,7 +25,10 @@
 #include "result_window.h"
 #include "extension_window.h"
 #include "find_item_window.h"
+#include "border_workspace_window.h"
+#include "materials_workbench_window.h"
 #include "settings.h"
+#include "spawn_export_window.h"
 
 #include "gui.h"
 
@@ -61,6 +64,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(IMPORT_MINIMAP, wxITEM_NORMAL, OnImportMinimap);
 	MAKE_ACTION(EXPORT_MINIMAP, wxITEM_NORMAL, OnExportMinimap);
 	MAKE_ACTION(EXPORT_TILESETS, wxITEM_NORMAL, OnExportTilesets);
+	MAKE_ACTION(EXPORT_SPAWNS, wxITEM_NORMAL, OnExportSpawns);
 
 	MAKE_ACTION(RELOAD_DATA, wxITEM_NORMAL, OnReloadDataFiles);
 	// MAKE_ACTION(RECENT_FILES, wxITEM_NORMAL, OnRecent);
@@ -175,6 +179,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
+	MAKE_ACTION(MATERIALS_WORKBENCH, wxITEM_NORMAL, OnMaterialsWorkbench);
+	MAKE_ACTION(BORDER_WORKSPACE, wxITEM_NORMAL, OnBorderWorkspace);
 
 	MAKE_ACTION(SELECT_TERRAIN, wxITEM_NORMAL, OnSelectTerrainPalette);
 	MAKE_ACTION(SELECT_DOODAD, wxITEM_NORMAL, OnSelectDoodadPalette);
@@ -341,6 +347,7 @@ void MainMenuBar::Update() {
 	EnableItem(IMPORT_MINIMAP, false);
 	EnableItem(EXPORT_MINIMAP, is_local);
 	EnableItem(EXPORT_TILESETS, loaded);
+	EnableItem(EXPORT_SPAWNS, loaded);
 
 	EnableItem(FIND_ITEM, is_host);
 	EnableItem(REPLACE_ITEMS, is_local);
@@ -406,6 +413,8 @@ void MainMenuBar::Update() {
 
 	EnableItem(WIN_MINIMAP, loaded);
 	EnableItem(NEW_PALETTE, loaded);
+	EnableItem(MATERIALS_WORKBENCH, loaded);
+	EnableItem(BORDER_WORKSPACE, loaded);
 	EnableItem(SELECT_TERRAIN, loaded);
 	EnableItem(SELECT_DOODAD, loaded);
 	EnableItem(SELECT_ITEM, loaded);
@@ -899,6 +908,39 @@ void MainMenuBar::OnExportTilesets(wxCommandEvent& WXUNUSED(event)) {
 		dlg.ShowModal();
 		dlg.Destroy();
 	}
+}
+
+void MainMenuBar::OnExportSpawns(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.GetCurrentEditor()) {
+		return;
+	}
+	Map& map = g_gui.GetCurrentMap();
+	FileName mapFilename(wxstr(map.getFilename()));
+	const wxString directory = mapFilename.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
+	const wxString baseName = mapFilename.GetName().empty() ? wxString("world") : mapFilename.GetName();
+	SpawnExportWindow dialog(frame, map, directory, baseName, false);
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+
+	const SpawnExportOptions options = dialog.GetOptions();
+	const SpawnDocument document = SpawnMapAdapter::Capture(map);
+	const SpawnWriteResult result = options.format == SpawnFormat::CanaryCrystal
+		? SpawnFormatIO::SaveCanaryCrystal(document, options.directory / options.primaryFilename, options.directory / options.npcFilename)
+		: SpawnFormatIO::SaveTfs(document, options.directory / options.primaryFilename);
+	if (!result.success) {
+		wxMessageBox(wxstr(result.error), "Spawn export failed", wxOK | wxICON_ERROR, frame);
+		return;
+	}
+
+	wxString message = "Spawn export completed and validated:";
+	for (const std::filesystem::path& file : result.files) {
+		message << "\n  " << wxstr(file.string());
+	}
+	for (const std::string& warning : result.warnings) {
+		message << "\n\nWarning: " << wxstr(warning);
+	}
+	wxMessageBox(message, "Spawn export complete", wxOK | wxICON_INFORMATION, frame);
 }
 
 void MainMenuBar::OnDebugViewDat(wxCommandEvent& WXUNUSED(event)) {
@@ -2128,6 +2170,14 @@ void MainMenuBar::OnMinimapWindow(wxCommandEvent& event) {
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event) {
 	g_gui.NewPalette();
+}
+
+void MainMenuBar::OnMaterialsWorkbench(wxCommandEvent& WXUNUSED(event)) {
+	MaterialsWorkbenchWindow::Open(frame);
+}
+
+void MainMenuBar::OnBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {
+	BorderWorkspaceWindow::Open(frame);
 }
 
 void MainMenuBar::OnSelectTerrainPalette(wxCommandEvent& WXUNUSED(event)) {

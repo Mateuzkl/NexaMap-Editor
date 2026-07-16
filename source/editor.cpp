@@ -72,6 +72,8 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	std::string sname = "Untitled-" + i2s(++unnamed_counter);
 	map.name = sname + ".otbm";
 	map.spawnfile = sname + "-spawn.xml";
+	map.spawnNpcFile.clear();
+	map.spawnFormat = SpawnFormat::Tfs;
 	map.housefile = sname + "-house.xml";
 	map.waypointfile = sname + "-waypoint.xml";
 	map.zonefile = sname + "-zones.xml";
@@ -168,8 +170,18 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 		FileName _name(filename);
 		_name.SetExt("xml");
 
-		_name.SetName(filename.GetName() + "-spawn");
-		map.spawnfile = nstr(_name.GetFullName());
+		if (map.spawnFilenamesExplicit) {
+			map.spawnFilenamesExplicit = false;
+		} else if (map.spawnFormat == SpawnFormat::CanaryCrystal) {
+			_name.SetName(filename.GetName() + "-monster");
+			map.spawnfile = nstr(_name.GetFullName());
+			_name.SetName(filename.GetName() + "-npc");
+			map.spawnNpcFile = nstr(_name.GetFullName());
+		} else {
+			_name.SetName(filename.GetName() + "-spawn");
+			map.spawnfile = nstr(_name.GetFullName());
+			map.spawnNpcFile.clear();
+		}
 		_name.SetName(filename.GetName() + "-house");
 		map.housefile = nstr(_name.GetFullName());
 		_name.SetName(filename.GetName() + "-waypoint");
@@ -187,7 +199,7 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 
 	// Make temporary backups
 	// converter.Assign(wxstr(savefile));
-	std::string backup_otbm, backup_house, backup_spawn, backup_waypoint, backup_zones;
+	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones;
 
 	if (converter.GetExt() == "otgz") {
 		save_otgz = true;
@@ -217,6 +229,15 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::rename((map_path + map.spawnfile).c_str(), backup_spawn.c_str());
 		}
 
+		if (!map.spawnNpcFile.empty()) {
+			converter.SetFullName(wxstr(map.spawnNpcFile));
+			if (converter.FileExists()) {
+				backup_spawn_npc = map_path + nstr(converter.GetName()) + ".xml~";
+				std::remove(backup_spawn_npc.c_str());
+				std::rename((map_path + map.spawnNpcFile).c_str(), backup_spawn_npc.c_str());
+			}
+		}
+
 		converter.SetFullName(wxstr(map.waypointfile));
 		if (converter.FileExists()) {
 			backup_waypoint = map_path + nstr(converter.GetName()) + ".xml~";
@@ -239,6 +260,7 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 		f << backup_otbm << '\n'
 		  << backup_house << '\n'
 		  << backup_spawn << '\n'
+		  << backup_spawn_npc << '\n'
 		  << backup_waypoint << '\n'
 		  << backup_zones << '\n';
 	}
@@ -281,6 +303,12 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 				converter.SetFullName(wxstr(map.spawnfile));
 				std::string spawn_filename = map_path + nstr(converter.GetName());
 				std::rename(backup_spawn.c_str(), std::string(spawn_filename + ".xml").c_str());
+			}
+
+			if (!backup_spawn_npc.empty()) {
+				converter.SetFullName(wxstr(map.spawnNpcFile));
+				std::string spawn_npc_filename = map_path + nstr(converter.GetName());
+				std::rename(backup_spawn_npc.c_str(), std::string(spawn_npc_filename + ".xml").c_str());
 			}
 
 			if (!backup_waypoint.empty()) {
@@ -349,6 +377,12 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::rename(backup_spawn.c_str(), std::string(spawn_filename + "." + date.str() + ".xml").c_str());
 		}
 
+		if (!backup_spawn_npc.empty()) {
+			converter.SetFullName(wxstr(map.spawnNpcFile));
+			std::string spawn_npc_filename = map_path + nstr(converter.GetName());
+			std::rename(backup_spawn_npc.c_str(), std::string(spawn_npc_filename + "." + date.str() + ".xml").c_str());
+		}
+
 		if (!backup_waypoint.empty()) {
 			converter.SetFullName(wxstr(map.waypointfile));
 			std::string waypoint_filename = map_path + nstr(converter.GetName());
@@ -365,6 +399,7 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 		std::remove(backup_otbm.c_str());
 		std::remove(backup_house.c_str());
 		std::remove(backup_spawn.c_str());
+		std::remove(backup_spawn_npc.c_str());
 		std::remove(backup_waypoint.c_str());
 		std::remove(backup_zones.c_str());
 	}
@@ -1804,4 +1839,3 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 		addAction(action, 2);
 	}
 }
-

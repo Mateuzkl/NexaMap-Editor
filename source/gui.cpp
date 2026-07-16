@@ -30,6 +30,7 @@
 #include "materials.h"
 #include "doodad_brush.h"
 #include "spawn_brush.h"
+#include "spawn_export_window.h"
 
 #include "common_windows.h"
 #include "result_window.h"
@@ -539,7 +540,7 @@ void GUI::SaveMap() {
 		wxString wildcard = g_settings.getInteger(Config::USE_OTGZ) != 0 ? MAP_SAVE_FILE_WILDCARD_OTGZ : MAP_SAVE_FILE_WILDCARD;
 		wxFileDialog dialog(root, "Save...", wxEmptyString, wxEmptyString, wildcard, wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 
-		if (dialog.ShowModal() == wxID_OK) {
+		if (dialog.ShowModal() == wxID_OK && ConfigureSpawnSaveAs(dialog.GetPath())) {
 			SaveCurrentMap(dialog.GetPath(), true);
 		}
 	}
@@ -553,12 +554,23 @@ void GUI::SaveMapAs() {
 	wxString wildcard = g_settings.getInteger(Config::USE_OTGZ) != 0 ? MAP_SAVE_FILE_WILDCARD_OTGZ : MAP_SAVE_FILE_WILDCARD;
 	wxFileDialog dialog(root, "Save As...", "", "", wildcard, wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 
-	if (dialog.ShowModal() == wxID_OK) {
+	if (dialog.ShowModal() == wxID_OK && ConfigureSpawnSaveAs(dialog.GetPath())) {
 		SaveCurrentMap(dialog.GetPath(), true);
 		UpdateTitle();
 		root->menu_bar->AddRecentFile(dialog.GetPath());
 		root->UpdateMenubar();
 	}
+}
+
+bool GUI::ConfigureSpawnSaveAs(const FileName& mapFilename) {
+	Map& map = GetCurrentMap();
+	SpawnExportWindow dialog(root, map, mapFilename.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME), mapFilename.GetName(), true);
+	if (dialog.ShowModal() != wxID_OK) {
+		return false;
+	}
+	const SpawnExportOptions options = dialog.GetOptions();
+	map.setSpawnSaveTarget(options.format, options.primaryFilename, options.npcFilename);
+	return true;
 }
 
 bool GUI::LoadMap(const FileName& fileName) {
@@ -678,11 +690,11 @@ void GUI::CloseCurrentEditor() {
 	root->UpdateMenubar();
 }
 
-bool GUI::CloseAllEditors() {
+bool GUI::CloseAllEditors(bool querySave) {
 	for (int i = 0; i < tabbook->GetTabCount(); ++i) {
 		auto* mapTab = dynamic_cast<MapTab*>(tabbook->GetTab(i));
 		if (mapTab) {
-			if (mapTab->IsUniqueReference() && mapTab->GetMap() && mapTab->GetMap()->hasChanged()) {
+			if (querySave && mapTab->IsUniqueReference() && mapTab->GetMap() && mapTab->GetMap()->hasChanged()) {
 				tabbook->SetFocusedTab(i);
 				if (!root->DoQuerySave(false)) {
 					return false;
@@ -1090,10 +1102,12 @@ void GUI::ShowWelcomeDialog(const wxBitmap& icon) {
 	UpdateMenubar();
 }
 
-void GUI::FinishWelcomeDialog() {
+void GUI::FinishWelcomeDialog(bool showMainWindow) {
 	if (welcomeDialog != nullptr) {
 		welcomeDialog->Hide();
-		root->Show();
+		if (showMainWindow) {
+			root->Show();
+		}
 		welcomeDialog->Destroy();
 		welcomeDialog = nullptr;
 	}
@@ -1105,6 +1119,7 @@ bool GUI::IsWelcomeDialogShown() {
 
 void GUI::OnWelcomeDialogClosed(wxCloseEvent& event) {
 	welcomeDialog->Destroy();
+	welcomeDialog = nullptr;
 	root->Close();
 }
 

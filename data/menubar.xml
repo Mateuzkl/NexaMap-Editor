@@ -47,6 +47,7 @@
 		<menu name="Export">
 			<item name="Export Minimap..." action="EXPORT_MINIMAP" help="Export minimap to an image file."/>
 			<item name="Export Tilesets..." action="EXPORT_TILESETS" help="Export tilesets to an xml file."/>
+			<item name="Export Spawns..." action="EXPORT_SPAWNS" help="Convert and export spawns for TFS 1.8 or Canary/Crystal."/>
 		</menu>
 		<menu name="Reload">
 			<item name="Reload" hotkey="F5" action="RELOAD_DATA" help="Reloads all data files."/>
@@ -216,6 +217,8 @@
 	<menu name="Window">
 		<item name="Minimap" hotkey="M" action="WIN_MINIMAP" help="Displays the minimap window."/>
 		<item name="New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
+		<item name="Materials Workbench..." action="MATERIALS_WORKBENCH" help="Visually edit XML ground, wall, doodad, carpet, and table brushes."/>
+		<item name="Border Workspace..." action="BORDER_WORKSPACE" help="Visually edit XML autoborder sets and item slots."/>
 		<menu name="Palette">
 			<item name="Terrain" hotkey="T" action="SELECT_TERRAIN" help="Select the Terrain palette."/>
 			<item name="Doodad" hotkey="D" action="SELECT_DOODAD" help="Select the Doodad palette."/>

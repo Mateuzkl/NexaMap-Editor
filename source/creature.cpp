@@ -59,6 +59,15 @@ Creature* Creature::deepCopy() const {
 	copy->direction = direction;
 	copy->selected = selected;
 	copy->saved = saved;
+	copy->spawn_weight_explicit = spawn_weight_explicit;
+	copy->spawn_direction_explicit = spawn_direction_explicit;
+	copy->spawn_type_override = spawn_type_override;
+	copy->spawn_is_npc = spawn_is_npc;
+	copy->has_spawn_source = has_spawn_source;
+	copy->spawn_source = spawn_source;
+	copy->spawn_attributes = spawn_attributes;
+	copy->alternative_kind = alternative_kind;
+	copy->spawn_alternatives = spawn_alternatives;
 	return copy;
 }
 

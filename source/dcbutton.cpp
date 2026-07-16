@@ -22,6 +22,7 @@
 #include "dcbutton.h"
 #include "sprites.h"
 #include "gui.h"
+#include "theme.h"
 
 BEGIN_EVENT_TABLE(DCButton, wxPanel)
 EVT_PAINT(DCButton::OnPaint)
@@ -92,24 +93,6 @@ void DCButton::OnPaint(wxPaintEvent& event) {
 		return;
 	}
 
-	static std::unique_ptr<wxPen> highlight_pen;
-	static std::unique_ptr<wxPen> dark_highlight_pen;
-	static std::unique_ptr<wxPen> light_shadow_pen;
-	static std::unique_ptr<wxPen> shadow_pen;
-
-	if (highlight_pen.get() == nullptr) {
-		highlight_pen.reset(newd wxPen(wxColor(0xFF, 0xFF, 0xFF), 1, wxSOLID));
-	}
-	if (dark_highlight_pen.get() == nullptr) {
-		dark_highlight_pen.reset(newd wxPen(wxColor(0xD4, 0xD0, 0xC8), 1, wxSOLID));
-	}
-	if (light_shadow_pen.get() == nullptr) {
-		light_shadow_pen.reset(newd wxPen(wxColor(0x80, 0x80, 0x80), 1, wxSOLID));
-	}
-	if (shadow_pen.get() == nullptr) {
-		shadow_pen.reset(newd wxPen(wxColor(0x40, 0x40, 0x40), 1, wxSOLID));
-	}
-
 	int size_x = 20, size_y = 20;
 
 	if (size == RENDER_SIZE_16x16) {
@@ -120,35 +103,14 @@ void DCButton::OnPaint(wxPaintEvent& event) {
 		size_y = 36;
 	}
 
-	pdc.SetBrush(*wxBLACK);
+	const bool selected = type == DC_BTN_TOGGLE && GetValue();
+	const wxColour background = selected ? Theme::Get(Theme::Role::SelectionFill) : Theme::Get(Theme::Role::RaisedSurface);
+	const wxColour border = selected ? Theme::Get(Theme::Role::AccentHover) : Theme::Get(Theme::Role::Border);
+	pdc.SetBackground(wxBrush(Theme::Get(Theme::Role::Surface)));
+	pdc.Clear();
+	pdc.SetBrush(wxBrush(background));
+	pdc.SetPen(wxPen(border));
 	pdc.DrawRectangle(0, 0, size_x, size_y);
-	if (type == DC_BTN_TOGGLE && GetValue()) {
-		pdc.SetPen(*shadow_pen);
-		pdc.DrawLine(0, 0, size_x - 1, 0);
-		pdc.DrawLine(0, 1, 0, size_y - 1);
-		pdc.SetPen(*light_shadow_pen);
-		pdc.DrawLine(1, 1, size_x - 2, 1);
-		pdc.DrawLine(1, 2, 1, size_y - 2);
-		pdc.SetPen(*dark_highlight_pen);
-		pdc.DrawLine(size_x - 2, 1, size_x - 2, size_y - 2);
-		pdc.DrawLine(1, size_y - 2, size_x - 1, size_y - 2);
-		pdc.SetPen(*highlight_pen);
-		pdc.DrawLine(size_x - 1, 0, size_x - 1, size_y - 1);
-		pdc.DrawLine(0, size_y - 1, size_y, size_y - 1);
-	} else {
-		pdc.SetPen(*highlight_pen);
-		pdc.DrawLine(0, 0, size_x - 1, 0);
-		pdc.DrawLine(0, 1, 0, size_y - 1);
-		pdc.SetPen(*dark_highlight_pen);
-		pdc.DrawLine(1, 1, size_x - 2, 1);
-		pdc.DrawLine(1, 2, 1, size_y - 2);
-		pdc.SetPen(*light_shadow_pen);
-		pdc.DrawLine(size_x - 2, 1, size_x - 2, size_y - 2);
-		pdc.DrawLine(1, size_y - 2, size_x - 1, size_y - 2);
-		pdc.SetPen(*shadow_pen);
-		pdc.DrawLine(size_x - 1, 0, size_x - 1, size_y - 1);
-		pdc.DrawLine(0, size_y - 1, size_y, size_y - 1);
-	}
 
 	if (sprite) {
 		if (size == RENDER_SIZE_16x16) {

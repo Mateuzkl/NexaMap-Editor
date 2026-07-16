@@ -21,6 +21,7 @@
 
 #include "graphics.h"
 #include "gui.h"
+#include "theme.h"
 
 // ============================================================================
 //
@@ -40,6 +41,9 @@ protected:
 
 DatDebugViewListBox::DatDebugViewListBox(wxWindow* parent, wxWindowID id) :
 	wxVListBox(parent, id, wxDefaultPosition, wxDefaultSize, wxLB_SINGLE) {
+	SetBackgroundColour(Theme::Get(Theme::Role::Background));
+	SetForegroundColour(Theme::Get(Theme::Role::Text));
+	SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
 	int n = 0;
 	for (int id = 0; id < g_gui.gfx.getItemSpriteMaxID(); ++id) {
 		Sprite* spr = g_gui.gfx.getSprite(id);
@@ -62,13 +66,9 @@ void DatDebugViewListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) con
 	}
 
 	if (IsSelected(n)) {
-		if (HasFocus()) {
-			dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-		} else {
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-		}
+		dc.SetTextForeground(Theme::Get(Theme::Role::TextOnAccent));
 	} else {
-		dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
+		dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 	}
 
 	dc.DrawText(wxString() << n, rect.GetX() + 40, rect.GetY() + 6);
