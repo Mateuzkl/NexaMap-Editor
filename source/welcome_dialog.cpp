@@ -33,7 +33,7 @@ WelcomeDialog::WelcomeDialog(const wxString& title_text, const wxString& version
 	dialog_sizer->Add(m_welcome_dialog_panel, 1, wxEXPAND);
 	SetSizer(dialog_sizer);
 
-	const wxSize minimum_client_size = FROM_DIP(this, wxSize(760, 440));
+	const wxSize minimum_client_size = FROM_DIP(this, wxSize(760, 500));
 	SetMinClientSize(minimum_client_size);
 	SetClientSize(wxSize(std::max(size.x, minimum_client_size.x), std::max(size.y, minimum_client_size.y)));
 	Layout();
@@ -116,6 +116,12 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	auto* open_map_button = newd WelcomeDialogButton(left_panel, wxDefaultPosition, button_size, button_base_colour, "Open");
 	open_map_button->SetAction(wxID_OPEN);
 	open_map_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);
+	auto* map_converter_button = newd WelcomeDialogButton(left_panel, wxDefaultPosition, button_size, button_base_colour, "Map Converter");
+	map_converter_button->SetAction(WELCOME_DIALOG_MAP_CONVERTER);
+	map_converter_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);
+	auto* spawn_converter_button = newd WelcomeDialogButton(left_panel, wxDefaultPosition, button_size, button_base_colour, "Spawn / NPC Converter");
+	spawn_converter_button->SetAction(WELCOME_DIALOG_SPAWN_CONVERTER);
+	spawn_converter_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);
 	auto* preferences_button = newd WelcomeDialogButton(left_panel, wxDefaultPosition, button_size, button_base_colour, "Preferences");
 	preferences_button->SetAction(wxID_PREFERENCES);
 	preferences_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);
@@ -123,6 +129,8 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	auto* buttons_sizer = newd wxBoxSizer(wxVERTICAL);
 	buttons_sizer->Add(new_map_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
 	buttons_sizer->Add(open_map_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
+	buttons_sizer->Add(map_converter_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
+	buttons_sizer->Add(spawn_converter_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
 	buttons_sizer->Add(preferences_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
 
 	auto* theme_sizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -303,6 +311,7 @@ void WelcomeDialogButton::OnMouseLeave(const wxMouseEvent& event) {
 RecentMapsPanel::RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const wxColour& base_colour, const std::vector<wxString>& recent_files) :
 	wxPanel(parent, wxID_ANY) {
 	SetBackgroundColour(Theme::Get(Theme::Role::Background));
+	Bind(wxEVT_LEAVE_WINDOW, &RecentMapsPanel::OnMouseLeave, this);
 	auto* sizer = new wxBoxSizer(wxVERTICAL);
 	for (const wxString& file : recent_files) {
 		auto* recent_item = newd RecentItem(this, base_colour, file);
@@ -312,7 +321,33 @@ RecentMapsPanel::RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const 
 	SetSizer(sizer);
 }
 
-RecentItem::RecentItem(wxWindow* parent, const wxColour& base_colour, const wxString& item_name) :
+void RecentMapsPanel::SetHoveredItem(RecentItem* item) {
+	if (m_hovered_item == item) {
+		return;
+	}
+	if (m_hovered_item) {
+		m_hovered_item->SetHovered(false);
+	}
+	m_hovered_item = item;
+	if (m_hovered_item) {
+		m_hovered_item->SetHovered(true);
+	}
+}
+
+void RecentMapsPanel::ClearHoveredItem(RecentItem* item) {
+	if (m_hovered_item == item) {
+		SetHoveredItem(nullptr);
+	}
+}
+
+void RecentMapsPanel::OnMouseLeave(wxMouseEvent& event) {
+	if (!GetScreenRect().Contains(wxGetMousePosition())) {
+		SetHoveredItem(nullptr);
+	}
+	event.Skip();
+}
+
+RecentItem::RecentItem(RecentMapsPanel* parent, const wxColour& base_colour, const wxString& item_name) :
 	wxPanel(parent, wxID_ANY),
 	m_text_colour(Theme::Get(Theme::Role::Text)),
 	m_text_colour_hover(Theme::Get(Theme::Role::TextOnAccent)),
@@ -323,11 +358,13 @@ RecentItem::RecentItem(wxWindow* parent, const wxColour& base_colour, const wxSt
 	m_title = newd wxStaticText(this, wxID_ANY, wxFileNameFromPath(m_item_text), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
 	m_title->SetFont(GetFont().Bold());
 	m_title->SetForegroundColour(m_text_colour);
+	m_title->SetBackgroundColour(m_background_colour);
 	m_title->SetToolTip(m_item_text);
 	m_file_path = newd wxStaticText(this, wxID_ANY, m_item_text, wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_START);
 	m_file_path->SetToolTip(m_item_text);
 	m_file_path->SetFont(GetFont().Smaller());
 	m_file_path->SetForegroundColour(m_text_colour);
+	m_file_path->SetBackgroundColour(m_background_colour);
 	auto* mainSizer = newd wxBoxSizer(wxHORIZONTAL);
 	auto* sizer = newd wxBoxSizer(wxVERTICAL);
 	m_title->SetMinSize(wxSize(0, -1));
@@ -335,8 +372,11 @@ RecentItem::RecentItem(wxWindow* parent, const wxColour& base_colour, const wxSt
 	sizer->Add(m_title, 0, wxEXPAND);
 	sizer->Add(m_file_path, 0, wxEXPAND | wxTOP, FROM_DIP(this, 2));
 	mainSizer->Add(sizer, 1, wxEXPAND | wxALL, FROM_DIP(this, 8));
-	Bind(wxEVT_ENTER_WINDOW, &RecentItem::OnMouseEnter, this);
-	Bind(wxEVT_LEAVE_WINDOW, &RecentItem::OnMouseLeave, this);
+	wxWindow* hover_windows[] = { this, m_title, m_file_path };
+	for (wxWindow* window : hover_windows) {
+		window->Bind(wxEVT_ENTER_WINDOW, &RecentItem::OnMouseEnter, this);
+		window->Bind(wxEVT_LEAVE_WINDOW, &RecentItem::OnMouseLeave, this);
+	}
 	m_title->Bind(wxEVT_LEFT_UP, &RecentItem::PropagateItemClicked, this);
 	m_file_path->Bind(wxEVT_LEFT_UP, &RecentItem::PropagateItemClicked, this);
 	SetMinSize(wxSize(0, FROM_DIP(this, 54)));
@@ -349,26 +389,27 @@ void RecentItem::PropagateItemClicked(wxMouseEvent& event) {
 	event.Skip();
 }
 
-void RecentItem::OnMouseEnter(const wxMouseEvent& event) {
-	if (GetScreenRect().Contains(ClientToScreen(event.GetPosition()))
-		&& m_title->GetForegroundColour() != m_text_colour_hover) {
-		m_title->SetForegroundColour(m_text_colour_hover);
-		m_file_path->SetForegroundColour(m_text_colour_hover);
-		SetBackgroundColour(m_background_colour_hover);
-		Refresh();
-		m_title->Refresh();
-		m_file_path->Refresh();
-	}
+void RecentItem::OnMouseEnter(wxMouseEvent& event) {
+	static_cast<RecentMapsPanel*>(GetParent())->SetHoveredItem(this);
+	event.Skip();
 }
 
-void RecentItem::OnMouseLeave(const wxMouseEvent& event) {
-	if (!GetScreenRect().Contains(ClientToScreen(event.GetPosition()))
-		&& m_title->GetForegroundColour() != m_text_colour) {
-		m_title->SetForegroundColour(m_text_colour);
-		m_file_path->SetForegroundColour(m_text_colour);
-		SetBackgroundColour(m_background_colour);
-		Refresh();
-		m_title->Refresh();
-		m_file_path->Refresh();
+void RecentItem::OnMouseLeave(wxMouseEvent& event) {
+	if (!GetScreenRect().Contains(wxGetMousePosition())) {
+		static_cast<RecentMapsPanel*>(GetParent())->ClearHoveredItem(this);
 	}
+	event.Skip();
+}
+
+void RecentItem::SetHovered(bool hovered) {
+	const wxColour& text_colour = hovered ? m_text_colour_hover : m_text_colour;
+	const wxColour& background_colour = hovered ? m_background_colour_hover : m_background_colour;
+	m_title->SetForegroundColour(text_colour);
+	m_file_path->SetForegroundColour(text_colour);
+	SetBackgroundColour(background_colour);
+	m_title->SetBackgroundColour(background_colour);
+	m_file_path->SetBackgroundColour(background_colour);
+	Refresh();
+	m_title->Refresh();
+	m_file_path->Refresh();
 }

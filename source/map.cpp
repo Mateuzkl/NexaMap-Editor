@@ -40,7 +40,7 @@ Map::~Map() {
 	////
 }
 
-bool Map::open(const std::string& file) {
+bool Map::open(const std::string& file, const ItemIdCodec* itemIdCodec) {
 	if (file == filename) {
 		return true; // Do not reopen ourselves!
 	}
@@ -48,6 +48,7 @@ bool Map::open(const std::string& file) {
 	tilecount = 0;
 
 	IOMapOTBM maploader(getVersion());
+	maploader.useItemIdCodec(itemIdCodec);
 
 	bool success = maploader.loadMap(*this, wxstr(file));
 

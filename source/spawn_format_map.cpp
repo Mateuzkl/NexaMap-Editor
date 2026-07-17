@@ -6,9 +6,83 @@
 #include "map.h"
 #include "tile.h"
 
+#include <map>
 #include <unordered_set>
 
+namespace {
+	constexpr size_t MAX_REPORTED_WARNINGS = 200;
+
+	void AppendWarning(std::vector<std::string>& warnings, std::string warning) {
+		if (warnings.size() < MAX_REPORTED_WARNINGS) {
+			warnings.push_back(std::move(warning));
+		} else if (warnings.size() == MAX_REPORTED_WARNINGS) {
+			warnings.emplace_back("Additional warnings were omitted to keep the report responsive.");
+		}
+	}
+
+	struct SpawnSignature {
+		int spawnTime;
+		Direction direction;
+		bool hasDirection;
+		SpawnAlternativeKind alternativeKind;
+	};
+
+	bool ValidateBeforeApply(const Map& map, const SpawnDocument& document, std::vector<std::string>& warnings) {
+		std::map<Position, SpawnSignature> signatures;
+		for (const SpawnAreaData& area : document.areas) {
+			if (area.centerX < 0 || area.centerX > 65535 || area.centerY < 0 || area.centerY > 65535 || area.centerZ < 0 || area.centerZ > 255 || area.radius < 0 || area.radius > 255) {
+				warnings.push_back("Spawn document contains an invalid area and was not applied.");
+				return false;
+			}
+			for (const SpawnEntryData& entry : area.entries) {
+				if (entry.name.empty() || entry.x < 0 || entry.x > 65535 || entry.y < 0 || entry.y > 65535 || entry.z != area.centerZ || entry.spawnTime < 1) {
+					warnings.push_back("Spawn document contains an invalid creature entry and was not applied.");
+					return false;
+				}
+				for (const SpawnVariantData& variant : entry.alternatives) {
+					if (variant.name.empty()) {
+						warnings.push_back("Spawn document contains an unnamed creature alternative and was not applied.");
+						return false;
+					}
+				}
+
+				const Position position(entry.x, entry.y, entry.z);
+				const Direction direction = static_cast<Direction>(std::clamp(entry.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST)));
+				const SpawnSignature signature { entry.spawnTime, direction, entry.hasDirection, entry.alternativeKind };
+				auto [iterator, inserted] = signatures.emplace(position, signature);
+				if (!inserted) {
+					SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
+					if (!MergeSpawnAlternativeKinds(iterator->second.alternativeKind, signature.alternativeKind, mergedKind)) {
+						warnings.push_back("Spawn entries at " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z) + " use incompatible alternative kinds; no spawn data was applied.");
+						return false;
+					}
+					iterator->second.alternativeKind = mergedKind;
+					if (iterator->second.spawnTime != signature.spawnTime || iterator->second.direction != signature.direction || iterator->second.hasDirection != signature.hasDirection) {
+						warnings.push_back("Spawn entries at " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z) + " disagree on respawn or direction; no spawn data was applied.");
+						return false;
+					}
+				}
+
+				const Tile* tile = map.getTile(position);
+				if (tile && tile->creature) {
+					SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
+					if (!MergeSpawnAlternativeKinds(tile->creature->getAlternativeKind(), iterator->second.alternativeKind, mergedKind) || tile->creature->getSpawnTime() != signature.spawnTime || tile->creature->getDirection() != signature.direction || tile->creature->hasSpawnDirection() != signature.hasDirection) {
+						warnings.push_back("Existing creature at " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z) + " conflicts with the spawn document; no spawn data was applied.");
+						return false;
+					}
+				}
+			}
+		}
+		return true;
+	}
+
+}
+
 bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector<std::string>& warnings) {
+	if (!ValidateBeforeApply(map, document, warnings)) {
+		return false;
+	}
+
 	for (const SpawnAreaData& area : document.areas) {
 		const Position center(area.centerX, area.centerY, area.centerZ);
 		Tile* centerTile = map.getTile(center);
@@ -17,10 +91,15 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 			map.setTile(center, centerTile);
 		}
 		if (!centerTile->spawn) {
-			centerTile->spawn = newd Spawn(std::max(1, area.radius));
+			centerTile->spawn = newd Spawn(area.radius);
 			map.addSpawn(centerTile);
 		} else {
-			centerTile->spawn->setSize(std::max(centerTile->spawn->getSize(), std::max(1, area.radius)));
+			const int expandedRadius = std::max(centerTile->spawn->getSize(), area.radius);
+			if (expandedRadius != centerTile->spawn->getSize()) {
+				map.removeSpawn(centerTile);
+				centerTile->spawn->setSize(expandedRadius);
+				map.addSpawn(centerTile);
+			}
 		}
 		centerTile->spawn->setSourceAttributes(area.kind, area.attributes);
 
@@ -65,18 +144,13 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 				}
 			} else {
 				Creature* creature = creatureTile->creature;
-				const Direction direction = static_cast<Direction>(std::clamp(entry.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST)));
-				if (creature->getSpawnTime() != entry.spawnTime || creature->getDirection() != direction || creature->hasSpawnDirection() != entry.hasDirection) {
-					warnings.push_back("Rejected collocated spawn entries with incompatible respawn or direction at " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z) + ".");
-					return false;
-				}
-				if (creature->getAlternativeKind() == SpawnAlternativeKind::None) {
-					creature->setAlternativeKind(SpawnAlternativeKind::CanaryWeight);
-				}
+				SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
+				MergeSpawnAlternativeKinds(creature->getAlternativeKind(), entry.alternativeKind, mergedKind);
+				creature->setAlternativeKind(mergedKind);
 				for (const SpawnVariantData& variant : variants) {
 					creature->addSpawnAlternative(variant);
 				}
-				warnings.push_back("Preserved weighted alternatives sharing tile " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z) + ".");
+				AppendWarning(warnings, "Preserved weighted alternatives sharing tile " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z) + ".");
 			}
 		}
 	}
@@ -96,7 +170,7 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 		area.centerX = center.x;
 		area.centerY = center.y;
 		area.centerZ = center.z;
-		area.radius = centerTile->spawn->getSize();
+		area.radius = document.format == SpawnFormat::CanaryCrystal ? centerTile->spawn->getSize() : std::max(1, centerTile->spawn->getSize());
 		area.kind = SpawnAreaKind::Mixed;
 		area.attributes = centerTile->spawn->getSourceAttributes(SpawnAreaKind::Mixed);
 

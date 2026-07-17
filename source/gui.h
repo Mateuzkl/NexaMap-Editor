@@ -34,6 +34,7 @@
 class BaseMap;
 class Map;
 
+enum class EditorClientVersionPolicy;
 class Editor;
 class Brush;
 class HouseBrush;
@@ -349,8 +350,10 @@ public:
 	void SaveMap();
 	void SaveMapAs();
 	bool LoadMap(const FileName& fileName);
+	bool LoadValidatedConvertedMap(const FileName& fileName, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 
 protected:
+	bool LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 	bool ConfigureSpawnSaveAs(const FileName& mapFilename);
 	bool LoadDataFiles(wxString& error, wxArrayString& warnings);
 	ClientVersion* getLoadedVersion() const {
@@ -510,8 +513,8 @@ public:
 		g_gui.DestroyLoadBar();
 	}
 
-	static void SetLoadDone(int32_t done, const wxString& newmessage = wxEmptyString) {
-		g_gui.SetLoadDone(done, newmessage);
+	static bool SetLoadDone(int32_t done, const wxString& newmessage = wxEmptyString) {
+		return g_gui.SetLoadDone(done, newmessage);
 	}
 
 	static void SetLoadScale(int32_t from, int32_t to) {

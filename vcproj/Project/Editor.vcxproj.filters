@@ -240,6 +240,12 @@
     <ClInclude Include="..\..\source\spawn_export_window.h">
       <Filter>gui</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\spawn_converter_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\spawn_xml_converter.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\sprites.h">
       <Filter>gui\graphics</Filter>
     </ClInclude>
@@ -324,6 +330,18 @@
     </ClInclude>
     <ClInclude Include="..\..\source\materials_workbench_window.h">
       <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\map_item_id_converter_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\map_item_id_converter.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\depot_conversion_validation.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\item_id_mapping.h">
+      <Filter>editor\io</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\positionctrl.h">
       <Filter>gui\controls</Filter>
@@ -476,6 +494,12 @@
     <ClCompile Include="..\..\source\spawn_export_window.cpp">
       <Filter>gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\spawn_converter_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\spawn_xml_converter.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\tile.cpp">
       <Filter>objects</Filter>
     </ClCompile>
@@ -616,6 +640,18 @@
     </ClCompile>
     <ClCompile Include="..\..\source\materials_workbench_window.cpp">
       <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\map_item_id_converter_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\map_item_id_converter.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\depot_conversion_validation.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\item_id_mapping.cpp">
+      <Filter>editor\io</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\positionctrl.cpp">
       <Filter>gui\controls</Filter>

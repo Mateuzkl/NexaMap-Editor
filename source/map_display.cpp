@@ -32,7 +32,9 @@
 #include "map_display.h"
 #include "map_drawer.h"
 #include "application.h"
+#include "border_workspace_window.h"
 #include "browse_tile_window.h"
+#include "theme.h"
 
 #include "doodad_brush.h"
 #include "house_exit_brush.h"
@@ -45,6 +47,92 @@
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
+
+namespace {
+	struct BorderItemCandidate {
+		Item* item = nullptr;
+		int stackPosition = 0;
+		bool topmost = false;
+	};
+
+	class BorderItemCandidateList final : public wxVListBox {
+	public:
+		BorderItemCandidateList(wxWindow* parent, const std::vector<BorderItemCandidate>& candidates) :
+			wxVListBox(parent, wxID_ANY, wxDefaultPosition, wxSize(parent->FromDIP(500), parent->FromDIP(210))),
+			candidates_(candidates) {
+			SetBackgroundColour(Theme::Get(Theme::Role::Background));
+			SetForegroundColour(Theme::Get(Theme::Role::Text));
+			SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
+			SetItemCount(candidates_.size());
+			if (!candidates_.empty()) {
+				SetSelection(0);
+			}
+		}
+
+		int GetSelectedItemId() const {
+			const int selection = GetSelection();
+			return selection == wxNOT_FOUND ? 0 : candidates_[selection].item->getID();
+		}
+
+	protected:
+		void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const override {
+			const BorderItemCandidate& candidate = candidates_[index];
+			if (Sprite* sprite = g_gui.gfx.getSprite(candidate.item->getClientID())) {
+				sprite->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX() + FromDIP(6), rect.GetY() + FromDIP(4), FromDIP(32), FromDIP(32));
+			}
+			dc.SetTextForeground(IsSelected(index) ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::Text));
+			wxString title = wxString::Format("Item ID %d", candidate.item->getID());
+			if (!candidate.item->getName().empty()) {
+				title << " - " << candidate.item->getName();
+			}
+			dc.DrawText(title, rect.GetX() + FromDIP(46), rect.GetY() + FromDIP(4));
+			wxString stack = wxString::Format("Stack position %d%s", candidate.stackPosition, candidate.topmost ? " (top)" : "");
+			dc.DrawText(stack, rect.GetX() + FromDIP(46), rect.GetY() + FromDIP(22));
+		}
+
+		wxCoord OnMeasureItem(size_t WXUNUSED(index)) const override {
+			return FromDIP(42);
+		}
+
+	private:
+		std::vector<BorderItemCandidate> candidates_;
+	};
+
+	class BorderItemCandidateDialog final : public wxDialog {
+	public:
+		BorderItemCandidateDialog(wxWindow* parent, const std::vector<BorderItemCandidate>& candidates) :
+			wxDialog(parent, wxID_ANY, "Select Border Item", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
+			auto* sizer = newd wxBoxSizer(wxVERTICAL);
+			sizer->Add(newd wxStaticText(this, wxID_ANY, "Several border items are selected on this tile. Choose the item to edit:"), 0, wxALL, FromDIP(10));
+			list_ = newd BorderItemCandidateList(this, candidates);
+			sizer->Add(list_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
+			auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
+			if (buttons) {
+				sizer->Add(buttons, 0, wxEXPAND | wxALL, FromDIP(10));
+			}
+			SetSizerAndFit(sizer);
+			SetMinSize(wxSize(FromDIP(540), FromDIP(300)));
+			CentreOnParent();
+			list_->Bind(wxEVT_LISTBOX_DCLICK, [this](wxCommandEvent&) { EndModal(wxID_OK); });
+		}
+
+		int GetSelectedItemId() const {
+			return list_->GetSelectedItemId();
+		}
+
+	private:
+		BorderItemCandidateList* list_ = nullptr;
+	};
+
+	bool SelectionHasItems(Editor& editor) {
+		for (Tile* tile : editor.selection.getTiles()) {
+			if (!tile->getSelectedItems().empty()) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 EVT_KEY_DOWN(MapCanvas::OnKeyDown)
@@ -85,6 +173,7 @@ EVT_MENU(MAP_POPUP_MENU_SWITCH_DOOR, MapCanvas::OnSwitchDoor)
 // ----
 EVT_MENU(MAP_POPUP_MENU_SELECT_RAW_BRUSH, MapCanvas::OnSelectRAWBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_GROUND_BRUSH, MapCanvas::OnSelectGroundBrush)
+EVT_MENU(MAP_POPUP_MENU_OPEN_BORDER_WORKSPACE, MapCanvas::OnOpenBorderWorkspace)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOODAD_BRUSH, MapCanvas::OnSelectDoodadBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_COLLECTION_BRUSH, MapCanvas::OnSelectCollectionBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOOR_BRUSH, MapCanvas::OnSelectDoorBrush)
@@ -2084,6 +2173,65 @@ void MapCanvas::OnSelectGroundBrush(wxCommandEvent& WXUNUSED(event)) {
 	}
 }
 
+void MapCanvas::OnOpenBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {
+	if (editor.selection.size() == 0) {
+		return;
+	}
+
+	std::map<int, size_t> itemCounts;
+	if (editor.selection.size() == 1) {
+		Tile* tile = editor.selection.getSelectedTile();
+		if (!tile) {
+			return;
+		}
+		const ItemVector selectedItems = tile->getSelectedItems();
+		if (selectedItems.size() == 1) {
+			itemCounts[selectedItems.front()->getID()] = 1;
+		} else {
+			std::vector<BorderItemCandidate> candidates;
+			int stackPosition = static_cast<int>(tile->items.size());
+			for (auto item = tile->items.rbegin(); item != tile->items.rend(); ++item, --stackPosition) {
+				if ((*item)->isSelected() && (*item)->isBorder()) {
+					candidates.push_back({ *item, stackPosition, stackPosition == static_cast<int>(tile->items.size()) });
+				}
+			}
+			if (tile->ground && tile->ground->isSelected() && tile->ground->isBorder()) {
+				candidates.push_back({ tile->ground, 0, tile->items.empty() });
+			}
+
+			if (candidates.size() == 1) {
+				itemCounts[candidates.front().item->getID()] = 1;
+			} else if (candidates.size() > 1) {
+				BorderItemCandidateDialog dialog(this, candidates);
+				if (dialog.ShowModal() != wxID_OK) {
+					return;
+				}
+				const int itemId = dialog.GetSelectedItemId();
+				if (itemId > 0) {
+					itemCounts[itemId] = 1;
+				}
+			} else if (Item* item = tile->getTopSelectedItem()) {
+				itemCounts[item->getID()] = 1;
+			}
+		}
+	} else {
+		for (Tile* tile : editor.selection.getTiles()) {
+			for (Item* item : tile->getSelectedItems()) {
+				if (item->isBorder()) {
+					++itemCounts[item->getID()];
+				}
+			}
+		}
+	}
+
+	std::vector<BorderWorkspaceWindow::ItemCount> items;
+	items.reserve(itemCounts.size());
+	for (const auto& [itemId, count] : itemCounts) {
+		items.push_back({ itemId, count });
+	}
+	BorderWorkspaceWindow::OpenForItems(this, items);
+}
+
 void MapCanvas::OnSelectDoodadBrush(wxCommandEvent& WXUNUSED(event)) {
 	if (editor.selection.size() != 1) {
 		return;
@@ -2607,6 +2755,15 @@ void MapPopupMenu::Update() {
 			wxMenuItem* browseTile = Append(MAP_POPUP_MENU_BROWSE_TILE, "Browse Field", "Navigate from tile items");
 			browseTile->Enable(anything_selected);
 		}
+		if (editor.selection.size() != 1) {
+			AppendSeparator();
+		}
+		wxMenuItem* borderWorkspace = Append(
+			MAP_POPUP_MENU_OPEN_BORDER_WORKSPACE,
+			"Open in Border Workspace...",
+			"Locate selected border items in Border Workspace"
+		);
+		borderWorkspace->Enable(SelectionHasItems(editor) && BorderWorkspaceWindow::IsAvailableForCurrentClient());
 	}
 }
 

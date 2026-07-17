@@ -83,8 +83,8 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	map.doChange();
 }
 
-Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
-	actionQueue(newd ActionQueue(*this)),
+Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec, bool detachedDecodedView) :
+	actionQueue(nullptr),
 	selection(*this),
 	copybuffer(copybuffer),
 	replace_brush(nullptr) {
@@ -104,15 +104,18 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 	}
 	*/
 
+	const bool keepLoadedClientVersion = clientVersionPolicy == EditorClientVersionPolicy::KeepLoaded;
 	bool success = true;
-	if (g_gui.GetCurrentVersionID() != ver.client) {
-		wxString error;
+	wxString loadError;
+	if (keepLoadedClientVersion && g_gui.GetCurrentVersionID() == CLIENT_VERSION_NONE) {
+		throw std::runtime_error("No client assets are loaded for the converted map.");
+	}
+
+	if (!keepLoadedClientVersion && g_gui.GetCurrentVersionID() != ver.client) {
 		wxArrayString warnings;
 		if (g_gui.CloseAllEditors()) {
-			success = g_gui.LoadVersion(ver.client, error, warnings);
-			if (!success) {
-				g_gui.PopupDialog("Error", error, wxOK);
-			} else {
+			success = g_gui.LoadVersion(ver.client, loadError, warnings);
+			if (success) {
 				g_gui.ListDialog("Warnings", warnings);
 			}
 		} else {
@@ -120,9 +123,19 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 		}
 	}
 
-	if (success) {
+	if (!success) {
+		throw std::runtime_error(nstr(loadError));
+	}
+
+	{
 		ScopedLoadingBar LoadingBar("Loading OTBM map...");
-		success = map.open(nstr(fn.GetFullPath()));
+		success = map.open(nstr(fn.GetFullPath()), readCodec);
+		if (success && keepLoadedClientVersion) {
+			// Converter output was already reopened and round-trip validated with
+			// the currently loaded item database. Its OTB minor value does not
+			// need to be a registered RME client profile for this trusted route.
+			map.mapVersion.client = g_gui.GetCurrentVersionID();
+		}
 		/* TODO
 		if(success && ver.client == CLIENT_VERSION_854_BAD) {
 			int ok = g_gui.PopupDialog("Incorrect OTB", "This map has been saved with an incorrect OTB version, do you want to convert it to the new OTB version?\n\nIf you are not sure, click Yes.", wxYES | wxNO);
@@ -134,6 +147,19 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 		}
 		*/
 	}
+
+	if (!success) {
+		throw std::runtime_error("Could not open map.\n" + nstr(map.getError()));
+	}
+	if (detachedDecodedView) {
+		// Client-ID files are decoded to Server IDs for display. Detach the
+		// editable view so a normal save can never overwrite the Client-ID file.
+		map.filename.clear();
+		map.name = nstr(fn.GetName()) + "-server-view.otbm";
+		map.unnamed = true;
+	}
+
+	actionQueue = newd ActionQueue(*this);
 }
 
 Editor::~Editor() {

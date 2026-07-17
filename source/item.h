@@ -74,11 +74,44 @@ enum SplashType {
 IMPLEMENT_INCREMENT_OP(SplashType)
 
 class Item : public ItemAttributes {
+protected:
+	// Keep subtype semantics stable when an item's ID is converted or reinterpreted.
+	enum SubtypeKind : uint8_t {
+		SUBTYPE_NONE = 0,
+		SUBTYPE_STACK_COUNT = 1 << 0,
+		SUBTYPE_FLUID = 1 << 1,
+		SUBTYPE_CHARGES = 1 << 2,
+		SUBTYPE_PERSISTED_COUNT_OR_FLUID = 1 << 3,
+	};
+	enum SubtypeAttribute : uint8_t {
+		SUBTYPE_ATTR_NONE = 0,
+		SUBTYPE_ATTR_COUNT = 1 << 0,
+		SUBTYPE_ATTR_CHARGES = 1 << 1,
+		SUBTYPE_ATTR_RUNE_CHARGES = 1 << 2,
+	};
+	bool hasSubtypeKind(SubtypeKind kind) const {
+		return (subtypeKinds & static_cast<uint8_t>(kind)) != 0;
+	}
+	void addSubtypeKind(SubtypeKind kind) {
+		subtypeKinds |= static_cast<uint8_t>(kind);
+	}
+	bool hasSubtypeAttribute(SubtypeAttribute attribute) const {
+		return (subtypeAttributes & static_cast<uint8_t>(attribute)) != 0;
+	}
+	void addSubtypeAttribute(SubtypeAttribute attribute) {
+		subtypeAttributes |= static_cast<uint8_t>(attribute);
+	}
+	bool shouldSerializeCountSubtype() const {
+		return hasSubtypeAttribute(SUBTYPE_ATTR_COUNT) ||
+			(subtypeAttributes == SUBTYPE_ATTR_NONE && (hasSubtypeKind(SUBTYPE_STACK_COUNT) || hasSubtypeKind(SUBTYPE_FLUID) || hasSubtypeKind(SUBTYPE_PERSISTED_COUNT_OR_FLUID)));
+	}
+	void copyBaseStateTo(Item& copy) const;
+
 public:
 	// Factory member to create item of right type based on type
 	static Item* Create(uint16_t _type, uint16_t _subtype = 0xFFFF);
 	static Item* Create(pugi::xml_node);
-	static Item* Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemType** itemType = nullptr);
+	static Item* Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemType** itemType = nullptr, bool inspectSpecialAttributes = false);
 
 protected:
 	// Constructor for items
@@ -122,7 +155,7 @@ public:
 	// Will return a node containing this item
 	virtual bool serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const;
 	// Will write this item to the stream supplied in the argument
-	virtual void serializeItemCompact_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const;
+	virtual bool serializeItemCompact_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const;
 	virtual void serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const;
 
 	// Static conversions
@@ -395,6 +428,8 @@ protected:
 	uint16_t id; // the same id as in ItemType
 	// Subtype is either fluid type, count, subtype or charges
 	uint16_t subtype;
+	uint8_t subtypeKinds;
+	uint8_t subtypeAttributes;
 	bool selected;
 	int frame;
 
@@ -410,10 +445,13 @@ typedef std::list<Item*> ItemList;
 Item* transformItem(Item* old_item, uint16_t new_id, Tile* parent = nullptr);
 
 inline int Item::getCount() const {
-	if (isStackable() || isExtraCharged() || isClientCharged()) {
+	if (hasSubtypeKind(SUBTYPE_STACK_COUNT) || hasSubtypeKind(SUBTYPE_CHARGES)) {
 		return subtype;
 	}
-	return 1;
+	if (subtypeKinds != SUBTYPE_NONE) {
+		return 1;
+	}
+	return isStackable() || isExtraCharged() || isClientCharged() ? subtype : 1;
 }
 
 inline uint16_t Item::getUniqueID() const {

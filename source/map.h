@@ -46,6 +46,8 @@ inline bool IsRemovableDuplicatedItem(const Item* item) {
 	return true;
 }
 
+class ItemIdCodec;
+
 class Map : public BaseMap {
 public:
 	// ctor and dtor
@@ -169,7 +171,7 @@ public:
 
 protected:
 	// Loads a map
-	bool open(const std::string& identifier);
+	bool open(const std::string& identifier, const ItemIdCodec* itemIdCodec = nullptr);
 
 protected:
 	void updateUniqueIds(Tile* old_tile, Tile* new_tile) override;

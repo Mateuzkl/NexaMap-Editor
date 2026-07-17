@@ -22,7 +22,11 @@
 
 wxDECLARE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 
+constexpr wxWindowID WELCOME_DIALOG_MAP_CONVERTER = wxID_HIGHEST + 7000;
+constexpr wxWindowID WELCOME_DIALOG_SPAWN_CONVERTER = wxID_HIGHEST + 7001;
+
 class WelcomeDialogPanel;
+class RecentItem;
 
 class WelcomeDialog : public wxDialog {
 public:
@@ -62,15 +66,15 @@ public:
 	void OnPaint(const wxPaintEvent& event);
 	void OnMouseEnter(const wxMouseEvent& event);
 	void OnMouseLeave(const wxMouseEvent& event);
-	wxStandardID GetAction() {
+	wxWindowID GetAction() {
 		return m_action;
 	};
-	void SetAction(wxStandardID action) {
+	void SetAction(wxWindowID action) {
 		m_action = action;
 	};
 
 private:
-	wxStandardID m_action;
+	wxWindowID m_action;
 	wxString m_text;
 	wxColour m_text_colour;
 	wxColour m_background;
@@ -81,14 +85,22 @@ private:
 class RecentMapsPanel : public wxPanel {
 public:
 	RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const wxColour& base_colour, const std::vector<wxString>& recent_files);
+	void SetHoveredItem(RecentItem* item);
+	void ClearHoveredItem(RecentItem* item);
+
+private:
+	void OnMouseLeave(wxMouseEvent& event);
+
+	RecentItem* m_hovered_item = nullptr;
 };
 
 class RecentItem : public wxPanel {
 public:
-	RecentItem(wxWindow* parent, const wxColour& base_colour, const wxString& item_name);
-	void OnMouseEnter(const wxMouseEvent& event);
-	void OnMouseLeave(const wxMouseEvent& event);
+	RecentItem(RecentMapsPanel* parent, const wxColour& base_colour, const wxString& item_name);
+	void OnMouseEnter(wxMouseEvent& event);
+	void OnMouseLeave(wxMouseEvent& event);
 	void PropagateItemClicked(wxMouseEvent& event);
+	void SetHovered(bool hovered);
 	const wxString& GetText() {
 		return m_item_text;
 	};

@@ -21,6 +21,8 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <limits>
+#include <new>
 
 uint8_t NodeFileWriteHandle::NODE_START = ::NODE_START;
 uint8_t NodeFileWriteHandle::NODE_END = ::NODE_END;
@@ -599,6 +601,9 @@ void DiskNodeFileWriteHandle::renewCache() {
 MemoryNodeFileWriteHandle::MemoryNodeFileWriteHandle() {
 	if (!cache) {
 		cache = static_cast<uint8_t*>(malloc(cache_size + 1));
+		if (!cache) {
+			throw std::bad_alloc();
+		}
 	}
 	local_write_index = 0;
 }
@@ -623,13 +628,21 @@ size_t MemoryNodeFileWriteHandle::getSize() {
 
 void MemoryNodeFileWriteHandle::renewCache() {
 	if (cache) {
-		cache_size = cache_size * 2;
-		cache = static_cast<uint8_t*>(realloc(cache, cache_size));
-		if (!cache) {
-			exit(1);
+		if (cache_size > std::numeric_limits<size_t>::max() / 2) {
+			throw std::length_error("Memory node cache is too large.");
 		}
+		const size_t expandedCacheSize = cache_size * 2;
+		uint8_t* expandedCache = static_cast<uint8_t*>(realloc(cache, expandedCacheSize));
+		if (!expandedCache) {
+			throw std::bad_alloc();
+		}
+		cache = expandedCache;
+		cache_size = expandedCacheSize;
 	} else {
 		cache = static_cast<uint8_t*>(malloc(cache_size + 1));
+		if (!cache) {
+			throw std::bad_alloc();
+		}
 	}
 }
 

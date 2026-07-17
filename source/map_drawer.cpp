@@ -603,42 +603,44 @@ void MapDrawer::DrawMap() {
 }
 
 void MapDrawer::DrawIngameBox() {
-	int center_x = start_x + int(screensize_x * zoom / 64);
-	int center_y = start_y + int(screensize_y * zoom / 64);
+	const int viewport_width = int(screensize_x * zoom);
+	const int viewport_height = int(screensize_y * zoom);
+	const int center_screen_x = (view_scroll_x / TileSize + int(screensize_x * zoom / (2 * TileSize))) * TileSize - view_scroll_x;
+	const int center_screen_y = (view_scroll_y / TileSize + int(screensize_y * zoom / (2 * TileSize))) * TileSize - view_scroll_y;
 
-	int offset_y = 2;
-	int box_start_map_x = center_x;
-	int box_start_map_y = center_y + offset_y;
-	int box_end_map_x = center_x + ClientMapWidth;
-	int box_end_map_y = center_y + ClientMapHeight + offset_y;
-
-	int box_start_x = box_start_map_x * TileSize - view_scroll_x;
-	int box_start_y = box_start_map_y * TileSize - view_scroll_y;
-	int box_end_x = box_end_map_x * TileSize - view_scroll_x;
-	int box_end_y = box_end_map_y * TileSize - view_scroll_y;
+	int box_start_x = center_screen_x - (ClientMapWidth / 2) * TileSize;
+	int box_start_y = center_screen_y - (ClientMapHeight / 2) * TileSize;
+	int box_end_x = box_start_x + ClientMapWidth * TileSize;
+	int box_end_y = box_start_y + ClientMapHeight * TileSize;
 
 	static wxColor side_color(0, 0, 0, 200);
 
 	glDisable(GL_TEXTURE_2D);
 
 	// left side
-	if (box_start_map_x >= start_x) {
-		drawFilledRect(0, 0, box_start_x, screensize_y * zoom, side_color);
+	if (box_start_x > 0) {
+		drawFilledRect(0, 0, std::min(box_start_x, viewport_width), viewport_height, side_color);
 	}
 
 	// right side
-	if (box_end_map_x < end_x) {
-		drawFilledRect(box_end_x, 0, screensize_x * zoom, screensize_y * zoom, side_color);
+	if (box_end_x < viewport_width) {
+		const int clipped_end_x = std::max(0, box_end_x);
+		drawFilledRect(clipped_end_x, 0, viewport_width - clipped_end_x, viewport_height, side_color);
 	}
 
+	const int clipped_start_x = std::max(0, box_start_x);
+	const int clipped_end_x = std::min(viewport_width, box_end_x);
+	const int clipped_width = std::max(0, clipped_end_x - clipped_start_x);
+
 	// top side
-	if (box_start_map_y >= start_y) {
-		drawFilledRect(box_start_x, 0, box_end_x - box_start_x, box_start_y, side_color);
+	if (box_start_y > 0 && clipped_width > 0) {
+		drawFilledRect(clipped_start_x, 0, clipped_width, std::min(box_start_y, viewport_height), side_color);
 	}
 
 	// bottom side
-	if (box_end_map_y < end_y) {
-		drawFilledRect(box_start_x, box_end_y, box_end_x - box_start_x, screensize_y * zoom, side_color);
+	if (box_end_y < viewport_height && clipped_width > 0) {
+		const int clipped_end_y = std::max(0, box_end_y);
+		drawFilledRect(clipped_start_x, clipped_end_y, clipped_width, viewport_height - clipped_end_y, side_color);
 	}
 
 	// hidden tiles

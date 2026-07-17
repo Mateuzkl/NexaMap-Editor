@@ -29,9 +29,14 @@
 class BaseMap;
 class CopyBuffer;
 
+enum class EditorClientVersionPolicy {
+	DetectFromMap,
+	KeepLoaded,
+};
+
 class Editor {
 public:
-	Editor(CopyBuffer& copybuffer, const FileName& fn);
+	Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPolicy clientVersionPolicy = EditorClientVersionPolicy::DetectFromMap, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 	Editor(CopyBuffer& copybuffer);
 	~Editor();
 

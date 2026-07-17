@@ -20,6 +20,12 @@
 
 #include "iomap.h"
 
+#include <functional>
+#include <string>
+#include <utility>
+
+using OTBMMemoryBudgetCheck = std::function<bool(const char* phase, uint64_t pendingBytes, std::string& error)>;
+
 // Pragma pack is VERY important since otherwise it won't be able to load the structs correctly
 #pragma pack(1)
 
@@ -132,25 +138,43 @@ public:
 	}
 	~IOMapOTBM() override { }
 
-	static bool getVersionInfo(const FileName& identifier, MapVersion& out_ver);
+	static bool getVersionInfo(const FileName& identifier, MapVersion& out_ver, uint32_t* itemMajorVersion = nullptr, const OTBMMemoryBudgetCheck& memoryBudgetCheck = {});
 
 	bool loadMap(Map& map, const FileName& identifier) override;
 	bool saveMap(Map& map, const FileName& identifier) override;
+	bool loadMapData(Map& map, const FileName& identifier);
+	bool saveMapData(Map& map, const FileName& identifier);
+	void useItemVersionHeader(uint32_t majorVersion, uint32_t minorVersion) {
+		headerItemMajorVersion = majorVersion;
+		headerItemMinorVersion = minorVersion;
+	}
+	void useItemIdCodec(const ItemIdCodec* codec) {
+		setItemIdCodec(codec);
+	}
+	void useMemoryBudgetCheck(OTBMMemoryBudgetCheck check) {
+		memoryBudgetCheck = std::move(check);
+	}
 
 	static bool saveZones(Map& map, pugi::xml_document& doc);
 
 protected:
-	static bool getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver);
+	enum class SpawnLoadStatus {
+		Loaded,
+		Unavailable,
+		Cancelled,
+	};
+
+	static bool getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver, uint32_t* itemMajorVersion = nullptr);
 
 	virtual bool loadMap(Map& map, NodeFileReadHandle& handle);
 	void readMapHeaderAttributes(BinaryNode* mapHeaderNode, Map& map);
-	void readTileArea(BinaryNode* mapNode, Map& map);
+	bool readTileArea(BinaryNode* mapNode, Map& map);
 	void readTowns(BinaryNode* mapNode, Map& map);
 	void readWaypoints(BinaryNode* mapNode, Map& map);
-	void writeTiles(Map& map, NodeFileWriteHandle& f);
+	bool writeTiles(Map& map, NodeFileWriteHandle& f);
 	void writeTowns(Map& map, NodeFileWriteHandle& f);
 	void writeWaypoints(Map& map, NodeFileWriteHandle& f, bool& waypointsWarning);
-	bool loadSpawns(Map& map, const FileName& dir);
+	SpawnLoadStatus loadSpawns(Map& map, const FileName& dir);
 	bool loadHouses(Map& map, const FileName& dir);
 	bool loadHouses(Map& map, pugi::xml_document& doc);
 	bool loadWaypoints(Map& map, const FileName& dir);
@@ -167,7 +191,11 @@ protected:
 	bool saveZones(Map& map, const FileName& dir);
 
 private:
+	bool checkMemoryBudget(const char* phase, uint64_t pendingBytes = 0);
 	static bool prependXmlDeclaration(pugi::xml_document& doc);
+	uint32_t headerItemMajorVersion = 0;
+	uint32_t headerItemMinorVersion = 0;
+	OTBMMemoryBudgetCheck memoryBudgetCheck;
 };
 
 #endif

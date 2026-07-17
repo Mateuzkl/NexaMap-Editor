@@ -20,6 +20,8 @@
 
 #include "client_version.h"
 
+#include <cstdint>
+
 enum ImportType {
 	IMPORT_DONT,
 	IMPORT_MERGE,
@@ -28,6 +30,14 @@ enum ImportType {
 };
 
 class Map;
+
+class ItemIdCodec {
+public:
+	virtual ~ItemIdCodec() = default;
+
+	virtual bool Decode(uint16_t storedId, uint16_t& serverId) const = 0;
+	virtual bool Encode(uint16_t serverId, uint16_t& storedId) const = 0;
+};
 
 class IOMap {
 protected:
@@ -53,8 +63,29 @@ public:
 		return errorstr;
 	}
 
+	void setItemIdCodec(const ItemIdCodec* codec) {
+		itemIdCodec = codec;
+	}
+	bool decodeStoredItemId(uint16_t storedId, uint16_t& serverId) const {
+		if (!itemIdCodec) {
+			serverId = storedId;
+			return true;
+		}
+		return itemIdCodec->Decode(storedId, serverId);
+	}
+	bool encodeStoredItemId(uint16_t serverId, uint16_t& storedId) const {
+		if (!itemIdCodec) {
+			storedId = serverId;
+			return true;
+		}
+		return itemIdCodec->Encode(serverId, storedId);
+	}
+
 	virtual bool loadMap(Map& map, const FileName& identifier) = 0;
 	virtual bool saveMap(Map& map, const FileName& identifier) = 0;
+
+private:
+	const ItemIdCodec* itemIdCodec = nullptr;
 };
 
 #endif

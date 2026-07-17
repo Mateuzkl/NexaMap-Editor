@@ -348,6 +348,8 @@ void Settings::IO(IOMode mode) {
 	String(PALETTE_RAW_STYLE, "listbox");
 	Int(THEME, 0);
 	Int(ACTIVE_THEME, -1);
+	String(SPAWN_CONVERTER_DIRECTORY, "");
+	Int(MAP_ITEM_ID_CONVERTER_MEMORY_LIMIT_GIB, 8);
 
 	section("Window");
 	String(PALETTE_LAYOUT, "name=02c30f6048629894000011bc00000002;caption=Palette;state=2099148;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=245;besth=100;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=-1;floath=-1");

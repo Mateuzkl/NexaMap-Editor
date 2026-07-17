@@ -127,10 +127,10 @@ public:
 
 	Item* deepCopy() const override;
 
-	uint8_t getDepotID() const {
+	uint16_t getDepotID() const {
 		return depotId;
 	}
-	void setDepotID(uint8_t id) {
+	void setDepotID(uint16_t id) {
 		depotId = id;
 	}
 
@@ -140,7 +140,7 @@ public:
 	// virtual bool readItemAttribute_OTMM(const IOMap& maphandle, OTMM_ItemAttribute attr, BinaryNode* node);
 
 protected:
-	uint8_t depotId;
+	uint16_t depotId;
 };
 
 class Podium : public Item {

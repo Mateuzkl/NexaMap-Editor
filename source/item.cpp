@@ -88,8 +88,20 @@ void Item::operator delete(void* ptr, const char*, int) noexcept {
 Item::Item(unsigned short _type, unsigned short _count) :
 	id(_type),
 	subtype(1),
+	subtypeKinds(SUBTYPE_NONE),
+	subtypeAttributes(SUBTYPE_ATTR_NONE),
 	selected(false),
 	frame(0) {
+	const ItemType& itemType = g_items[id];
+	if (itemType.stackable) {
+		addSubtypeKind(SUBTYPE_STACK_COUNT);
+	}
+	if (itemType.isFluidContainer() || itemType.isSplash()) {
+		addSubtypeKind(SUBTYPE_FLUID);
+	}
+	if (itemType.charges != 0 || itemType.isClientCharged() || itemType.isExtraCharged()) {
+		addSubtypeKind(SUBTYPE_CHARGES);
+	}
 	if (hasSubtype()) {
 		subtype = _count;
 	}
@@ -102,12 +114,19 @@ Item::~Item() {
 Item* Item::deepCopy() const {
 	Item* copy = Create(id, subtype);
 	if (copy) {
-		copy->selected = selected;
-		if (attributes) {
-			copy->attributes = newd ItemAttributeMap(*attributes);
-		}
+		copyBaseStateTo(*copy);
 	}
 	return copy;
+}
+
+void Item::copyBaseStateTo(Item& copy) const {
+	copy.subtype = subtype;
+	copy.subtypeKinds = subtypeKinds;
+	copy.subtypeAttributes = subtypeAttributes;
+	copy.selected = selected;
+	if (attributes) {
+		copy.attributes = newd ItemAttributeMap(*attributes);
+	}
 }
 
 Item* transformItem(Item* old_item, uint16_t new_id, Tile* parent) {
@@ -180,6 +199,9 @@ void Item::setSubtype(uint16_t n) {
 }
 
 bool Item::hasSubtype() const {
+	if (subtypeKinds != SUBTYPE_NONE || subtypeAttributes != SUBTYPE_ATTR_NONE) {
+		return true;
+	}
 	const ItemType& it = g_items[id];
 	return (it.isFluidContainer() || it.isSplash() || isCharged() || it.stackable || it.charges != 0);
 }

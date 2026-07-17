@@ -12,6 +12,7 @@
 
 #include <wx/button.h>
 #include <wx/choice.h>
+#include <wx/choicdlg.h>
 #include <wx/filedlg.h>
 #include <wx/filefn.h>
 #include <wx/filename.h>
@@ -37,6 +38,22 @@ namespace {
 	BorderWorkspaceWindow*& WindowInstance() {
 		static BorderWorkspaceWindow* instance = nullptr;
 		return instance;
+	}
+
+	wxString CurrentMaterialsPath() {
+		if (!g_gui.IsVersionLoaded()) {
+			return wxString();
+		}
+		FileName path = g_gui.GetCurrentVersion().getDataPath();
+		path.SetFullName("materials.xml");
+		path.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE);
+		return path.GetFullPath();
+	}
+
+	wxString NormalizePath(const wxString& path) {
+		wxFileName filename(path);
+		filename.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE);
+		return filename.GetFullPath();
 	}
 
 	constexpr std::array<const char*, 12> kEdges = {
@@ -99,6 +116,52 @@ void BorderWorkspaceWindow::Open(wxWindow* parent) {
 	}
 	WindowInstance() = newd BorderWorkspaceWindow(parent);
 	WindowInstance()->Show();
+}
+
+void BorderWorkspaceWindow::OpenForItems(wxWindow* parent, const std::vector<ItemCount>& items) {
+	if (!g_gui.IsVersionLoaded()) {
+		wxMessageBox("Load a client version before opening Border Workspace.", "Border Workspace", wxOK | wxICON_INFORMATION, parent);
+		return;
+	}
+	if (!IsAvailableForCurrentClient()) {
+		wxMessageBox(
+			wxString::Format("The current client's materials.xml was not found:\n%s", CurrentMaterialsPath()),
+			"Border Workspace", wxOK | wxICON_ERROR, parent
+		);
+		return;
+	}
+
+	bool created = false;
+	if (!WindowInstance()) {
+		WindowInstance() = newd BorderWorkspaceWindow(parent);
+		created = true;
+	}
+	BorderWorkspaceWindow* window = WindowInstance();
+	if (!window->EnsureCurrentClientCatalog()) {
+		if (created) {
+			WindowInstance() = nullptr;
+			window->Destroy();
+		} else {
+			window->Raise();
+			window->SetFocus();
+		}
+		return;
+	}
+
+	window->Show();
+	if (!window->OpenItems(items) && created) {
+		WindowInstance() = nullptr;
+		window->Destroy();
+		return;
+	}
+	window->Show();
+	window->Raise();
+	window->SetFocus();
+}
+
+bool BorderWorkspaceWindow::IsAvailableForCurrentClient() {
+	const wxString path = CurrentMaterialsPath();
+	return !path.IsEmpty() && wxFileExists(path);
 }
 
 BorderWorkspaceWindow::BorderWorkspaceWindow(wxWindow* parent) :
@@ -242,7 +305,7 @@ void BorderWorkspaceWindow::BuildLayout() {
 				}
 			}
 			if (slot >= 0) {
-				previewButtons_[slot] = newd DCButton(previewBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_32x32, 0);
+				previewButtons_[slot] = newd DCButton(previewBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, DC_BTN_TOGGLE, RENDER_SIZE_32x32, 0);
 				previewGrid->Add(previewButtons_[slot], 0, wxALIGN_CENTER);
 			} else {
 				previewGrid->Add(newd wxPanel(previewBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, wxSize(FromDIP(36), FromDIP(36))), 0, wxEXPAND);
@@ -300,6 +363,7 @@ void BorderWorkspaceWindow::BindEvents() {
 	});
 	for (int i = 0; i < 12; ++i) {
 		slotButtons_[i]->Bind(wxEVT_TOGGLEBUTTON, [this, i](wxCommandEvent&) { SelectSlot(i); });
+		previewButtons_[i]->Bind(wxEVT_TOGGLEBUTTON, [this, i](wxCommandEvent&) { SelectSlot(i); });
 	}
 	idCtrl_->Bind(wxEVT_SPINCTRL, [this](wxCommandEvent&) { MarkDirty(); });
 	idCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { MarkDirty(); });
@@ -315,11 +379,7 @@ void BorderWorkspaceWindow::LoadDefaultMaterialsFile() {
 		sourceLabel_->SetLabel("Load a client version, then open Border Workspace again; or choose a materials.xml manually.");
 		return;
 	}
-	FileName path = g_gui.GetCurrentVersion().getDataPath();
-	path.SetFullName("materials.xml");
-	if (!LoadCatalog(path.GetFullPath())) {
-		OpenMaterialsFile();
-	}
+	LoadCatalog(CurrentMaterialsPath());
 }
 
 void BorderWorkspaceWindow::OpenMaterialsFile() {
@@ -342,9 +402,11 @@ bool BorderWorkspaceWindow::LoadCatalog(const wxString& path) {
 		wxMessageBox(error, "Border Workspace", wxOK | wxICON_ERROR, this);
 		return false;
 	}
-	rootMaterialsPath_ = path;
+	rootMaterialsPath_ = NormalizePath(path);
 	currentRecord_ = -1;
+	hasOriginalRecord_ = false;
 	dirty_ = false;
+	RebuildItemIndex();
 	fileLabel_->SetLabel(wxString::Format("%s  |  %zu border sets in %zu files", path, records_.size(), visited.size()));
 	fileLabel_->SetToolTip(path);
 	PopulateBorderList();
@@ -354,6 +416,151 @@ bool BorderWorkspaceWindow::LoadCatalog(const wxString& path) {
 		RefreshWorkspace();
 	}
 	return true;
+}
+
+bool BorderWorkspaceWindow::EnsureCurrentClientCatalog() {
+	const wxString currentPath = CurrentMaterialsPath();
+	if (currentPath.IsEmpty()) {
+		return false;
+	}
+	if (!rootMaterialsPath_.IsEmpty() && NormalizePath(rootMaterialsPath_).CmpNoCase(NormalizePath(currentPath)) == 0) {
+		return true;
+	}
+	if (!ResolvePendingChanges("open the current client's border catalog")) {
+		return false;
+	}
+	return LoadCatalog(currentPath);
+}
+
+bool BorderWorkspaceWindow::OpenItems(const std::vector<ItemCount>& items) {
+	struct Choice {
+		int recordIndex = -1;
+		int slot = -1;
+		size_t count = 0;
+	};
+
+	size_t totalItems = 0;
+	for (const ItemCount& item : items) {
+		totalItems += item.count;
+	}
+
+	std::vector<Choice> choices;
+	if (totalItems == 1 && items.size() == 1) {
+		const auto found = itemIndex_.find(items.front().itemId);
+		if (found != itemIndex_.end()) {
+			for (const ItemLocation& location : found->second) {
+				choices.push_back({ location.recordIndex, location.slot, 1 });
+			}
+		}
+	} else {
+		std::map<int, size_t> recordCounts;
+		std::map<std::pair<int, int>, size_t> slotCounts;
+		for (const ItemCount& item : items) {
+			const auto found = itemIndex_.find(item.itemId);
+			if (found == itemIndex_.end()) {
+				continue;
+			}
+			std::set<int> matchedRecords;
+			for (const ItemLocation& location : found->second) {
+				matchedRecords.insert(location.recordIndex);
+				slotCounts[{ location.recordIndex, location.slot }] += item.count;
+			}
+			for (int recordIndex : matchedRecords) {
+				recordCounts[recordIndex] += item.count;
+			}
+		}
+		for (const auto& [recordIndex, count] : recordCounts) {
+			int bestSlot = 0;
+			size_t bestSlotCount = 0;
+			for (int slot = 0; slot < 12; ++slot) {
+				const size_t slotCount = slotCounts[{ recordIndex, slot }];
+				if (slotCount > bestSlotCount) {
+					bestSlot = slot;
+					bestSlotCount = slotCount;
+				}
+			}
+			choices.push_back({ recordIndex, bestSlot, count });
+		}
+	}
+
+	if (choices.empty()) {
+		wxString message;
+		if (totalItems == 1 && items.size() == 1) {
+			message = wxString::Format("Item ID %d was not found in any loaded border set.", items.front().itemId);
+		} else {
+			message = "None of the selected item IDs were found in the loaded border sets.";
+		}
+		message << "\n\nYou can open Border Workspace for a manual search.";
+		wxMessageDialog dialog(this, message, "Border item not found", wxYES_NO | wxICON_INFORMATION);
+		dialog.SetYesNoLabels("Open Border Workspace", "Cancel");
+		return dialog.ShowModal() == wxID_YES;
+	}
+
+	std::sort(choices.begin(), choices.end(), [this](const Choice& left, const Choice& right) {
+		if (left.count != right.count) {
+			return left.count > right.count;
+		}
+		const BorderRecord& leftRecord = records_[left.recordIndex];
+		const BorderRecord& rightRecord = records_[right.recordIndex];
+		if (leftRecord.id != rightRecord.id) {
+			return leftRecord.id < rightRecord.id;
+		}
+		return left.slot < right.slot;
+	});
+
+	Choice selected = choices.front();
+	if (choices.size() > 1) {
+		wxArrayString labels;
+		for (const Choice& choice : choices) {
+			const BorderRecord& record = records_[choice.recordIndex];
+			wxString label = wxString::Format("Border %d", record.id);
+			if (!record.description.IsEmpty()) {
+				label << " - " << record.description;
+			}
+			label << wxString::Format(" | %s | %s | %llu match%s", EdgeLabel(choice.slot), record.sourceName,
+				static_cast<unsigned long long>(choice.count), choice.count == 1 ? "" : "es");
+			labels.Add(label);
+		}
+		const wxString prompt = totalItems == 1
+			? wxString::Format("Item ID %d is used by multiple border slots. Select which border to edit.", items.front().itemId)
+			: wxString("The selection matches multiple border sets. The strongest match is listed first.");
+		wxSingleChoiceDialog dialog(this, prompt, "Select Border Set", labels);
+		dialog.SetSelection(0);
+		if (dialog.ShowModal() != wxID_OK) {
+			return false;
+		}
+		selected = choices[dialog.GetSelection()];
+	}
+	return FocusBorder(selected.recordIndex, selected.slot);
+}
+
+bool BorderWorkspaceWindow::FocusBorder(int recordIndex, int slot) {
+	if (recordIndex < 0 || recordIndex >= static_cast<int>(records_.size()) || slot < 0 || slot >= 12) {
+		return false;
+	}
+	if (recordIndex != currentRecord_ && !ResolvePendingChanges(wxString::Format("open Border %d", records_[recordIndex].id))) {
+		return false;
+	}
+	filterCtrl_->ChangeValue(wxEmptyString);
+	if (recordIndex != currentRecord_) {
+		LoadSelection(recordIndex);
+	} else {
+		PopulateBorderList();
+	}
+	SelectSlot(slot);
+	return true;
+}
+
+void BorderWorkspaceWindow::RebuildItemIndex() {
+	itemIndex_.clear();
+	for (int recordIndex = 0; recordIndex < static_cast<int>(records_.size()); ++recordIndex) {
+		for (int slot = 0; slot < 12; ++slot) {
+			const int itemId = records_[recordIndex].items[slot];
+			if (itemId > 0) {
+				itemIndex_[itemId].push_back({ recordIndex, slot });
+			}
+		}
+	}
 }
 
 bool BorderWorkspaceWindow::ScanMaterialsFile(const wxString& path, std::set<wxString>& visited, wxString& error) {
@@ -442,10 +649,17 @@ bool BorderWorkspaceWindow::ResolvePendingChanges(const wxString& action) {
 	if (!dirty_) {
 		return true;
 	}
-	const int answer = wxMessageBox(
+	wxMessageDialog dialog(
+		this,
 		wxString::Format("Save changes to %s before you %s?", headingLabel_->GetLabel(), action),
-		"Unsaved border changes", wxYES_NO | wxCANCEL | wxICON_WARNING, this
+		"Unsaved border changes", wxYES_NO | wxCANCEL | wxICON_WARNING
 	);
+	if (action.StartsWith("open Border")) {
+		dialog.SetYesNoCancelLabels("Save and Open", "Discard and Open", "Cancel");
+	} else {
+		dialog.SetYesNoCancelLabels("Save", "Discard", "Cancel");
+	}
+	const int answer = dialog.ShowModal();
 	if (answer == wxCANCEL) {
 		return false;
 	}
@@ -453,6 +667,11 @@ bool BorderWorkspaceWindow::ResolvePendingChanges(const wxString& action) {
 		return SaveCurrentBorder();
 	}
 	dirty_ = false;
+	if (hasOriginalRecord_ && currentRecord_ >= 0 && currentRecord_ < static_cast<int>(records_.size())) {
+		records_[currentRecord_] = originalRecord_;
+		RebuildItemIndex();
+		LoadSelection(currentRecord_);
+	}
 	return true;
 }
 
@@ -462,6 +681,8 @@ void BorderWorkspaceWindow::LoadSelection(int recordIndex) {
 	}
 	currentRecord_ = recordIndex;
 	dirty_ = false;
+	originalRecord_ = records_[currentRecord_];
+	hasOriginalRecord_ = true;
 	loading_ = true;
 	const BorderRecord& record = records_[currentRecord_];
 	idCtrl_->SetValue(record.id);
@@ -480,9 +701,14 @@ void BorderWorkspaceWindow::RefreshWorkspace() {
 		sourceLabel_->SetLabel("No border sets found in this materials catalog.");
 		for (int i = 0; i < 12; ++i) {
 			slotButtons_[i]->SetSprite(0);
+			slotButtons_[i]->SetValue(false);
 			previewButtons_[i]->SetSprite(0);
+			previewButtons_[i]->SetValue(false);
 			slotLabels_[i]->SetLabel("empty");
 		}
+		selectedEdgeLabel_->SetLabel("Edge: -");
+		selectedItemCtrl_->SetValue(0);
+		selectedItemPreview_->SetSprite(0);
 		RefreshButtons();
 		return;
 	}
@@ -526,6 +752,7 @@ void BorderWorkspaceWindow::SelectSlot(int slot) {
 	selectedSlot_ = slot;
 	for (int i = 0; i < 12; ++i) {
 		slotButtons_[i]->SetValue(i == slot);
+		previewButtons_[i]->SetValue(i == slot);
 	}
 	selectedEdgeLabel_->SetLabel(wxString::Format("Edge: %s (%s)", EdgeLabel(slot), EdgeName(slot)));
 	const int itemId = records_[currentRecord_].items[slot];
@@ -551,6 +778,7 @@ void BorderWorkspaceWindow::ApplySelectedItem() {
 		return;
 	}
 	records_[currentRecord_].items[selectedSlot_] = itemId;
+	RebuildItemIndex();
 	MarkDirty();
 }
 
@@ -637,7 +865,10 @@ bool BorderWorkspaceWindow::SaveCurrentBorder() {
 	record.id = newId;
 	record.group = group;
 	record.optional = optional;
+	originalRecord_ = record;
+	hasOriginalRecord_ = true;
 	dirty_ = false;
+	RebuildItemIndex();
 	RefreshWorkspace();
 	PopulateBorderList();
 	SetStatusText(wxString::Format("Saved Border %d. Backup: %s. Reload data files to apply it to the current session.", newId, backupPath));

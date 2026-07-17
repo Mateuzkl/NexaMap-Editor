@@ -44,6 +44,7 @@
 			<item name="Import Minimap..." action="IMPORT_MINIMAP" help="Import map data from a .bmp file."/>
 			-->
 		</menu>
+		<item name="Convert OTBM Item IDs..." action="MAP_ITEM_ID_CONVERTER" help="Convert all item IDs with the embedded native Server ID / Client ID mapping."/>
 		<menu name="Export">
 			<item name="Export Minimap..." action="EXPORT_MINIMAP" help="Export minimap to an image file."/>
 			<item name="Export Tilesets..." action="EXPORT_TILESETS" help="Export tilesets to an xml file."/>
@@ -56,6 +57,9 @@
 		<menu name="Recent Files" special="RECENT_FILES"/>
 		<item name="Preferences" action="PREFERENCES" help="Configure the map editor."/>
 		<item name="Exit" action="EXIT" help="Close the editor."/>
+	</menu>
+	<menu name="Tools">
+		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
 	</menu>
 	<menu name="Edit">
 		<item name="Undo" hotkey="Ctrl+Z" action="UNDO" help="Undo last action."/>

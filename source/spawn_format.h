@@ -27,6 +27,18 @@ enum class SpawnAlternativeKind {
 	TfsChance,
 };
 
+inline constexpr bool MergeSpawnAlternativeKinds(SpawnAlternativeKind current, SpawnAlternativeKind incoming, SpawnAlternativeKind& merged) noexcept {
+	if (current == SpawnAlternativeKind::None) {
+		merged = incoming;
+		return true;
+	}
+	if (incoming == SpawnAlternativeKind::None || current == incoming) {
+		merged = current;
+		return true;
+	}
+	return false;
+}
+
 using SpawnAttributeMap = std::map<std::string, std::string>;
 
 struct SpawnVariantData {
@@ -65,8 +77,6 @@ struct SpawnAreaData {
 
 struct SpawnDocument {
 	SpawnFormat format = SpawnFormat::Unknown;
-	std::filesystem::path primaryFile;
-	std::filesystem::path npcFile;
 	std::vector<SpawnAreaData> areas;
 	std::vector<std::string> warnings;
 
@@ -79,6 +89,10 @@ struct SpawnDetectionResult {
 	SpawnFormat format = SpawnFormat::Unknown;
 	std::filesystem::path primaryFile;
 	std::filesystem::path npcFile;
+	SpawnFormat alternateFormat = SpawnFormat::Unknown;
+	std::filesystem::path alternatePrimaryFile;
+	std::filesystem::path alternateNpcFile;
+	bool conflict = false;
 	std::string error;
 };
 
@@ -87,6 +101,11 @@ struct SpawnWriteResult {
 	std::vector<std::filesystem::path> files;
 	std::vector<std::string> warnings;
 	std::string error;
+};
+
+struct SpawnLoadDefaults {
+	int spawnTime = 60;
+	uint32_t monsterWeight = 1;
 };
 
 class SpawnFormatIO {
@@ -98,9 +117,9 @@ public:
 		const std::string& embeddedNpcFile,
 		const std::string& mapName
 	);
-	static bool Load(const SpawnDetectionResult& detection, SpawnDocument& document, std::string& error);
-	static bool LoadTfs(const std::filesystem::path& file, SpawnDocument& document, std::string& error);
-	static bool LoadCanaryCrystal(const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile, SpawnDocument& document, std::string& error);
+	static bool Load(const SpawnDetectionResult& detection, SpawnDocument& document, std::string& error, const SpawnLoadDefaults& defaults = {});
+	static bool LoadTfs(const std::filesystem::path& file, SpawnDocument& document, std::string& error, const SpawnLoadDefaults& defaults = {});
+	static bool LoadCanaryCrystal(const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile, SpawnDocument& document, std::string& error, const SpawnLoadDefaults& defaults = {});
 	static SpawnWriteResult SaveTfs(const SpawnDocument& document, const std::filesystem::path& file);
 	static SpawnWriteResult SaveCanaryCrystal(const SpawnDocument& document, const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile);
 	static bool SemanticallyEqual(const SpawnDocument& lhs, const SpawnDocument& rhs, bool compareWeights, std::string& difference);

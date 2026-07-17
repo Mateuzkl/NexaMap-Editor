@@ -32,12 +32,12 @@ Container::~Container() {
 }
 
 Item* Container::deepCopy() const {
-	Item* copy = Item::deepCopy();
-	auto* copyContainer = dynamic_cast<Container*>(copy);
-	if (copyContainer) {
-		for (Item const* item : contents) {
-			copyContainer->contents.push_back(item->deepCopy());
-		}
+	// Preserve nested items even if the converted ID is not classified as a
+	// container by the currently loaded item database.
+	auto* copy = newd Container(id);
+	copyBaseStateTo(*copy);
+	for (Item const* item : contents) {
+		copy->contents.push_back(item->deepCopy());
 	}
 	return copy;
 }
@@ -61,7 +61,10 @@ Teleport::Teleport(const uint16_t type) :
 }
 
 Item* Teleport::deepCopy() const {
-	auto* copy = static_cast<Teleport*>(Item::deepCopy());
+	// A converted ID may no longer be classified as a teleport by the active
+	// items.otb. Preserve the dynamic type and its OTBM-only data regardless.
+	auto* copy = newd Teleport(id);
+	copyBaseStateTo(*copy);
 	copy->destination = destination;
 	return copy;
 }
@@ -74,7 +77,9 @@ Door::Door(const uint16_t type) :
 }
 
 Item* Door::deepCopy() const {
-	Door* copy = static_cast<Door*>(Item::deepCopy());
+	// Do not let an ID/type-table change slice a house door into a plain Item.
+	auto* copy = newd Door(id);
+	copyBaseStateTo(*copy);
 	copy->doorId = doorId;
 	return copy;
 }
@@ -87,11 +92,11 @@ Depot::Depot(const uint16_t type) :
 }
 
 Item* Depot::deepCopy() const {
-	Item* copy = Item::deepCopy();
-	auto* copy_depot = dynamic_cast<Depot*>(copy);
-	if (copy_depot) {
-		copy_depot->depotId = depotId;
-	}
+	// A converted ID may not be classified as a depot by the active item
+	// metadata. Preserve the dynamic type and Town association explicitly.
+	auto* copy = newd Depot(id);
+	copyBaseStateTo(*copy);
+	copy->depotId = depotId;
 	return copy;
 }
 
@@ -103,7 +108,9 @@ Podium::Podium(const uint16_t type) :
 }
 
 Item* Podium::deepCopy() const {
-	auto* copy = static_cast<Podium*>(Item::deepCopy());
+	// Keep podium-only state even if the converted ID is classified differently.
+	auto* copy = newd Podium(id);
+	copyBaseStateTo(*copy);
 	copy->outfit = outfit;
 	copy->showOutfit = showOutfit;
 	copy->showMount = showMount;

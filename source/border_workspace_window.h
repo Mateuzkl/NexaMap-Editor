@@ -6,6 +6,7 @@
 #define RME_BORDER_WORKSPACE_WINDOW_H_
 
 #include <array>
+#include <map>
 #include <set>
 #include <vector>
 
@@ -22,7 +23,14 @@ class wxStaticText;
 
 class BorderWorkspaceWindow final : public wxFrame {
 public:
+	struct ItemCount {
+		int itemId = 0;
+		size_t count = 0;
+	};
+
 	static void Open(wxWindow* parent);
+	static void OpenForItems(wxWindow* parent, const std::vector<ItemCount>& items);
+	static bool IsAvailableForCurrentClient();
 
 private:
 	struct BorderRecord {
@@ -35,6 +43,10 @@ private:
 		bool optional = false;
 		std::array<int, 12> items {};
 	};
+	struct ItemLocation {
+		int recordIndex = -1;
+		int slot = -1;
+	};
 
 	explicit BorderWorkspaceWindow(wxWindow* parent);
 	~BorderWorkspaceWindow() override;
@@ -45,6 +57,10 @@ private:
 	void LoadDefaultMaterialsFile();
 	bool LoadCatalog(const wxString& path);
 	bool ScanMaterialsFile(const wxString& path, std::set<wxString>& visited, wxString& error);
+	bool EnsureCurrentClientCatalog();
+	bool OpenItems(const std::vector<ItemCount>& items);
+	bool FocusBorder(int recordIndex, int slot);
+	void RebuildItemIndex();
 	void PopulateBorderList();
 	bool ResolvePendingChanges(const wxString& action);
 	void LoadSelection(int recordIndex);
@@ -68,9 +84,12 @@ private:
 
 	wxString rootMaterialsPath_;
 	std::vector<BorderRecord> records_;
+	std::map<int, std::vector<ItemLocation>> itemIndex_;
 	std::vector<int> visibleRecords_;
+	BorderRecord originalRecord_;
 	int currentRecord_ = -1;
 	int selectedSlot_ = 0;
+	bool hasOriginalRecord_ = false;
 	bool dirty_ = false;
 	bool loading_ = false;
 
