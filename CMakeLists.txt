@@ -29,10 +29,14 @@ find_package(ZLIB REQUIRED)
 
 include(${wxWidgets_USE_FILE})
 include(source/CMakeLists.txt)
+if(WIN32)
+	list(APPEND rme_SRC "${CMAKE_CURRENT_SOURCE_DIR}/vcproj/Project/Editor.rc")
+endif()
 add_executable(${PROJECT_NAME} ${rme_H} ${rme_SRC})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED ON)
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "NexaMap Editor")
 if(ENABLE_UNITY_BUILD)
 	if(CMAKE_VERSION VERSION_LESS 3.16)
 		message(WARNING "ENABLE_UNITY_BUILD requires CMake 3.16 or newer; continuing without unity build")
@@ -59,6 +63,10 @@ target_link_libraries(${PROJECT_NAME}
 	fmt::fmt
 	nlohmann_json::nlohmann_json
 )
+
+file(GLOB WELCOME_ASSETS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/images/welcome/*.png")
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+install(FILES ${WELCOME_ASSETS} DESTINATION data/images/welcome)
 
 if(BUILD_TESTING)
 	add_executable(item_id_mapping_tests

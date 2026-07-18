@@ -10,20 +10,20 @@ namespace {
 	};
 
 	const std::array<RoleColours, static_cast<size_t>(Theme::Role::Count)> ROLE_COLOURS = { {
-		{ wxColour(32, 34, 39), wxColour(245, 246, 248) },
-		{ wxColour(24, 26, 30), wxColour(255, 255, 255) },
-		{ wxColour(43, 46, 53), wxColour(237, 239, 243) },
-		{ wxColour(232, 234, 238), wxColour(28, 31, 36) },
-		{ wxColour(164, 169, 179), wxColour(94, 100, 110) },
+		{ wxColour(11, 24, 32), wxColour(255, 255, 255) },
+		{ wxColour(7, 18, 23), wxColour(244, 247, 248) },
+		{ wxColour(16, 31, 39), wxColour(234, 241, 243) },
+		{ wxColour(242, 246, 248), wxColour(23, 33, 38) },
+		{ wxColour(145, 164, 174), wxColour(96, 113, 122) },
 		{ wxColour(255, 255, 255), wxColour(255, 255, 255) },
-		{ wxColour(70, 74, 84), wxColour(194, 198, 206) },
-		{ wxColour(45, 112, 190), wxColour(38, 103, 180) },
-		{ wxColour(61, 132, 216), wxColour(26, 86, 157) },
-		{ wxColour(48, 91, 145), wxColour(47, 109, 185) },
-		{ wxColour(29, 31, 37), wxColour(32, 34, 40) },
-		{ wxColour(174, 179, 188), wxColour(184, 188, 196) },
-		{ wxColour(244, 196, 48), wxColour(247, 199, 46) },
-		{ wxColour(86, 91, 103), wxColour(92, 97, 110) },
+		{ wxColour(23, 51, 62), wxColour(216, 226, 230) },
+		{ wxColour(0, 221, 235), wxColour(0, 175, 196) },
+		{ wxColour(20, 42, 52), wxColour(225, 245, 247) },
+		{ wxColour(18, 56, 68), wxColour(207, 236, 239) },
+		{ wxColour(11, 24, 32), wxColour(23, 33, 38) },
+		{ wxColour(145, 164, 174), wxColour(242, 246, 248) },
+		{ wxColour(0, 221, 235), wxColour(0, 175, 196) },
+		{ wxColour(23, 51, 62), wxColour(96, 113, 122) },
 	} };
 
 	const RoleColours FALLBACK_COLOURS = { wxColour(232, 234, 238), wxColour(28, 31, 36) };

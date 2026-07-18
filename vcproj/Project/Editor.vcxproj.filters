@@ -370,6 +370,9 @@
     <ClInclude Include="..\..\source\welcome_dialog.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\version_info.h">
+      <Filter>common</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\replace_items_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>

@@ -33,10 +33,10 @@ public:
 	static Type GetType();
 	static bool IsDark();
 	static wxColour Get(Role role);
+	static wxColour GetDark(Role role);
 
 private:
 	static Type currentType;
-	static wxColour GetDark(Role role);
 	static wxColour GetLight(Role role);
 };
 

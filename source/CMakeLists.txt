@@ -110,6 +110,7 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/version_info.h
 ${CMAKE_CURRENT_LIST_DIR}/zones.h
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_zones.h

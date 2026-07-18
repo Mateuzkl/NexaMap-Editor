@@ -18,14 +18,16 @@
 #ifndef RME_DEFINITIONS_H_
 #define RME_DEFINITIONS_H_
 
-#define __W_RME_APPLICATION_NAME__ wxString("OTAcademy Map Editor")
-#define __RME_APPLICATION_NAME__ std::string("OTAcademy Map Editor")
+#include "version_info.h"
+
+#define __W_RME_APPLICATION_NAME__ wxString(NEXAMAP_APPLICATION_NAME)
+#define __RME_APPLICATION_NAME__ std::string(NEXAMAP_APPLICATION_NAME)
 
 // Version info
 // xxyyzzt (major, minor, subversion)
-#define __RME_VERSION_MAJOR__ 5
-#define __RME_VERSION_MINOR__ 0
-#define __RME_SUBVERSION__ 0
+#define __RME_VERSION_MAJOR__ NEXAMAP_VERSION_MAJOR
+#define __RME_VERSION_MINOR__ NEXAMAP_VERSION_MINOR
+#define __RME_SUBVERSION__ NEXAMAP_VERSION_PATCH
 
 #define MAKE_VERSION_ID(major, minor, subversion) \
 	((major) * 10000000 + (minor) * 100000 + (subversion) * 1000)

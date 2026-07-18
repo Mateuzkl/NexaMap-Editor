@@ -1,118 +1,210 @@
 //////////////////////////////////////////////////////////////////////
 // This file is part of Remere's Map Editor
 //////////////////////////////////////////////////////////////////////
-// Remere's Map Editor is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// Remere's Map Editor is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program. If not, see <http://www.gnu.org/licenses/>.
-//////////////////////////////////////////////////////////////////////
 
 #ifndef WELCOME_DIALOG_H
 #define WELCOME_DIALOG_H
 
+#include <wx/scrolwin.h>
 #include <wx/wx.h>
+
+#include <vector>
 
 wxDECLARE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 
 constexpr wxWindowID WELCOME_DIALOG_MAP_CONVERTER = wxID_HIGHEST + 7000;
 constexpr wxWindowID WELCOME_DIALOG_SPAWN_CONVERTER = wxID_HIGHEST + 7001;
 
-class WelcomeDialogPanel;
+class WelcomeBrandPanel;
+class WelcomeFeatureItem;
+class WelcomeFeaturesPanel;
+class WelcomeNavigationItem;
+class WelcomeThemeChoice;
 class RecentItem;
+class RecentMapsPanel;
+
+class WelcomeDialogPanel;
 
 class WelcomeDialog : public wxDialog {
 public:
-	WelcomeDialog(const wxString& titleText, const wxString& versionText, const wxSize& size, const wxBitmap& rmeLogo, const std::vector<wxString>& recentFiles);
-	void OnButtonClicked(const wxMouseEvent& event);
-	void OnCheckboxClicked(const wxCommandEvent& event);
-	void OnRecentItemClicked(const wxMouseEvent& event);
+	WelcomeDialog(const wxString& titleText, const wxString& versionText, const wxSize& size, const wxBitmap& fallbackLogo, const std::vector<wxString>& recentFiles);
+
+	void OnNavigationActivated(wxCommandEvent& event);
+	void OnCheckboxClicked(wxCommandEvent& event);
+	void OnRecentItemActivated(wxCommandEvent& event);
 
 private:
-	WelcomeDialogPanel* m_welcome_dialog_panel;
+	void ActivateAction(wxWindowID action, const wxString& path = wxString {});
+
+	WelcomeDialogPanel* m_welcome_dialog_panel = nullptr;
 };
 
 class WelcomeDialogPanel : public wxPanel {
 public:
-	WelcomeDialogPanel(WelcomeDialog* parent, const wxString& title_text, const wxString& version_text, const wxColour& base_colour, const wxBitmap& rme_logo, const std::vector<wxString>& recent_files);
-	void OnThemeChanged(const wxCommandEvent& event);
-	void updateInputs();
+	WelcomeDialogPanel(WelcomeDialog* parent, const wxString& titleText, const wxString& versionText, const wxBitmap& fallbackLogo, const std::vector<wxString>& recentFiles);
+
+	void OnThemeChanged(wxCommandEvent& event);
+	void UpdateInputs();
 
 private:
 	void SetThemeSelection(int theme);
 	void UpdateThemeStatus();
+	void AddNavigationItem(wxWindow* parent, wxSizer* sizer, const wxString& iconName, const wxString& title, const wxString& subtitle, const wxString& tooltip, wxWindowID action, bool primary = false);
 
-	wxColour m_text_colour;
-	wxColour m_background_colour;
-	wxCheckBox* m_show_welcome_dialog_checkbox;
-	wxRadioButton* m_system_theme_radio;
-	wxRadioButton* m_dark_theme_radio;
-	wxRadioButton* m_light_theme_radio;
-	wxStaticText* m_theme_status_label;
+	wxCheckBox* m_show_welcome_dialog_checkbox = nullptr;
+	WelcomeThemeChoice* m_system_theme_choice = nullptr;
+	WelcomeThemeChoice* m_dark_theme_choice = nullptr;
+	WelcomeThemeChoice* m_light_theme_choice = nullptr;
+	wxStaticText* m_theme_status_label = nullptr;
 	int m_active_theme = 0;
 	bool m_theme_prompt_open = false;
 };
 
-class WelcomeDialogButton : public wxPanel {
+class WelcomeNavigationItem : public wxControl {
 public:
-	WelcomeDialogButton(wxWindow* parent, const wxPoint& pos, const wxSize& size, const wxColour& base_colour, const wxString& text);
-	void OnPaint(const wxPaintEvent& event);
-	void OnMouseEnter(const wxMouseEvent& event);
-	void OnMouseLeave(const wxMouseEvent& event);
-	wxWindowID GetAction() {
-		return m_action;
-	};
-	void SetAction(wxWindowID action) {
-		m_action = action;
-	};
+	WelcomeNavigationItem(wxWindow* parent, const wxString& iconName, const wxString& title, const wxString& subtitle, const wxString& tooltip, wxWindowID action, bool primary);
 
 private:
-	wxWindowID m_action;
-	wxString m_text;
-	wxColour m_text_colour;
-	wxColour m_background;
-	wxColour m_background_hover;
-	bool m_is_hover;
+#if wxUSE_ACCESSIBILITY && defined(__WXMSW__)
+	wxAccessible* CreateAccessible() override;
+#endif
+	void RebuildBitmaps();
+	void Activate();
+	void OnPaint(wxPaintEvent& event);
+	void OnMouseEnter(wxMouseEvent& event);
+	void OnMouseLeave(wxMouseEvent& event);
+	void OnLeftDown(wxMouseEvent& event);
+	void OnLeftUp(wxMouseEvent& event);
+	void OnCaptureLost(wxMouseCaptureLostEvent& event);
+	void OnKeyDown(wxKeyEvent& event);
+	void OnFocus(wxFocusEvent& event);
+
+	wxWindowID m_action = wxID_NONE;
+	wxString m_icon_name;
+	wxString m_title;
+	wxString m_subtitle;
+	wxBitmap m_normal_bitmap;
+	wxBitmap m_active_bitmap;
+	bool m_primary = false;
+	bool m_hovered = false;
+	bool m_pressed = false;
 };
 
-class RecentMapsPanel : public wxPanel {
+class WelcomeThemeChoice : public wxControl {
 public:
-	RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const wxColour& base_colour, const std::vector<wxString>& recent_files);
+	WelcomeThemeChoice(wxWindow* parent, int theme, const wxString& iconName, const wxString& label);
+
+	void SetSelected(bool selected);
+
+private:
+#if wxUSE_ACCESSIBILITY && defined(__WXMSW__)
+	wxAccessible* CreateAccessible() override;
+#endif
+	void RebuildBitmap();
+	void Activate();
+	void OnPaint(wxPaintEvent& event);
+	void OnLeftDown(wxMouseEvent& event);
+	void OnLeftUp(wxMouseEvent& event);
+	void OnMouseEnter(wxMouseEvent& event);
+	void OnMouseLeave(wxMouseEvent& event);
+	void OnKeyDown(wxKeyEvent& event);
+	void OnFocus(wxFocusEvent& event);
+
+	int m_theme = 0;
+	wxString m_icon_name;
+	wxString m_label;
+	wxBitmap m_bitmap;
+	bool m_selected = false;
+	bool m_hovered = false;
+	bool m_pressed = false;
+};
+
+class WelcomeBrandPanel : public wxPanel {
+public:
+	WelcomeBrandPanel(wxWindow* parent, const wxString& title, const wxString& version, const wxBitmap& fallbackLogo);
+
+private:
+	void RebuildBackground();
+	void OnPaint(wxPaintEvent& event);
+	void OnSize(wxSizeEvent& event);
+
+	wxString m_title;
+	wxString m_version;
+	wxImage m_background_source;
+	wxBitmap m_background_bitmap;
+	wxBitmap m_fallback_logo;
+	wxSize m_cached_size;
+};
+
+class WelcomeFeatureItem : public wxPanel {
+public:
+	WelcomeFeatureItem(wxWindow* parent, const wxString& iconName, const wxString& title, const wxString& description, const wxString& tooltip);
+
+	void SetShowDescription(bool show);
+
+private:
+	void RebuildBitmap();
+	void OnPaint(wxPaintEvent& event);
+
+	wxString m_icon_name;
+	wxString m_title;
+	wxString m_description;
+	wxBitmap m_bitmap;
+	bool m_show_description = true;
+};
+
+class WelcomeFeaturesPanel : public wxPanel {
+public:
+	explicit WelcomeFeaturesPanel(wxWindow* parent);
+
+private:
+	void OnSize(wxSizeEvent& event);
+	void UpdateLayout(const wxSize& size);
+
+	wxGridSizer* m_grid = nullptr;
+	std::vector<WelcomeFeatureItem*> m_items;
+	int m_columns = 4;
+};
+
+class RecentMapsPanel : public wxScrolledWindow {
+public:
+	RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const std::vector<wxString>& recentFiles);
+
 	void SetHoveredItem(RecentItem* item);
 	void ClearHoveredItem(RecentItem* item);
+	void SelectItem(RecentItem* item);
 
 private:
 	void OnMouseLeave(wxMouseEvent& event);
 
 	RecentItem* m_hovered_item = nullptr;
+	RecentItem* m_selected_item = nullptr;
 };
 
-class RecentItem : public wxPanel {
+class RecentItem : public wxControl {
 public:
-	RecentItem(RecentMapsPanel* parent, const wxColour& base_colour, const wxString& item_name);
-	void OnMouseEnter(wxMouseEvent& event);
-	void OnMouseLeave(wxMouseEvent& event);
-	void PropagateItemClicked(wxMouseEvent& event);
+	RecentItem(RecentMapsPanel* parent, const wxString& itemName);
+
 	void SetHovered(bool hovered);
-	const wxString& GetText() {
-		return m_item_text;
-	};
+	void SetSelected(bool selected);
 
 private:
-	wxColour m_text_colour;
-	wxColour m_text_colour_hover;
-	wxColour m_background_colour;
-	wxColour m_background_colour_hover;
-	wxStaticText* m_title;
-	wxStaticText* m_file_path;
+#if wxUSE_ACCESSIBILITY && defined(__WXMSW__)
+	wxAccessible* CreateAccessible() override;
+#endif
+	void Activate();
+	void OnPaint(wxPaintEvent& event);
+	void OnMouseEnter(wxMouseEvent& event);
+	void OnMouseLeave(wxMouseEvent& event);
+	void OnLeftDown(wxMouseEvent& event);
+	void OnLeftUp(wxMouseEvent& event);
+	void OnKeyDown(wxKeyEvent& event);
+	void OnFocus(wxFocusEvent& event);
+
 	wxString m_item_text;
+	bool m_hovered = false;
+	bool m_selected = false;
+	bool m_pressed = false;
 };
 
 #endif // WELCOME_DIALOG_H

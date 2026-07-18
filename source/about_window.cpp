@@ -171,7 +171,7 @@ EVT_MENU(wxID_CANCEL, AboutWindow::OnClickOK)
 END_EVENT_TABLE()
 
 AboutWindow::AboutWindow(wxWindow* parent) :
-	wxDialog(parent, wxID_ANY, "About", wxDefaultPosition, wxSize(300, 320), wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX),
+	wxDialog(parent, wxID_ANY, "About NexaMap Editor", wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX),
 	game_panel(nullptr) {
 	wxString about;
 	std::string compiler;
@@ -186,10 +186,11 @@ AboutWindow::AboutWindow(wxWindow* parent) :
 	compiler = "unknown";
 #endif
 
-	about << "OTAcademy Map Editor\n";
-	about << "(based on Remere's Map Editor)\n\n";
-	about << "This program is a map editor for game servers\nthat derivied from OpenTibia project.\n\n";
-	about << "Brought to you by OTAcademy\n\n";
+	about << __W_RME_APPLICATION_NAME__ << "\n";
+	about << "Create. Convert. Build Worlds.\n";
+	about << "Next-generation OTBM mapping tools\n\n";
+	about << "Based on Remere's Map Editor.\n";
+	about << "A map editor for game servers derived from OpenTibia.\n\n";
 
 	about << "Version " << __W_RME_VERSION__ << " for ";
 	about <<
@@ -231,6 +232,11 @@ AboutWindow::AboutWindow(wxWindow* parent) :
 	SetAcceleratorTable(accel);
 
 	SetSizerAndFit(topsizer);
+	const wxSize baselineSize = FROM_DIP(this, wxSize(340, 340));
+	wxSize dialogSize = GetSize();
+	dialogSize.IncTo(baselineSize);
+	SetMinSize(dialogSize);
+	SetSize(dialogSize);
 	Centre(wxBOTH);
 }
 

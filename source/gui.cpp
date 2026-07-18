@@ -1114,7 +1114,7 @@ void GUI::DestroyLoadBar() {
 
 void GUI::ShowWelcomeDialog(const wxBitmap& icon) {
 	std::vector<wxString> recent_files = root->GetRecentFiles();
-	welcomeDialog = newd WelcomeDialog(__W_RME_APPLICATION_NAME__, "Version " + __W_RME_VERSION__, FROM_DIP(root, wxSize(800, 480)), icon, recent_files);
+	welcomeDialog = newd WelcomeDialog(__W_RME_APPLICATION_NAME__, "Version " + __W_RME_VERSION__, FROM_DIP(root, wxSize(1100, 700)), icon, recent_files);
 	welcomeDialog->Bind(wxEVT_CLOSE_WINDOW, &GUI::OnWelcomeDialogClosed, this);
 	welcomeDialog->Bind(WELCOME_DIALOG_ACTION, &GUI::OnWelcomeDialogAction, this);
 	welcomeDialog->Show();
@@ -1312,25 +1312,17 @@ void GUI::SetTitle(wxString title) {
 		#define TITLE_APPEND (wxString(""))
 	#endif
 #endif
+	wxString applicationTitle = __W_RME_APPLICATION_NAME__;
 #ifdef __EXPERIMENTAL__
-	if (title != "") {
-		g_gui.root->SetTitle(title << " - OTAcademy Map Editor BETA" << TITLE_APPEND);
-	} else {
-		g_gui.root->SetTitle(wxString("OTAcademy Map Editor BETA") << TITLE_APPEND);
-	}
-#elif __SNAPSHOT__
-	if (title != "") {
-		g_gui.root->SetTitle(title << " - OTAcademy Map Editor - SNAPSHOT" << TITLE_APPEND);
-	} else {
-		g_gui.root->SetTitle(wxString("OTAcademy Map Editor - SNAPSHOT") << TITLE_APPEND);
-	}
-#else
-	if (!title.empty()) {
-		g_gui.root->SetTitle(title << " - OTAcademy Map Editor" << TITLE_APPEND);
-	} else {
-		g_gui.root->SetTitle(wxString("OTAcademy Map Editor") << TITLE_APPEND);
-	}
+	applicationTitle << " BETA";
+#elif defined(__SNAPSHOT__)
+	applicationTitle << " - SNAPSHOT";
 #endif
+	if (!title.empty()) {
+		g_gui.root->SetTitle(title << " - " << applicationTitle << TITLE_APPEND);
+	} else {
+		g_gui.root->SetTitle(applicationTitle << TITLE_APPEND);
+	}
 }
 
 void GUI::UpdateTitle() {
