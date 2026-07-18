@@ -454,6 +454,79 @@ namespace {
 		std::sort(entries.begin(), entries.end());
 		return entries;
 	}
+
+	// Helper function to convert LF to CRLF on Windows
+	void ConvertToCRLF(std::string& content) {
+#ifdef _WIN32
+		std::string windowsContent;
+		windowsContent.reserve(content.size() * 11 / 10); // Reserve ~10% extra for \r
+		for (size_t i = 0; i < content.size(); ++i) {
+			if (content[i] == '\n' && (i == 0 || content[i - 1] != '\r')) {
+				windowsContent += '\r';
+			}
+			windowsContent += content[i];
+		}
+		content = std::move(windowsContent);
+#endif
+	}
+
+	// Helper function to read file content
+	bool ReadFileContent(const std::filesystem::path& file, std::string& content) {
+		std::ifstream stream(file, std::ios::binary);
+		if (!stream) {
+			return false;
+		}
+		content.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+		return true;
+	}
+
+	// Helper function to write file content
+	bool WriteFileContent(const std::filesystem::path& file, const std::string& content) {
+		std::ofstream stream(file, std::ios::binary);
+		if (!stream || !(stream << content)) {
+			return false;
+		}
+		stream.close();
+		return true;
+	}
+
+	// Helper function to validate TFS spawn document
+	bool ValidateTfsDocument(const SpawnDocument& original, const std::filesystem::path& file, std::string& error) {
+		SpawnDocument reloaded;
+		std::string loadError;
+		if (!SpawnFormatIO::LoadTfs(file, reloaded, loadError)) {
+			error = "XML failed validation: " + loadError;
+			return false;
+		}
+		SpawnDocument expected = original;
+		for (SpawnAreaData& area : expected.areas) {
+			for (SpawnEntryData& entry : area.entries) {
+				entry.spawnTime = std::max(TFS_MIN_SPAWN_TIME, entry.spawnTime);
+			}
+		}
+		std::string difference;
+		if (!SpawnFormatIO::SemanticallyEqual(expected, reloaded, false, difference)) {
+			error = "XML changed spawn data: " + difference;
+			return false;
+		}
+		return true;
+	}
+
+	// Helper function to validate Canary/Crystal spawn document
+	bool ValidateCanaryCrystalDocument(const SpawnDocument& original, const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile, std::string& error) {
+		SpawnDocument reloaded;
+		std::string loadError;
+		if (!SpawnFormatIO::LoadCanaryCrystal(monsterFile, npcFile, reloaded, loadError)) {
+			error = "XML failed validation: " + loadError;
+			return false;
+		}
+		std::string difference;
+		if (!SpawnFormatIO::SemanticallyEqual(original, reloaded, original.format == SpawnFormat::CanaryCrystal, difference)) {
+			error = "XML changed spawn data: " + difference;
+			return false;
+		}
+		return true;
+	}
 }
 
 size_t SpawnDocument::monsterCount() const {
@@ -794,29 +867,46 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 		result.error = "Could not create destination directory for " + file.string() + ": " + ec.message();
 		return result;
 	}
+
+	// Serialize to string for comparison
+	std::ostringstream xmlStream;
+	xml.save(xmlStream, "\t", pugi::format_default, pugi::encoding_utf8);
+	std::string newContent = xmlStream.str();
+
+	// Convert LF to CRLF on Windows
+	ConvertToCRLF(newContent);
+
+	// Check if destination file already has identical content
+	std::string existingContent;
+	if (ReadFileContent(file, existingContent) && existingContent == newContent) {
+		// Content is identical - validate without writing
+		std::string validationError;
+		if (!ValidateTfsDocument(document, file, validationError)) {
+			result.error = "Existing file " + validationError;
+			return result;
+		}
+		// File is already correct - skip write
+		result.success = true;
+		return result;
+	}
+
+	// Content differs or file doesn't exist - proceed with transaction
 	FileSaveTransaction transaction;
 	const std::filesystem::path stagedFile = transaction.Stage(file);
-	if (!xml.save_file(stagedFile.string().c_str(), "\t", pugi::format_default, pugi::encoding_utf8)) {
+	
+	// Write the content (already has correct line endings from conversion above)
+	if (!WriteFileContent(stagedFile, newContent)) {
 		result.error = "Could not write " + file.string();
 		return result;
 	}
-	SpawnDocument reloaded;
-	std::string loadError;
-	if (!LoadTfs(stagedFile, reloaded, loadError)) {
-		result.error = "Generated TFS XML failed validation: " + loadError;
+	
+	// Validate the written file
+	std::string validationError;
+	if (!ValidateTfsDocument(document, stagedFile, validationError)) {
+		result.error = "Generated TFS " + validationError;
 		return result;
 	}
-	SpawnDocument expected = document;
-	for (SpawnAreaData& area : expected.areas) {
-		for (SpawnEntryData& entry : area.entries) {
-			entry.spawnTime = std::max(TFS_MIN_SPAWN_TIME, entry.spawnTime);
-		}
-	}
-	std::string difference;
-	if (!SemanticallyEqual(expected, reloaded, false, difference)) {
-		result.error = "Generated TFS XML changed spawn data: " + difference;
-		return result;
-	}
+	
 	if (!transaction.Commit(result.error)) {
 		return result;
 	}
@@ -888,28 +978,58 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 		result.error = "Could not create spawn destination directory: " + ec.message();
 		return result;
 	}
+
+	// Serialize both XMLs to strings for comparison
+	std::ostringstream monsterStream, npcStream;
+	monsterXml.save(monsterStream, "\t", pugi::format_default, pugi::encoding_utf8);
+	npcXml.save(npcStream, "\t", pugi::format_default, pugi::encoding_utf8);
+	std::string newMonsterContent = monsterStream.str();
+	std::string newNpcContent = npcStream.str();
+
+	// Convert LF to CRLF on Windows
+	ConvertToCRLF(newMonsterContent);
+	ConvertToCRLF(newNpcContent);
+
+	// Check if both files already have identical content
+	std::string existingMonster, existingNpc;
+	bool monsterMatches = ReadFileContent(monsterFile, existingMonster) && (existingMonster == newMonsterContent);
+	bool npcMatches = ReadFileContent(npcFile, existingNpc) && (existingNpc == newNpcContent);
+
+	if (monsterMatches && npcMatches) {
+		// Both files are identical - validate without writing
+		std::string validationError;
+		if (!ValidateCanaryCrystalDocument(document, monsterFile, npcFile, validationError)) {
+			result.error = "Existing files " + validationError;
+			return result;
+		}
+		// Files are already correct - skip write
+		result.success = true;
+		return result;
+	}
+
+	// Content differs or files don't exist - proceed with transaction
 	FileSaveTransaction transaction;
 	const std::filesystem::path stagedMonsterFile = transaction.Stage(monsterFile);
 	const std::filesystem::path stagedNpcFile = transaction.Stage(npcFile);
-	if (!monsterXml.save_file(stagedMonsterFile.string().c_str(), "\t", pugi::format_default, pugi::encoding_utf8)) {
+	
+	// Write the content (already has correct line endings from conversion above)
+	if (!WriteFileContent(stagedMonsterFile, newMonsterContent)) {
 		result.error = "Could not write " + monsterFile.string();
 		return result;
 	}
-	if (!npcXml.save_file(stagedNpcFile.string().c_str(), "\t", pugi::format_default, pugi::encoding_utf8)) {
+
+	if (!WriteFileContent(stagedNpcFile, newNpcContent)) {
 		result.error = "Could not write " + npcFile.string();
 		return result;
 	}
-	SpawnDocument reloaded;
-	std::string loadError;
-	if (!LoadCanaryCrystal(stagedMonsterFile, stagedNpcFile, reloaded, loadError)) {
-		result.error = "Generated Canary/Crystal XML failed validation: " + loadError;
+
+	// Validate the written files
+	std::string validationError;
+	if (!ValidateCanaryCrystalDocument(document, stagedMonsterFile, stagedNpcFile, validationError)) {
+		result.error = "Generated Canary/Crystal " + validationError;
 		return result;
 	}
-	std::string difference;
-	if (!SemanticallyEqual(document, reloaded, document.format == SpawnFormat::CanaryCrystal, difference)) {
-		result.error = "Generated Canary/Crystal XML changed spawn data: " + difference;
-		return result;
-	}
+	
 	if (!transaction.Commit(result.error)) {
 		return result;
 	}
