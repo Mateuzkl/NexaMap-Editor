@@ -22,6 +22,7 @@
 #include "common_windows.h"
 #include "preferences.h"
 #include "main_menubar.h"
+#include "hotkey_manager.h"
 #include "artprovider.h"
 #include "theme.h"
 
@@ -312,6 +313,9 @@ bool Application::OnInit() {
 	SetTopWindow(g_gui.root);
 	g_gui.SetTitle("");
 
+	g_hotkey_manager.DiscoverActions(g_gui.root->GetMainMenuBar());
+	g_hotkey_manager.RebuildAccelerators(g_gui.root);
+
 	g_gui.root->LoadRecentFiles();
 
 	// Load palette
@@ -596,13 +600,7 @@ void MainFrame::OnUpdateMenus(wxCommandEvent&) {
 #ifdef __WINDOWS__
 bool MainFrame::MSWTranslateMessage(WXMSG* msg) {
 	if (g_gui.AreHotkeysEnabled()) {
-		if (wxFrame::MSWTranslateMessage(msg)) {
-			return true;
-		}
-	} else {
-		if (wxWindow::MSWTranslateMessage(msg)) {
-			return true;
-		}
+		return wxFrame::MSWTranslateMessage(msg);
 	}
 	return false;
 }

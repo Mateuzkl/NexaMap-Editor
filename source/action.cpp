@@ -457,6 +457,10 @@ void BatchAction::addAndCommitAction(Action* action) {
 	timestamp = time(nullptr);
 }
 
+void BatchAction::rollback() {
+	undo();
+}
+
 void BatchAction::commit() {
 	for (Action* action : batch) {
 		if (action && !action->isCommited()) {
@@ -643,4 +647,3 @@ void DirtyList::AddPosition(int x, int y, int z) {
 void DirtyList::AddChange(Change* c) {
 	ichanges.push_back(c);
 }
-

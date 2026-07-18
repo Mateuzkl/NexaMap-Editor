@@ -28,11 +28,13 @@
 #include "border_workspace_window.h"
 #include "materials_workbench_window.h"
 #include "map_item_id_converter_window.h"
+#include "procedural_map_generator_window.h"
 #include "settings.h"
 #include "spawn_export_window.h"
 #include "spawn_converter_window.h"
 
 #include "gui.h"
+#include "hotkey_manager.h"
 
 #include <unordered_set>
 
@@ -50,22 +52,18 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	checking_programmaticly = false;
 
 #define MAKE_ACTION(id, kind, handler) actions[#id] = new MenuBar::Action(#id, id, kind, wxCommandEventFunction(&MainMenuBar::handler))
-#define MAKE_SET_ACTION(id, kind, setting_, handler)                                                  \
-	actions[#id] = new MenuBar::Action(#id, id, kind, wxCommandEventFunction(&MainMenuBar::handler)); \
-	actions[#id].setting = setting_
 
 	MAKE_ACTION(NEW, wxITEM_NORMAL, OnNew);
 	MAKE_ACTION(OPEN, wxITEM_NORMAL, OnOpen);
 	MAKE_ACTION(SAVE, wxITEM_NORMAL, OnSave);
 	MAKE_ACTION(SAVE_AS, wxITEM_NORMAL, OnSaveAs);
-	MAKE_ACTION(GENERATE_MAP, wxITEM_NORMAL, OnGenerateMap);
 	MAKE_ACTION(CLOSE, wxITEM_NORMAL, OnClose);
 
 	MAKE_ACTION(IMPORT_MAP, wxITEM_NORMAL, OnImportMap);
 	MAKE_ACTION(MAP_ITEM_ID_CONVERTER, wxITEM_NORMAL, OnMapItemIdConverter);
+	MAKE_ACTION(PROCEDURAL_MAP_GENERATOR, wxITEM_NORMAL, OnProceduralMapGenerator);
 	MAKE_ACTION(SPAWN_NPC_CONVERTER, wxITEM_NORMAL, OnSpawnNpcConverter);
 	MAKE_ACTION(IMPORT_MONSTERS, wxITEM_NORMAL, OnImportMonsterData);
-	MAKE_ACTION(IMPORT_MINIMAP, wxITEM_NORMAL, OnImportMinimap);
 	MAKE_ACTION(EXPORT_MINIMAP, wxITEM_NORMAL, OnExportMinimap);
 	MAKE_ACTION(EXPORT_TILESETS, wxITEM_NORMAL, OnExportTilesets);
 	MAKE_ACTION(EXPORT_SPAWNS, wxITEM_NORMAL, OnExportSpawns);
@@ -124,8 +122,6 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(PASTE, wxITEM_NORMAL, OnPaste);
 
 	MAKE_ACTION(EDIT_TOWNS, wxITEM_NORMAL, OnMapEditTowns);
-	MAKE_ACTION(EDIT_ITEMS, wxITEM_NORMAL, OnMapEditItems);
-	MAKE_ACTION(EDIT_MONSTERS, wxITEM_NORMAL, OnMapEditMonsters);
 
 	MAKE_ACTION(CLEAR_INVALID_HOUSES, wxITEM_NORMAL, OnClearHouseTiles);
 	MAKE_ACTION(CLEAR_MODIFIED_STATE, wxITEM_NORMAL, OnClearModifiedState);
@@ -217,6 +213,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(EXTENSIONS, wxITEM_NORMAL, OnListExtensions);
 	MAKE_ACTION(GOTO_WEBSITE, wxITEM_NORMAL, OnGotoWebsite);
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
+	MAKE_ACTION(SHOW_HOTKEYS, wxITEM_NORMAL, OnShowHotkeys);
 
 	// A deleter, this way the frame does not need
 	// to bother deleting us.
@@ -344,13 +341,12 @@ void MainMenuBar::Update() {
 	EnableItem(CLOSE, is_local);
 	EnableItem(SAVE, is_host);
 	EnableItem(SAVE_AS, is_host);
-	EnableItem(GENERATE_MAP, false);
 
 	EnableItem(IMPORT_MAP, is_local);
 	EnableItem(MAP_ITEM_ID_CONVERTER, loaded);
+	EnableItem(PROCEDURAL_MAP_GENERATOR, loaded && has_map);
 	EnableItem(SPAWN_NPC_CONVERTER, true);
 	EnableItem(IMPORT_MONSTERS, is_local);
-	EnableItem(IMPORT_MINIMAP, false);
 	EnableItem(EXPORT_MINIMAP, is_local);
 	EnableItem(EXPORT_TILESETS, loaded);
 	EnableItem(EXPORT_SPAWNS, loaded);
@@ -401,8 +397,6 @@ void MainMenuBar::Update() {
 	EnableItem(CLEAR_MODIFIED_STATE, is_local);
 
 	EnableItem(EDIT_TOWNS, is_local);
-	EnableItem(EDIT_ITEMS, false);
-	EnableItem(EDIT_MONSTERS, false);
 
 	EnableItem(MAP_CLEANUP, is_local);
 	EnableItem(MAP_PROPERTIES, is_local);
@@ -530,6 +524,20 @@ void MainMenuBar::UpdateFloorMenu() {
 				CheckItem(MenuBar::ActionID(MenuBar::FLOOR_0 + i), false);
 			}
 			CheckItem(MenuBar::ActionID(MenuBar::FLOOR_0 + g_gui.GetCurrentFloor()), true);
+		}
+	}
+}
+
+void MainMenuBar::UpdateLabelHotkeys() {
+	for (const auto& [actionId, itemList] : items) {
+		wxString key = g_hotkey_manager.GetEffectiveKey(actionId);
+		for (wxMenuItem* item : itemList) {
+			wxString baseName = item->GetItemLabelText();
+			wxString newLabel = baseName;
+			if (!key.empty()) {
+				newLabel += "\t" + key;
+			}
+			item->SetItemLabel(newLabel);
 		}
 	}
 }
@@ -706,12 +714,6 @@ wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayStri
 		}
 
 		const MenuBar::Action& act = *it->second;
-		wxAcceleratorEntry* entry = wxAcceleratorEntry::Create(wxstr(hotkey));
-		if (entry) {
-			delete entry; // accelerators.push_back(entry);
-		} else {
-			warnings.push_back("Invalid hotkey.");
-		}
 
 		wxMenuItem* tmp = parent->Append(
 			MAIN_FRAME_MENU + act.id, // ID
@@ -733,27 +735,6 @@ wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayStri
 
 void MainMenuBar::OnNew(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.NewMap();
-}
-
-void MainMenuBar::OnGenerateMap(wxCommandEvent& WXUNUSED(event)) {
-	/*
-	if(!DoQuerySave()) return;
-
-	std::ostringstream os;
-	os << "Untitled-" << untitled_counter << ".otbm";
-	++untitled_counter;
-
-	editor.generateMap(wxstr(os.str()));
-
-	g_gui.SetStatusText("Generated newd map");
-
-	g_gui.UpdateTitle();
-	g_gui.RefreshPalettes();
-	g_gui.UpdateMinimap();
-	g_gui.FitViewToMap();
-	UpdateMenubar();
-	Refresh();
-	*/
 }
 
 void MainMenuBar::OnOpenRecent(wxCommandEvent& event) {
@@ -801,6 +782,15 @@ void MainMenuBar::OnImportMap(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnMapItemIdConverter(wxCommandEvent& WXUNUSED(event)) {
 	static_cast<void>(RunMapItemIdConverter(frame, MapItemIdConverterLaunchContext::Editor));
+}
+
+void MainMenuBar::OnProceduralMapGenerator(wxCommandEvent& WXUNUSED(event)) {
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) {
+		wxMessageBox("Open a map before using the Procedural Map Generator.", "Procedural Map Generator", wxOK | wxICON_INFORMATION, frame);
+		return;
+	}
+	static_cast<void>(RunProceduralMapGenerator(frame, *editor, g_gui.GetCurrentFloor()));
 }
 
 void MainMenuBar::OnSpawnNpcConverter(wxCommandEvent& WXUNUSED(event)) {
@@ -902,12 +892,6 @@ void MainMenuBar::OnImportMonsterData(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.RefreshPalettes();
 }
 
-void MainMenuBar::OnImportMinimap(wxCommandEvent& WXUNUSED(event)) {
-	ASSERT(g_gui.IsEditorOpen());
-	// wxDialog* importmap = newd ImportMapWindow();
-	// importmap->ShowModal();
-}
-
 void MainMenuBar::OnExportMinimap(wxCommandEvent& WXUNUSED(event)) {
 	if (g_gui.GetCurrentEditor()) {
 		ExportMiniMapWindow dlg(frame, *g_gui.GetCurrentEditor());
@@ -983,6 +967,10 @@ void MainMenuBar::OnGotoWebsite(wxCommandEvent& WXUNUSED(event)) {
 void MainMenuBar::OnAbout(wxCommandEvent& WXUNUSED(event)) {
 	AboutWindow about(frame);
 	about.ShowModal();
+}
+
+void MainMenuBar::OnShowHotkeys(wxCommandEvent& WXUNUSED(event)) {
+	g_hotkey_manager.ShowHotkeyDialog(frame, this);
 }
 
 void MainMenuBar::OnUndo(wxCommandEvent& WXUNUSED(event)) {
@@ -1789,14 +1777,6 @@ void MainMenuBar::OnMapEditTowns(wxCommandEvent& WXUNUSED(event)) {
 		town_dialog->ShowModal();
 		town_dialog->Destroy();
 	}
-}
-
-void MainMenuBar::OnMapEditItems(wxCommandEvent& WXUNUSED(event)) {
-	;
-}
-
-void MainMenuBar::OnMapEditMonsters(wxCommandEvent& WXUNUSED(event)) {
-	;
 }
 
 void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event)) {

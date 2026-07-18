@@ -115,6 +115,7 @@ enum ActionIdentifier {
 	ACTION_ROTATE_ITEM,
 	ACTION_REPLACE_ITEMS,
 	ACTION_CHANGE_PROPERTIES,
+	ACTION_GENERATE_AREA,
 };
 
 class Action {
@@ -176,6 +177,9 @@ public:
 
 	virtual void addAction(Action* action);
 	virtual void addAndCommitAction(Action* action);
+	// Revert all already-committed child actions. Intended for transactional
+	// producers that must recover if a later construction phase fails.
+	void rollback();
 
 protected:
 	BatchAction(Editor& editor, ActionIdentifier ident);

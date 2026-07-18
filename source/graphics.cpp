@@ -1192,10 +1192,12 @@ wxMemoryDC* GameSprite::getDC(SpriteSize size) {
 					const int i = getIndex(w, h, l, 0, 0, 0, 0);
 					uint8_t* data = spriteList[i]->getRGBData();
 					if (data) {
-						wxImage img(SPRITE_PIXELS, SPRITE_PIXELS, data);
-						img.SetMaskColour(0xFF, 0x00, 0xFF);
-						image.Paste(img, (width - w - 1) * SPRITE_PIXELS, (height - h - 1) * SPRITE_PIXELS);
-						img.Destroy();
+						{
+							wxImage img(SPRITE_PIXELS, SPRITE_PIXELS, data, true);
+							img.SetMaskColour(0xFF, 0x00, 0xFF);
+							image.Paste(img, (width - w - 1) * SPRITE_PIXELS, (height - h - 1) * SPRITE_PIXELS);
+						}
+						delete[] data;
 					}
 				}
 			}
@@ -1320,7 +1322,7 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 	int read = 0;
 
 	// decompress pixels
-	while (read < size && write < pixels_data_size) {
+	while (read + 2 <= size && write < pixels_data_size) {
 		int transparent = dump[read] | dump[read + 1] << 8;
 		read += 2;
 		for (int i = 0; i < transparent && write < pixels_data_size; i++) {
@@ -1330,9 +1332,12 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 			write += 3;
 		}
 
+		if (write >= pixels_data_size || read + 2 > size) {
+			break;
+		}
 		int colored = dump[read] | dump[read + 1] << 8;
 		read += 2;
-		for (int i = 0; i < colored && write < pixels_data_size; i++) {
+		for (int i = 0; i < colored && write < pixels_data_size && read + bpp <= size; i++) {
 			data[write + 0] = dump[read + 0]; // red
 			data[write + 1] = dump[read + 1]; // green
 			data[write + 2] = dump[read + 2]; // blue
@@ -1370,7 +1375,7 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 	int read = 0;
 
 	// decompress pixels
-	while (read < size && write < pixels_data_size) {
+	while (read + 2 <= size && write < pixels_data_size) {
 		int transparent = dump[read] | dump[read + 1] << 8;
 		if (use_alpha && transparent >= SPRITE_PIXELS_SIZE) { // Corrupted sprite?
 			break;
@@ -1384,9 +1389,12 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 			write += 4;
 		}
 
+		if (write >= pixels_data_size || read + 2 > size) {
+			break;
+		}
 		int colored = dump[read] | dump[read + 1] << 8;
 		read += 2;
-		for (int i = 0; i < colored && write < pixels_data_size; i++) {
+		for (int i = 0; i < colored && write < pixels_data_size && read + bpp <= size; i++) {
 			data[write + 0] = dump[read + 0]; // red
 			data[write + 1] = dump[read + 1]; // green
 			data[write + 2] = dump[read + 2]; // blue
@@ -1585,16 +1593,16 @@ uint8_t* GameSprite::TemplateImage::getRGBData() {
 		return nullptr;
 	}
 
-	if (lookHead > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookHead >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookHead = 0;
 	}
-	if (lookBody > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookBody >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookBody = 0;
 	}
-	if (lookLegs > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookLegs >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookLegs = 0;
 	}
-	if (lookFeet > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookFeet >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookFeet = 0;
 	}
 
@@ -1636,16 +1644,16 @@ uint8_t* GameSprite::TemplateImage::getRGBAData() {
 		return nullptr;
 	}
 
-	if (lookHead > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookHead >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookHead = 0;
 	}
-	if (lookBody > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookBody >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookBody = 0;
 	}
-	if (lookLegs > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookLegs >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookLegs = 0;
 	}
-	if (lookFeet > (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
+	if (lookFeet >= (sizeof(TemplateOutfitLookupTable) / sizeof(TemplateOutfitLookupTable[0]))) {
 		lookFeet = 0;
 	}
 

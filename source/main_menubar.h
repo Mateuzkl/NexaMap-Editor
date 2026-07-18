@@ -28,13 +28,12 @@ namespace MenuBar {
 		OPEN,
 		SAVE,
 		SAVE_AS,
-		GENERATE_MAP,
 		CLOSE,
 		IMPORT_MAP,
 		MAP_ITEM_ID_CONVERTER,
+		PROCEDURAL_MAP_GENERATOR,
 		SPAWN_NPC_CONVERTER,
 		IMPORT_MONSTERS,
-		IMPORT_MINIMAP,
 		EXPORT_MINIMAP,
 		EXPORT_TILESETS,
 		EXPORT_SPAWNS,
@@ -85,8 +84,6 @@ namespace MenuBar {
 		COPY,
 		PASTE,
 		EDIT_TOWNS,
-		EDIT_ITEMS,
-		EDIT_MONSTERS,
 		MAP_CLEANUP,
 		MAP_REMOVE_ITEMS,
 		MAP_REMOVE_CORPSES,
@@ -172,6 +169,8 @@ namespace MenuBar {
 		REMOVE_ON_SELECTION_DUPLICATED_ITEMS,
 		SEARCH_ON_MAP_WALLS_UPON_WALLS,
 		SEARCH_ON_SELECTION_WALLS_UPON_WALLS,
+
+		SHOW_HOTKEYS,
 	};
 }
 
@@ -203,7 +202,6 @@ public:
 	// File Menu
 	void OnNew(wxCommandEvent& event);
 	void OnOpen(wxCommandEvent& event);
-	void OnGenerateMap(wxCommandEvent& event);
 	void OnOpenRecent(wxCommandEvent& event);
 	void OnSave(wxCommandEvent& event);
 	void OnSaveAs(wxCommandEvent& event);
@@ -215,9 +213,9 @@ public:
 	// Export Menu
 	void OnImportMap(wxCommandEvent& event);
 	void OnMapItemIdConverter(wxCommandEvent& event);
+	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSpawnNpcConverter(wxCommandEvent& event);
 	void OnImportMonsterData(wxCommandEvent& event);
-	void OnImportMinimap(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);
 	void OnExportTilesets(wxCommandEvent& event);
 	void OnExportSpawns(wxCommandEvent& event);
@@ -276,8 +274,6 @@ public:
 
 	// Map menu
 	void OnMapEditTowns(wxCommandEvent& event);
-	void OnMapEditItems(wxCommandEvent& event);
-	void OnMapEditMonsters(wxCommandEvent& event);
 	void OnMapCleanHouseItems(wxCommandEvent& event);
 	void OnMapCleanup(wxCommandEvent& event);
 	void OnMapProperties(wxCommandEvent& event);
@@ -316,6 +312,12 @@ public:
 	void OnListExtensions(wxCommandEvent& event);
 	void OnGotoWebsite(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnShowHotkeys(wxCommandEvent& event);
+
+	// Access actions map for hotkey discovery
+	const std::map<std::string, MenuBar::Action*>& GetActions() const { return actions; }
+	// Update menu item labels to match current HotkeyManager effective keys
+	void UpdateLabelHotkeys();
 
 protected:
 	// Load and returns a menu item, also sets accelerator

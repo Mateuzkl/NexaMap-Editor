@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <cmath>
 #include <iomanip>
+#include <random>
 #include <string>
 
 #include "mt_rand.h"
@@ -69,6 +70,21 @@ bool isTrueString(const std::string& str);
 // Generates a random number between low and high using the mersenne twister
 int random(int high);
 int random(int low, int high);
+
+// Keeps brush/item variation deterministic for one scoped operation without
+// reseeding or otherwise disturbing the editor's process-wide random stream.
+class ScopedRandomSeed final {
+public:
+	explicit ScopedRandomSeed(uint64_t seed);
+	~ScopedRandomSeed();
+
+	ScopedRandomSeed(const ScopedRandomSeed&) = delete;
+	ScopedRandomSeed& operator=(const ScopedRandomSeed&) = delete;
+
+private:
+	std::mt19937 generator;
+	std::mt19937* previous = nullptr;
+};
 
 // Unicode conversions
 std::wstring string2wstring(const std::string& utf8string);

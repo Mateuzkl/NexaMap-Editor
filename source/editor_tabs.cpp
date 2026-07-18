@@ -112,17 +112,33 @@ void MapTabbook::OnNotebookPageChanged(wxAuiNotebookEvent& evt) {
 // Wrappers
 
 void MapTabbook::AddTab(EditorTab* tab, bool select) {
-	tab->GetWindow()->Reparent(notebook);
-	notebook->AddPage(tab->GetWindow(), tab->GetTitle(), select);
-	conv[tab->GetWindow()] = tab;
+	if (!notebook || !tab || !tab->GetWindow()) {
+		return;
+	}
+
+	wxWindow* window = tab->GetWindow();
+	window->Reparent(notebook);
+	// AddPage may synchronously emit PAGE_CHANGED. Register the tab first so
+	// event handlers can safely resolve the new current page during that call.
+	conv[window] = tab;
+	if (!notebook->AddPage(window, tab->GetTitle(), select)) {
+		conv.erase(window);
+	}
 }
 
 void MapTabbook::SetFocusedTab(int idx) {
+	if (!notebook || idx < 0 || idx >= static_cast<int>(notebook->GetPageCount())) {
+		return;
+	}
 	notebook->SetSelection(idx);
 }
 
 EditorTab* MapTabbook::GetInternalTab(int idx) {
-	return conv[notebook->GetPage(idx)];
+	if (!notebook || idx < 0 || idx >= static_cast<int>(notebook->GetPageCount())) {
+		return nullptr;
+	}
+	const auto it = conv.find(notebook->GetPage(static_cast<size_t>(idx)));
+	return it != conv.end() ? it->second : nullptr;
 }
 
 EditorTab* MapTabbook::GetCurrentTab() {
@@ -140,7 +156,8 @@ wxWindow* MapTabbook::GetCurrentPage() {
 	if (GetTabCount() == 0) {
 		return nullptr;
 	}
-	return GetCurrentTab()->GetWindow();
+	EditorTab* current = GetCurrentTab();
+	return current ? current->GetWindow() : nullptr;
 }
 
 void MapTabbook::OnSwitchEditorMode(EditorMode mode) {
@@ -159,9 +176,12 @@ void MapTabbook::SetTabLabel(int idx, const wxString& label) {
 }
 
 void MapTabbook::DeleteTab(int idx) {
-	if (notebook) {
-		notebook->DeletePage(idx);
+	if (!notebook || idx < 0 || idx >= static_cast<int>(notebook->GetPageCount())) {
+		return;
 	}
+	wxWindow* window = notebook->GetPage(static_cast<size_t>(idx));
+	conv.erase(window);
+	notebook->DeletePage(static_cast<size_t>(idx));
 }
 
 int MapTabbook::GetTabCount() {

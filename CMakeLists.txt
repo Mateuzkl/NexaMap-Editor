@@ -39,6 +39,8 @@ if(ENABLE_UNITY_BUILD)
 	else()
 		set_source_files_properties(
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
 			PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 		)
 		set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -110,4 +112,17 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/spawn_xml_converter_tests"
 	)
 	add_test(NAME spawn_xml_converter_tests COMMAND spawn_xml_converter_tests)
+
+	add_executable(procedural_map_generator_tests
+		tests/procedural_map_generator_tests.cpp
+		source/procedural_map_generator.cpp
+	)
+	target_include_directories(procedural_map_generator_tests PRIVATE source)
+	set_target_properties(procedural_map_generator_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/procedural_map_generator_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/procedural_map_generator_tests"
+	)
+	add_test(NAME procedural_map_generator_tests COMMAND procedural_map_generator_tests)
 endif()

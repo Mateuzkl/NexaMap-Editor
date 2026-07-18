@@ -2072,7 +2072,7 @@ void MapDrawer::TakeScreenshot(uint8_t* screenshot_buffer) {
 	glPixelStorei(GL_PACK_ALIGNMENT, 1); // 1 byte alignment
 
 	for (int i = 0; i < screensize_y; ++i) {
-		glReadPixels(0, screensize_y - i, screensize_x, 1, GL_RGB, GL_UNSIGNED_BYTE, (GLubyte*)(screenshot_buffer) + 3 * screensize_x * i);
+		glReadPixels(0, screensize_y - i - 1, screensize_x, 1, GL_RGB, GL_UNSIGNED_BYTE, (GLubyte*)(screenshot_buffer) + 3 * screensize_x * i);
 	}
 }
 

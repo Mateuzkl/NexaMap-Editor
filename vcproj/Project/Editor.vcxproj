@@ -120,6 +120,7 @@
       <PrecompiledHeaderFile>main.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MaxFilesInUnityFile>8</MaxFilesInUnityFile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -268,6 +269,16 @@
     <ClInclude Include="..\..\source\positionctrl.h" />
     <ClCompile Include="..\..\source\main_toolbar.cpp" />
     <ClCompile Include="..\..\source\positionctrl.cpp" />
+	<ClInclude Include="..\..\source\procedural_map_generator.h" />
+	<ClCompile Include="..\..\source\procedural_map_generator.cpp">
+	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
+	  <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+	  <IncludeInUnityFile>false</IncludeInUnityFile>
+	</ClCompile>
+	<ClInclude Include="..\..\source\procedural_map_generator_window.h" />
+	<ClCompile Include="..\..\source\procedural_map_generator_window.cpp">
+	  <IncludeInUnityFile>false</IncludeInUnityFile>
+	</ClCompile>
     <ClInclude Include="..\..\source\carpet_brush.h" />
     <ClCompile Include="..\..\source\carpet_brush.cpp" />
     <ClInclude Include="..\..\source\common.h" />
@@ -337,6 +348,10 @@
     <ClInclude Include="..\..\source\gui.h" />
     <ClCompile Include="..\..\source\gui.cpp" />
     <ClInclude Include="..\..\source\gui_ids.h" />
+    <ClInclude Include="..\..\source\hotkey_dialog.h" />
+    <ClCompile Include="..\..\source\hotkey_dialog.cpp" />
+    <ClInclude Include="..\..\source\hotkey_manager.h" />
+    <ClCompile Include="..\..\source\hotkey_manager.cpp" />
     <ClInclude Include="..\..\source\main_menubar.h" />
     <ClCompile Include="..\..\source\main_menubar.cpp" />
     <ClInclude Include="..\..\source\map_tab.h" />

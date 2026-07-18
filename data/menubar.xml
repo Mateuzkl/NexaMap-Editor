@@ -34,15 +34,11 @@
 		<item name="Open..." hotkey="Ctrl+O" action="OPEN" help="Open another map."/>
 		<item name="Save" hotkey="Ctrl+S" action="SAVE" help="Save the current map."/>
 		<item name="Save As..." hotkey="Ctrl+Alt+S" action="SAVE_AS" help="Save the current map as a new file."/>
-		<item name="Generate Map" action="GENERATE_MAP" help="Generate a new map."/>
 		<item name="Close" hotkey="Ctrl+Q" action="CLOSE" help="Closes the currently open map."/>
 		<separator/>
 		<menu name="Import">
 			<item name="Import Map..." action="IMPORT_MAP" help="Import map data from another map file."/>
 			<item name="Import Monsters/NPC..." action="IMPORT_MONSTERS" help="Import either a monsters.xml file or a specific monster/NPC."/>
-			<!-- this was never implemented
-			<item name="Import Minimap..." action="IMPORT_MINIMAP" help="Import map data from a .bmp file."/>
-			-->
 		</menu>
 		<item name="Convert OTBM Item IDs..." action="MAP_ITEM_ID_CONVERTER" help="Convert all item IDs with the embedded native Server ID / Client ID mapping."/>
 		<menu name="Export">
@@ -114,10 +110,6 @@
 	</menu>
 	<menu name="Map">
 		<item name="Edit Towns" hotkey="Ctrl+T" action="EDIT_TOWNS" help="Edit towns."/>
-		<!-- these were never implemented
-		<item name="Edit Items" hotkey="Ctrl+I" action="EDIT_ITEMS" help="Edit items."/>
-		<item name="Edit Monsters" action="EDIT_MONSTERS" help="Edit monsters."/>
-		-->
 		<separator/>
 		<item name="Cleanup..." action="MAP_CLEANUP" help="Removes all items that do not exist in the OTB file (red tiles the server can't load)."/>
 		<item name="Remove Duplicated Items..." action="REMOVE_ON_MAP_DUPLICATED_ITEMS" help="Removes duplicated items from the map."/>
@@ -223,6 +215,7 @@
 		<item name="New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
 		<item name="Materials Workbench..." action="MATERIALS_WORKBENCH" help="Visually edit XML ground, wall, doodad, carpet, and table brushes."/>
 		<item name="Border Workspace..." action="BORDER_WORKSPACE" help="Visually edit XML autoborder sets and item slots."/>
+		<item name="Procedural Map Generator..." action="PROCEDURAL_MAP_GENERATOR" help="Generate terrain, cities, dungeons, hunting areas and other procedural layouts inside the selected area."/>
 		<menu name="Palette">
 			<item name="Terrain" hotkey="T" action="SELECT_TERRAIN" help="Select the Terrain palette."/>
 			<item name="Doodad" hotkey="D" action="SELECT_DOODAD" help="Select the Doodad palette."/>
@@ -248,6 +241,9 @@
 	-->
 	<menu name="Experimental">
 		<item name="Fog in light view" hotkey="" action="EXPERIMENTAL_FOG" help="Apply fog filter to light effect."/>
+	</menu>
+	<menu name="Hotkeys">
+		<item name="Configure Hotkeys..." hotkey="" action="SHOW_HOTKEYS" help="Configure keyboard shortcuts for all menu actions."/>
 	</menu>
 	<menu name="About">
 		<item name="Extensions..." hotkey="F2" action="EXTENSIONS" help=""/>

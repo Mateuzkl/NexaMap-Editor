@@ -28,6 +28,15 @@
 #include <cctype>
 #include <vector>
 
+namespace {
+thread_local std::mt19937* scopedRandomGenerator = nullptr;
+
+std::mt19937 MakeScopedGenerator(uint64_t seed) {
+	std::seed_seq sequence { static_cast<uint32_t>(seed), static_cast<uint32_t>(seed >> 32), 0x524D4505U };
+	return std::mt19937(sequence);
+}
+}
+
 // random generator
 std::mt19937& getRandomGenerator() {
 	static std::random_device rd;
@@ -167,6 +176,9 @@ int random(int low, int high) {
 	if (low > high) {
 		return low;
 	}
+	if (scopedRandomGenerator) {
+		return std::uniform_int_distribution<int>(low, high)(*scopedRandomGenerator);
+	}
 
 	int const range = high - low;
 
@@ -176,6 +188,16 @@ int random(int low, int high) {
 
 int random(int high) {
 	return random(0, high);
+}
+
+ScopedRandomSeed::ScopedRandomSeed(uint64_t seed) :
+	generator(MakeScopedGenerator(seed)),
+	previous(scopedRandomGenerator) {
+	scopedRandomGenerator = &generator;
+}
+
+ScopedRandomSeed::~ScopedRandomSeed() {
+	scopedRandomGenerator = previous;
 }
 
 std::wstring string2wstring(const std::string& utf8string) {

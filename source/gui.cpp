@@ -1039,7 +1039,14 @@ void GUI::RefreshView() {
 	}
 
 	for (EditorTab* editorTab : editorTabs) {
-		editorTab->GetWindow()->Refresh();
+		// Call GetCanvas()->Refresh() directly to ensure the FBO cache is invalidated.
+		// wxPanel::Refresh() does not call the custom MapCanvas::Refresh() method,
+		// which means drawer->markDirty() is never executed, causing the FBO cache
+		// to remain stale when view settings (like show_special_tiles) change.
+		auto* mapTab = dynamic_cast<MapTab*>(editorTab);
+		if (mapTab && mapTab->GetView() && mapTab->GetView()->GetCanvas()) {
+			mapTab->GetView()->GetCanvas()->Refresh();
+		}
 	}
 }
 
@@ -1327,15 +1334,17 @@ void GUI::SetTitle(wxString title) {
 }
 
 void GUI::UpdateTitle() {
-	if (tabbook->GetTabCount() > 0) {
-		SetTitle(tabbook->GetCurrentTab()->GetTitle());
-		for (int idx = 0; idx < tabbook->GetTabCount(); ++idx) {
-			if (tabbook->GetTab(idx)) {
-				tabbook->SetTabLabel(idx, tabbook->GetTab(idx)->GetTitle());
-			}
-		}
-	} else {
+	if (!tabbook) {
 		SetTitle("");
+		return;
+	}
+
+	EditorTab* current = tabbook->GetCurrentTab();
+	SetTitle(current ? current->GetTitle() : wxString {});
+	for (int idx = 0; idx < tabbook->GetTabCount(); ++idx) {
+		if (EditorTab* tab = tabbook->GetTab(idx)) {
+			tabbook->SetTabLabel(idx, tab->GetTitle());
+		}
 	}
 }
 

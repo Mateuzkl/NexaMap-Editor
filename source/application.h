@@ -91,6 +91,10 @@ public:
 		return tool_bar;
 	}
 
+	MainMenuBar* GetMainMenuBar() const {
+		return menu_bar;
+	}
+
 	void OnUpdateMenus(wxCommandEvent& event);
 	void UpdateFloorMenu();
 	void OnIdle(wxIdleEvent& event);

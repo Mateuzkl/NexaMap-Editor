@@ -37,6 +37,8 @@ ${CMAKE_CURRENT_LIST_DIR}/graphics.h
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/gui.h
 ${CMAKE_CURRENT_LIST_DIR}/gui_ids.h
+${CMAKE_CURRENT_LIST_DIR}/hotkey_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.h
 ${CMAKE_CURRENT_LIST_DIR}/house.h
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.h
@@ -79,6 +81,8 @@ ${CMAKE_CURRENT_LIST_DIR}/palette_window.h
 ${CMAKE_CURRENT_LIST_DIR}/pngfiles.h
 ${CMAKE_CURRENT_LIST_DIR}/position.h
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.h
+	${CMAKE_CURRENT_LIST_DIR}/procedural_map_generator.h
+	${CMAKE_CURRENT_LIST_DIR}/procedural_map_generator_window.h
 ${CMAKE_CURRENT_LIST_DIR}/preferences.h
 ${CMAKE_CURRENT_LIST_DIR}/process_com.h
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
@@ -126,6 +130,8 @@ ${CMAKE_CURRENT_LIST_DIR}/brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tables.cpp
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
+	${CMAKE_CURRENT_LIST_DIR}/procedural_map_generator.cpp
+	${CMAKE_CURRENT_LIST_DIR}/procedural_map_generator_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/client_version.cpp
 ${CMAKE_CURRENT_LIST_DIR}/common.cpp
@@ -151,6 +157,8 @@ ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gui.cpp
+${CMAKE_CURRENT_LIST_DIR}/hotkey_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.cpp

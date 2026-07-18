@@ -1923,12 +1923,6 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 			f.addU8(OTBM_ATTR_EXT_HOUSE_FILE);
 			f.addString(nstr(tmpName.GetFullName()));
 
-			if (!map.zonefile.empty()) {
-				tmpName.Assign(wxstr(map.zonefile));
-				f.addU8(OTBM_ATTR_EXT_ZONE_FILE);
-				f.addString(nstr(tmpName.GetFullName()));
-			}
-
 			// Start writing tiles
 			if (!writeTiles(map, f)) {
 				return false;

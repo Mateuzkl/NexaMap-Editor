@@ -124,6 +124,12 @@
     <ClInclude Include="..\..\source\gui_ids.h">
       <Filter>gui</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\hotkey_dialog.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\hotkey_manager.h">
+      <Filter>gui</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\house.h">
       <Filter>objects</Filter>
     </ClInclude>
@@ -337,6 +343,12 @@
     <ClInclude Include="..\..\source\map_item_id_converter.h">
       <Filter>editor\io</Filter>
     </ClInclude>
+	<ClInclude Include="..\..\source\procedural_map_generator.h">
+	  <Filter>editor</Filter>
+	</ClInclude>
+	<ClInclude Include="..\..\source\procedural_map_generator_window.h">
+	  <Filter>gui\dialogs</Filter>
+	</ClInclude>
     <ClInclude Include="..\..\source\depot_conversion_validation.h">
       <Filter>editor\io</Filter>
     </ClInclude>
@@ -626,6 +638,12 @@
     <ClCompile Include="..\..\source\gui.cpp">
       <Filter>gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\hotkey_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\hotkey_manager.cpp">
+      <Filter>gui</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\extension_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
@@ -647,6 +665,12 @@
     <ClCompile Include="..\..\source\map_item_id_converter.cpp">
       <Filter>editor\io</Filter>
     </ClCompile>
+	<ClCompile Include="..\..\source\procedural_map_generator.cpp">
+	  <Filter>editor</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\procedural_map_generator_window.cpp">
+	  <Filter>gui\dialogs</Filter>
+	</ClCompile>
     <ClCompile Include="..\..\source\depot_conversion_validation.cpp">
       <Filter>editor\io</Filter>
     </ClCompile>

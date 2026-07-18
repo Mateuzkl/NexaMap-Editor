@@ -17,6 +17,8 @@
 
 #include "main.h"
 
+#include <cstdlib>
+#include <limits>
 #include <sstream>
 #include <time.h>
 #include <wx/wfstream.h>
@@ -33,6 +35,7 @@
 #include "map_drawer.h"
 #include "application.h"
 #include "border_workspace_window.h"
+#include "procedural_map_generator_window.h"
 #include "browse_tile_window.h"
 #include "theme.h"
 
@@ -174,6 +177,7 @@ EVT_MENU(MAP_POPUP_MENU_SWITCH_DOOR, MapCanvas::OnSwitchDoor)
 EVT_MENU(MAP_POPUP_MENU_SELECT_RAW_BRUSH, MapCanvas::OnSelectRAWBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_GROUND_BRUSH, MapCanvas::OnSelectGroundBrush)
 EVT_MENU(MAP_POPUP_MENU_OPEN_BORDER_WORKSPACE, MapCanvas::OnOpenBorderWorkspace)
+EVT_MENU(MAP_POPUP_MENU_PROCEDURAL_GENERATOR, MapCanvas::OnProceduralMapGenerator)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOODAD_BRUSH, MapCanvas::OnSelectDoodadBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_COLLECTION_BRUSH, MapCanvas::OnSelectCollectionBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOOR_BRUSH, MapCanvas::OnSelectDoorBrush)
@@ -236,7 +240,7 @@ MapCanvas::~MapCanvas() {
 	delete popup_menu;
 	delete animation_timer;
 	delete drawer;
-	free(screenshot_buffer);
+	std::free(screenshot_buffer);
 }
 
 void MapCanvas::Refresh() {
@@ -383,8 +387,25 @@ void MapCanvas::TakeScreenshot(wxFileName path, const wxString& format) {
 	int screensize_x, screensize_y;
 	GetViewBox(&view_scroll_x, &view_scroll_y, &screensize_x, &screensize_y);
 
-	delete[] screenshot_buffer;
-	screenshot_buffer = newd uint8_t[3 * screensize_x * screensize_y];
+	std::free(screenshot_buffer);
+	screenshot_buffer = nullptr;
+	if (screensize_x <= 0 || screensize_y <= 0) {
+		g_gui.PopupDialog("Capture failed", "Image capture failed because the view has an invalid size.", wxOK);
+		return;
+	}
+
+	const size_t width = static_cast<size_t>(screensize_x);
+	const size_t height = static_cast<size_t>(screensize_y);
+	if (width > std::numeric_limits<size_t>::max() / height / 3) {
+		g_gui.PopupDialog("Capture failed", "Image capture failed because the view is too large.", wxOK);
+		return;
+	}
+
+	screenshot_buffer = static_cast<uint8_t*>(std::malloc(width * height * 3));
+	if (!screenshot_buffer) {
+		g_gui.PopupDialog("Capture failed", "Image capture failed because there is not enough memory.", wxOK);
+		return;
+	}
 
 	// Draw the window
 	Refresh();
@@ -394,9 +415,7 @@ void MapCanvas::TakeScreenshot(wxFileName path, const wxString& format) {
 	if (screenshot_buffer == nullptr) {
 		g_gui.PopupDialog("Capture failed", "Image capture failed. Old Video Driver?", wxOK);
 	} else {
-		// We got the shit
-		int screensize_x, screensize_y;
-		static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
+		// wxImage takes ownership of buffers allocated with malloc.
 		wxImage screenshot(screensize_x, screensize_y, screenshot_buffer);
 
 		time_t t = time(nullptr);
@@ -1073,7 +1092,6 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 						last_click_map_y = tmp;
 					}
 
-					int numtiles = 0;
 					int threadcount = std::max(g_settings.getInteger(Config::WORKER_THREADS), 1);
 
 					int start_x = 0, start_y = 0, start_z = 0;
@@ -1104,7 +1122,6 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 								end_y -= (floor < GROUND_LAYER ? GROUND_LAYER - floor : 0);
 							}
 
-							numtiles = (start_z - end_z) * (end_x - start_x) * (end_y - start_y);
 							break;
 						}
 						case SELECT_VISIBLE_FLOORS: {
@@ -1130,36 +1147,28 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 						}
 					}
 
-					if (numtiles < 500) {
+					const int column_count = end_x - start_x + 1;
+					const int row_count = end_y - start_y + 1;
+					const int floor_count = start_z - end_z + 1;
+					const uint64_t tile_count = static_cast<uint64_t>(column_count) * row_count * floor_count;
+					if (tile_count < 500) {
 						// No point in threading for such a small set.
 						threadcount = 1;
 					}
-					// Subdivide the selection area
-					// We know it's a square, just split it into several areas
-					int width = end_x - start_x;
-					if (width < threadcount) {
-						threadcount = min(1, width);
-					}
-					// Let's divide!
-					int remainder = width;
-					int cleared = 0;
+					threadcount = std::min(threadcount, column_count);
+
 					std::vector<SelectionThread*> threads;
-					if (width == 0) {
-						threads.push_back(newd SelectionThread(editor, Position(start_x, start_y, start_z), Position(start_x, end_y, end_z)));
-					} else {
-						for (int i = 0; i < threadcount; ++i) {
-							int chunksize = width / threadcount;
-							// The last threads takes all the remainder
-							if (i == threadcount - 1) {
-								chunksize = remainder;
-							}
-							threads.push_back(newd SelectionThread(editor, Position(start_x + cleared, start_y, start_z), Position(start_x + cleared + chunksize, end_y, end_z)));
-							cleared += chunksize;
-							remainder -= chunksize;
-						}
+					threads.reserve(threadcount);
+					const int base_columns = column_count / threadcount;
+					const int extra_columns = column_count % threadcount;
+					int next_x = start_x;
+					for (int i = 0; i < threadcount; ++i) {
+						const int chunk_columns = base_columns + (i < extra_columns ? 1 : 0);
+						const int chunk_end_x = next_x + chunk_columns - 1;
+						threads.push_back(newd SelectionThread(editor, Position(next_x, start_y, start_z), Position(chunk_end_x, end_y, end_z)));
+						next_x = chunk_end_x + 1;
 					}
-					ASSERT(cleared == width);
-					ASSERT(remainder == 0);
+					ASSERT(next_x == end_x + 1);
 
 					editor.selection.start(); // Start a selection session
 					for (auto iter = threads.begin(); iter != threads.end(); ++iter) {
@@ -2232,6 +2241,10 @@ void MapCanvas::OnOpenBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {
 	BorderWorkspaceWindow::OpenForItems(this, items);
 }
 
+void MapCanvas::OnProceduralMapGenerator(wxCommandEvent& WXUNUSED(event)) {
+	static_cast<void>(RunProceduralMapGenerator(g_gui.root, editor, GetFloor()));
+}
+
 void MapCanvas::OnSelectDoodadBrush(wxCommandEvent& WXUNUSED(event)) {
 	if (editor.selection.size() != 1) {
 		return;
@@ -2765,6 +2778,12 @@ void MapPopupMenu::Update() {
 		);
 		borderWorkspace->Enable(SelectionHasItems(editor) && BorderWorkspaceWindow::IsAvailableForCurrentClient());
 	}
+	AppendSeparator();
+	Append(
+		MAP_POPUP_MENU_PROCEDURAL_GENERATOR,
+		anything_selected ? "Generate Area..." : "Procedural Map Generator...",
+		"Generate terrain, cities, dungeons, hunting areas and other procedural layouts inside the selected area."
+	);
 }
 
 void MapCanvas::getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill /*= false*/) {
