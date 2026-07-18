@@ -176,6 +176,9 @@ public:
 	bool getRAW(std::string& str, size_t sz);
 	bool getString(std::string& str);
 	bool getLongString(std::string& str);
+	[[nodiscard]] const std::string& getNodeData() const {
+		return data;
+	}
 
 	BinaryNode* getChild();
 	// Returns this on success, nullptr on failure

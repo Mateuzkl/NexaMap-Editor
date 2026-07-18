@@ -8,6 +8,7 @@
 
 #include "complexitem.h"
 #include "depot_conversion_validation.h"
+#include "filehandle.h"
 #include "file_transaction.h"
 #include "gui.h"
 #include "iomap_otbm.h"
@@ -337,6 +338,297 @@ namespace {
 	private:
 		uint64_t hash = 14695981039346656037ull;
 	};
+
+	struct StreamingOtbmSummary {
+		StableHash hash;
+		uint64_t nodeCount = 0;
+		uint64_t tileCount = 0;
+	};
+
+	struct StreamingOtbmTransform {
+		ItemIdMapping::Direction direction;
+		MapVersion targetVersion;
+		uint32_t targetItemMajorVersion;
+		uint32_t targetItemMinorVersion;
+		ReportBuilder& reportBuilder;
+	};
+
+	enum class StreamingConversionStatus {
+		NotApplicable,
+		Succeeded,
+		Failed,
+	};
+
+	uint16_t ReadLittleEndianU16(const std::string& data, size_t offset) {
+		return static_cast<uint16_t>(static_cast<uint8_t>(data[offset])) |
+		       (static_cast<uint16_t>(static_cast<uint8_t>(data[offset + 1])) << 8);
+	}
+
+	uint32_t ReadLittleEndianU32(const std::string& data, size_t offset) {
+		return static_cast<uint32_t>(static_cast<uint8_t>(data[offset])) |
+		       (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 1])) << 8) |
+		       (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 2])) << 16) |
+		       (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 3])) << 24);
+	}
+
+	void WriteLittleEndianU16(std::string& data, size_t offset, uint16_t value) {
+		data[offset] = static_cast<char>(value & 0xFF);
+		data[offset + 1] = static_cast<char>((value >> 8) & 0xFF);
+	}
+
+	void WriteLittleEndianU32(std::string& data, size_t offset, uint32_t value) {
+		data[offset] = static_cast<char>(value & 0xFF);
+		data[offset + 1] = static_cast<char>((value >> 8) & 0xFF);
+		data[offset + 2] = static_cast<char>((value >> 16) & 0xFF);
+		data[offset + 3] = static_cast<char>((value >> 24) & 0xFF);
+	}
+
+	bool TransformStreamingItemId(std::string& data, size_t offset, StreamingOtbmTransform& transform, std::string& error) {
+		if (offset > data.size() || data.size() - offset < sizeof(uint16_t)) {
+			error = "Invalid OTBM item ID field while streaming the source map.";
+			return false;
+		}
+
+		const auto result = ItemIdMapping::convert(ReadLittleEndianU16(data, offset), transform.direction);
+		transform.reportBuilder.observe(result);
+		WriteLittleEndianU16(data, offset, result.converted);
+		return true;
+	}
+
+	bool TransformStreamingTile(std::string& data, uint8_t nodeType, StreamingOtbmTransform& transform, std::string& error) {
+		const size_t attributeStart = nodeType == OTBM_HOUSETILE ? 7 : 3;
+		if (data.size() < attributeStart) {
+			error = "Invalid OTBM tile header while streaming the source map.";
+			return false;
+		}
+
+		size_t offset = attributeStart;
+		while (offset < data.size()) {
+			const uint8_t attribute = static_cast<uint8_t>(data[offset++]);
+			if (attribute == OTBM_ATTR_ITEM) {
+				if (!TransformStreamingItemId(data, offset, transform, error)) {
+					return false;
+				}
+				offset += sizeof(uint16_t);
+				continue;
+			}
+			if (attribute == OTBM_ATTR_TILE_FLAGS) {
+				if (offset > data.size() || data.size() - offset < sizeof(uint32_t)) {
+					error = "Invalid OTBM tile flags while streaming the source map.";
+					return false;
+				}
+				const uint32_t flags = ReadLittleEndianU32(data, offset);
+				offset += sizeof(uint32_t);
+				// Legacy zone-brush tiles append a zero-terminated list of uint16 IDs.
+				if ((flags & 0x0040u) != 0) {
+					uint16_t zoneId = 0;
+					do {
+						if (offset > data.size() || data.size() - offset < sizeof(uint16_t)) {
+							error = "Invalid legacy OTBM zone list while streaming the source map.";
+							return false;
+						}
+						zoneId = ReadLittleEndianU16(data, offset);
+						offset += sizeof(uint16_t);
+					} while (zoneId != 0);
+				}
+				continue;
+			}
+
+			std::ostringstream message;
+			message << "Unsupported OTBM tile attribute " << static_cast<unsigned int>(attribute) << " in the streaming converter.";
+			error = message.str();
+			return false;
+		}
+		return true;
+	}
+
+	bool PrepareStreamingNode(std::string& data, bool root, StreamingOtbmTransform& transform, StreamingOtbmSummary& summary, std::string& error) {
+		if (data.empty()) {
+			error = "Invalid empty OTBM node while streaming the source map.";
+			return false;
+		}
+		if (root) {
+			if (data.size() < 17) {
+				error = "Invalid OTBM root header while streaming the source map.";
+				return false;
+			}
+			WriteLittleEndianU32(data, 1, static_cast<uint32_t>(transform.targetVersion.otbm));
+			WriteLittleEndianU32(data, 9, transform.targetItemMajorVersion);
+			WriteLittleEndianU32(data, 13, transform.targetItemMinorVersion);
+			return true;
+		}
+
+		const uint8_t nodeType = static_cast<uint8_t>(data[0]);
+		if (nodeType == OTBM_ITEM) {
+			return TransformStreamingItemId(data, 1, transform, error);
+		}
+		if (nodeType == OTBM_TILE || nodeType == OTBM_HOUSETILE) {
+			++summary.tileCount;
+			return TransformStreamingTile(data, nodeType, transform, error);
+		}
+		return true;
+	}
+
+	bool StreamOtbmNode(BinaryNode* node, NodeFileReadHandle& input, NodeFileWriteHandle* output, StreamingOtbmTransform* transform, StreamingOtbmSummary& summary, uint64_t memoryLimitBytes, bool root, std::string& error) {
+		std::string data = node->getNodeData();
+		if (transform) {
+			if (!PrepareStreamingNode(data, root, *transform, summary, error)) {
+				return false;
+			}
+		} else if (!root && !data.empty()) {
+			const uint8_t nodeType = static_cast<uint8_t>(data[0]);
+			if (nodeType == OTBM_TILE || nodeType == OTBM_HOUSETILE) {
+				++summary.tileCount;
+			}
+		}
+
+		++summary.nodeCount;
+		if (summary.nodeCount % 8192 == 0) {
+			if (!CheckMemoryLimit(memoryLimitBytes, output ? "while streaming the OTBM conversion" : "while validating the streamed OTBM", error)) {
+				return false;
+			}
+			const size_t inputSize = input.size();
+			const int32_t progress = inputSize == 0 ? 0 : std::min<int32_t>(99, static_cast<int32_t>(100.0 * static_cast<double>(input.tell()) / static_cast<double>(inputSize)));
+			if (!ScopedLoadingBar::SetLoadDone(progress)) {
+				error = "Conversion cancelled while streaming the OTBM map.";
+				return false;
+			}
+		}
+		const uint8_t nodeStart = 0xFE;
+		const uint8_t nodeEnd = 0xFF;
+		summary.hash.add(nodeStart);
+		summary.hash.addString(data);
+
+		if (output) {
+			const uint8_t nodeType = static_cast<uint8_t>(data[0]);
+			if (!output->addNode(nodeType) || (data.size() > 1 && !output->addRAW(reinterpret_cast<const uint8_t*>(data.data() + 1), data.size() - 1))) {
+				error = "Could not write the streamed OTBM output.";
+				return false;
+			}
+		}
+
+		for (BinaryNode* child = node->getChild(); child != nullptr; child = child->advance()) {
+			if (!StreamOtbmNode(child, input, output, transform, summary, memoryLimitBytes, false, error)) {
+				return false;
+			}
+		}
+
+		summary.hash.add(nodeEnd);
+		if (output && !output->endNode()) {
+			error = "Could not finish the streamed OTBM output.";
+			return false;
+		}
+		return true;
+	}
+
+	StreamingConversionStatus ConvertMapItemIdsStreaming(const MapItemIdConversionOptions& options, const MapVersion& targetVersion, uint32_t targetItemMajorVersion, uint32_t targetItemMinorVersion, uint64_t memoryLimitBytes, MapItemIdConversionReport& report) {
+		std::ifstream sourceProbe(options.source, std::ios::binary);
+		std::array<char, 4> identifier {};
+		if (!sourceProbe.read(identifier.data(), identifier.size())) {
+			report.error = "Could not read the source OTBM identifier.";
+			return StreamingConversionStatus::Failed;
+		}
+		if (static_cast<uint8_t>(identifier[0]) == 0x1F && static_cast<uint8_t>(identifier[1]) == 0x8B) {
+			return StreamingConversionStatus::NotApplicable;
+		}
+		const bool wildcardIdentifier = std::all_of(identifier.begin(), identifier.end(), [](char byte) { return byte == 0; });
+		if (!wildcardIdentifier && std::string(identifier.data(), identifier.size()) != "OTBM") {
+			report.error = "Source is not a regular supported OTBM file.";
+			return StreamingConversionStatus::Failed;
+		}
+		sourceProbe.close();
+
+		std::error_code filesystemError;
+		const std::filesystem::path destinationDirectory = options.destination.parent_path();
+		if (!destinationDirectory.empty()) {
+			std::filesystem::create_directories(destinationDirectory, filesystemError);
+			if (filesystemError) {
+				report.error = "Could not create destination directory: " + filesystemError.message();
+				return StreamingConversionStatus::Failed;
+			}
+		}
+
+		ScopedLoadingBar loading("Converting OTBM item IDs...", true);
+		report.streamed = true;
+		report.threadsUsed = 1;
+		ReportBuilder reportBuilder(report);
+		StreamingOtbmTransform transform { options.direction, targetVersion, targetItemMajorVersion, targetItemMinorVersion, reportBuilder };
+		StreamingOtbmSummary expected;
+		FileSaveTransaction transaction;
+		const std::filesystem::path stagedPath = transaction.Stage(options.destination);
+		const std::string outputIdentifier(identifier.data(), identifier.size());
+
+		ScopedLoadingBar::SetLoadScale(0, 72);
+		const auto conversionStart = std::chrono::steady_clock::now();
+		{
+			DiskNodeFileReadHandle input(PrintablePath(options.source), StringVector(1, "OTBM"));
+			if (!input.isOk()) {
+				report.error = "Could not open the regular OTBM source for streaming.";
+				return StreamingConversionStatus::Failed;
+			}
+			DiskNodeFileWriteHandle output(PrintablePath(stagedPath), outputIdentifier);
+			if (!output.isOk()) {
+				report.error = "Could not open the staged OTBM output for streaming.";
+				return StreamingConversionStatus::Failed;
+			}
+			BinaryNode* root = input.getRootNode();
+			if (!root || !StreamOtbmNode(root, input, &output, &transform, expected, memoryLimitBytes, true, report.error) || !input.isOk() || !output.isOk()) {
+				if (report.error.empty()) {
+					report.error = "The source OTBM node stream is invalid or truncated.";
+				}
+				return StreamingConversionStatus::Failed;
+			}
+			output.close();
+		}
+		report.conversionSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - conversionStart).count();
+		report.tileCount = expected.tileCount;
+		reportBuilder.finish(options.direction);
+
+		ScopedLoadingBar::SetLoadScale(72, 98);
+		if (!ScopedLoadingBar::SetLoadDone(1, "Validating streamed OTBM output...")) {
+			report.cancelled = true;
+			report.error = "Conversion cancelled before output validation.";
+			return StreamingConversionStatus::Failed;
+		}
+		const auto validationStart = std::chrono::steady_clock::now();
+		StreamingOtbmSummary actual;
+		{
+			DiskNodeFileReadHandle validationInput(PrintablePath(stagedPath), StringVector(1, "OTBM"));
+			if (!validationInput.isOk()) {
+				report.error = "Generated OTBM could not be reopened for streaming validation.";
+				return StreamingConversionStatus::Failed;
+			}
+			BinaryNode* validationRoot = validationInput.getRootNode();
+			if (!validationRoot || !StreamOtbmNode(validationRoot, validationInput, nullptr, nullptr, actual, memoryLimitBytes, true, report.error) || !validationInput.isOk()) {
+				if (report.error.empty()) {
+					report.error = "Generated OTBM has an invalid or truncated node stream.";
+				}
+				return StreamingConversionStatus::Failed;
+			}
+		}
+		if (expected.hash.value() != actual.hash.value() || expected.nodeCount != actual.nodeCount || expected.tileCount != actual.tileCount) {
+			report.error = "Generated OTBM failed byte-exact streaming validation; no destination file was replaced.";
+			return StreamingConversionStatus::Failed;
+		}
+
+		MapVersion stagedVersion;
+		uint32_t stagedItemMajorVersion = 0;
+		if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(stagedPath)), stagedVersion, &stagedItemMajorVersion) || stagedVersion.otbm != targetVersion.otbm || stagedVersion.client != targetVersion.client || stagedItemMajorVersion != targetItemMajorVersion) {
+			report.error = "Generated OTBM header does not match the selected target map version.";
+			return StreamingConversionStatus::Failed;
+		}
+
+		std::string commitError;
+		if (!transaction.Commit(commitError)) {
+			report.error = commitError;
+			return StreamingConversionStatus::Failed;
+		}
+		report.savingSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - validationStart).count();
+		report.outputValidated = true;
+		report.success = true;
+		ScopedLoadingBar::SetLoadDone(100, "Conversion complete.");
+		return StreamingConversionStatus::Succeeded;
+	}
 
 	struct MapSummary {
 		uint16_t width = 0;
@@ -807,6 +1099,13 @@ MapItemIdPerformanceLimits GetMapItemIdConverterPerformanceLimits() {
 		const uint64_t safeHeadroom = available - available / 4;
 		limits.safeMemoryLimitBytes = workingSet > std::numeric_limits<uint64_t>::max() - safeHeadroom ? std::numeric_limits<uint64_t>::max() : workingSet + safeHeadroom;
 	}
+	if (total != 0) {
+		// A momentary drop in free physical RAM must not reduce Automatic mode to
+		// a budget too small for a large map. This is only an upper bound, not a
+		// preallocation; keep 25% of physical RAM outside the automatic budget.
+		const uint64_t physicalMemoryFloor = total - total / 4;
+		limits.safeMemoryLimitBytes = std::max(limits.safeMemoryLimitBytes, physicalMemoryFloor);
+	}
 	limits.maximumCustomMemoryLimitBytes = total != 0 ? total : limits.safeMemoryLimitBytes;
 	if (limits.maximumCustomMemoryLimitBytes == 0) {
 		limits.maximumCustomMemoryLimitBytes = 8 * GiB;
@@ -837,6 +1136,7 @@ std::string MapItemIdConversionReport::format(const MapItemIdConversionOptions& 
 		   << "Destination: " << PrintablePath(options.destination) << '\n'
 		   << "Mapping: " << ItemIdMapping::sourceVersion() << '\n'
 		   << "Processing mode: " << (options.performance.mode == MapItemIdProcessingMode::Automatic ? "Automatic" : "Custom") << '\n'
+		   << "Conversion path: " << (streamed ? "Streaming (low memory)" : "Full map compatibility") << '\n'
 		   << "Threads used: " << threadsUsed << '\n'
 		   << "Memory limit: " << std::fixed << std::setprecision(2) << static_cast<double>(memoryLimitBytes) / static_cast<double>(GiB) << " GB\n"
 		   << "Loading time: " << loadingSeconds << " s\n"
@@ -954,6 +1254,23 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 			report.error = "Source is not a valid supported OTBM file.";
 		}
 		return finish();
+	}
+	if (sourceVersion.otbm == targetVersion.otbm) {
+		const StreamingConversionStatus streamingStatus = ConvertMapItemIdsStreaming(
+			options,
+			targetVersion,
+			targetItemMajorVersion,
+			targetItemMinorVersion,
+			performance.memoryLimitBytes,
+			report
+		);
+		if (streamingStatus == StreamingConversionStatus::Succeeded) {
+			return finish();
+		}
+		if (streamingStatus == StreamingConversionStatus::Failed) {
+			report.cancelled = report.error.find("cancelled") != std::string::npos;
+			return finish();
+		}
 	}
 
 	ScopedLoadingBar loading("Converting OTBM item IDs...", true);
