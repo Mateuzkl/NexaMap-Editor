@@ -1609,21 +1609,7 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 	}
 
 	g_gui.SetLoadDone(99, "Saving spawns...");
-	const SpawnDocument spawnDocument = SpawnMapAdapter::Capture(map);
-	SpawnWriteResult spawnResult;
-	const std::filesystem::path directory(nstr(identifier.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
-	const std::filesystem::path finalSpawn = directory / map.spawnfile;
-	if (map.spawnFormat == SpawnFormat::CanaryCrystal) {
-		const std::filesystem::path finalNpcSpawn = directory / map.spawnNpcFile;
-		spawnResult = SpawnFormatIO::SaveCanaryCrystal(spawnDocument, finalSpawn, finalNpcSpawn);
-	} else {
-		spawnResult = SpawnFormatIO::SaveTfs(spawnDocument, finalSpawn);
-	}
-	for (const std::string& message : spawnResult.warnings) {
-		warnings.push_back(wxstr(message));
-	}
-	if (!spawnResult.success) {
-		warnings.push_back(wxstr("IOMapOTBM::saveMap: " + spawnResult.error));
+	if (!saveSpawns(map, identifier)) {
 		return false;
 	}
 
@@ -1941,7 +1927,11 @@ static bool fileMatchesXmlContent(const wxString& filepath, const std::string& c
 }
 
 static bool writeContentToFile(const wxString& filepath, const std::string& content) {
-	wxFile file(filepath, wxFile::write);
+	FileSaveTransaction transaction;
+	const std::filesystem::path destination(filepath.ToStdWstring());
+	const std::filesystem::path staged = transaction.Stage(destination);
+
+	wxFile file(wxString(staged.wstring()), wxFile::write);
 	if (!file.IsOpened()) {
 		return false;
 	}
@@ -1952,7 +1942,12 @@ static bool writeContentToFile(const wxString& filepath, const std::string& cont
 			return false;
 		}
 	}
-	return file.Close();
+	if (!file.Close()) {
+		return false;
+	}
+
+	std::string error;
+	return transaction.Commit(error);
 }
 
 static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath) {

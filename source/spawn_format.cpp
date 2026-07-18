@@ -459,7 +459,7 @@ namespace {
 	void ConvertToCRLF(std::string& content) {
 #ifdef _WIN32
 		std::string windowsContent;
-		windowsContent.reserve(content.size() * 11 / 10); // Reserve ~10% extra for \r
+		windowsContent.reserve(content.size() + 1024); // Heuristic reserve to avoid reallocations
 		for (size_t i = 0; i < content.size(); ++i) {
 			if (content[i] == '\n' && (i == 0 || content[i - 1] != '\r')) {
 				windowsContent += '\r';
@@ -472,12 +472,14 @@ namespace {
 
 	// Helper function to read file content
 	bool ReadFileContent(const std::filesystem::path& file, std::string& content) {
-		std::ifstream stream(file, std::ios::binary);
+		std::ifstream stream(file, std::ios::binary | std::ios::ate);
 		if (!stream) {
 			return false;
 		}
-		content.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-		return true;
+		const std::streamsize size = stream.tellg();
+		stream.seekg(0, std::ios::beg);
+		content.resize(static_cast<size_t>(size));
+		return static_cast<bool>(stream.read(content.data(), size));
 	}
 
 	// Helper function to write file content
@@ -879,13 +881,7 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 	// Check if destination file already has identical content
 	std::string existingContent;
 	if (ReadFileContent(file, existingContent) && existingContent == newContent) {
-		// Content is identical - validate without writing
-		std::string validationError;
-		if (!ValidateTfsDocument(document, file, validationError)) {
-			result.error = "Existing file " + validationError;
-			return result;
-		}
-		// File is already correct - skip write
+		// File is already correct - skip write and validation
 		result.success = true;
 		return result;
 	}
@@ -996,34 +992,35 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 	bool npcMatches = ReadFileContent(npcFile, existingNpc) && (existingNpc == newNpcContent);
 
 	if (monsterMatches && npcMatches) {
-		// Both files are identical - validate without writing
-		std::string validationError;
-		if (!ValidateCanaryCrystalDocument(document, monsterFile, npcFile, validationError)) {
-			result.error = "Existing files " + validationError;
-			return result;
-		}
-		// Files are already correct - skip write
+		// Files are already correct - skip write and validation
 		result.success = true;
 		return result;
 	}
 
 	// Content differs or files don't exist - proceed with transaction
 	FileSaveTransaction transaction;
-	const std::filesystem::path stagedMonsterFile = transaction.Stage(monsterFile);
-	const std::filesystem::path stagedNpcFile = transaction.Stage(npcFile);
 	
-	// Write the content (already has correct line endings from conversion above)
-	if (!WriteFileContent(stagedMonsterFile, newMonsterContent)) {
-		result.error = "Could not write " + monsterFile.string();
-		return result;
+	// Stage and write only files that actually changed
+	std::filesystem::path stagedMonsterFile = monsterFile;
+	std::filesystem::path stagedNpcFile = npcFile;
+	
+	if (!monsterMatches) {
+		stagedMonsterFile = transaction.Stage(monsterFile);
+		if (!WriteFileContent(stagedMonsterFile, newMonsterContent)) {
+			result.error = "Could not write " + monsterFile.string();
+			return result;
+		}
+	}
+	
+	if (!npcMatches) {
+		stagedNpcFile = transaction.Stage(npcFile);
+		if (!WriteFileContent(stagedNpcFile, newNpcContent)) {
+			result.error = "Could not write " + npcFile.string();
+			return result;
+		}
 	}
 
-	if (!WriteFileContent(stagedNpcFile, newNpcContent)) {
-		result.error = "Could not write " + npcFile.string();
-		return result;
-	}
-
-	// Validate the written files
+	// Validate the written files (use final paths for unchanged, staged for changed)
 	std::string validationError;
 	if (!ValidateCanaryCrystalDocument(document, stagedMonsterFile, stagedNpcFile, validationError)) {
 		result.error = "Generated Canary/Crystal " + validationError;
