@@ -1942,7 +1942,6 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 
 	bool waypointsWarning = false;
 
-
 	FileName tmpName;
 	MapVersion mapVersion = map.getVersion();
 

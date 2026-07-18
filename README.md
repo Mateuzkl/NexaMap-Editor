@@ -101,6 +101,20 @@ cmake --build out/build/release
 cmake --install out/build/release --prefix out/install/release
 ```
 
+### Automated Windows packages
+
+GitHub Actions builds and tests `Release` packages for Windows x64 and x86 on
+pull requests and updates to `main`. Both ZIP files are available as workflow
+artifacts.
+
+Pushing a version tag publishes the same packages, with SHA-256 checksums, as a
+non-draft GitHub Release:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 ### Linux — CMake and vcpkg
 
 Install Git, CMake, Ninja, a C++20 compiler and the development packages required by OpenGL and your desktop environment. Package names vary by distribution.

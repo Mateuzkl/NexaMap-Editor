@@ -360,15 +360,11 @@ namespace {
 	};
 
 	uint16_t ReadLittleEndianU16(const std::string& data, size_t offset) {
-		return static_cast<uint16_t>(static_cast<uint8_t>(data[offset])) |
-		       (static_cast<uint16_t>(static_cast<uint8_t>(data[offset + 1])) << 8);
+		return static_cast<uint16_t>(static_cast<uint8_t>(data[offset])) | (static_cast<uint16_t>(static_cast<uint8_t>(data[offset + 1])) << 8);
 	}
 
 	uint32_t ReadLittleEndianU32(const std::string& data, size_t offset) {
-		return static_cast<uint32_t>(static_cast<uint8_t>(data[offset])) |
-		       (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 1])) << 8) |
-		       (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 2])) << 16) |
-		       (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 3])) << 24);
+		return static_cast<uint32_t>(static_cast<uint8_t>(data[offset])) | (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 1])) << 8) | (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 2])) << 16) | (static_cast<uint32_t>(static_cast<uint8_t>(data[offset + 3])) << 24);
 	}
 
 	void WriteLittleEndianU16(std::string& data, size_t offset, uint16_t value) {
@@ -1196,284 +1192,284 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 		return report;
 	};
 	try {
-	if (!ItemIdMapping::validateTables()) {
-		report.error = "Embedded item ID mapping tables failed validation.";
-		return finish();
-	}
-	if (options.source.empty() || options.destination.empty()) {
-		report.error = "Source and destination paths are required.";
-		return finish();
-	}
-	if (FileSaveTransaction::PathsReferToSameFile(options.source, options.destination)) {
-		report.error = "Source and destination must be different files.";
-		return finish();
-	}
-	std::error_code filesystemError;
-	if (!std::filesystem::is_regular_file(options.source, filesystemError) || filesystemError) {
-		report.error = "Source OTBM file does not exist or cannot be accessed.";
-		return finish();
-	}
-	const uint64_t sourceSize = std::filesystem::file_size(options.source, filesystemError);
-	if (filesystemError) {
-		report.error = "Could not inspect the source OTBM size: " + filesystemError.message();
-		return finish();
-	}
-	const ResolvedPerformance performance = ResolvePerformance(options, sourceSize, report.error);
-	if (!report.error.empty()) {
-		return finish();
-	}
-	report.memoryLimitBytes = performance.memoryLimitBytes;
-	const OTBMMemoryBudgetCheck memoryBudgetCheck = [limit = performance.memoryLimitBytes, &report](const char* phase, uint64_t pendingBytes, std::string& error) {
-		const bool withinBudget = CheckMemoryLimit(limit, phase, error, pendingBytes);
-		if (!withinBudget) {
-			report.error = error;
-		}
-		return withinBudget;
-	};
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "before conversion setup", report.error)) {
-		return finish();
-	}
-
-	ClientVersion* targetClient = ClientVersion::get(options.targetVersion.client);
-	if (!targetClient) {
-		report.error = "The selected target map version is not registered by this RME installation.";
-		return finish();
-	}
-	const MapVersion targetVersion(options.targetVersion.otbm, targetClient->getID());
-	if (targetVersion.otbm < MAP_OTBM_1 || targetVersion.otbm > MAP_OTBM_4) {
-		report.error = "The selected target OTBM version is not supported.";
-		return finish();
-	}
-	const OtbVersion targetOtb = targetClient->getOTBVersion();
-	const uint32_t targetItemMajorVersion = static_cast<uint32_t>(targetOtb.format_version);
-	const uint32_t targetItemMinorVersion = static_cast<uint32_t>(targetOtb.id);
-
-	MapVersion sourceVersion;
-	if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(options.source)), sourceVersion, nullptr, memoryBudgetCheck)) {
-		if (report.error.empty()) {
-			report.error = "Source is not a valid supported OTBM file.";
-		}
-		return finish();
-	}
-	if (sourceVersion.otbm == targetVersion.otbm) {
-		const StreamingConversionStatus streamingStatus = ConvertMapItemIdsStreaming(
-			options,
-			targetVersion,
-			targetItemMajorVersion,
-			targetItemMinorVersion,
-			performance.memoryLimitBytes,
-			report
-		);
-		if (streamingStatus == StreamingConversionStatus::Succeeded) {
+		if (!ItemIdMapping::validateTables()) {
+			report.error = "Embedded item ID mapping tables failed validation.";
 			return finish();
 		}
-		if (streamingStatus == StreamingConversionStatus::Failed) {
-			report.cancelled = report.error.find("cancelled") != std::string::npos;
+		if (options.source.empty() || options.destination.empty()) {
+			report.error = "Source and destination paths are required.";
 			return finish();
 		}
-	}
+		if (FileSaveTransaction::PathsReferToSameFile(options.source, options.destination)) {
+			report.error = "Source and destination must be different files.";
+			return finish();
+		}
+		std::error_code filesystemError;
+		if (!std::filesystem::is_regular_file(options.source, filesystemError) || filesystemError) {
+			report.error = "Source OTBM file does not exist or cannot be accessed.";
+			return finish();
+		}
+		const uint64_t sourceSize = std::filesystem::file_size(options.source, filesystemError);
+		if (filesystemError) {
+			report.error = "Could not inspect the source OTBM size: " + filesystemError.message();
+			return finish();
+		}
+		const ResolvedPerformance performance = ResolvePerformance(options, sourceSize, report.error);
+		if (!report.error.empty()) {
+			return finish();
+		}
+		report.memoryLimitBytes = performance.memoryLimitBytes;
+		const OTBMMemoryBudgetCheck memoryBudgetCheck = [limit = performance.memoryLimitBytes, &report](const char* phase, uint64_t pendingBytes, std::string& error) {
+			const bool withinBudget = CheckMemoryLimit(limit, phase, error, pendingBytes);
+			if (!withinBudget) {
+				report.error = error;
+			}
+			return withinBudget;
+		};
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "before conversion setup", report.error)) {
+			return finish();
+		}
 
-	ScopedLoadingBar loading("Converting OTBM item IDs...", true);
-	ReportBuilder reportBuilder(report);
-	std::unique_ptr<Map> map = std::make_unique<Map>();
-	MappingCodec reverseReadCodec(ItemIdMapping::Direction::ClientToServer, &reportBuilder);
-	IOMapOTBM loader(sourceVersion);
-	loader.useMemoryBudgetCheck(memoryBudgetCheck);
-	if (options.direction == ItemIdMapping::Direction::ClientToServer) {
-		loader.useItemIdCodec(&reverseReadCodec);
-	}
+		ClientVersion* targetClient = ClientVersion::get(options.targetVersion.client);
+		if (!targetClient) {
+			report.error = "The selected target map version is not registered by this RME installation.";
+			return finish();
+		}
+		const MapVersion targetVersion(options.targetVersion.otbm, targetClient->getID());
+		if (targetVersion.otbm < MAP_OTBM_1 || targetVersion.otbm > MAP_OTBM_4) {
+			report.error = "The selected target OTBM version is not supported.";
+			return finish();
+		}
+		const OtbVersion targetOtb = targetClient->getOTBVersion();
+		const uint32_t targetItemMajorVersion = static_cast<uint32_t>(targetOtb.format_version);
+		const uint32_t targetItemMinorVersion = static_cast<uint32_t>(targetOtb.id);
 
-	ScopedLoadingBar::SetLoadScale(0, 25);
-	const auto loadingStart = std::chrono::steady_clock::now();
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "before loading the source map", report.error)) {
-		return finish();
-	}
-	if (!loader.loadMapData(*map, FileName(PathToWxString(options.source)))) {
+		MapVersion sourceVersion;
+		if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(options.source)), sourceVersion, nullptr, memoryBudgetCheck)) {
+			if (report.error.empty()) {
+				report.error = "Source is not a valid supported OTBM file.";
+			}
+			return finish();
+		}
+		if (sourceVersion.otbm == targetVersion.otbm) {
+			const StreamingConversionStatus streamingStatus = ConvertMapItemIdsStreaming(
+				options,
+				targetVersion,
+				targetItemMajorVersion,
+				targetItemMinorVersion,
+				performance.memoryLimitBytes,
+				report
+			);
+			if (streamingStatus == StreamingConversionStatus::Succeeded) {
+				return finish();
+			}
+			if (streamingStatus == StreamingConversionStatus::Failed) {
+				report.cancelled = report.error.find("cancelled") != std::string::npos;
+				return finish();
+			}
+		}
+
+		ScopedLoadingBar loading("Converting OTBM item IDs...", true);
+		ReportBuilder reportBuilder(report);
+		std::unique_ptr<Map> map = std::make_unique<Map>();
+		MappingCodec reverseReadCodec(ItemIdMapping::Direction::ClientToServer, &reportBuilder);
+		IOMapOTBM loader(sourceVersion);
+		loader.useMemoryBudgetCheck(memoryBudgetCheck);
+		if (options.direction == ItemIdMapping::Direction::ClientToServer) {
+			loader.useItemIdCodec(&reverseReadCodec);
+		}
+
+		ScopedLoadingBar::SetLoadScale(0, 25);
+		const auto loadingStart = std::chrono::steady_clock::now();
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "before loading the source map", report.error)) {
+			return finish();
+		}
+		if (!loader.loadMapData(*map, FileName(PathToWxString(options.source)))) {
+			report.loadingSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - loadingStart).count();
+			AppendWarnings(loader, report);
+			report.cancelled = IsCancellationError(loader.getError());
+			if (report.error.empty()) {
+				report.error = report.cancelled ? "Conversion cancelled while loading the source map." : nstr(loader.getError());
+			}
+			return finish();
+		}
 		report.loadingSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - loadingStart).count();
 		AppendWarnings(loader, report);
-		report.cancelled = IsCancellationError(loader.getError());
-		if (report.error.empty()) {
-			report.error = report.cancelled ? "Conversion cancelled while loading the source map." : nstr(loader.getError());
-		}
-		return finish();
-	}
-	report.loadingSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - loadingStart).count();
-	AppendWarnings(loader, report);
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "after loading", report.error)) {
-		return finish();
-	}
-	if (!FileSaveTransaction::PathsReferToSameFile(ParentDirectory(options.source), ParentDirectory(options.destination)) && ReferencesSidecars(*map)) {
-		report.error = "Cross-directory output is not supported when the OTBM references spawn, NPC spawn, house, or zone sidecar files. Choose a destination in the source map directory.";
-		return finish();
-	}
-	const std::filesystem::path destinationDirectory = options.destination.parent_path();
-	if (!destinationDirectory.empty()) {
-		std::filesystem::create_directories(destinationDirectory, filesystemError);
-		if (filesystemError) {
-			report.error = "Could not create destination directory: " + filesystemError.message();
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "after loading", report.error)) {
 			return finish();
 		}
-	}
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "before applying the target map version", report.error)) {
-		return finish();
-	}
-	if (!map->convert(targetVersion)) {
-		report.error = "Could not apply the selected target map version.";
-		return finish();
-	}
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "after applying the target map version", report.error)) {
-		return finish();
-	}
+		if (!FileSaveTransaction::PathsReferToSameFile(ParentDirectory(options.source), ParentDirectory(options.destination)) && ReferencesSidecars(*map)) {
+			report.error = "Cross-directory output is not supported when the OTBM references spawn, NPC spawn, house, or zone sidecar files. Choose a destination in the source map directory.";
+			return finish();
+		}
+		const std::filesystem::path destinationDirectory = options.destination.parent_path();
+		if (!destinationDirectory.empty()) {
+			std::filesystem::create_directories(destinationDirectory, filesystemError);
+			if (filesystemError) {
+				report.error = "Could not create destination directory: " + filesystemError.message();
+				return finish();
+			}
+		}
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "before applying the target map version", report.error)) {
+			return finish();
+		}
+		if (!map->convert(targetVersion)) {
+			report.error = "Could not apply the selected target map version.";
+			return finish();
+		}
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "after applying the target map version", report.error)) {
+			return finish();
+		}
 
-	ScopedLoadingBar::SetLoadScale(25, 50);
-	const auto conversionStart = std::chrono::steady_clock::now();
-	MapSummary sourceSummary;
-	std::string analysisError;
-	const bool encodeOutputIds = options.direction == ItemIdMapping::Direction::ServerToClient;
-	ReportBuilder* analysisReport = encodeOutputIds ? &reportBuilder : nullptr;
-	if (!AnalyzeMap(*map, encodeOutputIds, analysisReport, sourceSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
+		ScopedLoadingBar::SetLoadScale(25, 50);
+		const auto conversionStart = std::chrono::steady_clock::now();
+		MapSummary sourceSummary;
+		std::string analysisError;
+		const bool encodeOutputIds = options.direction == ItemIdMapping::Direction::ServerToClient;
+		ReportBuilder* analysisReport = encodeOutputIds ? &reportBuilder : nullptr;
+		if (!AnalyzeMap(*map, encodeOutputIds, analysisReport, sourceSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
+			report.conversionSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - conversionStart).count();
+			report.cancelled = analysisError.empty();
+			report.error = analysisError.empty() ? "Conversion cancelled during map analysis." : analysisError;
+			return finish();
+		}
+		report.tileCount = sourceSummary.tileCount;
+		reportBuilder.finish(options.direction);
 		report.conversionSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - conversionStart).count();
-		report.cancelled = analysisError.empty();
-		report.error = analysisError.empty() ? "Conversion cancelled during map analysis." : analysisError;
-		return finish();
-	}
-	report.tileCount = sourceSummary.tileCount;
-	reportBuilder.finish(options.direction);
-	report.conversionSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - conversionStart).count();
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "after conversion analysis", report.error)) {
-		return finish();
-	}
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "after conversion analysis", report.error)) {
+			return finish();
+		}
 
-	FileSaveTransaction transaction;
-	const std::filesystem::path stagedPath = transaction.Stage(options.destination);
-	MappingCodec forwardWriteCodec(ItemIdMapping::Direction::ServerToClient);
-	IOMapOTBM saver(targetVersion);
-	saver.useMemoryBudgetCheck(memoryBudgetCheck);
-	saver.useItemVersionHeader(targetItemMajorVersion, targetItemMinorVersion);
-	if (encodeOutputIds) {
-		saver.useItemIdCodec(&forwardWriteCodec);
-	}
+		FileSaveTransaction transaction;
+		const std::filesystem::path stagedPath = transaction.Stage(options.destination);
+		MappingCodec forwardWriteCodec(ItemIdMapping::Direction::ServerToClient);
+		IOMapOTBM saver(targetVersion);
+		saver.useMemoryBudgetCheck(memoryBudgetCheck);
+		saver.useItemVersionHeader(targetItemMajorVersion, targetItemMinorVersion);
+		if (encodeOutputIds) {
+			saver.useItemIdCodec(&forwardWriteCodec);
+		}
 
-	ScopedLoadingBar::SetLoadScale(50, 72);
-	const auto savingStart = std::chrono::steady_clock::now();
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "before writing the output map", report.error)) {
-		return finish();
-	}
-	if (!saver.saveMapData(*map, FileName(PathToWxString(stagedPath)))) {
+		ScopedLoadingBar::SetLoadScale(50, 72);
+		const auto savingStart = std::chrono::steady_clock::now();
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "before writing the output map", report.error)) {
+			return finish();
+		}
+		if (!saver.saveMapData(*map, FileName(PathToWxString(stagedPath)))) {
+			report.savingSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - savingStart).count();
+			AppendWarnings(saver, report);
+			report.cancelled = IsCancellationError(saver.getError());
+			if (report.error.empty()) {
+				report.error = report.cancelled ? "Conversion cancelled while writing the output map." : nstr(saver.getError());
+			}
+			return finish();
+		}
 		report.savingSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - savingStart).count();
 		AppendWarnings(saver, report);
-		report.cancelled = IsCancellationError(saver.getError());
-		if (report.error.empty()) {
-			report.error = report.cancelled ? "Conversion cancelled while writing the output map." : nstr(saver.getError());
+
+		MapVersion stagedVersion;
+		uint32_t stagedItemMajorVersion = 0;
+		if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(stagedPath)), stagedVersion, &stagedItemMajorVersion, memoryBudgetCheck) || stagedVersion.otbm != targetVersion.otbm || stagedVersion.client != targetVersion.client || stagedItemMajorVersion != targetItemMajorVersion) {
+			if (report.error.empty()) {
+				report.error = "Generated OTBM header does not match the selected target map version.";
+			}
+			return finish();
 		}
-		return finish();
-	}
-	report.savingSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - savingStart).count();
-	AppendWarnings(saver, report);
 
-	MapVersion stagedVersion;
-	uint32_t stagedItemMajorVersion = 0;
-	if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(stagedPath)), stagedVersion, &stagedItemMajorVersion, memoryBudgetCheck) || stagedVersion.otbm != targetVersion.otbm || stagedVersion.client != targetVersion.client || stagedItemMajorVersion != targetItemMajorVersion) {
-		if (report.error.empty()) {
-			report.error = "Generated OTBM header does not match the selected target map version.";
+		map.reset();
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "after saving", report.error)) {
+			return finish();
 		}
-		return finish();
-	}
+		if (!ScopedLoadingBar::SetLoadDone(99, "Reopening generated OTBM...")) {
+			report.cancelled = true;
+			report.error = "Conversion cancelled before output validation.";
+			return finish();
+		}
 
-	map.reset();
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "after saving", report.error)) {
-		return finish();
-	}
-	if (!ScopedLoadingBar::SetLoadDone(99, "Reopening generated OTBM...")) {
-		report.cancelled = true;
-		report.error = "Conversion cancelled before output validation.";
-		return finish();
-	}
-
-	ScopedLoadingBar::SetLoadScale(72, 90);
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "before reopening the generated OTBM", report.error)) {
-		return finish();
-	}
-	std::unique_ptr<Map> validationMap = std::make_unique<Map>();
-	MappingCodec validationReadCodec(ItemIdMapping::Direction::ClientToServer);
-	IOMapOTBM validator(targetVersion);
-	validator.useMemoryBudgetCheck(memoryBudgetCheck);
-	if (encodeOutputIds) {
-		validator.useItemIdCodec(&validationReadCodec);
-	}
-	if (!validator.loadMapData(*validationMap, FileName(PathToWxString(stagedPath)))) {
+		ScopedLoadingBar::SetLoadScale(72, 90);
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "before reopening the generated OTBM", report.error)) {
+			return finish();
+		}
+		std::unique_ptr<Map> validationMap = std::make_unique<Map>();
+		MappingCodec validationReadCodec(ItemIdMapping::Direction::ClientToServer);
+		IOMapOTBM validator(targetVersion);
+		validator.useMemoryBudgetCheck(memoryBudgetCheck);
+		if (encodeOutputIds) {
+			validator.useItemIdCodec(&validationReadCodec);
+		}
+		if (!validator.loadMapData(*validationMap, FileName(PathToWxString(stagedPath)))) {
+			AppendWarnings(validator, report);
+			report.cancelled = IsCancellationError(validator.getError());
+			if (report.error.empty()) {
+				report.error = report.cancelled ? "Conversion cancelled while validating the output map." : "Generated OTBM could not be reopened: " + nstr(validator.getError());
+			}
+			return finish();
+		}
 		AppendWarnings(validator, report);
-		report.cancelled = IsCancellationError(validator.getError());
-		if (report.error.empty()) {
-			report.error = report.cancelled ? "Conversion cancelled while validating the output map." : "Generated OTBM could not be reopened: " + nstr(validator.getError());
+		if (validationMap->getVersion().otbm != targetVersion.otbm || validationMap->getVersion().client != targetVersion.client) {
+			report.error = "Generated OTBM reopened with metadata different from the selected target version.";
+			return finish();
 		}
-		return finish();
-	}
-	AppendWarnings(validator, report);
-	if (validationMap->getVersion().otbm != targetVersion.otbm || validationMap->getVersion().client != targetVersion.client) {
-		report.error = "Generated OTBM reopened with metadata different from the selected target version.";
-		return finish();
-	}
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "while validating the output", report.error)) {
-		return finish();
-	}
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "while validating the output", report.error)) {
+			return finish();
+		}
 
-	ScopedLoadingBar::SetLoadScale(90, 94);
-	MapSummary validationSummary;
-	analysisError.clear();
-	if (!AnalyzeMap(*validationMap, encodeOutputIds, nullptr, validationSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
-		report.cancelled = analysisError.empty();
-		report.error = analysisError.empty() ? "Conversion cancelled during output validation." : analysisError;
-		return finish();
-	}
-	if (!ValidateSpecialItemState(sourceSummary, validationSummary, report.error)) {
-		return finish();
-	}
-	if (!(sourceSummary == validationSummary)) {
-		report.error = "Generated OTBM failed structural validation; no destination file was replaced.";
-		return finish();
-	}
+		ScopedLoadingBar::SetLoadScale(90, 94);
+		MapSummary validationSummary;
+		analysisError.clear();
+		if (!AnalyzeMap(*validationMap, encodeOutputIds, nullptr, validationSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
+			report.cancelled = analysisError.empty();
+			report.error = analysisError.empty() ? "Conversion cancelled during output validation." : analysisError;
+			return finish();
+		}
+		if (!ValidateSpecialItemState(sourceSummary, validationSummary, report.error)) {
+			return finish();
+		}
+		if (!(sourceSummary == validationSummary)) {
+			report.error = "Generated OTBM failed structural validation; no destination file was replaced.";
+			return finish();
+		}
 
-	ScopedLoadingBar::SetLoadScale(94, 98);
-	FileSaveTransaction roundTripTransaction;
-	const std::filesystem::path roundTripPath = roundTripTransaction.Stage(options.destination);
-	MappingCodec validationWriteCodec(ItemIdMapping::Direction::ServerToClient);
-	IOMapOTBM validationSaver(targetVersion);
-	validationSaver.useMemoryBudgetCheck(memoryBudgetCheck);
-	validationSaver.useItemVersionHeader(targetItemMajorVersion, targetItemMinorVersion);
-	if (encodeOutputIds) {
-		validationSaver.useItemIdCodec(&validationWriteCodec);
-	}
-	if (!CheckMemoryLimit(performance.memoryLimitBytes, "before round-trip serialization", report.error)) {
-		return finish();
-	}
-	if (!validationSaver.saveMapData(*validationMap, FileName(PathToWxString(roundTripPath)))) {
+		ScopedLoadingBar::SetLoadScale(94, 98);
+		FileSaveTransaction roundTripTransaction;
+		const std::filesystem::path roundTripPath = roundTripTransaction.Stage(options.destination);
+		MappingCodec validationWriteCodec(ItemIdMapping::Direction::ServerToClient);
+		IOMapOTBM validationSaver(targetVersion);
+		validationSaver.useMemoryBudgetCheck(memoryBudgetCheck);
+		validationSaver.useItemVersionHeader(targetItemMajorVersion, targetItemMinorVersion);
+		if (encodeOutputIds) {
+			validationSaver.useItemIdCodec(&validationWriteCodec);
+		}
+		if (!CheckMemoryLimit(performance.memoryLimitBytes, "before round-trip serialization", report.error)) {
+			return finish();
+		}
+		if (!validationSaver.saveMapData(*validationMap, FileName(PathToWxString(roundTripPath)))) {
+			AppendWarnings(validationSaver, report);
+			report.cancelled = IsCancellationError(validationSaver.getError());
+			if (report.error.empty()) {
+				report.error = report.cancelled ? "Conversion cancelled during round-trip validation." : "Generated OTBM failed native round-trip save: " + nstr(validationSaver.getError());
+			}
+			return finish();
+		}
 		AppendWarnings(validationSaver, report);
-		report.cancelled = IsCancellationError(validationSaver.getError());
-		if (report.error.empty()) {
-			report.error = report.cancelled ? "Conversion cancelled during round-trip validation." : "Generated OTBM failed native round-trip save: " + nstr(validationSaver.getError());
+		std::string comparisonError;
+		// Unlike the quick AnalyzeMap gate, native byte-for-byte reserialization covers every persisted OTBM field before commit.
+		if (!FilesMatch(stagedPath, roundTripPath, comparisonError)) {
+			report.error = "Generated OTBM failed byte-exact round-trip validation: " + comparisonError;
+			return finish();
 		}
-		return finish();
-	}
-	AppendWarnings(validationSaver, report);
-	std::string comparisonError;
-	// Unlike the quick AnalyzeMap gate, native byte-for-byte reserialization covers every persisted OTBM field before commit.
-	if (!FilesMatch(stagedPath, roundTripPath, comparisonError)) {
-		report.error = "Generated OTBM failed byte-exact round-trip validation: " + comparisonError;
-		return finish();
-	}
-	report.outputValidated = true;
-	validationMap.reset();
+		report.outputValidated = true;
+		validationMap.reset();
 
-	std::string commitError;
-	if (!transaction.Commit(commitError)) {
-		report.error = commitError;
-		return finish();
-	}
+		std::string commitError;
+		if (!transaction.Commit(commitError)) {
+			report.error = commitError;
+			return finish();
+		}
 
-	report.success = true;
-	ScopedLoadingBar::SetLoadDone(100, "Conversion complete.");
-	return finish();
+		report.success = true;
+		ScopedLoadingBar::SetLoadDone(100, "Conversion complete.");
+		return finish();
 	} catch (const std::bad_alloc&) {
 		report.error = "Conversion stopped because the configured operation could not allocate enough memory.";
 		return finish();

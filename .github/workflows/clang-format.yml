@@ -1,53 +1,57 @@
 ---
 name: Check code style
+
 on:
   pull_request:
     paths:
       - "source/**"
+      - ".clang-format"
       - ".github/workflows/clang-format.yml"
   push:
+    branches:
+      - main
     paths:
       - "source/**"
+      - ".clang-format"
+      - ".github/workflows/clang-format.yml"
+permissions:
+  contents: read
+
+concurrency:
+  group: clang-format-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  clang-format:
     runs-on: ubuntu-latest
     steps:
-      - name: Cancel Previous Runs
-        if: github.ref != 'refs/heads/master'
-        uses: fkirc/skip-duplicate-actions@master
+      - name: Check out source
+        uses: actions/checkout@v7
         with:
-          concurrent_skipping: "same_content"
-          cancel_others: true
+          fetch-depth: 0
 
-      - name: Set up Git
-        if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Find changed source files
+        id: changed-files
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "GitHub Actions"
+          if [[ -z "${BASE_SHA}" || "${BASE_SHA}" =~ ^0+$ ]]; then
+            BASE_SHA="$(git rev-list --max-parents=0 "${HEAD_SHA}")"
+          fi
 
-      - name: Actions checkout
-        if: ${{ github.ref != 'refs/heads/master' }}
-        uses: actions/checkout@v3
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          mapfile -t files < <(
+            git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" "${HEAD_SHA}" -- source |
+              awk '/^source\/.*\.(cpp|hpp|h)$/ && $0 !~ /^source\/ext\//'
+          )
+          printf 'files=%s\n' "${files[*]}" >> "${GITHUB_OUTPUT}"
 
-      - name: Run clang format lint
-        if: ${{ github.ref != 'refs/heads/master' }}
-        uses: DoozyX/clang-format-lint-action@v0.16.2
+      - name: Check clang-format
+        if: steps.changed-files.outputs.files != ''
+        uses: DoozyX/clang-format-lint-action@v0.20
         with:
-          source: "source"
+          source: ${{ steps.changed-files.outputs.files }}
           extensions: "cpp,hpp,h"
           clangFormatVersion: 16
-          inplace: true
-
-      - name: Run add and commit
-        if: ${{ github.ref != 'refs/heads/master' }}
-        uses: EndBug/add-and-commit@v9
-        with:
-          author_name: GitHub Actions
-          author_email: github-actions[bot]@users.noreply.github.com
-          message: "Code format - (Clang-format)"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          inplace: false

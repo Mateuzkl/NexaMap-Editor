@@ -125,7 +125,7 @@ protected:
 
 	template <class T>
 	bool getType(T& ref) {
-		size_t const numRead = fread(&ref, sizeof(ref), 1, file);
+		const size_t numRead = fread(&ref, sizeof(ref), 1, file);
 		return numRead == 1 && ferror(file) == 0;
 	}
 };
