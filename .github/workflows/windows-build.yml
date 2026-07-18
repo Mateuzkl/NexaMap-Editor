@@ -52,12 +52,31 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force .vcpkg-cache | Out-Null
 
+      - name: Detect Visual Studio generator
+        id: visual-studio
+        shell: pwsh
+        run: |
+          $generatorLine = cmake --help |
+            Select-String -Pattern "^\* Visual Studio [0-9]+ [0-9]{4}" |
+            Select-Object -First 1
+
+          if (-not $generatorLine) {
+            throw "CMake did not report a default Visual Studio generator."
+          }
+
+          $generator = [regex]::Match(
+            $generatorLine.Line,
+            "Visual Studio [0-9]+ [0-9]{4}"
+          ).Value
+          Write-Host "Using $generator"
+          "generator=$generator" >> $env:GITHUB_OUTPUT
+
       - name: Configure
         shell: pwsh
         run: |
           $toolchain = Join-Path $env:VCPKG_INSTALLATION_ROOT "scripts/buildsystems/vcpkg.cmake"
           cmake -S . -B "out/build/${{ matrix.architecture }}" `
-            -G "Visual Studio 17 2022" `
+            -G "${{ steps.visual-studio.outputs.generator }}" `
             -A "${{ matrix.cmake-architecture }}" `
             "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
             "-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}" `
