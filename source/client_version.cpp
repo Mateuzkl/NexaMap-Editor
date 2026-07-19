@@ -31,6 +31,7 @@
 // Static methods to load/save
 
 ClientVersion::VersionMap ClientVersion::client_versions;
+ClientVersionList ClientVersion::client_version_order;
 ClientVersion* ClientVersion::latest_version = nullptr;
 ClientVersion::OtbMap ClientVersion::otb_versions;
 
@@ -135,6 +136,7 @@ void ClientVersion::unloadVersions() {
 		delete it->second;
 	}
 	client_versions.clear();
+	client_version_order.clear();
 	latest_version = nullptr;
 	otb_versions.clear();
 }
@@ -274,6 +276,7 @@ void ClientVersion::loadVersion(pugi::xml_node versionNode) {
 	}
 
 	client_versions[version->getID()] = version;
+	client_version_order.push_back(version);
 	if (should_be_default) {
 		latest_version = version;
 	}
@@ -370,9 +373,9 @@ ClientVersion* ClientVersion::get(const std::string& id) {
 
 ClientVersionList ClientVersion::getAllVisible() {
 	ClientVersionList l;
-	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
-		if (i->second->isVisible()) {
-			l.push_back(i->second);
+	for (ClientVersion* version : client_version_order) {
+		if (version->isVisible()) {
+			l.push_back(version);
 		}
 	}
 	return l;
@@ -380,11 +383,11 @@ ClientVersionList ClientVersion::getAllVisible() {
 
 ClientVersionList ClientVersion::getAllForOTBMVersion(MapVersionID id) {
 	ClientVersionList list;
-	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
-		if (i->second->isVisible()) {
-			for (auto v = i->second->map_versions_supported.begin(); v != i->second->map_versions_supported.end(); ++v) {
+	for (ClientVersion* version : client_version_order) {
+		if (version->isVisible()) {
+			for (auto v = version->map_versions_supported.begin(); v != version->map_versions_supported.end(); ++v) {
 				if (*v == id) {
-					list.push_back(i->second);
+					list.push_back(version);
 				}
 			}
 		}

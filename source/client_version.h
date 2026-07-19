@@ -261,6 +261,7 @@ private:
 	// All versions
 	typedef std::map<ClientVersionID, ClientVersion*> VersionMap;
 	static VersionMap client_versions;
+	static ClientVersionList client_version_order;
 	static ClientVersion* latest_version;
 
 	// All otbs
