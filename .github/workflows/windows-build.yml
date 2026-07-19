@@ -7,7 +7,7 @@ on:
     branches:
       - main
     tags:
-      - "v*"
+      - "v[0-9]*.[0-9]*.[0-9]*"
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Restore vcpkg cache
         uses: actions/cache@v6
@@ -130,12 +132,20 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Validate version tag
+        shell: bash
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Release tags must use vMAJOR.MINOR.PATCH, for example v1.0.0."
+            exit 1
+          fi
+
       - name: Download packages
         uses: actions/download-artifact@v8
         with:

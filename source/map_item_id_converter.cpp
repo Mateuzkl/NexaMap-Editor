@@ -148,10 +148,6 @@ namespace {
 
 		const uint64_t perWorkerBudget = 2 * MiB;
 		resolved.threads = std::min<uint32_t>(resolved.threads, static_cast<uint32_t>(std::max<uint64_t>(1, resolved.memoryLimitBytes / perWorkerBudget)));
-		if (sourceSize > resolved.memoryLimitBytes) {
-			error = "The selected memory limit is smaller than the source file.";
-			return {};
-		}
 		const uint64_t workingSet = QueryProcessMemoryBytes();
 		if (workingSet != 0 && workingSet > resolved.memoryLimitBytes) {
 			error = "The RME process is already using more memory than the selected conversion limit.";
@@ -1251,7 +1247,8 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 			}
 			return finish();
 		}
-		if (sourceVersion.otbm == targetVersion.otbm) {
+		const bool sameDirectory = FileSaveTransaction::PathsReferToSameFile(ParentDirectory(options.source), ParentDirectory(options.destination));
+		if (sourceVersion.otbm == targetVersion.otbm && sameDirectory) {
 			const StreamingConversionStatus streamingStatus = ConvertMapItemIdsStreaming(
 				options,
 				targetVersion,
@@ -1298,7 +1295,7 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 		if (!CheckMemoryLimit(performance.memoryLimitBytes, "after loading", report.error)) {
 			return finish();
 		}
-		if (!FileSaveTransaction::PathsReferToSameFile(ParentDirectory(options.source), ParentDirectory(options.destination)) && ReferencesSidecars(*map)) {
+		if (!sameDirectory && ReferencesSidecars(*map)) {
 			report.error = "Cross-directory output is not supported when the OTBM references spawn, NPC spawn, house, or zone sidecar files. Choose a destination in the source map directory.";
 			return finish();
 		}

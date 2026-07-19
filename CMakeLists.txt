@@ -45,6 +45,7 @@ if(ENABLE_UNITY_BUILD)
 		message(WARNING "ENABLE_UNITY_BUILD requires CMake 3.16 or newer; continuing without unity build")
 	else()
 		set_source_files_properties(
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/gl_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
