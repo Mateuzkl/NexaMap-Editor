@@ -289,7 +289,9 @@ bool RunMapItemIdConverter(wxWindow* parent, MapItemIdConverterLaunchContext con
 	const MapItemIdConversionOptions options = dialog.getOptions();
 	const MapItemIdConversionReport report = ConvertMapItemIds(options);
 	const wxString title = report.success ? "OTBM Item ID Conversion Complete" : (report.cancelled ? "OTBM Item ID Conversion Cancelled" : "OTBM Item ID Conversion Failed");
-	g_gui.ShowTextBox(parent, title, wxstr(report.format(options)));
+	const std::string formattedReport = report.format(options);
+	const wxString reportText = wxstr(formattedReport);
+	g_gui.ShowTextBox(parent, title, reportText);
 	if (!report.success) {
 		return false;
 	}

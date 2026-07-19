@@ -51,6 +51,7 @@ struct MapItemIdConversionReport {
 	bool success = false;
 	bool cancelled = false;
 	bool outputValidated = false;
+	bool streamed = false;
 	uint64_t tileCount = 0;
 	uint64_t totalItems = 0;
 	uint64_t mappedItems = 0;

@@ -125,7 +125,7 @@ protected:
 
 	template <class T>
 	bool getType(T& ref) {
-		size_t const numRead = fread(&ref, sizeof(ref), 1, file);
+		const size_t numRead = fread(&ref, sizeof(ref), 1, file);
 		return numRead == 1 && ferror(file) == 0;
 	}
 };
@@ -176,6 +176,9 @@ public:
 	bool getRAW(std::string& str, size_t sz);
 	bool getString(std::string& str);
 	bool getLongString(std::string& str);
+	[[nodiscard]] const std::string& getNodeData() const {
+		return data;
+	}
 
 	BinaryNode* getChild();
 	// Returns this on success, nullptr on failure

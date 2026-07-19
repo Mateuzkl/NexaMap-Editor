@@ -37,11 +37,15 @@ add_executable(${PROJECT_NAME} ${rme_H} ${rme_SRC})
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED ON)
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "NexaMap Editor")
+if(WIN32)
+	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
 if(ENABLE_UNITY_BUILD)
 	if(CMAKE_VERSION VERSION_LESS 3.16)
 		message(WARNING "ENABLE_UNITY_BUILD requires CMake 3.16 or newer; continuing without unity build")
 	else()
 		set_source_files_properties(
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/gl_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
@@ -64,9 +68,19 @@ target_link_libraries(${PROJECT_NAME}
 	nlohmann_json::nlohmann_json
 )
 
-file(GLOB WELCOME_ASSETS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/images/welcome/*.png")
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
-install(FILES ${WELCOME_ASSETS} DESTINATION data/images/welcome)
+install(DIRECTORY
+	"${CMAKE_CURRENT_SOURCE_DIR}/brushes"
+	"${CMAKE_CURRENT_SOURCE_DIR}/data"
+	"${CMAKE_CURRENT_SOURCE_DIR}/extensions"
+	"${CMAKE_CURRENT_SOURCE_DIR}/icons"
+	DESTINATION .
+)
+install(FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.rtf"
+	"${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+	DESTINATION .
+)
 
 if(BUILD_TESTING)
 	add_executable(item_id_mapping_tests
