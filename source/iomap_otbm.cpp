@@ -1599,119 +1599,30 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 		return false;
 	}
 
-	MapVersion stagedVersion;
-	if (!getVersionInfo(identifier, stagedVersion, nullptr, memoryBudgetCheck)) {
-		error("Generated OTBM file failed validation: %s", mapFile.string().c_str());
-		return false;
-	}
 	return true;
 }
 
 bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
-	const std::filesystem::path mapFile(nstr(identifier.GetFullPath()));
-	const std::filesystem::path directory(nstr(identifier.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
-	const std::string mapName = nstr(identifier.GetName());
-	std::error_code ec;
-	if (!directory.empty()) {
-		std::filesystem::create_directories(directory, ec);
-	}
-	if (ec) {
-		error("Can not create map directory %s", directory.string().c_str());
-		return false;
-	}
-
-	if (map.spawnFormat == SpawnFormat::CanaryCrystal) {
-		if (map.spawnfile.empty()) {
-			map.spawnfile = mapName + "-monster.xml";
-		}
-		if (map.spawnNpcFile.empty()) {
-			map.spawnNpcFile = mapName + "-npc.xml";
-		}
-	} else {
-		map.spawnFormat = SpawnFormat::Tfs;
-		map.spawnNpcFile.clear();
-		if (map.spawnfile.empty()) {
-			map.spawnfile = mapName + "-spawn.xml";
-		}
-	}
-	if (map.zonefile.empty()) {
-		map.zonefile = mapName + "-zones.xml";
-	}
-
-	FileSaveTransaction transaction;
-	const std::filesystem::path stagedMap = transaction.Stage(mapFile);
-	if (!saveMapData(map, FileName(wxstr(stagedMap.string())))) {
+	// Write OTBM file using saveMapData
+	if (!saveMapData(map, identifier)) {
 		return false;
 	}
 
 	g_gui.SetLoadDone(99, "Saving spawns...");
-	const SpawnDocument spawnDocument = SpawnMapAdapter::Capture(map);
-	SpawnWriteResult spawnResult;
-	const std::filesystem::path finalSpawn = directory / map.spawnfile;
-	const std::filesystem::path stagedSpawn = transaction.Stage(finalSpawn);
-	if (map.spawnFormat == SpawnFormat::CanaryCrystal) {
-		const std::filesystem::path finalNpcSpawn = directory / map.spawnNpcFile;
-		const std::filesystem::path stagedNpcSpawn = transaction.Stage(finalNpcSpawn);
-		spawnResult = SpawnFormatIO::SaveCanaryCrystal(spawnDocument, stagedSpawn, stagedNpcSpawn);
-	} else {
-		spawnResult = SpawnFormatIO::SaveTfs(spawnDocument, stagedSpawn);
-	}
-	for (const std::string& message : spawnResult.warnings) {
-		warnings.push_back(wxstr(message));
-	}
-	if (!spawnResult.success) {
-		warnings.push_back(wxstr("IOMapOTBM::saveMap: " + spawnResult.error));
+	if (!saveSpawns(map, identifier)) {
 		return false;
 	}
 
-	auto stageXml = [&](pugi::xml_document& document, const std::filesystem::path& destination, const char* rootName) {
-		const std::filesystem::path staged = transaction.Stage(destination);
-		if (!document.save_file(staged.string().c_str(), "\t", pugi::format_default, pugi::encoding_utf8)) {
-			warnings.push_back(wxstr("Could not stage " + destination.string() + "."));
-			return false;
-		}
-		pugi::xml_document validation;
-		const pugi::xml_parse_result parseResult = validation.load_file(staged.string().c_str());
-		if (!parseResult || !validation.child(rootName)) {
-			warnings.push_back(wxstr("Generated XML failed validation: " + destination.string() + "."));
-			return false;
-		}
-		return true;
-	};
-
 	g_gui.SetLoadDone(99, "Saving houses...");
-	if (!map.housefile.empty()) {
-		pugi::xml_document houseDocument;
-		if (!saveHouses(map, houseDocument) || !stageXml(houseDocument, directory / map.housefile, "houses")) {
-			return false;
-		}
+	if (!saveHouses(map, identifier)) {
+		return false;
 	}
 
 	g_gui.SetLoadDone(99, "Saving zones...");
-	bool hasZones = !map.zones.zones.empty();
-	for (MapIterator iterator = map.begin(); !hasZones && iterator != map.end(); ++iterator) {
-		Tile* tile = (*iterator)->get();
-		hasZones = tile && tile->hasZone();
-	}
-	const std::filesystem::path zoneFile = directory / map.zonefile;
-	ec.clear();
-	const bool zoneFileExists = std::filesystem::exists(zoneFile, ec);
-	if (ec) {
-		warnings.push_back(wxstr("Could not inspect zone file " + zoneFile.string() + ": " + ec.message()));
+	if (!saveZones(map, identifier)) {
 		return false;
-	}
-	if (hasZones || zoneFileExists) {
-		pugi::xml_document zoneDocument;
-		if (!saveZones(map, zoneDocument) || !stageXml(zoneDocument, zoneFile, "zones")) {
-			return false;
-		}
 	}
 
-	std::string commitError;
-	if (!transaction.Commit(commitError)) {
-		warnings.push_back(wxstr("IOMapOTBM::saveMap: " + commitError));
-		return false;
-	}
 	return true;
 }
 
@@ -2016,7 +1927,11 @@ static bool fileMatchesXmlContent(const wxString& filepath, const std::string& c
 }
 
 static bool writeContentToFile(const wxString& filepath, const std::string& content) {
-	wxFile file(filepath, wxFile::write);
+	FileSaveTransaction transaction;
+	const std::filesystem::path destination(filepath.ToStdWstring());
+	const std::filesystem::path staged = transaction.Stage(destination);
+
+	wxFile file(wxString(staged.wstring()), wxFile::write);
 	if (!file.IsOpened()) {
 		return false;
 	}
@@ -2027,7 +1942,12 @@ static bool writeContentToFile(const wxString& filepath, const std::string& cont
 			return false;
 		}
 	}
-	return file.Close();
+	if (!file.Close()) {
+		return false;
+	}
+
+	std::string error;
+	return transaction.Commit(error);
 }
 
 static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath) {
