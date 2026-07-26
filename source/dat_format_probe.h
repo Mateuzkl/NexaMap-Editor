@@ -22,8 +22,8 @@ namespace DatFormatProbe {
 		SpriteIdWidth sprite_id_width = SpriteIdWidth::UInt16;
 		std::string error;
 
-		size_t spriteIdBytes() const {
-			return static_cast<size_t>(sprite_id_width);
+		std::size_t spriteIdBytes() const {
+			return static_cast<std::size_t>(sprite_id_width);
 		}
 	};
 
