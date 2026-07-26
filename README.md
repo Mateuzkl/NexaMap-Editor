@@ -143,6 +143,16 @@ During development, the editor resolves welcome-screen resources from the reposi
 4. Create a new map or open an existing `.otbm` project.
 5. Keep a backup before converting maps, item identifiers, spawns or NPC files between server formats.
 
+### Tibia 8.60 assets.dat
+
+NexaMap Editor can load `assets.dat` and `items.otb` together for Tibia 8.60:
+
+- `assets.dat` supplies client metadata and sprite IDs.
+- `Tibia.spr` supplies the sprite pixels.
+- `data/860/items.otb` remains required and supplies the server ID to client ID mapping.
+
+Copy `Tibia.dat` from the compatible Tibia 8.60 client, rename the copy to `assets.dat`, and place it at `data/860/assets.dat` or in the client assets directory selected in Preferences. Keep the original client file unchanged. The version-specific `data/860/assets.dat` takes precedence when both locations contain the file. Do not delete or replace `data/860/items.otb`.
+
 ## Contributing
 
 Bug reports and focused pull requests are welcome.

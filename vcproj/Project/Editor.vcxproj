@@ -285,6 +285,12 @@
     <ClInclude Include="..\..\source\con_vector.h" />
     <ClInclude Include="..\..\source\creature_brush.h" />
     <ClCompile Include="..\..\source\creature_brush.cpp" />
+    <ClInclude Include="..\..\source\dat_format_probe.h" />
+    <ClCompile Include="..\..\source\dat_format_probe.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
     <ClInclude Include="..\..\source\dat_debug_view.h" />
     <ClCompile Include="..\..\source\dat_debug_view.cpp" />
     <ClInclude Include="..\..\source\definitions.h" />

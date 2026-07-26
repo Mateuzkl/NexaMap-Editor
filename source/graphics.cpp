@@ -20,6 +20,7 @@
 #include "sprites.h"
 #include "graphics.h"
 #include "artprovider.h"
+#include "dat_format_probe.h"
 #include "filehandle.h"
 #include "settings.h"
 #include "gui.h"
@@ -526,6 +527,19 @@ bool GraphicManager::loadOTFI(const FileName& filename, wxString& error, wxArray
 		sprites_file = wxFileName(filename.GetFullPath(), wxString(ASSETS_NAME) + ".spr");
 	}
 
+	// ClientVersion owns path resolution (including the optional 8.60
+	// assets.dat override). Keep the graphics loader on those exact files.
+	if (client_version != nullptr) {
+		const wxFileName resolved_metadata = client_version->getMetadataPath();
+		const wxFileName resolved_sprites = client_version->getSpritesPath();
+		if (resolved_metadata.FileExists()) {
+			metadata_file = resolved_metadata;
+		}
+		if (resolved_sprites.FileExists()) {
+			sprites_file = resolved_sprites;
+		}
+	}
+
 	return true;
 }
 
@@ -558,6 +572,14 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		is_extended = dat_format >= DAT_FORMAT_96;
 		has_frame_durations = dat_format >= DAT_FORMAT_1050;
 		has_frame_groups = dat_format >= DAT_FORMAT_1057;
+	}
+	if (dat_format == DAT_FORMAT_86 && datafile.GetFullName().CmpNoCase("assets.dat") == 0) {
+		const auto probe = DatFormatProbe::probeTibia860(std::filesystem::path(nstr(datafile.GetFullPath())));
+		if (!probe.success) {
+			error = "Failed to validate Tibia 8.60 assets.dat: " + wxstr(probe.error);
+			return false;
+		}
+		is_extended = probe.sprite_id_width == DatFormatProbe::SpriteIdWidth::UInt32;
 	}
 
 	uint16_t id = minID;

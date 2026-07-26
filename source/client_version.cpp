@@ -435,6 +435,19 @@ bool ClientVersion::hasValidPaths() {
 		}
 	}
 
+	// Tibia 8.60 may use a server-provided assets.dat as client metadata.
+	// It supplements Tibia.spr; items.otb remains the server-ID database.
+	if (getID() == CLIENT_VERSION_860) {
+		FileName version_assets = getDataPath();
+		version_assets.SetFullName("assets.dat");
+		wxFileName client_assets(client_path.GetFullPath(), "assets.dat");
+		if (version_assets.FileExists()) {
+			metadata_path = version_assets;
+		} else if (client_assets.FileExists()) {
+			metadata_path = client_assets;
+		}
+	}
+
 	if (!metadata_path.FileExists() || !sprites_path.FileExists()) {
 		return false;
 	}
