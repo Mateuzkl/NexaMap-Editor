@@ -179,4 +179,17 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/procedural_map_generator_tests"
 	)
 	add_test(NAME procedural_map_generator_tests COMMAND procedural_map_generator_tests)
+
+	add_executable(zones_tests
+		tests/zones_tests.cpp
+		source/zones.cpp
+	)
+	target_include_directories(zones_tests PRIVATE source)
+	set_target_properties(zones_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/zones_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/zones_tests"
+	)
+	add_test(NAME zones_tests COMMAND zones_tests)
 endif()

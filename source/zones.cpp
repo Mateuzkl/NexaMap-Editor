@@ -11,7 +11,8 @@ Zones::~Zones() {
 }
 
 bool Zones::addZone(const std::string& name, unsigned int id) {
-	if (hasZone(name)) {
+	const bool emptyName = name.empty() || name.find_first_not_of(" \t\r\n") == std::string::npos;
+	if (emptyName || id == 0 || id > std::numeric_limits<uint16_t>::max() || hasZone(name)) {
 		return false;
 	}
 	if (used_ids.find(id) != used_ids.end()) {
@@ -26,26 +27,65 @@ bool Zones::addZone(const std::string& name) {
 	return addZone(name, generateID());
 }
 
-bool Zones::hasZone(const std::string& name) {
+bool Zones::renameZone(const std::string& oldName, const std::string& newName) {
+	const bool emptyNewName = newName.empty() || newName.find_first_not_of(" \t\r\n") == std::string::npos;
+	if (oldName.empty() || emptyNewName) {
+		return false;
+	}
+
+	auto oldIt = zones.find(oldName);
+	if (oldIt == zones.end()) {
+		return false;
+	}
+	if (oldName == newName) {
+		return true;
+	}
+	if (zones.find(newName) != zones.end()) {
+		return false;
+	}
+
+	const unsigned int id = oldIt->second;
+	zones.erase(oldIt);
+	zones.emplace(newName, id);
+	return true;
+}
+
+bool Zones::hasZone(const std::string& name) const {
 	return zones.find(name) != zones.end();
 }
 
-bool Zones::hasZone(unsigned int id) {
+bool Zones::hasZone(unsigned int id) const {
 	return used_ids.find(id) != used_ids.end();
 }
 
-void Zones::removeZone(const std::string& name) {
-	if (!hasZone(name)) {
-		return;
+bool Zones::removeZone(const std::string& name) {
+	auto it = zones.find(name);
+	if (it == zones.end()) {
+		return false;
 	}
-	used_ids.erase(zones[name]);
-	zones.erase(name);
+	used_ids.erase(it->second);
+	zones.erase(it);
+	return true;
 }
 
-unsigned int Zones::generateID() {
-	unsigned int id = 1;
-	while (used_ids.find(id) != used_ids.end()) {
-		++id;
+std::string Zones::getZoneName(unsigned int id) const {
+	for (const auto& zone : zones) {
+		if (zone.second == id) {
+			return zone.first;
+		}
 	}
-	return id;
+	return {};
+}
+
+unsigned int Zones::getEmptyID() const {
+	return generateID();
+}
+
+unsigned int Zones::generateID() const {
+	for (unsigned int id = 1; id <= std::numeric_limits<uint16_t>::max(); ++id) {
+		if (used_ids.find(id) == used_ids.end()) {
+			return id;
+		}
+	}
+	return 0;
 }

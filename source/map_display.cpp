@@ -32,6 +32,7 @@
 #include "properties_window.h"
 #include "tileset_window.h"
 #include "map_display.h"
+#include "zone_brush.h"
 #include "map_drawer.h"
 #include "application.h"
 #include "border_workspace_window.h"
@@ -315,6 +316,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			options.show_special_tiles = g_settings.getBoolean(Config::SHOW_SPECIAL_TILES);
 			options.show_zone_areas = g_settings.getBoolean(Config::SHOW_ZONE_AREAS);
 			options.show_items = g_settings.getBoolean(Config::SHOW_ITEMS);
+			options.active_zone_id = g_gui.zone_brush ? g_gui.zone_brush->getZone() : 0;
 			options.highlight_items = g_settings.getBoolean(Config::HIGHLIGHT_ITEMS);
 			options.highlight_locked_doors = g_settings.getBoolean(Config::HIGHLIGHT_LOCKED_DOORS);
 			options.show_blocking = g_settings.getBoolean(Config::SHOW_BLOCKING);
@@ -553,6 +555,20 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 			}
 		} else {
 			ss << "Nothing";
+		}
+		if (tile->hasZone()) {
+			ss << " | Zones: ";
+			size_t remaining = tile->zones.size();
+			for (unsigned int zoneId : tile->zones) {
+				ss << zoneId;
+				const std::string zoneName = editor.map.zones.getZoneName(zoneId);
+				if (!zoneName.empty()) {
+					ss << " (" << wxstr(zoneName) << ")";
+				}
+				if (--remaining != 0) {
+					ss << ", ";
+				}
+			}
 		}
 	} else {
 		ss << "Nothing";

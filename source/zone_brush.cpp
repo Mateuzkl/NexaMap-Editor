@@ -9,7 +9,8 @@
 
 ZoneBrush::ZoneBrush() :
 	FlagBrush(0),
-	zoneId(0) {
+	zoneId(0),
+	eraseMode(false) {
 	////
 }
 
@@ -30,7 +31,9 @@ void ZoneBrush::undraw(BaseMap* map, Tile* tile) {
 }
 
 void ZoneBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
-	if (tile->hasGround()) {
+	if (eraseMode) {
+		tile->removeZone(zoneId);
+	} else if (tile->hasGround()) {
 		tile->addZone(zoneId);
 	}
 }

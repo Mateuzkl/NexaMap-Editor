@@ -1079,11 +1079,13 @@ PaletteWindow* GUI::NewPalette() {
 	return CreatePalette();
 }
 
-void GUI::RefreshPalettes(Map* m, bool usedefault) {
+void GUI::RefreshPalettes(Map* m, bool usedefault, bool selectBrush) {
 	for (auto& palette : palettes) {
 		palette->OnUpdate(m ? m : (usedefault ? (IsEditorOpen() ? &GetCurrentMap() : nullptr) : nullptr));
 	}
-	SelectBrush();
+	if (selectBrush) {
+		SelectBrush();
+	}
 }
 
 void GUI::RefreshOtherPalettes(PaletteWindow* p) {
@@ -1439,7 +1441,11 @@ bool GUI::CanRedo() {
 bool GUI::DoUndo() {
 	Editor* editor = GetCurrentEditor();
 	if (editor && editor->actionQueue->canUndo()) {
+		const bool refreshZonePalettes = editor->actionQueue->getUndoType() == ACTION_ZONE_EDIT;
 		editor->actionQueue->undo();
+		if (refreshZonePalettes) {
+			RefreshPalettes(nullptr, true, false);
+		}
 		if (editor->selection.size() > 0) {
 			SetSelectionMode();
 		}
@@ -1455,7 +1461,11 @@ bool GUI::DoUndo() {
 bool GUI::DoRedo() {
 	Editor* editor = GetCurrentEditor();
 	if (editor && editor->actionQueue->canRedo()) {
+		const bool refreshZonePalettes = editor->actionQueue->getRedoType() == ACTION_ZONE_EDIT;
 		editor->actionQueue->redo();
+		if (refreshZonePalettes) {
+			RefreshPalettes(nullptr, true, false);
+		}
 		if (editor->selection.size() > 0) {
 			SetSelectionMode();
 		}
@@ -1570,25 +1580,27 @@ void GUI::SetSelectionMode() {
 	mode = SELECTION_MODE;
 }
 
-void GUI::SetDrawingMode() {
-	if (mode == DRAWING_MODE) {
-		return;
+void GUI::SetDrawingMode(bool preserveSelection) {
+	if (!preserveSelection) {
+		std::set<MapTab*> al;
+		for (int idx = 0; idx < tabbook->GetTabCount(); ++idx) {
+			EditorTab* editorTab = tabbook->GetTab(idx);
+			if (auto* mapTab = dynamic_cast<MapTab*>(editorTab)) {
+				if (al.find(mapTab) != al.end()) {
+					continue;
+				}
+
+				Editor* editor = mapTab->GetEditor();
+				editor->selection.start();
+				editor->selection.clear();
+				editor->selection.finish();
+				al.insert(mapTab);
+			}
+		}
 	}
 
-	std::set<MapTab*> al;
-	for (int idx = 0; idx < tabbook->GetTabCount(); ++idx) {
-		EditorTab* editorTab = tabbook->GetTab(idx);
-		if (auto* mapTab = dynamic_cast<MapTab*>(editorTab)) {
-			if (al.find(mapTab) != al.end()) {
-				continue;
-			}
-
-			Editor* editor = mapTab->GetEditor();
-			editor->selection.start();
-			editor->selection.clear();
-			editor->selection.finish();
-			al.insert(mapTab);
-		}
+	if (mode == DRAWING_MODE) {
+		return;
 	}
 
 	if (current_brush && current_brush->isDoodad()) {
@@ -1828,7 +1840,7 @@ void GUI::SelectBrushInternal(Brush* brush) {
 		secondary_map = doodad_buffer_map;
 	}
 
-	SetDrawingMode();
+	SetDrawingMode(current_brush->isZone());
 	RefreshView();
 }
 

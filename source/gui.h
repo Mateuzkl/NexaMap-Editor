@@ -225,7 +225,7 @@ public:
 
 	void SwitchMode();
 	void SetSelectionMode();
-	void SetDrawingMode();
+	void SetDrawingMode(bool preserveSelection = false);
 	bool IsSelectionMode() const {
 		return mode == SELECTION_MODE;
 	}
@@ -375,7 +375,7 @@ public:
 	// Rebuild forces palette to reload the entire contents
 	void RebuildPalettes();
 	// Refresh only updates the content (such as house/waypoint list)
-	void RefreshPalettes(Map* m = nullptr, bool usedfault = true);
+	void RefreshPalettes(Map* m = nullptr, bool usedfault = true, bool selectBrush = true);
 	// Won't refresh the palette in the parameter
 	void RefreshOtherPalettes(PaletteWindow* p);
 	// If no palette is shown, this displays the primary palette
