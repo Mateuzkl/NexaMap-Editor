@@ -116,6 +116,15 @@ namespace {
 		return versionDirectory.empty() ? "OTC Assets" : versionDirectory + " (OTC)";
 	}
 
+	void AddOtcCatalogDirectory(
+		const std::filesystem::path& directory,
+		std::vector<std::filesystem::path>& candidates
+	) {
+		if (HasCatalog(directory)) {
+			candidates.push_back(directory);
+		}
+	}
+
 	void AddOtcVersionDirectories(
 		const std::filesystem::path& parent,
 		std::vector<std::filesystem::path>& candidates
@@ -156,10 +165,10 @@ namespace {
 		}
 
 		std::vector<std::filesystem::path> otcCandidates;
-		if (HasCatalog(root)) {
-			otcCandidates.push_back(root);
-		}
+		AddOtcCatalogDirectory(root, otcCandidates);
+		AddOtcCatalogDirectory(root / "data" / "things", otcCandidates);
 		AddOtcVersionDirectories(root / "data" / "things", otcCandidates);
+		AddOtcCatalogDirectory(root / "things", otcCandidates);
 		AddOtcVersionDirectories(root / "things", otcCandidates);
 		AddOtcVersionDirectories(root, otcCandidates);
 		if (otcCandidates.empty()) {
@@ -226,7 +235,8 @@ ClientAssetsValidationResult ClientAssetsManifestLoader::Validate(const std::fil
 	if (!detected) {
 		return Failure(
 			"Could not find a supported Assets layout. Select either a CipSoft/Crystal client root "
-			"or an OTC root containing data/things/<version>/catalog-content.json."
+			"or an OTC root containing data/things/catalog-content.json or "
+			"data/things/<version>/catalog-content.json."
 		);
 	}
 	manifest.layout = detected->layout;

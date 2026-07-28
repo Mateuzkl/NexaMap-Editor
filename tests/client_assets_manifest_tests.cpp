@@ -22,8 +22,7 @@ namespace {
 }
 
 int main() {
-	const std::filesystem::path root =
-		std::filesystem::temp_directory_path() / "nexamap-client-assets-manifest-tests";
+	const std::filesystem::path root = std::filesystem::temp_directory_path() / "nexamap-client-assets-manifest-tests";
 	std::error_code error;
 	std::filesystem::remove_all(root, error);
 
@@ -61,6 +60,36 @@ int main() {
 	check(otc.manifest.assetsDirectory == otcAssets, "OTC version assets directory is resolved");
 	check(otc.manifest.version == "15.25 (OTC)", "OTC directory version is formatted");
 	check(ClientAssetsManifestLoader::Validate(otcAssets).valid, "OTC version directory can be selected directly");
+
+	const std::filesystem::path directOtcRoot = root / "otc-direct";
+	const std::filesystem::path directOtcAssets = directOtcRoot / "data" / "things";
+	std::filesystem::create_directories(directOtcAssets);
+	write(directOtcAssets / "catalog-content.json", R"([
+		{"type":"appearances","file":"appearances.dat"},
+		{"type":"sprite","file":"sheet.lzma","firstspriteid":30,"lastspriteid":45,"spritetype":11}
+	])");
+	write(directOtcAssets / "appearances.dat", "");
+	write(directOtcAssets / "sheet.lzma", "");
+	const ClientAssetsValidationResult directOtc = ClientAssetsManifestLoader::Validate(directOtcRoot);
+	check(directOtc.valid, "OTC root with direct data/things catalog is accepted");
+	check(directOtc.manifest.layout == ClientAssetsLayout::OtClient, "direct OTC layout is detected");
+	check(directOtc.manifest.assetsDirectory == directOtcAssets, "direct OTC assets directory is resolved");
+
+	const std::filesystem::path olderOtcAssets = directOtcAssets / "1500";
+	const std::filesystem::path newerOtcAssets = directOtcAssets / "1526";
+	for (const std::filesystem::path& versionAssets : { olderOtcAssets, newerOtcAssets }) {
+		std::filesystem::create_directories(versionAssets);
+		write(versionAssets / "catalog-content.json", R"([
+			{"type":"appearances","file":"appearances.dat"},
+			{"type":"sprite","file":"sheet.lzma","firstspriteid":50,"lastspriteid":65,"spritetype":11}
+		])");
+		write(versionAssets / "appearances.dat", "");
+		write(versionAssets / "sheet.lzma", "");
+	}
+	const ClientAssetsValidationResult preferredOtc = ClientAssetsManifestLoader::Validate(directOtcRoot);
+	check(preferredOtc.valid, "OTC root with direct and versioned catalogs is accepted");
+	check(preferredOtc.manifest.assetsDirectory == newerOtcAssets, "newest OTC version is preferred over direct catalog");
+	check(preferredOtc.manifest.version == "15.26 (OTC)", "preferred OTC version is retained");
 
 	write(root / "assets" / "catalog-content.json", R"([
 		{"type":"appearances","file":"appearances.dat"},
