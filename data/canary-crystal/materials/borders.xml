@@ -1,0 +1,4 @@
+<materials>
+	<!-- Borders -->
+	<include file="borders/borders.xml"/>
+</materials>

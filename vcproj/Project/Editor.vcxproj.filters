@@ -719,4 +719,47 @@
       <Filter>resources</Filter>
     </ResourceCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Filter Include="protobuf">
+      <UniqueIdentifier>{811eb5fc-50cf-4fd2-b114-7f2cb0a84ef4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\source\client_assets.h">
+      <Filter>managers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\client_assets_manifest.h">
+      <Filter>managers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\item_id_codec.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\map_format.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\sprite_appearances.h">
+      <Filter>gui\graphics</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\source\client_assets.cpp">
+      <Filter>managers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\client_assets_manifest.cpp">
+      <Filter>managers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\item_id_codec.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\map_format.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\sprite_appearances.cpp">
+      <Filter>gui\graphics</Filter>
+    </ClCompile>
+    <None Include="..\..\source\protobuf\appearances.proto">
+      <Filter>protobuf</Filter>
+    </None>
+    <ClCompile Include="$(AppearancesGeneratedDir)\appearances.pb.cc">
+      <Filter>protobuf</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

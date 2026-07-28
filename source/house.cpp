@@ -104,6 +104,9 @@ const House* Houses::getHouse(uint32_t houseid) const {
 House::House(Map& map) :
 	id(0),
 	rent(0),
+	requiredReset(0),
+	clientid(0),
+	beds(0),
 	townid(0),
 	guildhall(false),
 	map(&map),

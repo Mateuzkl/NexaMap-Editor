@@ -21,6 +21,10 @@
 #include <string.h> // memcpy
 
 #include "items.h"
+#include "item_id_mapping.h"
+
+#include <appearances.pb.h>
+#include <limits>
 
 ItemDatabase g_items;
 
@@ -126,6 +130,97 @@ void ItemDatabase::clear() {
 		delete items[i];
 		items.set(i, nullptr);
 	}
+	MajorVersion = 0;
+	MinorVersion = 0;
+	BuildNumber = 0;
+	item_count = 0;
+	max_item_id = 0;
+}
+
+bool ItemDatabase::loadFromAppearances(const rme::protobuf::appearances::Appearances& appearances, wxString& error, wxArrayString& warnings) {
+	using namespace rme::protobuf::appearances;
+
+	clear();
+	MajorVersion = 4;
+	MinorVersion = 4;
+
+	for (const Appearance& object : appearances.object()) {
+		if (!object.has_id() || object.id() == 0 || object.id() > std::numeric_limits<uint16_t>::max()) {
+			warnings.push_back(wxString::Format("Ignored Canary/Crystal item appearance with unsupported ID %u.", object.id()));
+			continue;
+		}
+		if (!object.has_flags()) {
+			warnings.push_back(wxString::Format("Ignored Canary/Crystal item appearance %u because it has no flags.", object.id()));
+			continue;
+		}
+
+		const uint16_t id = static_cast<uint16_t>(object.id());
+		auto* item = newd ItemType();
+		item->id = id;
+		item->clientID = id;
+		item->name = object.name();
+		item->description = object.description();
+
+		const AppearanceFlags& flags = object.flags();
+		if (flags.container()) {
+			item->type = ITEM_TYPE_CONTAINER;
+			item->group = ITEM_GROUP_CONTAINER;
+		} else if (flags.has_bank()) {
+			item->group = ITEM_GROUP_GROUND;
+		} else if (flags.liquidcontainer()) {
+			item->group = ITEM_GROUP_FLUID;
+		} else if (flags.liquidpool()) {
+			item->group = ITEM_GROUP_SPLASH;
+		}
+
+		item->alwaysOnBottom = flags.has_clip() || flags.has_bottom() || flags.has_top();
+		if (flags.clip()) {
+			item->alwaysOnTopOrder = 1;
+		} else if (flags.bottom()) {
+			item->alwaysOnTopOrder = 2;
+		} else if (flags.top()) {
+			item->alwaysOnTopOrder = 3;
+		}
+		item->unpassable = flags.unpass();
+		item->blockMissiles = flags.unsight();
+		item->blockPathfinder = flags.avoid();
+		item->pickupable = flags.take();
+		item->moveable = !flags.unmove();
+		item->canReadText = flags.has_write() || flags.has_write_once() || (flags.has_lenshelp() && flags.lenshelp().id() == 1112);
+		item->canWriteText = (flags.has_write() && flags.write().max_text_length() != 0) || (flags.has_write_once() && flags.write_once().max_text_length_once() != 0);
+		item->isHangable = flags.hang();
+		item->stackable = flags.cumulative();
+		item->rotable = flags.rotate();
+		item->ignoreLook = flags.ignore_look();
+		item->hasElevation = flags.has_height();
+		if (flags.has_hook()) {
+			item->hookSouth = flags.hook().direction() == HOOK_TYPE_SOUTH;
+			item->hookEast = flags.hook().direction() == HOOK_TYPE_EAST;
+		}
+
+		if (!g_gui.gfx.loadAppearanceItem(object, item, error, warnings)) {
+			delete item;
+			return false;
+		}
+		item->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(id));
+		if (!item->sprite) {
+			warnings.push_back(wxString::Format("Canary/Crystal item %u has no drawable sprite metadata.", id));
+		}
+
+		if (items[id]) {
+			warnings.push_back(wxString::Format("Duplicate Canary/Crystal item appearance %u; the last entry was retained.", id));
+			delete items[id];
+		}
+		items.set(id, item);
+		max_item_id = std::max(max_item_id, id);
+		item_count = std::max(item_count, id);
+	}
+
+	if (max_item_id == 0) {
+		error = "The appearances file did not contain any usable object appearances.";
+		return false;
+	}
+	return true;
 }
 
 bool ItemDatabase::readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxString& error, wxArrayString& warnings) {
@@ -830,7 +925,7 @@ static void parseFloorChange(ItemType& it, const std::string& value) {
 	}
 }
 
-bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
+bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id, bool serverIdsToClientIds) {
 	ClientVersionID clientVersion = g_gui.GetCurrentVersionID();
 	if (clientVersion < CLIENT_VERSION_980 && id > 20000 && id < 20100) {
 		itemNode = itemNode.next_sibling();
@@ -918,7 +1013,8 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
 			}
 		} else if (key == "rotateto") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
-				it.rotateTo = attribute.as_ushort();
+				const uint16_t rotateTo = attribute.as_ushort();
+				it.rotateTo = serverIdsToClientIds ? ItemIdMapping::serverToClient(rotateTo).converted : rotateTo;
 			}
 		} else if (key == "containersize") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
@@ -962,7 +1058,7 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
 	return true;
 }
 
-bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, wxArrayString& warnings) {
+bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds) {
 	pugi::xml_document doc;
 	pugi::xml_parse_result result = doc.load_file(identifier.GetFullPath().mb_str());
 	if (!result) {
@@ -995,8 +1091,16 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 			return false;
 		}
 
-		for (uint16_t id = fromId; id <= toId; ++id) {
-			if (!loadItemFromGameXml(itemNode, id)) {
+		for (uint32_t sourceId = fromId; sourceId <= toId; ++sourceId) {
+			const ItemIdMapping::Result mapping = ItemIdMapping::serverToClient(static_cast<uint16_t>(sourceId));
+			const uint16_t id = serverIdsToClientIds ? mapping.converted : static_cast<uint16_t>(sourceId);
+			if (serverIdsToClientIds && !mapping.found) {
+				continue;
+			}
+			if (!typeExists(id)) {
+				continue;
+			}
+			if (!loadItemFromGameXml(itemNode, id, serverIdsToClientIds)) {
 				return false;
 			}
 		}

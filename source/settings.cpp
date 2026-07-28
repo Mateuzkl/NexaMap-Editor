@@ -172,26 +172,26 @@ void Settings::IO(IOMode mode) {
 #define section(s) \
 	if (conf)      \
 	conf->SetPath("/" s)
-#define Int(key, dflt)                                     \
-	do {                                                   \
-		if (mode == DEFAULT) {                             \
-			setInteger(key, dflt);                         \
-		} else if (mode == SAVE) {                         \
-			conf->Write(#key, getInteger(key));            \
-		} else if (mode == LOAD) {                         \
+#define Int(key, dflt)                                                  \
+	do {                                                                \
+		if (mode == DEFAULT) {                                          \
+			setInteger(key, dflt);                                      \
+		} else if (mode == SAVE) {                                      \
+			conf->Write(#key, getInteger(key));                         \
+		} else if (mode == LOAD) {                                      \
 			setInteger(key, conf->Read(#key, static_cast<long>(dflt))); \
-		}                                                  \
+		}                                                               \
 	} while (false)
-#define IntToSave(key, dflt)                               \
-	do {                                                   \
-		if (mode == DEFAULT) {                             \
-			setInteger(key, dflt);                         \
-		} else if (mode == SAVE) {                         \
-			conf->Write(#key, getInteger(key##_TO_SAVE));  \
-		} else if (mode == LOAD) {                         \
+#define IntToSave(key, dflt)                                            \
+	do {                                                                \
+		if (mode == DEFAULT) {                                          \
+			setInteger(key, dflt);                                      \
+		} else if (mode == SAVE) {                                      \
+			conf->Write(#key, getInteger(key##_TO_SAVE));               \
+		} else if (mode == LOAD) {                                      \
 			setInteger(key, conf->Read(#key, static_cast<long>(dflt))); \
-			setInteger(key##_TO_SAVE, getInteger(key));    \
-		}                                                  \
+			setInteger(key##_TO_SAVE, getInteger(key));                 \
+		}                                                               \
 	} while (false)
 #define Float(key, dflt)                        \
 	do {                                        \
@@ -293,6 +293,7 @@ void Settings::IO(IOMode mode) {
 	Int(MONSTER_DEFAULT_WEIGHT, 25);
 	String(MONSTERS_LUA_DIRECTORY, "");
 	String(NPCS_LUA_DIRECTORY, "");
+	String(CANARY_CRYSTAL_ASSETS_DIRECTORY, "");
 	Int(DEFAULT_CLIENT_VERSION, CLIENT_VERSION_NONE);
 	Int(RAW_LIKE_SIMONE, 1);
 	Int(ONLY_ONE_INSTANCE, 1);
@@ -396,7 +397,7 @@ void Settings::IO(IOMode mode) {
 void Settings::load() {
 	wxConfigBase* conf;
 #ifdef __WINDOWS__
-	FileName const filename("editor.cfg");
+	const FileName filename("editor.cfg");
 	if (filename.FileExists()) { // Use local file if it exists
 		wxFileInputStream file(filename.GetFullPath());
 		conf = newd wxFileConfig(file);
@@ -438,7 +439,7 @@ void Settings::save(bool endoftheworld) {
 		if (!conf) {
 			return;
 		}
-		FileName const filename("editor.cfg");
+		const FileName filename("editor.cfg");
 		if (!SaveFileConfigAtomically(*conf, filename.GetFullPath())) {
 			wxLogError("Could not save settings to " + filename.GetFullPath() + ".");
 		}
@@ -467,7 +468,7 @@ void Settings::save(bool endoftheworld) {
 	}
 #endif
 	if (endoftheworld) {
-		wxConfigBase const* cfg = dynamic_cast<wxConfigBase*>(wxConfig::Get());
+		const wxConfigBase* cfg = dynamic_cast<wxConfigBase*>(wxConfig::Get());
 		wxConfig::Set(nullptr);
 		delete cfg;
 	}

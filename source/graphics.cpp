@@ -24,7 +24,9 @@
 #include "settings.h"
 #include "gui.h"
 #include "otml.h"
+#include "sprite_appearances.h"
 
+#include <appearances.pb.h>
 #include <wx/mstream.h>
 #include <wx/stopwatch.h>
 #include <wx/dir.h>
@@ -185,6 +187,8 @@ GraphicManager::GraphicManager() :
 	client_version(nullptr),
 	unloaded(true),
 	dat_format(DAT_FORMAT_UNKNOWN),
+	item_count(0),
+	creature_count(0),
 	otfi_found(false),
 	is_extended(false),
 	has_transparency(false),
@@ -653,6 +657,215 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		++id;
 	}
 
+	return true;
+}
+
+GameSprite::NormalImage* GraphicManager::getOrCreateAssetImage(uint32_t spriteId, uint8_t cropX, uint8_t cropY) {
+	const uint64_t key = 0x8000000000000000ULL | (static_cast<uint64_t>(spriteId) << 16) | (static_cast<uint64_t>(cropY) << 8) | static_cast<uint64_t>(cropX);
+	const auto iterator = image_space.find(key);
+	if (iterator != image_space.end()) {
+		return static_cast<GameSprite::NormalImage*>(iterator->second);
+	}
+
+	auto* image = newd GameSprite::NormalImage();
+	image->id = spriteId;
+	image->fromAssets = true;
+	image->assetCropX = cropX;
+	image->assetCropY = cropY;
+	image_space[key] = image;
+	return image;
+}
+
+bool GraphicManager::loadAppearanceSprite(
+	const rme::protobuf::appearances::Appearance& appearance,
+	int spriteSpaceId,
+	wxString& error,
+	wxArrayString& warnings
+) {
+	using namespace rme::protobuf::appearances;
+
+	const FrameGroup* frameGroup = nullptr;
+	for (const FrameGroup& candidate : appearance.frame_group()) {
+		if (candidate.has_sprite_info() && candidate.sprite_info().sprite_id_size() > 0) {
+			frameGroup = &candidate;
+			break;
+		}
+	}
+	if (!frameGroup) {
+		warnings.push_back(wxString::Format("Appearance %u has no drawable frame group.", appearance.id()));
+		return true;
+	}
+
+	const SpriteInfo& spriteInfo = frameGroup->sprite_info();
+	const ClientSpriteSheetPtr firstSheet = g_spriteAppearances.getSheetBySpriteId(spriteInfo.sprite_id(0));
+	if (!firstSheet) {
+		error = wxString::Format(
+			"Appearance %u references sprite ID %u, which is absent from the client catalog.",
+			appearance.id(),
+			spriteInfo.sprite_id(0)
+		);
+		return false;
+	}
+
+	const ClientSpriteSize sourceSize = firstSheet->getSpriteSize();
+	const uint8_t tileWidth = static_cast<uint8_t>(std::max(1, sourceSize.width / SPRITE_PIXELS));
+	const uint8_t tileHeight = static_cast<uint8_t>(std::max(1, sourceSize.height / SPRITE_PIXELS));
+
+	auto* sprite = newd GameSprite();
+	sprite->id = static_cast<uint32_t>(spriteSpaceId);
+	sprite->width = tileWidth;
+	sprite->height = tileHeight;
+	sprite->layers = static_cast<uint8_t>(std::clamp<uint32_t>(spriteInfo.layers(), 1, 255));
+	sprite->pattern_x = static_cast<uint8_t>(std::clamp<uint32_t>(spriteInfo.pattern_width(), 1, 255));
+	sprite->pattern_y = static_cast<uint8_t>(std::clamp<uint32_t>(spriteInfo.pattern_height(), 1, 255));
+	sprite->pattern_z = static_cast<uint8_t>(std::clamp<uint32_t>(spriteInfo.pattern_depth(), 1, 255));
+
+	const uint64_t sourceSpritesPerFrame = static_cast<uint64_t>(sprite->layers) * sprite->pattern_x * sprite->pattern_y * sprite->pattern_z;
+	uint32_t frameCount = 1;
+	if (spriteInfo.has_animation() && spriteInfo.animation().sprite_phase_size() > 0) {
+		frameCount = static_cast<uint32_t>(spriteInfo.animation().sprite_phase_size());
+	} else if (sourceSpritesPerFrame > 0) {
+		frameCount = std::max<uint32_t>(
+			1,
+			static_cast<uint32_t>(spriteInfo.sprite_id_size() / sourceSpritesPerFrame)
+		);
+	}
+	sprite->frames = static_cast<uint8_t>(std::clamp<uint32_t>(frameCount, 1, 255));
+
+	if (sprite->frames > 1) {
+		int startFrame = 0;
+		int loopCount = 0;
+		bool asynchronous = false;
+		if (spriteInfo.has_animation()) {
+			const SpriteAnimation& animation = spriteInfo.animation();
+			startFrame = static_cast<int>(std::min<uint32_t>(animation.default_start_phase(), sprite->frames - 1));
+			loopCount = static_cast<int>(animation.loop_count());
+			asynchronous = !animation.synchronized();
+		}
+		sprite->animator = newd Animator(sprite->frames, startFrame, loopCount, asynchronous);
+		if (spriteInfo.has_animation()) {
+			const SpriteAnimation& animation = spriteInfo.animation();
+			for (int phaseIndex = 0; phaseIndex < std::min<int>(animation.sprite_phase_size(), sprite->frames); ++phaseIndex) {
+				const SpritePhase& phase = animation.sprite_phase(phaseIndex);
+				const int minimum = static_cast<int>(std::max<uint32_t>(1, phase.duration_min()));
+				const int maximum = static_cast<int>(std::max<uint32_t>(minimum, phase.duration_max()));
+				sprite->animator->getFrameDuration(phaseIndex)->setValues(minimum, maximum);
+			}
+			sprite->animator->reset();
+		}
+	}
+
+	const uint64_t expectedSourceCount = sourceSpritesPerFrame * sprite->frames;
+	if (expectedSourceCount != static_cast<uint64_t>(spriteInfo.sprite_id_size())) {
+		warnings.push_back(wxString::Format(
+			"Appearance %u declares %llu logical sprites but contains %d sprite IDs; available IDs will be reused safely.",
+			appearance.id(),
+			static_cast<unsigned long long>(expectedSourceCount),
+			spriteInfo.sprite_id_size()
+		));
+	}
+
+	const auto appendSourceSprite = [&](uint32_t spriteId) {
+		const ClientSpriteSheetPtr sheet = g_spriteAppearances.getSheetBySpriteId(spriteId);
+		ClientSpriteSize actualSize = sourceSize;
+		if (!sheet) {
+			warnings.push_back(wxString::Format(
+				"Appearance %u references missing sprite ID %u; an empty sprite will be used.",
+				appearance.id(),
+				spriteId
+			));
+			spriteId = 0;
+		} else {
+			actualSize = sheet->getSpriteSize();
+			if (actualSize.width != sourceSize.width || actualSize.height != sourceSize.height) {
+				warnings.push_back(wxString::Format(
+					"Appearance %u mixes sprite layouts; sprite %u will be cropped to the first layout.",
+					appearance.id(),
+					spriteId
+				));
+			}
+		}
+
+		for (uint8_t y = 0; y < tileHeight; ++y) {
+			for (uint8_t x = 0; x < tileWidth; ++x) {
+				// RME's tile coordinate zero is the bottom-right tile of a composite.
+				const uint8_t cropX = static_cast<uint8_t>(tileWidth - x - 1);
+				const uint8_t cropY = static_cast<uint8_t>(tileHeight - y - 1);
+				sprite->spriteList.push_back(getOrCreateAssetImage(spriteId, cropX, cropY));
+			}
+		}
+	};
+
+	const uint64_t logicalCount = std::max<uint64_t>(1, expectedSourceCount);
+	for (uint64_t index = 0; index < logicalCount; ++index) {
+		const int sourceIndex = static_cast<int>(index % std::max(1, spriteInfo.sprite_id_size()));
+		appendSourceSprite(spriteInfo.sprite_id(sourceIndex));
+	}
+	sprite->numsprites = static_cast<uint32_t>(sprite->spriteList.size());
+
+	if (appearance.has_flags()) {
+		const AppearanceFlags& flags = appearance.flags();
+		if (flags.has_automap()) {
+			sprite->minimap_color = static_cast<uint16_t>(flags.automap().color());
+		}
+		if (flags.has_height()) {
+			sprite->draw_height = static_cast<uint16_t>(flags.height().elevation());
+		}
+		if (flags.has_shift()) {
+			sprite->drawoffset_x = static_cast<uint16_t>(std::max<int32_t>(0, flags.shift().x()));
+			sprite->drawoffset_y = static_cast<uint16_t>(std::max<int32_t>(0, flags.shift().y()));
+		}
+		if (flags.has_light()) {
+			sprite->has_light = true;
+			sprite->light.intensity = static_cast<uint8_t>(std::min<uint32_t>(255, flags.light().brightness()));
+			sprite->light.color = static_cast<uint8_t>(std::min<uint32_t>(255, flags.light().color()));
+		}
+	}
+
+	const auto existing = sprite_space.find(spriteSpaceId);
+	if (existing != sprite_space.end()) {
+		delete existing->second;
+		existing->second = sprite;
+	} else {
+		sprite_space[spriteSpaceId] = sprite;
+	}
+	return true;
+}
+
+bool GraphicManager::loadAppearanceItem(
+	const rme::protobuf::appearances::Appearance& appearance,
+	ItemType* item,
+	wxString& error,
+	wxArrayString& warnings
+) {
+	(void)item;
+	if (!loadAppearanceSprite(appearance, static_cast<int>(appearance.id()), error, warnings)) {
+		return false;
+	}
+	item_count = std::max<uint16_t>(item_count, static_cast<uint16_t>(appearance.id()));
+	unloaded = false;
+	has_transparency = true;
+	has_frame_durations = true;
+	return true;
+}
+
+bool GraphicManager::loadAppearanceOutfit(
+	const rme::protobuf::appearances::Appearance& appearance,
+	wxString& error,
+	wxArrayString& warnings
+) {
+	if (appearance.id() > std::numeric_limits<uint16_t>::max()) {
+		warnings.push_back(wxString::Format("Ignored outfit appearance with unsupported ID %u.", appearance.id()));
+		return true;
+	}
+	const int spriteSpaceId = static_cast<int>(appearance.id()) + item_count;
+	if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings)) {
+		return false;
+	}
+	creature_count = std::max<uint16_t>(creature_count, static_cast<uint16_t>(appearance.id()));
+	unloaded = false;
+	has_transparency = true;
+	has_frame_durations = true;
 	return true;
 }
 
@@ -1305,6 +1518,37 @@ void GameSprite::NormalImage::clean(int time) {
 }
 
 uint8_t* GameSprite::NormalImage::getRGBData() {
+	if (fromAssets) {
+		std::vector<uint8_t> pixels;
+		ClientSpriteSize sourceSize;
+		wxString error;
+		if (id == 0 || !g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error)) {
+			return nullptr;
+		}
+
+		const int pixelsDataSize = SPRITE_PIXELS * SPRITE_PIXELS * 3;
+		auto* data = newd uint8_t[pixelsDataSize];
+		const int originX = assetCropX * SPRITE_PIXELS;
+		const int originY = assetCropY * SPRITE_PIXELS;
+		for (int y = 0; y < SPRITE_PIXELS; ++y) {
+			for (int x = 0; x < SPRITE_PIXELS; ++x) {
+				const size_t destination = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 3;
+				if (originX + x >= sourceSize.width || originY + y >= sourceSize.height) {
+					data[destination + 0] = 0xFF;
+					data[destination + 1] = 0x00;
+					data[destination + 2] = 0xFF;
+					continue;
+				}
+				const size_t source = (static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
+				const uint8_t alpha = pixels[source + 3];
+				data[destination + 0] = alpha == 0 ? 0xFF : pixels[source + 2];
+				data[destination + 1] = alpha == 0 ? 0x00 : pixels[source + 1];
+				data[destination + 2] = alpha == 0 ? 0xFF : pixels[source + 0];
+			}
+		}
+		return data;
+	}
+
 	if (!dump) {
 		if (g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
 			return nullptr;
@@ -1357,6 +1601,38 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 }
 
 uint8_t* GameSprite::NormalImage::getRGBAData() {
+	if (fromAssets) {
+		std::vector<uint8_t> pixels;
+		ClientSpriteSize sourceSize;
+		wxString error;
+		if (id == 0 || !g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error)) {
+			return nullptr;
+		}
+
+		const int pixelsDataSize = SPRITE_PIXELS_SIZE * 4;
+		auto* data = newd uint8_t[pixelsDataSize];
+		const int originX = assetCropX * SPRITE_PIXELS;
+		const int originY = assetCropY * SPRITE_PIXELS;
+		for (int y = 0; y < SPRITE_PIXELS; ++y) {
+			for (int x = 0; x < SPRITE_PIXELS; ++x) {
+				const size_t destination = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 4;
+				if (originX + x >= sourceSize.width || originY + y >= sourceSize.height) {
+					data[destination + 0] = 0;
+					data[destination + 1] = 0;
+					data[destination + 2] = 0;
+					data[destination + 3] = 0;
+					continue;
+				}
+				const size_t source = (static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
+				data[destination + 0] = pixels[source + 2];
+				data[destination + 1] = pixels[source + 1];
+				data[destination + 2] = pixels[source + 0];
+				data[destination + 3] = pixels[source + 3];
+			}
+		}
+		return data;
+	}
+
 	if (!dump) {
 		if (g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
 			return nullptr;

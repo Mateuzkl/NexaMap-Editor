@@ -39,6 +39,14 @@ class ItemType;
 class GameSprite;
 class ItemDatabase;
 
+namespace rme {
+	namespace protobuf {
+		namespace appearances {
+			class Appearances;
+		}
+	}
+}
+
 extern ItemDatabase g_items;
 
 typedef uint8_t attribute_t;
@@ -425,8 +433,9 @@ public:
 	ItemType& getItemType(int id);
 
 	bool loadFromOtb(const FileName& datafile, wxString& error, wxArrayString& warnings);
-	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings);
-	bool loadItemFromGameXml(pugi::xml_node itemNode, int id);
+	bool loadFromAppearances(const rme::protobuf::appearances::Appearances& appearances, wxString& error, wxArrayString& warnings);
+	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds = false);
+	bool loadItemFromGameXml(pugi::xml_node itemNode, int id, bool serverIdsToClientIds = false);
 	bool loadMetaItem(pugi::xml_node node);
 
 	// typedef std::map<int32_t, ItemType*> ItemMap;
@@ -445,7 +454,9 @@ protected:
 	bool loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 
 	// Shared OTB attribute parsing used by loadFromOtbVer2/Ver3 (common cases only).
-	enum class OtbAttributeResult { Handled, Unhandled, FatalError };
+	enum class OtbAttributeResult { Handled,
+									Unhandled,
+									FatalError };
 	OtbAttributeResult parseCommonOtbItemAttribute(BinaryNode* itemNode, ItemType* t, uint8_t attribute, uint16_t datalen, wxString& error, wxArrayString& warnings);
 
 	bool readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxString& error, wxArrayString& warnings);

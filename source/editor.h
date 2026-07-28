@@ -54,7 +54,7 @@ public: // Functions
 	}
 
 	// Map handling
-	void saveMap(const FileName& filename, bool showdialog); // "" means default filename
+	bool saveMap(const FileName& filename, bool showdialog); // "" means default filename
 
 	Map& getMap() noexcept {
 		return map;

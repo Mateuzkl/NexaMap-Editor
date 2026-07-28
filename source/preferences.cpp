@@ -21,6 +21,7 @@
 
 #include "settings.h"
 #include "client_version.h"
+#include "client_assets.h"
 
 #include "gui.h"
 
@@ -587,6 +588,29 @@ wxNotebookPage* PreferencesWindow::CreateClientPage() {
 	client_list_sizer->Add(npcs_lua_dir_picker, wxSizerFlags(0).Border(wxRIGHT, 10).Expand());
 	SetWindowToolTip(npcs_lua_text, npcs_lua_dir_picker, "Path to server NPC Lua files.");
 
+	auto* canary_crystal_assets_text = newd wxStaticText(client_list_window, wxID_ANY, "CipSoft/Crystal or OTC Assets root:");
+	client_list_sizer->Add(canary_crystal_assets_text, wxSizerFlags(0).Expand());
+	canary_crystal_assets_dir_picker = newd wxDirPickerCtrl(
+		client_list_window,
+		wxID_ANY,
+		ClientAssets::getPath(),
+		"Select a CipSoft/Crystal client root or an OTC root",
+		wxDefaultPosition,
+		wxDefaultSize,
+		wxDIRP_USE_TEXTCTRL | wxDIRP_DIR_MUST_EXIST
+	);
+	client_list_sizer->Add(canary_crystal_assets_dir_picker, wxSizerFlags(0).Border(wxRIGHT, 10).Expand());
+	SetWindowToolTip(
+		canary_crystal_assets_text,
+		canary_crystal_assets_dir_picker,
+		"Client root containing package.json and assets/catalog-content.json."
+	);
+	canary_crystal_assets_dir_picker->Bind(
+		wxEVT_DIRPICKER_CHANGED,
+		&PreferencesWindow::OnCanaryCrystalAssetsChanged,
+		this
+	);
+
 	// Set the sizers
 	client_list_window->SetSizer(client_list_sizer);
 	client_list_window->FitInside();
@@ -600,8 +624,9 @@ wxNotebookPage* PreferencesWindow::CreateClientPage() {
 // Event handlers!
 
 void PreferencesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
-	Apply();
-	EndModal(0);
+	if (Apply()) {
+		EndModal(0);
+	}
 }
 
 void PreferencesWindow::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
@@ -612,6 +637,24 @@ void PreferencesWindow::OnClickApply(wxCommandEvent& WXUNUSED(event)) {
 	Apply();
 }
 
+void PreferencesWindow::OnCanaryCrystalAssetsChanged(wxFileDirPickerEvent& event) {
+	const wxString selectedPath = event.GetPath();
+	if (selectedPath.empty()) {
+		return;
+	}
+
+	ClientAssetsManifest manifest;
+	wxString error;
+	wxArrayString warnings;
+	if (!ClientAssets::validatePath(selectedPath, manifest, error, warnings)) {
+		g_gui.PopupDialog(this, "Invalid CipSoft/Crystal or OTC Assets root", error, wxOK | wxICON_ERROR);
+		return;
+	}
+	if (!warnings.empty()) {
+		g_gui.ListDialog("CipSoft/Crystal or OTC Assets validation warnings", warnings);
+	}
+}
+
 void PreferencesWindow::OnCollapsiblePane(wxCollapsiblePaneEvent& event) {
 	auto* win = (wxWindow*)event.GetEventObject();
 	win->GetParent()->Fit();
@@ -619,7 +662,22 @@ void PreferencesWindow::OnCollapsiblePane(wxCollapsiblePaneEvent& event) {
 
 // Stuff
 
-void PreferencesWindow::Apply() {
+bool PreferencesWindow::Apply() {
+	const wxString selectedAssetsPath = canary_crystal_assets_dir_picker->GetPath();
+	if (!selectedAssetsPath.empty()) {
+		ClientAssetsManifest manifest;
+		wxString assetsError;
+		wxArrayString assetsWarnings;
+		if (!ClientAssets::validatePath(selectedAssetsPath, manifest, assetsError, assetsWarnings)) {
+			book->SetSelection(4);
+			g_gui.PopupDialog(this, "Invalid CipSoft/Crystal or OTC Assets root", assetsError, wxOK | wxICON_ERROR);
+			return false;
+		}
+		if (!assetsWarnings.empty()) {
+			g_gui.ListDialog("CipSoft/Crystal or OTC Assets validation warnings", assetsWarnings);
+		}
+	}
+
 	bool must_restart = false;
 	bool palette_update_needed = false;
 
@@ -745,6 +803,8 @@ void PreferencesWindow::Apply() {
 	// Client
 	g_settings.setString(Config::MONSTERS_LUA_DIRECTORY, nstr(monsters_lua_dir_picker->GetPath()));
 	g_settings.setString(Config::NPCS_LUA_DIRECTORY, nstr(npcs_lua_dir_picker->GetPath()));
+	ClientAssets::setPath(selectedAssetsPath);
+	ClientAssets::saveConfiguredPath();
 
 	ClientVersionList versions = ClientVersion::getAllVisible();
 	int version_counter = 0;
@@ -784,4 +844,5 @@ void PreferencesWindow::Apply() {
 		g_gui.PopupDialog("Error", error, wxOK);
 		g_gui.ListDialog("Warnings", warnings);
 	}
+	return true;
 }

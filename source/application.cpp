@@ -25,6 +25,7 @@
 #include "hotkey_manager.h"
 #include "artprovider.h"
 #include "theme.h"
+#include "client_assets.h"
 
 #include "materials.h"
 #include "map.h"
@@ -85,107 +86,108 @@ wxIMPLEMENT_APP_NO_MAIN(Application);
 
 namespace {
 
-class TeeStreamBuffer final : public std::streambuf {
-public:
-	TeeStreamBuffer(std::streambuf* consoleBuffer, std::streambuf* logBuffer) :
-		consoleBuffer(consoleBuffer), logBuffer(logBuffer) {
-	}
-
-protected:
-	int_type overflow(int_type character) override {
-		if (traits_type::eq_int_type(character, traits_type::eof())) {
-			return traits_type::not_eof(character);
+	class TeeStreamBuffer final : public std::streambuf {
+	public:
+		TeeStreamBuffer(std::streambuf* consoleBuffer, std::streambuf* logBuffer) :
+			consoleBuffer(consoleBuffer), logBuffer(logBuffer) {
 		}
 
-		const char value = traits_type::to_char_type(character);
-		consoleBuffer->sputc(value);
-		if (traits_type::eq_int_type(logBuffer->sputc(value), traits_type::eof())) {
-			return traits_type::eof();
+	protected:
+		int_type overflow(int_type character) override {
+			if (traits_type::eq_int_type(character, traits_type::eof())) {
+				return traits_type::not_eof(character);
+			}
+
+			const char value = traits_type::to_char_type(character);
+			consoleBuffer->sputc(value);
+			if (traits_type::eq_int_type(logBuffer->sputc(value), traits_type::eof())) {
+				return traits_type::eof();
+			}
+			return character;
 		}
-		return character;
-	}
 
-	std::streamsize xsputn(const char* text, std::streamsize size) override {
-		const std::streamsize consoleSize = consoleBuffer->sputn(text, size);
-		const std::streamsize logSize = logBuffer->sputn(text, size);
-		return std::min(consoleSize, logSize);
-	}
+		std::streamsize xsputn(const char* text, std::streamsize size) override {
+			const std::streamsize consoleSize = consoleBuffer->sputn(text, size);
+			const std::streamsize logSize = logBuffer->sputn(text, size);
+			return std::min(consoleSize, logSize);
+		}
 
-	int sync() override {
-		consoleBuffer->pubsync();
-		return logBuffer->pubsync();
-	}
+		int sync() override {
+			consoleBuffer->pubsync();
+			return logBuffer->pubsync();
+		}
 
-private:
-	std::streambuf* consoleBuffer;
-	std::streambuf* logBuffer;
-};
+	private:
+		std::streambuf* consoleBuffer;
+		std::streambuf* logBuffer;
+	};
 
-class ConsoleLogTarget final : public wxLog {
-protected:
-	void DoLogText(const wxString& message) override {
-		const wxScopedCharBuffer utf8 = message.ToUTF8();
-		std::cerr << "[wx] " << (utf8 ? utf8.data() : "") << std::endl;
-	}
-};
+	class ConsoleLogTarget final : public wxLog {
+	protected:
+		void DoLogText(const wxString& message) override {
+			const wxScopedCharBuffer utf8 = message.ToUTF8();
+			std::cerr << "[wx] " << (utf8 ? utf8.data() : "") << std::endl;
+		}
+	};
 
 #if wxUSE_STACKWALKER && wxUSE_ON_FATAL_EXCEPTION
-class DiagnosticStackWalker final : public wxStackWalker {
-protected:
-	void OnStackFrame(const wxStackFrame& frame) override {
-		std::cerr << "  #" << frame.GetLevel() << " "
-		          << frame.GetName().ToStdString();
-		if (frame.HasSourceLocation()) {
-			std::cerr << " at " << frame.GetFileName().ToStdString()
-			          << ":" << frame.GetLine();
-		} else if (!frame.GetModule().IsEmpty()) {
-			std::cerr << " in " << frame.GetModule().ToStdString();
+	class DiagnosticStackWalker final : public wxStackWalker {
+	protected:
+		void OnStackFrame(const wxStackFrame& frame) override {
+			std::cerr << "  #" << frame.GetLevel() << " "
+					  << frame.GetName().ToStdString();
+			if (frame.HasSourceLocation()) {
+				std::cerr << " at " << frame.GetFileName().ToStdString()
+						  << ":" << frame.GetLine();
+			} else if (!frame.GetModule().IsEmpty()) {
+				std::cerr << " in " << frame.GetModule().ToStdString();
+			}
+			std::cerr << " [" << frame.GetAddress() << "]" << std::endl;
 		}
-		std::cerr << " [" << frame.GetAddress() << "]" << std::endl;
-	}
-};
+	};
 #endif
 
-template <typename EntryPoint>
-int RunApplication(EntryPoint&& entryPoint) {
-	try {
-		std::cerr << "[info] RME starting" << std::endl;
-		const int exitCode = std::forward<EntryPoint>(entryPoint)();
-		std::cerr << "[info] RME stopped with code " << exitCode << std::endl;
+	template <typename EntryPoint>
+	int RunApplication(EntryPoint&& entryPoint) {
+		try {
+			std::cerr << "[info] RME starting" << std::endl;
+			const int exitCode = std::forward<EntryPoint>(entryPoint)();
+			std::cerr << "[info] RME stopped with code " << exitCode << std::endl;
+			return exitCode;
+		} catch (const std::exception& exception) {
+			std::cerr << "[critical] Unhandled startup/shutdown exception: "
+					  << exception.what() << std::endl;
+		} catch (...) {
+			std::cerr << "[critical] Unknown startup/shutdown exception" << std::endl;
+		}
+		return EXIT_FAILURE;
+	}
+
+	template <typename EntryPoint>
+	int RunWithDiagnostics(const std::filesystem::path& executablePath, EntryPoint&& entryPoint) {
+		const std::filesystem::path logPath = executablePath.parent_path() / "rme.log";
+		std::ofstream logFile(logPath, std::ios::out | std::ios::app);
+		if (!logFile) {
+			std::cerr << "[warning] Could not open diagnostic log: " << logPath.string() << std::endl;
+			return RunApplication(std::forward<EntryPoint>(entryPoint));
+		}
+
+		TeeStreamBuffer outputBuffer(std::cout.rdbuf(), logFile.rdbuf());
+		TeeStreamBuffer errorBuffer(std::cerr.rdbuf(), logFile.rdbuf());
+		std::streambuf* const originalOutputBuffer = std::cout.rdbuf(&outputBuffer);
+		std::streambuf* const originalErrorBuffer = std::cerr.rdbuf(&errorBuffer);
+		std::cout << std::unitbuf;
+		std::cerr << std::unitbuf;
+
+		std::cerr << std::endl
+				  << "=== RME diagnostic session ===" << std::endl;
+		std::cerr << "[info] Diagnostic log: " << logPath.string() << std::endl;
+		const int exitCode = RunApplication(std::forward<EntryPoint>(entryPoint));
+
+		std::cout.rdbuf(originalOutputBuffer);
+		std::cerr.rdbuf(originalErrorBuffer);
 		return exitCode;
-	} catch (const std::exception& exception) {
-		std::cerr << "[critical] Unhandled startup/shutdown exception: "
-		          << exception.what() << std::endl;
-	} catch (...) {
-		std::cerr << "[critical] Unknown startup/shutdown exception" << std::endl;
 	}
-	return EXIT_FAILURE;
-}
-
-template <typename EntryPoint>
-int RunWithDiagnostics(const std::filesystem::path& executablePath, EntryPoint&& entryPoint) {
-	const std::filesystem::path logPath = executablePath.parent_path() / "rme.log";
-	std::ofstream logFile(logPath, std::ios::out | std::ios::app);
-	if (!logFile) {
-		std::cerr << "[warning] Could not open diagnostic log: " << logPath.string() << std::endl;
-		return RunApplication(std::forward<EntryPoint>(entryPoint));
-	}
-
-	TeeStreamBuffer outputBuffer(std::cout.rdbuf(), logFile.rdbuf());
-	TeeStreamBuffer errorBuffer(std::cerr.rdbuf(), logFile.rdbuf());
-	std::streambuf* const originalOutputBuffer = std::cout.rdbuf(&outputBuffer);
-	std::streambuf* const originalErrorBuffer = std::cerr.rdbuf(&errorBuffer);
-	std::cout << std::unitbuf;
-	std::cerr << std::unitbuf;
-
-	std::cerr << std::endl << "=== RME diagnostic session ===" << std::endl;
-	std::cerr << "[info] Diagnostic log: " << logPath.string() << std::endl;
-	const int exitCode = RunApplication(std::forward<EntryPoint>(entryPoint));
-
-	std::cout.rdbuf(originalOutputBuffer);
-	std::cerr.rdbuf(originalErrorBuffer);
-	return exitCode;
-}
 
 } // namespace
 
@@ -238,13 +240,13 @@ bool Application::OnInit() {
 			std::cerr << "[info] Theme: System Default" << std::endl;
 			break;
 	}
-#ifdef __WXMSW__
+	#ifdef __WXMSW__
 	if (theme == 1) {
 		MSWEnableDarkMode(wxApp::DarkMode_Always);
 	} else if (theme == 0) {
 		MSWEnableDarkMode(wxApp::DarkMode_Auto);
 	}
-#endif
+	#endif
 #endif
 	// Keep the normal wxWidgets UI logger and mirror all messages to the
 	// diagnostic console/file stream.
@@ -269,6 +271,7 @@ bool Application::OnInit() {
 	FixVersionDiscrapencies();
 	g_gui.LoadHotkeys();
 	ClientVersion::loadVersions();
+	ClientAssets::loadConfiguredPath();
 
 #ifdef _USE_PROCESS_COM
 	m_single_instance_checker = newd wxSingleInstanceChecker; // Instance checker has to stay alive throughout the applications lifetime
@@ -514,7 +517,7 @@ bool Application::OnExceptionInMainLoop() {
 		throw;
 	} catch (const std::exception& exception) {
 		std::cerr << "[error] Exception while handling an event: "
-		          << exception.what() << std::endl;
+				  << exception.what() << std::endl;
 	} catch (...) {
 		std::cerr << "[error] Unknown exception while handling an event" << std::endl;
 	}
@@ -526,7 +529,7 @@ void Application::OnUnhandledException() {
 		throw;
 	} catch (const std::exception& exception) {
 		std::cerr << "[error] Unhandled application exception: "
-		          << exception.what() << std::endl;
+				  << exception.what() << std::endl;
 	} catch (...) {
 		std::cerr << "[error] Unknown unhandled application exception" << std::endl;
 	}
@@ -660,12 +663,16 @@ bool MainFrame::DoQuerySave(bool doclose) {
 
 		if (ret == wxID_YES) {
 			if (g_gui.GetCurrentMap().hasFile()) {
-				g_gui.SaveCurrentMap(true);
+				if (!g_gui.SaveCurrentMap(true)) {
+					return false;
+				}
 			} else {
 				wxFileDialog file(this, "Save...", "", "", "*.otbm", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 				int32_t result = file.ShowModal();
 				if (result == wxID_OK) {
-					g_gui.SaveCurrentMap(file.GetPath(), true);
+					if (!g_gui.SaveCurrentMap(file.GetPath(), true)) {
+						return false;
+					}
 				} else {
 					return false;
 				}

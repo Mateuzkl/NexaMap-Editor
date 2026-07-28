@@ -30,6 +30,72 @@
 #include "house_exit_brush.h"
 #include "doodad_brush.h"
 #include "spawn_brush.h"
+#include "map_format.h"
+#include "spawn_format.h"
+#include "item_id_codec.h"
+
+#include <filesystem>
+#include <optional>
+#include <wx/choicdlg.h>
+
+namespace {
+	MapStorageFormat ChooseMapStorageFormat(const OTBMFileMetadata& metadata, const MapFormatDetection& detection) {
+		wxArrayString choices;
+		choices.Add("TFS - Server IDs and one combined spawn XML");
+		choices.Add("Canary/Crystal - ClientIDs and separate monster/NPC XML");
+		wxString message = wxstr(detection.reason);
+		if (detection.conflict) {
+			message += "\n\nConflicting format evidence was found. Choose which format should be used to open this map:";
+		} else {
+			message += "\n\nThe format cannot be determined safely. Choose how this map should be opened:";
+		}
+		wxSingleChoiceDialog dialog(g_gui.root, message, "Choose map format", choices);
+		dialog.SetSelection(metadata.version.otbm >= MAP_OTBM_5 ? 1 : 0);
+		if (dialog.ShowModal() != wxID_OK) {
+			return MapStorageFormat::Unknown;
+		}
+		return dialog.GetSelection() == 1 ? MapStorageFormat::CanaryCrystal : MapStorageFormat::Tfs;
+	}
+
+	ClientVersionID ChooseTfsClientVersion(ClientVersionID headerVersion) {
+		if (ClientVersion::get(headerVersion)) {
+			return headerVersion;
+		}
+
+		const ClientVersionList versions = ClientVersion::getAllVisible();
+		wxArrayString choices;
+		std::vector<ClientVersionID> identifiers;
+		int suggestedIndex = 0;
+		for (ClientVersion* version : versions) {
+			if (!version || !version->isVisible()) {
+				continue;
+			}
+			choices.Add(wxstr(version->getName()));
+			identifiers.push_back(version->getID());
+			if (version->getID() == g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION)) {
+				suggestedIndex = static_cast<int>(identifiers.size() - 1);
+			}
+		}
+		if (choices.empty()) {
+			return CLIENT_VERSION_NONE;
+		}
+
+		wxSingleChoiceDialog dialog(
+			g_gui.root,
+			wxString::Format(
+				"The OTBM item version %d does not match a configured TFS client.\nChoose the client profile used by this map:",
+				headerVersion
+			),
+			"Choose TFS client profile",
+			choices
+		);
+		dialog.SetSelection(suggestedIndex);
+		if (dialog.ShowModal() != wxID_OK) {
+			return CLIENT_VERSION_NONE;
+		}
+		return identifiers.at(static_cast<size_t>(dialog.GetSelection()));
+	}
+}
 
 Editor::Editor(CopyBuffer& copybuffer) :
 	actionQueue(newd ActionQueue(*this)),
@@ -40,18 +106,20 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	wxArrayString warnings;
 	bool ok = true;
 
-	auto defaultVersion = ClientVersionID(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION));
-	if (defaultVersion == CLIENT_VERSION_NONE) {
-		defaultVersion = ClientVersion::getLatestVersion()->getID();
-	}
+	if (!g_gui.IsCanaryCrystalAssetsLoaded()) {
+		auto defaultVersion = ClientVersionID(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION));
+		if (defaultVersion == CLIENT_VERSION_NONE) {
+			defaultVersion = ClientVersion::getLatestVersion()->getID();
+		}
 
-	if (g_gui.GetCurrentVersionID() != defaultVersion) {
-		if (g_gui.CloseAllEditors()) {
-			ok = g_gui.LoadVersion(defaultVersion, error, warnings);
-			g_gui.PopupDialog("Error", error, wxOK);
-			g_gui.ListDialog("Warnings", warnings);
-		} else {
-			throw std::runtime_error("All maps of different versions were not closed.");
+		if (g_gui.GetCurrentVersionID() != defaultVersion) {
+			if (g_gui.CloseAllEditors()) {
+				ok = g_gui.LoadVersion(defaultVersion, error, warnings);
+				g_gui.PopupDialog("Error", error, wxOK);
+				g_gui.ListDialog("Warnings", warnings);
+			} else {
+				throw std::runtime_error("All maps of different versions were not closed.");
+			}
 		}
 	}
 
@@ -60,9 +128,13 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	}
 
 	MapVersion version;
-	version.otbm = g_gui.GetCurrentVersion().getPrefferedMapVersionID();
+	version.otbm = g_gui.IsCanaryCrystalAssetsLoaded() ? MAP_OTBM_5 : g_gui.GetCurrentVersion().getPrefferedMapVersionID();
 	version.client = g_gui.GetCurrentVersionID();
 	map.convert(version);
+	map.storageFormat = g_gui.IsCanaryCrystalAssetsLoaded() ? MapStorageFormat::CanaryCrystal : MapStorageFormat::Tfs;
+	map.itemIdSpace = g_gui.IsCanaryCrystalAssetsLoaded() ? ItemIdSpace::Client : ItemIdSpace::Server;
+	map.sourceItemMajorVersion = g_gui.IsCanaryCrystalAssetsLoaded() ? 4 : g_items.MajorVersion;
+	map.sourceItemMinorVersion = g_gui.IsCanaryCrystalAssetsLoaded() ? 4 : g_items.MinorVersion;
 
 	map.height = 2048;
 	map.width = 2048;
@@ -71,9 +143,15 @@ Editor::Editor(CopyBuffer& copybuffer) :
 
 	std::string sname = "Untitled-" + i2s(++unnamed_counter);
 	map.name = sname + ".otbm";
-	map.spawnfile = sname + "-spawn.xml";
-	map.spawnNpcFile.clear();
-	map.spawnFormat = SpawnFormat::Tfs;
+	if (g_gui.IsCanaryCrystalAssetsLoaded()) {
+		map.spawnfile = sname + "-monster.xml";
+		map.spawnNpcFile = sname + "-npc.xml";
+		map.spawnFormat = SpawnFormat::CanaryCrystal;
+	} else {
+		map.spawnfile = sname + "-spawn.xml";
+		map.spawnNpcFile.clear();
+		map.spawnFormat = SpawnFormat::Tfs;
+	}
 	map.housefile = sname + "-house.xml";
 	map.waypointfile = sname + "-waypoint.xml";
 	map.zonefile = sname + "-zones.xml";
@@ -88,11 +166,12 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPo
 	selection(*this),
 	copybuffer(copybuffer),
 	replace_brush(nullptr) {
-	MapVersion ver;
-	if (!IOMapOTBM::getVersionInfo(fn, ver)) {
+	OTBMFileMetadata metadata;
+	if (!IOMapOTBM::getFileMetadata(fn, metadata)) {
 		// g_gui.PopupDialog("Error", "Could not open file \"" + fn.GetFullPath() + "\".", wxOK);
 		throw std::runtime_error("Could not open file \"" + nstr(fn.GetFullPath()) + "\".\nThis is not a valid OTBM file or it does not exist.");
 	}
+	MapVersion ver = metadata.version;
 
 	/*
 	if(ver < CLIENT_VERSION_760) {
@@ -105,21 +184,67 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPo
 	*/
 
 	const bool keepLoadedClientVersion = clientVersionPolicy == EditorClientVersionPolicy::KeepLoaded;
+	MapStorageFormat storageFormat = g_gui.IsCanaryCrystalAssetsLoaded() ? MapStorageFormat::CanaryCrystal : MapStorageFormat::Tfs;
+	if (!keepLoadedClientVersion) {
+		const std::filesystem::path directory(nstr(fn.GetPath()));
+		const SpawnDetectionResult spawnDetection = SpawnFormatIO::Detect(
+			directory,
+			metadata.spawnFile,
+			metadata.spawnNpcFile,
+			nstr(fn.GetName())
+		);
+		const MapFormatEvidence evidence {
+			metadata.version.otbm,
+			static_cast<ClientVersionID>(metadata.itemMinorVersion),
+			ClientVersion::get(static_cast<ClientVersionID>(metadata.itemMinorVersion)) != nullptr,
+			spawnDetection.format,
+			spawnDetection.conflict,
+			!metadata.zoneFile.empty(),
+		};
+		const MapFormatDetection detection = MapFormatDetector::Detect(evidence);
+		storageFormat = detection.format;
+		if (storageFormat == MapStorageFormat::Unknown) {
+			storageFormat = ChooseMapStorageFormat(metadata, detection);
+			if (storageFormat == MapStorageFormat::Unknown) {
+				throw std::runtime_error("Map opening was cancelled while choosing its storage format.");
+			}
+		}
+	}
+
 	bool success = true;
 	wxString loadError;
 	if (keepLoadedClientVersion && g_gui.GetCurrentVersionID() == CLIENT_VERSION_NONE) {
 		throw std::runtime_error("No client assets are loaded for the converted map.");
 	}
 
-	if (!keepLoadedClientVersion && g_gui.GetCurrentVersionID() != ver.client) {
+	if (!keepLoadedClientVersion && storageFormat == MapStorageFormat::CanaryCrystal && !g_gui.IsCanaryCrystalAssetsLoaded()) {
 		wxArrayString warnings;
 		if (g_gui.CloseAllEditors()) {
-			success = g_gui.LoadVersion(ver.client, loadError, warnings);
+			success = g_gui.LoadCanaryCrystalAssets(loadError, warnings);
 			if (success) {
 				g_gui.ListDialog("Warnings", warnings);
 			}
 		} else {
-			throw std::runtime_error("All maps of different versions were not closed.");
+			throw std::runtime_error("All maps using another asset format were not closed.");
+		}
+	} else if (!keepLoadedClientVersion && storageFormat == MapStorageFormat::Tfs) {
+		const ClientVersionID selectedVersion = ChooseTfsClientVersion(ver.client);
+		if (selectedVersion == CLIENT_VERSION_NONE) {
+			throw std::runtime_error("Map opening was cancelled while choosing its TFS client profile.");
+		}
+		ver.client = selectedVersion;
+		if (g_gui.GetCurrentVersionID() == selectedVersion && !g_gui.IsCanaryCrystalAssetsLoaded()) {
+			success = true;
+		} else {
+			wxArrayString warnings;
+			if (g_gui.CloseAllEditors()) {
+				success = g_gui.LoadVersion(selectedVersion, loadError, warnings);
+				if (success) {
+					g_gui.ListDialog("Warnings", warnings);
+				}
+			} else {
+				throw std::runtime_error("All maps of different versions were not closed.");
+			}
 		}
 	}
 
@@ -127,10 +252,18 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPo
 		throw std::runtime_error(nstr(loadError));
 	}
 
+	map.storageFormat = storageFormat;
+	map.itemIdSpace = storageFormat == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
 	{
 		ScopedLoadingBar LoadingBar("Loading OTBM map...");
 		success = map.open(nstr(fn.GetFullPath()), readCodec);
-		if (success && keepLoadedClientVersion) {
+		if (success) {
+			map.storageFormat = storageFormat;
+			map.itemIdSpace = storageFormat == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
+			map.sourceItemMajorVersion = metadata.itemMajorVersion;
+			map.sourceItemMinorVersion = metadata.itemMinorVersion;
+		}
+		if (success && (keepLoadedClientVersion || storageFormat == MapStorageFormat::CanaryCrystal || ver.client != metadata.version.client)) {
 			// Converter output was already reopened and round-trip validated with
 			// the currently loaded item database. Its OTB minor value does not
 			// need to be a registered RME client profile for this trusted route.
@@ -178,18 +311,21 @@ void Editor::addAction(Action* action, int stacking_delay) {
 	g_gui.UpdateMenus();
 }
 
-void Editor::saveMap(const FileName& filename, bool showdialog) {
+bool Editor::saveMap(const FileName& filename, bool showdialog) {
+	const std::string originalFilename = map.filename;
+	const std::string originalName = map.name;
+	const bool originallyUnnamed = map.unnamed;
+	const bool originalSpawnFilenamesExplicit = map.spawnFilenamesExplicit;
 	std::string savefile = filename.GetFullPath().mb_str(wxConvUTF8).data();
 	bool save_as = false;
 	bool save_otgz = false;
 
 	if (savefile.empty()) {
 		savefile = map.filename;
-
-		FileName c1(wxstr(savefile));
-		FileName c2(wxstr(map.filename));
-		save_as = c1 != c2;
 	}
+	FileName c1(wxstr(savefile));
+	FileName c2(wxstr(map.filename));
+	save_as = c1 != c2;
 
 	// If not named yet, propagate the file name to the auxilliary files
 	if (map.unnamed) {
@@ -304,6 +440,16 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 
 		// Perform the actual save
 		IOMapOTBM mapsaver(map.getVersion());
+		if (map.sourceItemMajorVersion != 0 || map.sourceItemMinorVersion != 0) {
+			mapsaver.useItemVersionHeader(map.sourceItemMajorVersion, map.sourceItemMinorVersion);
+		}
+		std::optional<MappingItemIdCodec> itemIdCodec;
+		const ItemIdSpace targetSpace = map.storageFormat == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
+		if (map.itemIdSpace != targetSpace) {
+			const ItemIdMapping::Direction direction = targetSpace == ItemIdSpace::Client ? ItemIdMapping::Direction::ServerToClient : ItemIdMapping::Direction::ClientToServer;
+			itemIdCodec.emplace(direction);
+			mapsaver.useItemIdCodec(&*itemIdCodec);
+		}
 		bool success = mapsaver.saveMap(map, fn);
 
 		if (showdialog) {
@@ -312,6 +458,10 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 
 		// Check for errors...
 		if (!success) {
+			map.filename = originalFilename;
+			map.name = originalName;
+			map.unnamed = originallyUnnamed;
+			map.spawnFilenamesExplicit = originalSpawnFilenamesExplicit;
 			// Rename the temporary backup files back to their previous names
 			if (!backup_otbm.empty()) {
 				converter.SetFullName(wxstr(savefile));
@@ -361,7 +511,7 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 
 		// If failure, don't run the rest of the function
 		if (!success) {
-			return;
+			return false;
 		}
 	}
 
@@ -431,6 +581,7 @@ void Editor::saveMap(const FileName& filename, bool showdialog) {
 	}
 
 	map.clearChanges();
+	return true;
 }
 
 bool Editor::importMap(const FileName& filename, int import_x_offset, int import_y_offset, int import_z_offset, ImportType house_import_type, ImportType spawn_import_type) {

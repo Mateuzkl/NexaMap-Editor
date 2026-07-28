@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include <wx/display.h>
+#include <wx/dir.h>
 
 #include <utility>
 
@@ -33,6 +34,7 @@
 #include "spawn_export_window.h"
 #include "spawn_converter_window.h"
 #include "map_item_id_converter_window.h"
+#include "client_assets.h"
 
 #include "common_windows.h"
 #include "result_window.h"
@@ -49,6 +51,25 @@
 #endif
 
 const wxEventType EVT_UPDATE_MENUS = wxNewEventType();
+
+namespace {
+	constexpr const char* CANARY_CRYSTAL_DATA_DIRECTORY = "canary-crystal";
+
+	wxString GetCanaryCrystalBundledDataDirectory() {
+		wxString dataDirectory = GUI::GetDataDirectory();
+		if (!wxFileName(dataDirectory).DirExists()) {
+			dataDirectory = g_gui.getFoundDataDirectory();
+		}
+		return dataDirectory + wxString::FromUTF8(CANARY_CRYSTAL_DATA_DIRECTORY) + FileName::GetPathSeparator();
+	}
+
+	FileName GetCanaryCrystalLocalDataDirectory() {
+		FileName directory = GUI::GetLocalDataDirectory();
+		directory.AppendDir(wxString::FromUTF8(CANARY_CRYSTAL_DATA_DIRECTORY));
+		directory.Mkdir(0755, wxPATH_MKDIR_FULL);
+		return directory;
+	}
+}
 
 // Global GUI instance
 GUI g_gui;
@@ -77,6 +98,7 @@ GUI::GUI() :
 
 	OGLContext(nullptr),
 	loaded_version(CLIENT_VERSION_NONE),
+	canary_crystal_assets_loaded(false),
 	mode(SELECTION_MODE),
 	pasting(false),
 	hotkeys_enabled(true),
@@ -249,7 +271,7 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 		return false;
 	}
 
-	if (version != loaded_version || force) {
+	if (version != loaded_version || force || canary_crystal_assets_loaded) {
 		if (getLoadedVersion() != nullptr) {
 			// There is another version loaded right now, save window layout
 			g_gui.SavePerspective();
@@ -281,6 +303,42 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 
 		return ret;
 	}
+	return true;
+}
+
+bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force) {
+	ClientVersion* compatibilityProfile = ClientVersion::getLatestVersion();
+	if (compatibilityProfile == nullptr) {
+		error = "No client compatibility profile is available for the Canary/Crystal Assets loader.";
+		return false;
+	}
+	if (ClientAssets::getPath().empty()) {
+		error = "Configure a CipSoft/Crystal or OTC Assets root in Preferences > Client Version first.";
+		return false;
+	}
+	if (canary_crystal_assets_loaded && loaded_version == compatibilityProfile->getID() && !force) {
+		return true;
+	}
+
+	if (getLoadedVersion() != nullptr) {
+		SavePerspective();
+	}
+	UnnamedRenderingLock();
+	DestroyPalettes();
+	DestroyMinimap();
+	UnloadVersion();
+
+	// Assets provide their own appearances and sprites. The latest configured
+	// profile is used only for editor compatibility rules; no versioned DAT/SPR
+	// or data/<version> directory is loaded here.
+	loaded_version = compatibilityProfile->getID();
+	canary_crystal_assets_loaded = true;
+	if (!LoadCanaryCrystalDataFiles(error, warnings)) {
+		canary_crystal_assets_loaded = false;
+		loaded_version = CLIENT_VERSION_NONE;
+		return false;
+	}
+	LoadPerspective();
 	return true;
 }
 
@@ -400,6 +458,88 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	return true;
 }
 
+bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
+	const wxString assetsDataDirectory = GetCanaryCrystalBundledDataDirectory();
+	if (!wxDir::Exists(assetsDataDirectory)) {
+		error = "Missing bundled Canary/Crystal data directory: " + assetsDataDirectory;
+		return false;
+	}
+
+	gfx.client_version = getLoadedVersion();
+	CreateLoadBar("Loading Canary/Crystal Assets");
+	SetLoadDone(0, "Validating package and catalog...");
+	wxLogMessage("Canary/Crystal: validating client package and catalog.");
+
+	if (!ClientAssets::load(error, warnings)) {
+		DestroyLoadBar();
+		UnloadVersion();
+		return false;
+	}
+
+	SetLoadDone(35, "Loading item metadata...");
+	wxLogMessage("Canary/Crystal: loading dedicated item metadata.");
+	wxString supplementalError;
+	if (!g_items.loadFromGameXml(assetsDataDirectory + "items/items.xml", supplementalError, warnings, false)) {
+		warnings.push_back("Couldn't enrich Canary/Crystal items from items.xml: " + supplementalError);
+	}
+
+	SetLoadDone(50, "Loading creatures...");
+	wxLogMessage("Canary/Crystal: loading dedicated monsters and NPCs.");
+	supplementalError.clear();
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/monsters.xml", true, supplementalError, warnings)) {
+		warnings.push_back("Couldn't load Canary/Crystal monsters.xml: " + supplementalError);
+	}
+	supplementalError.clear();
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/npcs.xml", true, supplementalError, warnings)) {
+		warnings.push_back("Couldn't load Canary/Crystal npcs.xml: " + supplementalError);
+	}
+	{
+		FileName userCreatures = GetCanaryCrystalLocalDataDirectory();
+		userCreatures.SetFullName("creatures.xml");
+		wxString userError;
+		wxArrayString userWarnings;
+		g_creatures.loadFromXML(userCreatures, false, userError, userWarnings);
+		for (const wxString& warning : userWarnings) {
+			warnings.push_back(warning);
+		}
+	}
+
+	const wxString monstersDirectory = wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
+	if (!monstersDirectory.empty() && wxDir::Exists(monstersDirectory)) {
+		wxString luaError;
+		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings)) {
+			warnings.push_back("Couldn't import the configured monsters Lua directory: " + luaError);
+		}
+	}
+	const wxString npcsDirectory = wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
+	if (!npcsDirectory.empty() && wxDir::Exists(npcsDirectory)) {
+		wxString luaError;
+		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings)) {
+			warnings.push_back("Couldn't import the configured NPCs Lua directory: " + luaError);
+		}
+	}
+
+	SetLoadDone(65, "Loading materials...");
+	wxLogMessage("Canary/Crystal: loading dedicated materials and borders.");
+	supplementalError.clear();
+	if (!g_materials.loadMaterials(assetsDataDirectory + "materials/materials.xml", supplementalError, warnings)) {
+		warnings.push_back("Couldn't load materials.xml: " + supplementalError);
+	}
+
+	// Legacy extensions are tied to versioned TFS ServerIDs and may redefine
+	// brushes from the dedicated ClientID material set. Do not mix them into an
+	// Assets session.
+	SetLoadDone(85, "Initializing Canary/Crystal brushes...");
+	wxLogMessage("Canary/Crystal: initializing editor brushes.");
+	g_brushes.init();
+	SetLoadDone(95, "Building Canary/Crystal palettes...");
+	wxLogMessage("Canary/Crystal: building item and creature palettes.");
+	g_materials.createOtherTileset();
+	wxLogMessage("Canary/Crystal: dedicated data load completed.");
+	DestroyLoadBar();
+	return true;
+}
+
 void GUI::UnloadVersion() {
 	UnnamedRenderingLock();
 	gfx.clear();
@@ -430,23 +570,27 @@ void GUI::UnloadVersion() {
 
 		loaded_version = CLIENT_VERSION_NONE;
 	}
+	ClientAssets::unload();
+	canary_crystal_assets_loaded = false;
 }
 
 void GUI::SaveUserCreatures() {
 	if (loaded_version == CLIENT_VERSION_NONE) {
 		return;
 	}
-	FileName cdb = getLoadedVersion()->getLocalDataPath();
+	FileName cdb = canary_crystal_assets_loaded ? GetCanaryCrystalLocalDataDirectory() : getLoadedVersion()->getLocalDataPath();
 	cdb.SetFullName("creatures.xml");
 	g_creatures.saveToXML(cdb);
 }
 
-void GUI::SaveCurrentMap(const FileName& filename, bool showdialog) {
+bool GUI::SaveCurrentMap(const FileName& filename, bool showdialog) {
 	MapTab* mapTab = GetCurrentMapTab();
 	if (mapTab) {
 		Editor* editor = mapTab->GetEditor();
 		if (editor) {
-			editor->saveMap(filename, showdialog);
+			if (!editor->saveMap(filename, showdialog)) {
+				return false;
+			}
 
 			const std::string& filename = editor->map.getFilename();
 			const Position& position = mapTab->GetScreenCenterPosition();
@@ -460,6 +604,7 @@ void GUI::SaveCurrentMap(const FileName& filename, bool showdialog) {
 	UpdateTitle();
 	root->UpdateMenubar();
 	root->Refresh();
+	return mapTab != nullptr;
 }
 
 bool GUI::IsEditorOpen() const {
@@ -543,8 +688,26 @@ void GUI::SaveMap() {
 		wxString wildcard = g_settings.getInteger(Config::USE_OTGZ) != 0 ? MAP_SAVE_FILE_WILDCARD_OTGZ : MAP_SAVE_FILE_WILDCARD;
 		wxFileDialog dialog(root, "Save...", wxEmptyString, wxEmptyString, wildcard, wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 
-		if (dialog.ShowModal() == wxID_OK && ConfigureSpawnSaveAs(dialog.GetPath())) {
-			SaveCurrentMap(dialog.GetPath(), true);
+		Map& map = GetCurrentMap();
+		const MapVersion previousVersion = map.mapVersion;
+		const MapStorageFormat previousStorageFormat = map.storageFormat;
+		const uint32_t previousMajorVersion = map.sourceItemMajorVersion;
+		const uint32_t previousMinorVersion = map.sourceItemMinorVersion;
+		const SpawnFormat previousSpawnFormat = map.spawnFormat;
+		const std::string previousSpawnFile = map.spawnfile;
+		const std::string previousNpcFile = map.spawnNpcFile;
+		const std::string previousZoneFile = map.zonefile;
+		const bool previousExplicitFilenames = map.spawnFilenamesExplicit;
+		if (dialog.ShowModal() == wxID_OK && ConfigureSpawnSaveAs(dialog.GetPath()) && !SaveCurrentMap(dialog.GetPath(), true)) {
+			map.mapVersion = previousVersion;
+			map.storageFormat = previousStorageFormat;
+			map.sourceItemMajorVersion = previousMajorVersion;
+			map.sourceItemMinorVersion = previousMinorVersion;
+			map.spawnFormat = previousSpawnFormat;
+			map.spawnfile = previousSpawnFile;
+			map.spawnNpcFile = previousNpcFile;
+			map.zonefile = previousZoneFile;
+			map.spawnFilenamesExplicit = previousExplicitFilenames;
 		}
 	}
 }
@@ -557,11 +720,32 @@ void GUI::SaveMapAs() {
 	wxString wildcard = g_settings.getInteger(Config::USE_OTGZ) != 0 ? MAP_SAVE_FILE_WILDCARD_OTGZ : MAP_SAVE_FILE_WILDCARD;
 	wxFileDialog dialog(root, "Save As...", "", "", wildcard, wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 
+	Map& map = GetCurrentMap();
+	const MapVersion previousVersion = map.mapVersion;
+	const MapStorageFormat previousStorageFormat = map.storageFormat;
+	const uint32_t previousMajorVersion = map.sourceItemMajorVersion;
+	const uint32_t previousMinorVersion = map.sourceItemMinorVersion;
+	const SpawnFormat previousSpawnFormat = map.spawnFormat;
+	const std::string previousSpawnFile = map.spawnfile;
+	const std::string previousNpcFile = map.spawnNpcFile;
+	const std::string previousZoneFile = map.zonefile;
+	const bool previousExplicitFilenames = map.spawnFilenamesExplicit;
 	if (dialog.ShowModal() == wxID_OK && ConfigureSpawnSaveAs(dialog.GetPath())) {
-		SaveCurrentMap(dialog.GetPath(), true);
-		UpdateTitle();
-		root->menu_bar->AddRecentFile(dialog.GetPath());
-		root->UpdateMenubar();
+		if (SaveCurrentMap(dialog.GetPath(), true)) {
+			UpdateTitle();
+			root->menu_bar->AddRecentFile(dialog.GetPath());
+			root->UpdateMenubar();
+		} else {
+			map.mapVersion = previousVersion;
+			map.storageFormat = previousStorageFormat;
+			map.sourceItemMajorVersion = previousMajorVersion;
+			map.sourceItemMinorVersion = previousMinorVersion;
+			map.spawnFormat = previousSpawnFormat;
+			map.spawnfile = previousSpawnFile;
+			map.spawnNpcFile = previousNpcFile;
+			map.zonefile = previousZoneFile;
+			map.spawnFilenamesExplicit = previousExplicitFilenames;
+		}
 	}
 }
 
@@ -573,6 +757,19 @@ bool GUI::ConfigureSpawnSaveAs(const FileName& mapFilename) {
 	}
 	const SpawnExportOptions options = dialog.GetOptions();
 	map.setSpawnSaveTarget(options.format, options.primaryFilename, options.npcFilename);
+	map.setStorageFormat(options.mapFormat);
+	map.zonefile = nstr(mapFilename.GetName()) + "-zones.xml";
+	MapVersion targetVersion = map.getVersion();
+	if (options.mapFormat == MapStorageFormat::CanaryCrystal) {
+		targetVersion.otbm = std::max(targetVersion.otbm, MAP_OTBM_5);
+		targetVersion.client = g_gui.IsCanaryCrystalAssetsLoaded() ? g_gui.GetCurrentVersionID() : ClientVersion::getLatestVersion()->getID();
+		map.setSourceItemVersion(4, 4);
+	} else {
+		targetVersion.otbm = MAP_OTBM_3;
+		targetVersion.client = CLIENT_VERSION_860;
+		map.setSourceItemVersion(3, CLIENT_VERSION_860);
+	}
+	map.mapVersion = targetVersion;
 	return true;
 }
 

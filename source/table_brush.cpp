@@ -81,7 +81,7 @@ bool TableBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				continue;
 			}
 
-			uint16_t const id = subChildNode.attribute("id").as_ushort();
+			const uint16_t id = subChildNode.attribute("id").as_ushort();
 			if (id == 0) {
 				warnings.push_back("Could not read id tag of item node\n");
 				break;
@@ -90,10 +90,10 @@ bool TableBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 			ItemType& it = g_items[id];
 			if (it.id == 0) {
 				warnings.push_back("There is no itemtype with id " + std::to_string(id));
-				return false;
+				continue;
 			} else if (it.brush && it.brush != this) {
 				warnings.push_back("Itemtype id " + std::to_string(id) + " already has a brush");
-				return false;
+				continue;
 			}
 
 			it.isTable = true;
@@ -118,7 +118,7 @@ void TableBrush::undraw(BaseMap* map, Tile* t) {
 	auto it = t->items.begin();
 	while (it != t->items.end()) {
 		if ((*it)->isTable()) {
-			TableBrush const* tb = (*it)->getTableBrush();
+			const TableBrush* tb = (*it)->getTableBrush();
 			if (tb == this) {
 				delete *it;
 				it = t->items.erase(it);
@@ -162,7 +162,7 @@ bool hasMatchingTableBrushAtTile(BaseMap* map, const TableBrush* table_brush, ui
 
 	ItemVector::const_iterator it = t->items.begin();
 	for (; it != t->items.end(); ++it) {
-		TableBrush const* tb = (*it)->getTableBrush();
+		const TableBrush* tb = (*it)->getTableBrush();
 		if (tb == table_brush) {
 			return true;
 		}
@@ -179,9 +179,9 @@ void TableBrush::doTables(BaseMap* map, Tile* tile) {
 
 	const Position& position = tile->getPosition();
 
-	int32_t const x = position.x;
-	int32_t const y = position.y;
-	int32_t const z = position.z;
+	const int32_t x = position.x;
+	const int32_t y = position.y;
+	const int32_t z = position.z;
 
 	for (Item* item : tile->items) {
 		ASSERT(item);
@@ -240,8 +240,8 @@ void TableBrush::doTables(BaseMap* map, Tile* tile) {
 			}
 		}
 
-		auto const bt = static_cast<BorderType>(table_types[tiledata]);
-		TableNode const& tn = table_brush->table_items[static_cast<int32_t>(bt)];
+		const auto bt = static_cast<BorderType>(table_types[tiledata]);
+		const TableNode& tn = table_brush->table_items[static_cast<int32_t>(bt)];
 		if (tn.total_chance == 0) {
 			return;
 		}

@@ -358,13 +358,13 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 		stream.addU8(getSubtype());
 	}
 
-	if (maphandle.version.otbm >= MAP_OTBM_4) {
+	if (maphandle.version.otbm == MAP_OTBM_4 || maphandle.version.otbm > MAP_OTBM_5) {
 		if (attributes && !attributes->empty()) {
 			stream.addU8(OTBM_ATTR_ATTRIBUTE_MAP);
 			serializeAttributeMap(maphandle, stream);
 		}
 	} else {
-		if (subtypeAttributes == SUBTYPE_ATTR_NONE && g_items.MinorVersion >= CLIENT_VERSION_820 && hasSubtypeKind(SUBTYPE_CHARGES)) {
+		if (subtypeAttributes == SUBTYPE_ATTR_NONE && maphandle.version.client >= CLIENT_VERSION_820 && hasSubtypeKind(SUBTYPE_CHARGES)) {
 			stream.addU8(OTBM_ATTR_CHARGES);
 			stream.addU16(getSubtype());
 		}
@@ -832,6 +832,18 @@ static bool readOtbmBytes(const FileName& filename, std::vector<uint8_t>& output
 }
 
 bool IOMapOTBM::getVersionInfo(const FileName& filename, MapVersion& out_ver, uint32_t* itemMajorVersion, const OTBMMemoryBudgetCheck& memoryBudgetCheck) {
+	OTBMFileMetadata metadata;
+	if (!getFileMetadata(filename, metadata, memoryBudgetCheck)) {
+		return false;
+	}
+	out_ver = metadata.version;
+	if (itemMajorVersion) {
+		*itemMajorVersion = metadata.itemMajorVersion;
+	}
+	return true;
+}
+
+bool IOMapOTBM::getFileMetadata(const FileName& filename, OTBMFileMetadata& metadata, const OTBMMemoryBudgetCheck& memoryBudgetCheck) {
 	bool isGzip = false;
 	std::string readError;
 	if (!isGzipOtbmInput(filename, isGzip, readError)) {
@@ -839,7 +851,7 @@ bool IOMapOTBM::getVersionInfo(const FileName& filename, MapVersion& out_ver, ui
 	}
 	if (!isGzip) {
 		DiskNodeFileReadHandle f(nstr(filename.GetFullPath()), StringVector(1, "OTBM"));
-		return f.isOk() && getVersionInfo(&f, out_ver, itemMajorVersion);
+		return f.isOk() && getFileMetadata(&f, metadata);
 	}
 
 	std::vector<uint8_t> otbmBuffer;
@@ -853,10 +865,22 @@ bool IOMapOTBM::getVersionInfo(const FileName& filename, MapVersion& out_ver, ui
 	}
 
 	MemoryNodeFileReadHandle f(otbmBuffer.data() + 4, otbmBuffer.size() - 4);
-	return getVersionInfo(&f, out_ver, itemMajorVersion);
+	return getFileMetadata(&f, metadata);
 }
 
 bool IOMapOTBM::getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver, uint32_t* itemMajorVersion) {
+	OTBMFileMetadata metadata;
+	if (!getFileMetadata(f, metadata)) {
+		return false;
+	}
+	out_ver = metadata.version;
+	if (itemMajorVersion) {
+		*itemMajorVersion = metadata.itemMajorVersion;
+	}
+	return true;
+}
+
+bool IOMapOTBM::getFileMetadata(NodeFileReadHandle* f, OTBMFileMetadata& metadata) {
 	BinaryNode* root = f->getRootNode();
 	if (!root) {
 		return false;
@@ -870,22 +894,58 @@ bool IOMapOTBM::getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver, uint3
 	if (!root->getU32(u32)) { // Version
 		return false;
 	}
-	out_ver.otbm = (MapVersionID)u32;
+	metadata.version.otbm = (MapVersionID)u32;
 
 	root->getU16(u16); // map size X
 	root->getU16(u16); // map size Y
 	if (!root->getU32(u32)) { // OTB major version
 		return false;
 	}
-	if (itemMajorVersion) {
-		*itemMajorVersion = u32;
-	}
+	metadata.itemMajorVersion = u32;
 
 	if (!root->getU32(u32)) { // OTB minor version
 		return false;
 	}
 
-	out_ver.client = ClientVersionID(u32);
+	metadata.itemMinorVersion = u32;
+	metadata.version.client = ClientVersionID(u32);
+
+	BinaryNode* mapHeader = root->getChild();
+	uint8_t nodeType = 0;
+	if (!mapHeader || !mapHeader->getU8(nodeType) || nodeType != OTBM_MAP_DATA) {
+		return true;
+	}
+	uint8_t attribute = 0;
+	while (mapHeader->getU8(attribute)) {
+		std::string value;
+		switch (attribute) {
+			case OTBM_ATTR_DESCRIPTION:
+			case OTBM_ATTR_EXT_HOUSE_FILE:
+				if (!mapHeader->getString(value)) {
+					return false;
+				}
+				break;
+			case OTBM_ATTR_EXT_SPAWN_FILE:
+				if (!mapHeader->getString(metadata.spawnFile)) {
+					return false;
+				}
+				break;
+			case OTBM_ATTR_EXT_SPAWN_NPC_FILE:
+				if (!mapHeader->getString(metadata.spawnNpcFile)) {
+					return false;
+				}
+				break;
+			case OTBM_ATTR_EXT_ZONE_FILE:
+				if (!mapHeader->getString(metadata.zoneFile)) {
+					return false;
+				}
+				break;
+			default:
+				// Header attributes are not length-prefixed as a group. Stop at
+				// an unknown extension without guessing its representation.
+				return true;
+		}
+	}
 	return true;
 }
 
@@ -984,9 +1044,15 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 	}
 	if (spawnStatus == SpawnLoadStatus::Unavailable) {
 		warning("Failed to load spawns.");
-		map.spawnfile = nstr(filename.GetName()) + "-spawn.xml";
-		map.spawnNpcFile.clear();
-		map.spawnFormat = SpawnFormat::Tfs;
+		if (map.getStorageFormat() == MapStorageFormat::CanaryCrystal || version.otbm >= MAP_OTBM_5) {
+			map.spawnfile = nstr(filename.GetName()) + "-monster.xml";
+			map.spawnNpcFile = nstr(filename.GetName()) + "-npc.xml";
+			map.spawnFormat = SpawnFormat::CanaryCrystal;
+		} else {
+			map.spawnfile = nstr(filename.GetName()) + "-spawn.xml";
+			map.spawnNpcFile.clear();
+			map.spawnFormat = SpawnFormat::Tfs;
+		}
 	}
 
 	if (!loadWaypoints(map, filename)) {
@@ -1322,7 +1388,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 
 	version.otbm = (MapVersionID)u32;
 
-	if (version.otbm > MAP_OTBM_4) {
+	if (version.otbm > MAP_OTBM_6) {
 		// Failed to read version
 		if (g_gui.PopupDialog("Map error", "The loaded map appears to be a OTBM format that is not supported by the editor."
 										   "Do you still want to attempt to load the map?",
@@ -1346,7 +1412,8 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 
 	map.height = u16;
 
-	if (!root->getU32(u32) || u32 > (unsigned long)g_items.MajorVersion) { // OTB major version
+	uint32_t itemMajorVersion = 0;
+	if (!root->getU32(itemMajorVersion) || itemMajorVersion > (unsigned long)g_items.MajorVersion) { // OTB major version
 		if (g_gui.PopupDialog("Map error", "The loaded map appears to be a items.otb format that deviates from the "
 										   "items.otb loaded by the editor. Do you still want to attempt to load the map?",
 							  wxYES | wxNO)
@@ -1358,10 +1425,12 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 		}
 	}
 
-	if (!root->getU32(u32) || u32 > (unsigned long)g_items.MinorVersion) { // OTB minor version
+	uint32_t itemMinorVersion = 0;
+	if (!root->getU32(itemMinorVersion) || itemMinorVersion > (unsigned long)g_items.MinorVersion) { // OTB minor version
 		warning("This editor needs an updated items.otb version");
 	}
-	version.client = (ClientVersionID)u32;
+	version.client = (ClientVersionID)itemMinorVersion;
+	map.setSourceItemVersion(itemMajorVersion, itemMinorVersion);
 
 	BinaryNode* mapHeaderNode = root->getChild();
 	if (mapHeaderNode == nullptr || !mapHeaderNode->getByte(u8) || u8 != OTBM_MAP_DATA) {
@@ -1541,6 +1610,10 @@ bool IOMapOTBM::loadHouses(Map& map, pugi::xml_document& doc) {
 			house->rent = attribute.as_int();
 		}
 
+		if ((attribute = houseNode.attribute("reqreset"))) {
+			house->requiredReset = attribute.as_uint();
+		}
+
 		if ((attribute = houseNode.attribute("guildhall"))) {
 			house->guildhall = attribute.as_bool();
 		}
@@ -1550,6 +1623,14 @@ bool IOMapOTBM::loadHouses(Map& map, pugi::xml_document& doc) {
 		} else {
 			warning("House %d has no town! House was removed.", house->getID());
 			map.houses.removeHouse(house);
+		}
+
+		if ((attribute = houseNode.attribute("clientid"))) {
+			house->clientid = attribute.as_uint();
+		}
+
+		if ((attribute = houseNode.attribute("beds"))) {
+			house->beds = attribute.as_int();
 		}
 	}
 	return true;
@@ -1658,6 +1739,10 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 }
 
 bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
+	if (map.zonefile.empty()) {
+		map.zonefile = nstr(identifier.GetName()) + "-zones.xml";
+	}
+
 	// Write OTBM file using saveMapData
 	if (!saveMapData(map, identifier)) {
 		return false;
@@ -1855,6 +1940,9 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 
 	FileName tmpName;
 	MapVersion mapVersion = map.getVersion();
+	if (map.getStorageFormat() == MapStorageFormat::CanaryCrystal && mapVersion.otbm < MAP_OTBM_5) {
+		mapVersion.otbm = MAP_OTBM_5;
+	}
 
 	f.addNode(0);
 	{
@@ -1863,8 +1951,10 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 		f.addU16(map.width);
 		f.addU16(map.height);
 
-		f.addU32(headerItemMajorVersion != 0 ? headerItemMajorVersion : g_items.MajorVersion);
-		f.addU32(headerItemMinorVersion != 0 ? headerItemMinorVersion : g_items.MinorVersion);
+		const uint32_t defaultMajorVersion = map.getStorageFormat() == MapStorageFormat::CanaryCrystal ? 4 : g_items.MajorVersion;
+		const uint32_t defaultMinorVersion = map.getStorageFormat() == MapStorageFormat::CanaryCrystal ? 4 : g_items.MinorVersion;
+		f.addU32(headerItemMajorVersion != 0 ? headerItemMajorVersion : defaultMajorVersion);
+		f.addU32(headerItemMinorVersion != 0 ? headerItemMinorVersion : defaultMinorVersion);
 
 		f.addNode(OTBM_MAP_DATA);
 		{
@@ -1878,7 +1968,7 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 			tmpName.Assign(wxstr(map.spawnfile));
 			f.addU8(OTBM_ATTR_EXT_SPAWN_FILE);
 			f.addString(nstr(tmpName.GetFullName()));
-			if (!map.spawnNpcFile.empty()) {
+			if (map.getStorageFormat() == MapStorageFormat::CanaryCrystal && !map.spawnNpcFile.empty()) {
 				tmpName.Assign(wxstr(map.spawnNpcFile));
 				f.addU8(OTBM_ATTR_EXT_SPAWN_NPC_FILE);
 				f.addString(nstr(tmpName.GetFullName()));
@@ -1887,6 +1977,15 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 			tmpName.Assign(wxstr(map.housefile));
 			f.addU8(OTBM_ATTR_EXT_HOUSE_FILE);
 			f.addString(nstr(tmpName.GetFullName()));
+
+			// Crystal/Canary resolves zone names and IDs through this sidecar
+			// reference. TFS 1.8 rejects attribute 24 as an unknown header node,
+			// but still reads the per-tile OTBM_TILE_ZONE nodes written below.
+			if (map.getStorageFormat() == MapStorageFormat::CanaryCrystal && !map.zonefile.empty()) {
+				tmpName.Assign(wxstr(map.zonefile));
+				f.addU8(OTBM_ATTR_EXT_ZONE_FILE);
+				f.addString(nstr(tmpName.GetFullName()));
+			}
 
 			// Start writing tiles
 			if (!writeTiles(map, f)) {
@@ -2106,6 +2205,12 @@ bool IOMapOTBM::saveHouses(Map& map, pugi::xml_document& doc) {
 
 		houseNode.append_attribute("townid") = house->townid;
 		houseNode.append_attribute("size") = static_cast<int32_t>(house->size());
+		if (map.getStorageFormat() == MapStorageFormat::CanaryCrystal) {
+			houseNode.append_attribute("clientid") = house->clientid;
+			houseNode.append_attribute("beds") = house->beds;
+		} else {
+			houseNode.append_attribute("reqreset") = house->requiredReset;
+		}
 	}
 	return true;
 }
@@ -2154,7 +2259,9 @@ bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 		hasZones = tile && tile->hasZone();
 	}
 
-	if (!hasZones && !wxFileExists(filepath)) {
+	// Crystal/Canary always loads the zone sidecar referenced by the OTBM,
+	// including maps with no named zones. TFS does not need an empty file.
+	if (!hasZones && !wxFileExists(filepath) && map.getStorageFormat() != MapStorageFormat::CanaryCrystal) {
 		return true;
 	}
 

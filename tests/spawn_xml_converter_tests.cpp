@@ -189,6 +189,7 @@ namespace {
 		Check(!result.success && result.overwriteRequired, "existing output requires explicit overwrite confirmation");
 		std::ifstream unchanged(output, std::ios::binary);
 		Check(std::string(std::istreambuf_iterator<char>(unchanged), std::istreambuf_iterator<char>()) == "do not overwrite", "declined overwrite leaves existing output unchanged");
+		unchanged.close();
 		result = SpawnXmlConverter::ConvertCanaryToTfs(valid, {}, output, true);
 		Check(result.success, "confirmed overwrite commits validated output");
 
