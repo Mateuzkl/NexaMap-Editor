@@ -103,10 +103,15 @@
   <PropertyGroup Label="Vcpkg">
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
   </PropertyGroup>
+  <PropertyGroup>
+    <AppearancesProtoDir>$(ProjectDir)..\..\source\protobuf</AppearancesProtoDir>
+    <AppearancesProto>$(AppearancesProtoDir)\appearances.proto</AppearancesProto>
+    <AppearancesGeneratedDir>$(ProjectDir)$(IntDir)protobuf</AppearancesGeneratedDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(AppearancesGeneratedDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRTDBG_MAP_ALLOC;__DEBUG__;WXUSINGDLL;wxMSVC_VERSION_AUTO;__EXPERIMENTAL__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -136,7 +141,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(AppearancesGeneratedDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRTDBG_MAP_ALLOC;__DEBUG__;WXUSINGDLL;wxMSVC_VERSION_AUTO;__EXPERIMENTAL__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -167,7 +172,7 @@
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(AppearancesGeneratedDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>NDEBUG;__RELEASE__;WXUSINGDLL;wxMSVC_VERSION_AUTO;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -199,7 +204,7 @@
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(AppearancesGeneratedDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>NDEBUG;__RELEASE__;WXUSINGDLL;wxMSVC_VERSION_AUTO;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -394,6 +399,10 @@
     <ClCompile Include="..\..\source\action.cpp" />
     <ClInclude Include="..\..\source\client_version.h" />
     <ClCompile Include="..\..\source\client_version.cpp" />
+    <ClInclude Include="..\..\source\client_assets.h" />
+    <ClCompile Include="..\..\source\client_assets.cpp" />
+    <ClInclude Include="..\..\source\client_assets_manifest.h" />
+    <ClCompile Include="..\..\source\client_assets_manifest.cpp" />
     <ClInclude Include="..\..\source\copybuffer.h" />
     <ClCompile Include="..\..\source\copybuffer.cpp" />
     <ClInclude Include="..\..\source\creatures.h" />
@@ -402,6 +411,8 @@
     <ClCompile Include="..\..\source\editor.cpp" />
     <ClInclude Include="..\..\source\items.h" />
     <ClCompile Include="..\..\source\items.cpp" />
+    <ClInclude Include="..\..\source\item_id_codec.h" />
+    <ClCompile Include="..\..\source\item_id_codec.cpp" />
     <ClInclude Include="..\..\source\selection.h" />
     <ClCompile Include="..\..\source\selection.cpp" />
     <ClInclude Include="..\..\source\tileset_window.h" />
@@ -429,10 +440,14 @@
     <ClCompile Include="..\..\source\item_attributes.cpp" />
     <ClInclude Include="..\..\source\map.h" />
     <ClCompile Include="..\..\source\map.cpp" />
+    <ClInclude Include="..\..\source\map_format.h" />
+    <ClCompile Include="..\..\source\map_format.cpp" />
     <ClInclude Include="..\..\source\outfit.h" />
     <ClInclude Include="..\..\source\position.h" />
     <ClInclude Include="..\..\source\spawn.h" />
     <ClCompile Include="..\..\source\spawn.cpp" />
+    <ClInclude Include="..\..\source\sprite_appearances.h" />
+    <ClCompile Include="..\..\source\sprite_appearances.cpp" />
     <ClInclude Include="..\..\source\spawn_format.h" />
     <ClCompile Include="..\..\source\spawn_format.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -487,7 +502,29 @@
   <ItemGroup>
     <ResourceCompile Include="Editor.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\source\protobuf\appearances.proto" />
+    <ClCompile Include="$(AppearancesGeneratedDir)\appearances.pb.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <DisableSpecificWarnings>4244;4251;4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <Target
+    Name="GenerateAppearancesProtobuf"
+    BeforeTargets="ClCompile"
+    DependsOnTargets="VcpkgInstallManifestDependencies"
+    Inputs="$(AppearancesProto)"
+    Outputs="$(AppearancesGeneratedDir)\appearances.pb.h;$(AppearancesGeneratedDir)\appearances.pb.cc">
+    <MakeDir Directories="$(AppearancesGeneratedDir)" />
+    <Error
+      Condition="!Exists('$(_ZVcpkgCurrentInstalledDir)tools\protobuf\protoc.exe')"
+      Text="protoc.exe was not found. Restore the vcpkg manifest dependencies before building the Editor project." />
+    <Exec
+      WorkingDirectory="$(AppearancesProtoDir)"
+      Command="&quot;$(_ZVcpkgCurrentInstalledDir)tools\protobuf\protoc.exe&quot; --proto_path=. --cpp_out=&quot;$(AppearancesGeneratedDir)&quot; appearances.proto" />
+  </Target>
 </Project>

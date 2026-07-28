@@ -25,6 +25,14 @@
 #include "client_version.h"
 #include <wx/artprov.h>
 
+namespace rme {
+	namespace protobuf {
+		namespace appearances {
+			class Appearance;
+		}
+	}
+}
+
 enum SpriteSize {
 	SPRITE_SIZE_16x16,
 	// SPRITE_SIZE_24x24,
@@ -45,6 +53,7 @@ class MapCanvas;
 class GraphicManager;
 class FileReadHandle;
 class Animator;
+class ItemType;
 
 struct SpriteLight {
 	uint8_t intensity = 0;
@@ -158,6 +167,9 @@ protected:
 		// This contains the pixel data
 		uint16_t size;
 		uint8_t* dump;
+		bool fromAssets = false;
+		uint8_t assetCropX = 0;
+		uint8_t assetCropY = 0;
 
 		void clean(int time) override;
 
@@ -340,6 +352,8 @@ public:
 	uint8_t normalizeSpriteFlag(uint8_t flag) const;
 	void readSpriteFlagData(uint8_t flag, uint8_t prev_flag, FileReadHandle& file, GameSprite* sType, wxArrayString& warnings);
 	bool loadSpriteData(const FileName& datafile, wxString& error, wxArrayString& warnings);
+	bool loadAppearanceItem(const rme::protobuf::appearances::Appearance& appearance, ItemType* item, wxString& error, wxArrayString& warnings);
+	bool loadAppearanceOutfit(const rme::protobuf::appearances::Appearance& appearance, wxString& error, wxArrayString& warnings);
 
 	// Cleans old & unused textures according to config settings
 	void garbageCollection();
@@ -368,10 +382,17 @@ private:
 	// This is used if memcaching is NOT on
 	std::string spritefile;
 	bool loadSpriteDump(uint8_t*& target, uint16_t& size, int sprite_id);
+	GameSprite::NormalImage* getOrCreateAssetImage(uint32_t spriteId, uint8_t cropX, uint8_t cropY);
+	bool loadAppearanceSprite(
+		const rme::protobuf::appearances::Appearance& appearance,
+		int spriteSpaceId,
+		wxString& error,
+		wxArrayString& warnings
+	);
 
 	typedef std::map<int, Sprite*> SpriteMap;
 	SpriteMap sprite_space;
-	typedef std::map<int, GameSprite::Image*> ImageMap;
+	typedef std::map<uint64_t, GameSprite::Image*> ImageMap;
 	ImageMap image_space;
 	std::deque<GameSprite*> cleanup_list;
 

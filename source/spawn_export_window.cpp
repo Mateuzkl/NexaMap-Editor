@@ -17,23 +17,34 @@ namespace {
 }
 
 SpawnExportWindow::SpawnExportWindow(wxWindow* parent, Map& map, const wxString& directory, const wxString& mapBaseName, bool saveAsMode) :
-	wxDialog(parent, wxID_ANY, saveAsMode ? "Spawn format for Save As" : "Export Spawns", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+	wxDialog(parent, wxID_ANY, saveAsMode ? "Map and spawn format for Save As" : "Export Spawns", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	map(map),
 	document(SpawnMapAdapter::Capture(map)),
 	saveAsMode(saveAsMode) {
+	if (map.getItemIdSpace() == ItemIdSpace::Server) {
+		serverToClientPreview = AnalyzeItemIdConversion(map, ItemIdMapping::Direction::ServerToClient);
+	} else {
+		clientToServerPreview = AnalyzeItemIdConversion(map, ItemIdMapping::Direction::ClientToServer);
+	}
+
 	auto* topSizer = newd wxBoxSizer(wxVERTICAL);
 	auto* form = newd wxFlexGridSizer(2, 8, 12);
 	form->AddGrowableCol(1, 1);
 
 	form->Add(newd wxStaticText(this, wxID_ANY, "Source format:"), 0, wxALIGN_CENTER_VERTICAL);
-	sourceLabel = newd wxStaticText(this, wxID_ANY, wxString::FromUTF8(SpawnFormatIO::GetFormatName(map.getSpawnFormat())));
+	const wxString sourceDescription = wxString::Format(
+		"%s (%s)",
+		wxString::FromUTF8(MapFormatDetector::GetFormatName(map.getStorageFormat())),
+		map.getItemIdSpace() == ItemIdSpace::Client ? "ClientIDs in memory" : "Server IDs in memory"
+	);
+	sourceLabel = newd wxStaticText(this, wxID_ANY, sourceDescription);
 	form->Add(sourceLabel, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
 
 	form->Add(newd wxStaticText(this, wxID_ANY, "Target format:"), 0, wxALIGN_CENTER_VERTICAL);
 	formatChoice = newd wxChoice(this, wxID_ANY);
 	formatChoice->Append("TFS 1.8 / protocol 8.60 (one *-spawn.xml)");
 	formatChoice->Append("Canary / Crystal 11.x (separate *-monster.xml and *-npc.xml)");
-	formatChoice->SetSelection(map.getSpawnFormat() == SpawnFormat::CanaryCrystal ? 1 : 0);
+	formatChoice->SetSelection(map.getStorageFormat() == MapStorageFormat::CanaryCrystal ? 1 : 0);
 	form->Add(formatChoice, 1, wxEXPAND);
 
 	form->Add(newd wxStaticText(this, wxID_ANY, "Destination:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -80,6 +91,7 @@ SpawnExportWindow::SpawnExportWindow(wxWindow* parent, Map& map, const wxString&
 SpawnExportOptions SpawnExportWindow::GetOptions() const {
 	SpawnExportOptions options;
 	options.format = formatChoice->GetSelection() == 1 ? SpawnFormat::CanaryCrystal : SpawnFormat::Tfs;
+	options.mapFormat = formatChoice->GetSelection() == 1 ? MapStorageFormat::CanaryCrystal : MapStorageFormat::Tfs;
 	options.directory = std::filesystem::path(nstr(directoryPicker->GetPath()));
 	if (options.format == SpawnFormat::CanaryCrystal) {
 		options.primaryFilename = EnsureXmlExtension(nstr(monsterFilename->GetValue()));
@@ -105,7 +117,24 @@ void SpawnExportWindow::UpdatePreview() {
 		}
 	}
 	wxString preview;
-	preview << "Summary: " << document.areas.size() << " spawn areas, " << document.monsterCount() << " monsters and " << document.npcCount() << " NPCs.";
+	preview << "Target: " << (modern ? "Canary/Crystal OTBM 5 + ClientIDs" : "TFS OTBM + Server IDs") << ".";
+	preview << "\nSummary: " << document.areas.size() << " spawn areas, " << document.monsterCount() << " monsters and " << document.npcCount() << " NPCs.";
+	const ItemIdSpace targetSpace = modern ? ItemIdSpace::Client : ItemIdSpace::Server;
+	if (targetSpace != map.getItemIdSpace()) {
+		const ItemIdConversionPreview& conversion = modern ? serverToClientPreview : clientToServerPreview;
+		preview << "\nItem ID conversion: " << conversion.totalItems << " item occurrences scanned, "
+				<< conversion.changedItems << " IDs changed, "
+				<< conversion.missingItems << " without a mapping and "
+				<< conversion.ambiguousItems << " ambiguous.";
+		if (conversion.missingItems > 0) {
+			preview << "\nWarning: IDs without a mapping remain unchanged.";
+		}
+		if (conversion.ambiguousItems > 0) {
+			preview << "\nWarning: ambiguous ClientID mappings use the preferred server candidate.";
+		}
+	} else {
+		preview << "\nItem IDs already use the target ID space; no conversion is needed.";
+	}
 	if (!modern && shortRespawns > 0) {
 		preview << "\nWarning: " << shortRespawns << " respawn value(s) below 10 seconds will be adjusted to the TFS minimum.";
 	}
@@ -163,6 +192,24 @@ void SpawnExportWindow::OnConfirm(wxCommandEvent& WXUNUSED(event)) {
 			names << "\n  " << wxstr(file.string());
 		}
 		if (wxMessageBox("The following spawn file(s) already exist:" + names + "\n\nOverwrite them?", "Confirm overwrite", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING, this) != wxYES) {
+			return;
+		}
+	}
+	const ItemIdSpace targetSpace = modern ? ItemIdSpace::Client : ItemIdSpace::Server;
+	if (targetSpace != map.getItemIdSpace()) {
+		const ItemIdConversionPreview& conversion = modern ? serverToClientPreview : clientToServerPreview;
+		if ((conversion.missingItems > 0 || conversion.ambiguousItems > 0) &&
+			wxMessageBox(
+				wxString::Format(
+					"Item ID conversion found %llu unmapped and %llu ambiguous occurrence(s).\n"
+					"Unmapped IDs remain unchanged; ambiguous IDs use the preferred candidate.\n\nContinue?",
+					static_cast<unsigned long long>(conversion.missingItems),
+					static_cast<unsigned long long>(conversion.ambiguousItems)
+				),
+				"Confirm item ID conversion",
+				wxYES_NO | wxNO_DEFAULT | wxICON_WARNING,
+				this
+			) != wxYES) {
 			return;
 		}
 	}

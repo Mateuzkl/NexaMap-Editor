@@ -34,12 +34,13 @@ public:
 	void OnClickApply(wxCommandEvent&);
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
+	void OnCanaryCrystalAssetsChanged(wxFileDirPickerEvent&);
 
 	void OnCollapsiblePane(wxCollapsiblePaneEvent&);
 
 protected:
 	void SetDefaults();
-	void Apply();
+	bool Apply();
 
 	wxBookCtrl* book;
 
@@ -117,6 +118,7 @@ protected:
 	wxCheckBox* check_sigs_chkbox;
 	wxDirPickerCtrl* monsters_lua_dir_picker;
 	wxDirPickerCtrl* npcs_lua_dir_picker;
+	wxDirPickerCtrl* canary_crystal_assets_dir_picker;
 
 	// Create controls
 	wxChoice* AddPaletteStyleChoice(wxWindow* parent, wxSizer* sizer, const wxString& short_description, const wxString& description, const std::string& setting);

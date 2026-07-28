@@ -45,6 +45,9 @@ public:
 	std::string getDescription();
 
 	int rent;
+	uint32_t requiredReset;
+	uint32_t clientid;
+	int32_t beds;
 	// HouseDoorList doorList;
 	std::string name;
 	uint32_t townid;

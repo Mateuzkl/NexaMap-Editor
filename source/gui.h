@@ -290,6 +290,10 @@ public:
 	// Persists the per-version user creatures.xml (imported monsters/NPCs) without tearing down the version.
 	void SaveUserCreatures();
 	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false);
+	bool LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force = false);
+	bool IsCanaryCrystalAssetsLoaded() const {
+		return canary_crystal_assets_loaded;
+	}
 	// The current version loaded (returns CLIENT_VERSION_NONE if no version is loaded)
 	const ClientVersion& GetCurrentVersion() const;
 	ClientVersionID GetCurrentVersionID() const;
@@ -341,9 +345,9 @@ public:
 	Map& GetCurrentMap();
 	int GetOpenMapCount();
 	bool ShouldSave();
-	void SaveCurrentMap(const FileName& filename, bool showdialog); // "" means default filename
-	void SaveCurrentMap(bool showdialog = true) {
-		SaveCurrentMap(wxString(""), showdialog);
+	bool SaveCurrentMap(const FileName& filename, bool showdialog); // "" means default filename
+	bool SaveCurrentMap(bool showdialog = true) {
+		return SaveCurrentMap(wxString(""), showdialog);
 	}
 	bool NewMap();
 	void OpenMap();
@@ -356,6 +360,7 @@ protected:
 	bool LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 	bool ConfigureSpawnSaveAs(const FileName& mapFilename);
 	bool LoadDataFiles(wxString& error, wxArrayString& warnings);
+	bool LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings);
 	ClientVersion* getLoadedVersion() const {
 		return loaded_version == CLIENT_VERSION_NONE ? nullptr : ClientVersion::get(loaded_version);
 	}
@@ -442,6 +447,7 @@ protected:
 	wxGLContext* OGLContext;
 
 	ClientVersionID loaded_version;
+	bool canary_crystal_assets_loaded;
 	EditorMode mode;
 	bool pasting;
 

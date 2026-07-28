@@ -243,8 +243,8 @@ bool GroundBrush::parseBorderSpecificCases(pugi::xml_node childNode, BorderBlock
 
 						ItemType& it = g_items[with_id];
 						if (it.id == 0) {
-							delete specificCaseBlock;
-							return false;
+							warnings.push_back("Unknown replacement item id " + std::to_string(with_id) + " in border specific case.");
+							continue;
 						}
 
 						it.isBorder = true;
@@ -267,8 +267,8 @@ bool GroundBrush::parseBorderSpecificCases(pugi::xml_node childNode, BorderBlock
 						const int32_t with_id = attribute.as_int();
 						ItemType& it = g_items[with_id];
 						if (it.id == 0) {
-							delete specificCaseBlock;
-							return false;
+							warnings.push_back("Unknown replacement item id " + std::to_string(with_id) + " in border specific case.");
+							continue;
 						}
 
 						it.isBorder = true;
@@ -329,17 +329,17 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 			ItemType& it = g_items[itemId];
 			if (it.id == 0) {
 				warnings.push_back("\nInvalid item id " + std::to_string(itemId));
-				return false;
+				continue;
 			}
 
 			if (!it.isGroundTile()) {
 				warnings.push_back("\nItem " + std::to_string(itemId) + " is not ground item.");
-				return false;
+				continue;
 			}
 
 			if (it.brush && it.brush != this) {
 				warnings.push_back("\nItem " + std::to_string(itemId) + " can not be member of two brushes");
-				return false;
+				continue;
 			}
 
 			it.brush = this;

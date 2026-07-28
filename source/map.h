@@ -27,6 +27,7 @@
 #include "waypoints.h"
 #include "zones.h"
 #include "templates.h"
+#include "map_format.h"
 
 #include <unordered_set>
 
@@ -138,6 +139,18 @@ public:
 	SpawnFormat getSpawnFormat() const {
 		return spawnFormat;
 	}
+	MapStorageFormat getStorageFormat() const {
+		return storageFormat;
+	}
+	ItemIdSpace getItemIdSpace() const {
+		return itemIdSpace;
+	}
+	uint32_t getSourceItemMajorVersion() const {
+		return sourceItemMajorVersion;
+	}
+	uint32_t getSourceItemMinorVersion() const {
+		return sourceItemMinorVersion;
+	}
 	const std::string& getZoneFilename() const {
 		return zonefile;
 	}
@@ -153,6 +166,16 @@ public:
 	}
 	void setSpawnFormat(SpawnFormat format) {
 		spawnFormat = format;
+	}
+	void setStorageFormat(MapStorageFormat format) {
+		storageFormat = format;
+	}
+	void setItemIdSpace(ItemIdSpace space) {
+		itemIdSpace = space;
+	}
+	void setSourceItemVersion(uint32_t majorVersion, uint32_t minorVersion) {
+		sourceItemMajorVersion = majorVersion;
+		sourceItemMinorVersion = minorVersion;
 	}
 	void setSpawnSaveTarget(SpawnFormat format, const std::string& primaryFile, const std::string& npcFile) {
 		spawnFormat = format;
@@ -198,6 +221,10 @@ protected:
 	std::string waypointfile; // The waypoints file (stores extended waypoint information such as id, preferred icon and matching town)
 	std::string zonefile; // The zonefile
 	SpawnFormat spawnFormat = SpawnFormat::Tfs;
+	MapStorageFormat storageFormat = MapStorageFormat::Tfs;
+	ItemIdSpace itemIdSpace = ItemIdSpace::Server;
+	uint32_t sourceItemMajorVersion = 0;
+	uint32_t sourceItemMinorVersion = 0;
 	bool spawnFilenamesExplicit = false;
 
 public:
@@ -212,6 +239,7 @@ protected:
 	friend class IOMapOTBM;
 	friend class Editor;
 	friend class SpawnMapAdapter;
+	friend class GUI;
 
 public:
 	Waypoints waypoints;

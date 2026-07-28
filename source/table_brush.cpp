@@ -90,10 +90,10 @@ bool TableBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 			ItemType& it = g_items[id];
 			if (it.id == 0) {
 				warnings.push_back("There is no itemtype with id " + std::to_string(id));
-				return false;
+				continue;
 			} else if (it.brush && it.brush != this) {
 				warnings.push_back("Itemtype id " + std::to_string(id) + " already has a brush");
-				return false;
+				continue;
 			}
 
 			it.isTable = true;

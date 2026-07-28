@@ -26,6 +26,15 @@
 
 using OTBMMemoryBudgetCheck = std::function<bool(const char* phase, uint64_t pendingBytes, std::string& error)>;
 
+struct OTBMFileMetadata {
+	MapVersion version;
+	uint32_t itemMajorVersion = 0;
+	uint32_t itemMinorVersion = 0;
+	std::string spawnFile;
+	std::string spawnNpcFile;
+	std::string zoneFile;
+};
+
 // Pragma pack is VERY important since otherwise it won't be able to load the structs correctly
 #pragma pack(1)
 
@@ -139,6 +148,7 @@ public:
 	~IOMapOTBM() override { }
 
 	static bool getVersionInfo(const FileName& identifier, MapVersion& out_ver, uint32_t* itemMajorVersion = nullptr, const OTBMMemoryBudgetCheck& memoryBudgetCheck = {});
+	static bool getFileMetadata(const FileName& identifier, OTBMFileMetadata& metadata, const OTBMMemoryBudgetCheck& memoryBudgetCheck = {});
 
 	bool loadMap(Map& map, const FileName& identifier) override;
 	bool saveMap(Map& map, const FileName& identifier) override;
@@ -165,6 +175,7 @@ protected:
 	};
 
 	static bool getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver, uint32_t* itemMajorVersion = nullptr);
+	static bool getFileMetadata(NodeFileReadHandle* f, OTBMFileMetadata& metadata);
 
 	virtual bool loadMap(Map& map, NodeFileReadHandle& handle);
 	void readMapHeaderAttributes(BinaryNode* mapHeaderNode, Map& map);

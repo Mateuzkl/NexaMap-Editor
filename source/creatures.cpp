@@ -138,12 +138,20 @@ CreatureType::~CreatureType() {
 
 CreatureType* CreatureType::loadFromXML(pugi::xml_node node, wxArrayString& warnings) {
 	pugi::xml_attribute attribute;
-	if (!(attribute = node.attribute("type"))) {
+	std::string tmpType;
+	if ((attribute = node.attribute("type"))) {
+		tmpType = attribute.as_string();
+	} else {
+		const std::string nodeName = as_lower_str(node.name());
+		if (nodeName == "monster" || nodeName == "npc") {
+			tmpType = nodeName;
+		}
+	}
+	if (tmpType.empty()) {
 		warnings.push_back("Couldn't read type tag of creature node.");
 		return nullptr;
 	}
 
-	const std::string& tmpType = attribute.as_string();
 	if (tmpType != "monster" && tmpType != "npc") {
 		warnings.push_back("Invalid type tag of creature node \"" + wxstr(tmpType) + "\"");
 		return nullptr;
@@ -173,7 +181,7 @@ CreatureType* CreatureType::loadFromXML(pugi::xml_node node, wxArrayString& warn
 		ct->outfit.lookMount = attribute.as_int();
 	}
 
-	if ((attribute = node.attribute("lookaddon"))) {
+	if ((attribute = node.attribute("lookaddon")) || (attribute = node.attribute("lookaddons"))) {
 		ct->outfit.lookAddon = attribute.as_int();
 	}
 
@@ -363,13 +371,22 @@ bool CreatureDatabase::loadFromXML(const FileName& filename, bool standard, wxSt
 	}
 
 	pugi::xml_node node = doc.child("creatures");
+	std::string childName = "creature";
+	if (!node) {
+		node = doc.child("monsters");
+		childName = "monster";
+	}
+	if (!node) {
+		node = doc.child("npcs");
+		childName = "npc";
+	}
 	if (!node) {
 		error = "Invalid file signature, this file is not a valid creatures file.";
 		return false;
 	}
 
 	for (pugi::xml_node creatureNode = node.first_child(); creatureNode; creatureNode = creatureNode.next_sibling()) {
-		if (as_lower_str(creatureNode.name()) != "creature") {
+		if (as_lower_str(creatureNode.name()) != childName) {
 			continue;
 		}
 

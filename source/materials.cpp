@@ -27,6 +27,74 @@
 #include "brush.h"
 #include "creature_brush.h"
 #include "raw_brush.h"
+#include "client_assets.h"
+#include "item_id_mapping.h"
+
+#include <limits>
+
+namespace {
+	struct MaterialIdTranslationStats {
+		uint64_t translated = 0;
+		uint64_t missing = 0;
+	};
+
+	void TranslateItemAttribute(pugi::xml_node node, const char* attributeName, MaterialIdTranslationStats& stats) {
+		pugi::xml_attribute attribute = node.attribute(attributeName);
+		if (!attribute) {
+			return;
+		}
+		const uint32_t raw = attribute.as_uint();
+		if (raw == 0 || raw > std::numeric_limits<uint16_t>::max()) {
+			return;
+		}
+		const ItemIdMapping::Result mapping = ItemIdMapping::serverToClient(static_cast<uint16_t>(raw));
+		if (!mapping.found) {
+			++stats.missing;
+			return;
+		}
+		attribute.set_value(mapping.converted);
+		stats.translated += mapping.converted != raw ? 1 : 0;
+	}
+
+	void TranslateMaterialNode(pugi::xml_node node, MaterialIdTranslationStats& stats) {
+		const std::string nodeName = as_lower_str(node.name());
+		if (nodeName != "metaitem") {
+			if (nodeName == "item" || nodeName == "door" || nodeName == "match_item" || nodeName == "replace_item") {
+				TranslateItemAttribute(node, "id", stats);
+			}
+			if (nodeName == "replace_item" || nodeName == "replace_border") {
+				TranslateItemAttribute(node, "with", stats);
+			}
+		}
+		TranslateItemAttribute(node, "item", stats);
+		TranslateItemAttribute(node, "server_lookid", stats);
+		TranslateItemAttribute(node, "afteritem", stats);
+		TranslateItemAttribute(node, "ground_equivalent", stats);
+
+		for (pugi::xml_node child = node.first_child(); child;) {
+			pugi::xml_node next = child.next_sibling();
+			if (as_lower_str(child.name()) == "item" && child.attribute("fromid")) {
+				const uint32_t fromId = child.attribute("fromid").as_uint();
+				const uint32_t toId = std::max(fromId, child.attribute("toid").as_uint(fromId));
+				for (uint32_t sourceId = fromId; sourceId <= toId && sourceId <= std::numeric_limits<uint16_t>::max(); ++sourceId) {
+					pugi::xml_node expanded = node.insert_copy_before(child, child);
+					expanded.remove_attribute("fromid");
+					expanded.remove_attribute("toid");
+					pugi::xml_attribute id = expanded.attribute("id");
+					if (!id) {
+						id = expanded.append_attribute("id");
+					}
+					id.set_value(sourceId);
+					TranslateMaterialNode(expanded, stats);
+				}
+				node.remove_child(child);
+			} else {
+				TranslateMaterialNode(child, stats);
+			}
+			child = next;
+		}
+	}
+}
 
 Materials g_materials;
 
@@ -55,21 +123,49 @@ const MaterialsExtensionList& Materials::getExtensions() {
 	return extensions;
 }
 
-bool Materials::loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings) {
+bool Materials::loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds) {
+	std::set<wxString> visited;
+	return loadMaterialsInternal(identifier, error, warnings, serverIdsToClientIds, visited);
+}
+
+bool Materials::loadMaterialsInternal(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds, std::set<wxString>& visited) {
+	FileName normalizedIdentifier(identifier);
+	normalizedIdentifier.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE);
+	const wxString normalizedPath = normalizedIdentifier.GetFullPath();
+	if (visited.count(normalizedPath) != 0) {
+		warnings.push_back("Skipped repeated or cyclic materials include: " + normalizedPath);
+		return true;
+	}
+	visited.insert(normalizedPath);
+
+	if (ClientAssets::isLoaded()) {
+		wxLogMessage("Canary/Crystal materials: loading " + normalizedPath);
+	}
 	pugi::xml_document doc;
-	pugi::xml_parse_result result = doc.load_file(identifier.GetFullPath().mb_str());
+	pugi::xml_parse_result result = doc.load_file(normalizedPath.mb_str());
 	if (!result) {
-		warnings.push_back("Could not open " + identifier.GetFullName() + " (file not found or syntax error)");
+		warnings.push_back("Could not open " + normalizedIdentifier.GetFullName() + " (file not found or syntax error)");
 		return false;
 	}
 
 	pugi::xml_node node = doc.child("materials");
 	if (!node) {
-		warnings.push_back(identifier.GetFullName() + ": Invalid rootheader.");
+		warnings.push_back(normalizedIdentifier.GetFullName() + ": Invalid rootheader.");
 		return false;
 	}
 
-	unserializeMaterials(identifier, node, error, warnings);
+	if (serverIdsToClientIds) {
+		MaterialIdTranslationStats translation;
+		TranslateMaterialNode(node, translation);
+		if (translation.missing > 0) {
+			warnings.push_back(wxString::Format(
+				"%s: %llu material item reference(s) have no Server ID to ClientID mapping and were left unchanged.",
+				normalizedIdentifier.GetFullName(),
+				static_cast<unsigned long long>(translation.missing)
+			));
+		}
+	}
+	unserializeMaterials(normalizedIdentifier, node, error, warnings, serverIdsToClientIds, visited);
 	return true;
 }
 
@@ -174,14 +270,19 @@ bool Materials::loadExtensions(const FileName& directoryName, wxString& error, w
 
 		extensions.push_back(materialExtension);
 		if (materialExtension->isForVersion(g_gui.GetCurrentVersionID())) {
-			unserializeMaterials(filename, extensionNode, error, warnings);
+			if (ClientAssets::isLoaded()) {
+				MaterialIdTranslationStats translation;
+				TranslateMaterialNode(extensionNode, translation);
+			}
+			std::set<wxString> visited;
+			unserializeMaterials(fn, extensionNode, error, warnings, false, visited);
 		}
 	} while (ext_dir.GetNext(&filename));
 
 	return true;
 }
 
-bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node node, wxString& error, wxArrayString& warnings) {
+bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node node, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds, std::set<wxString>& visited) {
 	wxString warning;
 	pugi::xml_attribute attribute;
 	for (pugi::xml_node childNode = node.first_child(); childNode; childNode = childNode.next_sibling()) {
@@ -191,12 +292,15 @@ bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node no
 				continue;
 			}
 
-			FileName includeName;
-			includeName.SetPath(filename.GetPath());
-			includeName.SetFullName(wxString(attribute.as_string(), wxConvUTF8));
+			const wxString includeFile(attribute.as_string(), wxConvUTF8);
+			if (includeFile.empty()) {
+				warnings.push_back(filename.GetFullName() + ": Ignored an empty materials include.");
+				continue;
+			}
+			FileName includeName(filename.GetPath(), includeFile);
 
 			wxString subError;
-			if (!loadMaterials(includeName, subError, warnings)) {
+			if (!loadMaterialsInternal(includeName, subError, warnings, serverIdsToClientIds, visited)) {
 				warnings.push_back("Error while loading file \"" + includeName.GetFullName() + "\": " + subError);
 			}
 		} else if (childName == "metaitem") {

@@ -13,6 +13,8 @@ endif()
 find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
+find_package(liblzma CONFIG REQUIRED)
+find_package(Protobuf REQUIRED)
 
 find_package(OpenGL REQUIRED)
 
@@ -28,6 +30,7 @@ find_package(wxWidgets COMPONENTS html aui gl adv core net base REQUIRED)
 find_package(ZLIB REQUIRED)
 
 include(${wxWidgets_USE_FILE})
+add_subdirectory(source/protobuf)
 include(source/CMakeLists.txt)
 if(WIN32)
 	list(APPEND rme_SRC "${CMAKE_CURRENT_SOURCE_DIR}/vcproj/Project/Editor.rc")
@@ -66,6 +69,8 @@ target_link_libraries(${PROJECT_NAME}
 	glad::glad
 	fmt::fmt
 	nlohmann_json::nlohmann_json
+	liblzma::liblzma
+	nexamap_protobuf
 )
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
@@ -83,6 +88,33 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+	add_executable(client_assets_manifest_tests
+		tests/client_assets_manifest_tests.cpp
+		source/client_assets_manifest.cpp
+	)
+	target_include_directories(client_assets_manifest_tests PRIVATE source)
+	target_link_libraries(client_assets_manifest_tests PRIVATE nlohmann_json::nlohmann_json)
+	set_target_properties(client_assets_manifest_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME client_assets_manifest_tests COMMAND client_assets_manifest_tests)
+
+	add_executable(map_format_tests
+		tests/map_format_tests.cpp
+		source/map_format.cpp
+	)
+	target_include_directories(map_format_tests PRIVATE source)
+	target_link_libraries(map_format_tests PRIVATE ${wxWidgets_LIBRARIES})
+	if(MSVC)
+		target_compile_options(map_format_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(map_format_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME map_format_tests COMMAND map_format_tests)
+
 	add_executable(item_id_mapping_tests
 		tests/item_id_mapping_tests.cpp
 		source/item_id_mapping.cpp

@@ -10,6 +10,8 @@ ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_enums.h
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.h
+${CMAKE_CURRENT_LIST_DIR}/client_assets.h
+${CMAKE_CURRENT_LIST_DIR}/client_assets_manifest.h
 ${CMAKE_CURRENT_LIST_DIR}/client_version.h
 ${CMAKE_CURRENT_LIST_DIR}/common.h
 ${CMAKE_CURRENT_LIST_DIR}/common_windows.h
@@ -46,6 +48,7 @@ ${CMAKE_CURRENT_LIST_DIR}/iomap.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.h
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.h
 ${CMAKE_CURRENT_LIST_DIR}/item.h
+${CMAKE_CURRENT_LIST_DIR}/item_id_codec.h
 ${CMAKE_CURRENT_LIST_DIR}/item_id_mapping.h
 ${CMAKE_CURRENT_LIST_DIR}/item_attributes.h
 ${CMAKE_CURRENT_LIST_DIR}/items.h
@@ -54,6 +57,7 @@ ${CMAKE_CURRENT_LIST_DIR}/main.h
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.h
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.h
 ${CMAKE_CURRENT_LIST_DIR}/map.h
+${CMAKE_CURRENT_LIST_DIR}/map_format.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_allocator.h
@@ -100,6 +104,7 @@ ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/sprites.h
+${CMAKE_CURRENT_LIST_DIR}/sprite_appearances.h
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/templates.h
 ${CMAKE_CURRENT_LIST_DIR}/threads.h
@@ -134,6 +139,8 @@ ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
 	${CMAKE_CURRENT_LIST_DIR}/procedural_map_generator.cpp
 	${CMAKE_CURRENT_LIST_DIR}/procedural_map_generator_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/client_assets.cpp
+${CMAKE_CURRENT_LIST_DIR}/client_assets_manifest.cpp
 ${CMAKE_CURRENT_LIST_DIR}/client_version.cpp
 ${CMAKE_CURRENT_LIST_DIR}/common.cpp
 ${CMAKE_CURRENT_LIST_DIR}/common_windows.cpp
@@ -168,12 +175,14 @@ ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item_attributes.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item.cpp
+${CMAKE_CURRENT_LIST_DIR}/item_id_codec.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item_id_mapping.cpp
 ${CMAKE_CURRENT_LIST_DIR}/items.cpp
 ${CMAKE_CURRENT_LIST_DIR}/light_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.cpp
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_display.cpp
@@ -213,6 +222,7 @@ ${CMAKE_CURRENT_LIST_DIR}/spawn_format_map.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.cpp
+${CMAKE_CURRENT_LIST_DIR}/sprite_appearances.cpp
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap76-74.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap81.cpp

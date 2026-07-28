@@ -2,6 +2,8 @@
 #define RME_SPAWN_EXPORT_WINDOW_H_
 
 #include "spawn_format.h"
+#include "map_format.h"
+#include "item_id_codec.h"
 
 #include <wx/dialog.h>
 
@@ -14,6 +16,7 @@ class wxWindow;
 
 struct SpawnExportOptions {
 	SpawnFormat format = SpawnFormat::Tfs;
+	MapStorageFormat mapFormat = MapStorageFormat::Tfs;
 	std::filesystem::path directory;
 	std::string primaryFilename;
 	std::string npcFilename;
@@ -33,6 +36,8 @@ private:
 
 	Map& map;
 	SpawnDocument document;
+	ItemIdConversionPreview serverToClientPreview;
+	ItemIdConversionPreview clientToServerPreview;
 	bool saveAsMode;
 	wxChoice* formatChoice = nullptr;
 	wxDirPickerCtrl* directoryPicker = nullptr;

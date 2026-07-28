@@ -31,7 +31,7 @@ public:
 
 	TilesetContainer tilesets;
 
-	bool loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings);
+	bool loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds = false);
 	bool loadExtensions(const FileName& identifier, wxString& error, wxArrayString& warnings);
 	void createOtherTileset();
 	void addToTileset(const std::string& tilesetName, int itemId, TilesetCategoryType categoryType);
@@ -47,7 +47,8 @@ public:
 	}
 
 protected:
-	bool unserializeMaterials(const FileName& filename, pugi::xml_node node, wxString& error, wxArrayString& warnings);
+	bool loadMaterialsInternal(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds, std::set<wxString>& visited);
+	bool unserializeMaterials(const FileName& filename, pugi::xml_node node, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds, std::set<wxString>& visited);
 	bool unserializeTileset(pugi::xml_node node, wxArrayString& warnings);
 
 	MaterialsExtensionList extensions;

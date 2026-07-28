@@ -25,6 +25,7 @@
 #include "hotkey_manager.h"
 #include "artprovider.h"
 #include "theme.h"
+#include "client_assets.h"
 
 #include "materials.h"
 #include "map.h"
@@ -269,6 +270,7 @@ bool Application::OnInit() {
 	FixVersionDiscrapencies();
 	g_gui.LoadHotkeys();
 	ClientVersion::loadVersions();
+	ClientAssets::loadConfiguredPath();
 
 #ifdef _USE_PROCESS_COM
 	m_single_instance_checker = newd wxSingleInstanceChecker; // Instance checker has to stay alive throughout the applications lifetime
@@ -660,12 +662,16 @@ bool MainFrame::DoQuerySave(bool doclose) {
 
 		if (ret == wxID_YES) {
 			if (g_gui.GetCurrentMap().hasFile()) {
-				g_gui.SaveCurrentMap(true);
+				if (!g_gui.SaveCurrentMap(true)) {
+					return false;
+				}
 			} else {
 				wxFileDialog file(this, "Save...", "", "", "*.otbm", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 				int32_t result = file.ShowModal();
 				if (result == wxID_OK) {
-					g_gui.SaveCurrentMap(file.GetPath(), true);
+					if (!g_gui.SaveCurrentMap(file.GetPath(), true)) {
+						return false;
+					}
 				} else {
 					return false;
 				}
