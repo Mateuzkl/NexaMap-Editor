@@ -512,8 +512,9 @@ void ZonesPalettePanel::OnClickDeleteZone(wxCommandEvent&) {
 
 	const wxString message = wxstr(
 		"Delete Zone \"" + name + "\" [ID: " + std::to_string(zoneId) + "]?\n\n"
-		"This will remove " + name + " from every tile in the map.\n"
-		"This operation is stored as one undo/redo action."
+																		"This will remove "
+		+ name + " from every tile in the map.\n"
+				 "This operation is stored as one undo/redo action."
 	);
 	wxMessageDialog dialog(this, message, "Delete Zone", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
 	dialog.SetYesNoLabels("Delete", "Cancel");
@@ -564,8 +565,7 @@ void ZonesPalettePanel::OnClickDeleteZone(wxCommandEvent&) {
 	OnUpdate();
 	g_gui.RefreshView();
 	g_gui.SetStatusText(
-		"Deleted Zone: " + name + " [ID: " + std::to_string(zoneId) + "] from " +
-		std::to_string(changedTiles) + " tiles."
+		"Deleted Zone: " + name + " [ID: " + std::to_string(zoneId) + "] from " + std::to_string(changedTiles) + " tiles."
 	);
 }
 
@@ -584,8 +584,7 @@ void ZonesPalettePanel::OnClickPaintZone(wxCommandEvent&) {
 	}
 	if (activateZone(zoneId, false, false)) {
 		g_gui.SetStatusText(
-			"Paint Zone: " + map->zones.getZoneName(zoneId) + " [ID: " + std::to_string(zoneId) +
-			"]. Left click paints; Ctrl+left click erases the active zone."
+			"Paint Zone: " + map->zones.getZoneName(zoneId) + " [ID: " + std::to_string(zoneId) + "]. Left click paints; Ctrl+left click erases the active zone."
 		);
 	}
 }
@@ -597,8 +596,7 @@ void ZonesPalettePanel::OnClickEraseZone(wxCommandEvent&) {
 	}
 	if (activateZone(zoneId, true, false)) {
 		g_gui.SetStatusText(
-			"Erase Zone: " + map->zones.getZoneName(zoneId) + " [ID: " + std::to_string(zoneId) +
-			"]. Left click removes only the active zone."
+			"Erase Zone: " + map->zones.getZoneName(zoneId) + " [ID: " + std::to_string(zoneId) + "]. Left click removes only the active zone."
 		);
 	}
 }
@@ -644,8 +642,7 @@ void ZonesPalettePanel::applyZoneToSelection(bool remove) {
 	g_gui.RefreshView();
 	const std::string name = map->zones.getZoneName(active_zone_id);
 	g_gui.SetStatusText(
-		std::string(remove ? "Removed " : "Applied ") + name + " [ID: " + std::to_string(active_zone_id) +
-		(remove ? "] from " : "] to ") + std::to_string(changedTiles) + " tiles."
+		std::string(remove ? "Removed " : "Applied ") + name + " [ID: " + std::to_string(active_zone_id) + (remove ? "] from " : "] to ") + std::to_string(changedTiles) + " tiles."
 	);
 }
 
@@ -687,8 +684,7 @@ void ZonesPalettePanel::OnClickFindFirstTile(wxCommandEvent&) {
 
 	g_gui.SetScreenCenterPosition(position);
 	g_gui.SetStatusText(
-		"Found " + map->zones.getZoneName(zoneId) + " [ID: " + std::to_string(zoneId) + "] at " +
-		std::to_string(position.x) + ", " + std::to_string(position.y) + ", " + std::to_string(position.z) + "."
+		"Found " + map->zones.getZoneName(zoneId) + " [ID: " + std::to_string(zoneId) + "] at " + std::to_string(position.x) + ", " + std::to_string(position.y) + ", " + std::to_string(position.z) + "."
 	);
 }
 
@@ -744,8 +740,7 @@ void ZonesPalettePanel::OnClickSelectZoneTiles(wxCommandEvent&) {
 	}
 	g_gui.RefreshView();
 	g_gui.SetStatusText(
-		"Selected " + std::to_string(selectedTiles) + " tiles from " + map->zones.getZoneName(zoneId) +
-		" on floor " + std::to_string(floor) + "."
+		"Selected " + std::to_string(selectedTiles) + " tiles from " + map->zones.getZoneName(zoneId) + " on floor " + std::to_string(floor) + "."
 	);
 }
 
@@ -824,11 +819,10 @@ void ZonesPalettePanel::OnClickImportZone(wxCommandEvent&) {
 
 		const bool nameExists = map->zones.hasZone(name);
 		const bool idExists = map->zones.hasZone(id);
-		const bool exactExisting = nameExists && idExists &&
-			map->zones.getZoneID(name) == id && map->zones.getZoneName(id) == name;
+		const bool exactExisting = nameExists && idExists && map->zones.getZoneID(name) == id && map->zones.getZoneName(id) == name;
 		const bool conflict = (nameExists || idExists) && !exactExisting;
 
-		ImportedZone imported{ name, id, !exactExisting, {} };
+		ImportedZone imported { name, id, !exactExisting, {} };
 		for (pugi::xml_node positionNode : zoneNode.children("position")) {
 			if (!positionNode.attribute("x") || !positionNode.attribute("y") || !positionNode.attribute("z")) {
 				++invalidPositions;
@@ -859,10 +853,7 @@ void ZonesPalettePanel::OnClickImportZone(wxCommandEvent&) {
 	}
 
 	if (invalidDefinitions != 0 || duplicateDefinitions != 0) {
-		const std::string report = "Import aborted before changing the map.\n\nInvalid zone definitions: " +
-			std::to_string(invalidDefinitions) +
-			"\nDuplicate names or IDs in file: " +
-			std::to_string(duplicateDefinitions);
+		const std::string report = "Import aborted before changing the map.\n\nInvalid zone definitions: " + std::to_string(invalidDefinitions) + "\nDuplicate names or IDs in file: " + std::to_string(duplicateDefinitions);
 		wxMessageBox(wxstr(report), "Zone Import Error", wxOK | wxICON_ERROR, this);
 		g_gui.SetStatusText("Zone import aborted: invalid or duplicate definitions.");
 		return;
@@ -870,17 +861,13 @@ void ZonesPalettePanel::OnClickImportZone(wxCommandEvent&) {
 
 	if (importedZones.empty()) {
 		g_gui.SetStatusText(
-			"No zones imported. Conflicts: " + std::to_string(conflicts) +
-			", invalid positions: " + std::to_string(invalidPositions) + "."
+			"No zones imported. Conflicts: " + std::to_string(conflicts) + ", invalid positions: " + std::to_string(invalidPositions) + "."
 		);
 		return;
 	}
 
 	if (conflicts != 0 || invalidPositions != 0) {
-		const std::string report =
-			"Zone import validation found issues:\n\nConflicting zones (kept unchanged): " +
-			std::to_string(conflicts) + "\nInvalid positions (skipped): " +
-			std::to_string(invalidPositions) + "\n\nImport all remaining valid data as one undoable action?";
+		const std::string report = "Zone import validation found issues:\n\nConflicting zones (kept unchanged): " + std::to_string(conflicts) + "\nInvalid positions (skipped): " + std::to_string(invalidPositions) + "\n\nImport all remaining valid data as one undoable action?";
 		wxMessageDialog confirm(this, wxstr(report), "Confirm Zone Import", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
 		confirm.SetYesNoLabels("Import", "Cancel");
 		if (confirm.ShowModal() != wxID_YES) {
@@ -936,8 +923,6 @@ void ZonesPalettePanel::OnClickImportZone(wxCommandEvent&) {
 	OnUpdate();
 	activateZone(active_zone_id, false, false);
 	g_gui.SetStatusText(
-		"Imported " + std::to_string(createdZones) + " new zones, reused " + std::to_string(reusedZones) +
-		", applied " + std::to_string(appliedAssociations) + " tile associations, skipped " +
-		std::to_string(conflicts) + " conflicts and " + std::to_string(invalidPositions) + " invalid positions."
+		"Imported " + std::to_string(createdZones) + " new zones, reused " + std::to_string(reusedZones) + ", applied " + std::to_string(appliedAssociations) + " tile associations, skipped " + std::to_string(conflicts) + " conflicts and " + std::to_string(invalidPositions) + " invalid positions."
 	);
 }

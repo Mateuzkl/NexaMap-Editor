@@ -2230,8 +2230,7 @@ void MapDrawer::UpdateCPUUsage() {
 
 	if (last_now_time.QuadPart != 0) {
 		auto process_diff = static_cast<double>(
-			(sys.QuadPart - last_sys_time.QuadPart) +
-			(user.QuadPart - last_cpu_time.QuadPart)
+			(sys.QuadPart - last_sys_time.QuadPart) + (user.QuadPart - last_cpu_time.QuadPart)
 		);
 		auto system_diff = static_cast<double>(now.QuadPart - last_now_time.QuadPart);
 
@@ -2269,9 +2268,7 @@ void MapDrawer::UpdateCPUUsage() {
 
 	unsigned long long utime;
 	unsigned long long stime;
-	int fields = sscanf(ptr + 2,
-		"%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu",
-		&utime, &stime);
+	int fields = sscanf(ptr + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu", &utime, &stime);
 
 	if (fields != 2) {
 		return;

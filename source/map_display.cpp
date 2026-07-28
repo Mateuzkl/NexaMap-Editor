@@ -373,7 +373,6 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 	// Swap buffer
 	SwapBuffers();
-
 }
 
 void MapCanvas::ShowPositionIndicator(const Position& position) {

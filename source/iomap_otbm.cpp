@@ -1695,8 +1695,7 @@ bool IOMapOTBM::loadZones(Map& map, pugi::xml_document& doc) {
 			continue;
 		}
 		if (!map.zones.addZone(name, id)) {
-			const bool exactExisting = map.zones.hasZone(name) && map.zones.hasZone(id) &&
-				map.zones.getZoneID(name) == id && map.zones.getZoneName(id) == name;
+			const bool exactExisting = map.zones.hasZone(name) && map.zones.hasZone(id) && map.zones.getZoneID(name) == id && map.zones.getZoneName(id) == name;
 			if (!exactExisting) {
 				warnings.push_back(
 					"IOMapOTBM::loadZones: Conflicting zone name or id for '" + name + "' (" + i2s(id) + ")."

@@ -57,14 +57,14 @@ Change* Change::Create(Waypoint* wp, const Position& where) {
 Change* Change::CreateZone(const std::string& name, unsigned int id, bool add) {
 	auto* c = newd Change();
 	c->type = CHANGE_ZONE_REGISTRY;
-	c->data = newd ZoneRegistryChange{ name, id, add };
+	c->data = newd ZoneRegistryChange { name, id, add };
 	return c;
 }
 
 Change* Change::RenameZone(const std::string& oldName, const std::string& newName) {
 	auto* c = newd Change();
 	c->type = CHANGE_RENAME_ZONE;
-	c->data = newd ZoneRenameChange{ oldName, newName };
+	c->data = newd ZoneRenameChange { oldName, newName };
 	return c;
 }
 
@@ -299,9 +299,7 @@ void Action::commit(DirtyList* dirty_list) {
 			case CHANGE_ZONE_REGISTRY: {
 				auto* change = reinterpret_cast<Change::ZoneRegistryChange*>(c->data);
 				ASSERT(change);
-				const bool changed = change->add ?
-					editor.map.zones.addZone(change->name, change->id) :
-					editor.map.zones.removeZone(change->name);
+				const bool changed = change->add ? editor.map.zones.addZone(change->name, change->id) : editor.map.zones.removeZone(change->name);
 				if (changed) {
 					change->add = !change->add;
 				}
@@ -429,9 +427,7 @@ void Action::undo(DirtyList* dirty_list) {
 			case CHANGE_ZONE_REGISTRY: {
 				auto* change = reinterpret_cast<Change::ZoneRegistryChange*>(c->data);
 				ASSERT(change);
-				const bool changed = change->add ?
-					editor.map.zones.addZone(change->name, change->id) :
-					editor.map.zones.removeZone(change->name);
+				const bool changed = change->add ? editor.map.zones.addZone(change->name, change->id) : editor.map.zones.removeZone(change->name);
 				if (changed) {
 					change->add = !change->add;
 				}
