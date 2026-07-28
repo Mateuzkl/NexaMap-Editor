@@ -186,11 +186,8 @@ bool ItemDatabase::loadFromAppearances(const rme::protobuf::appearances::Appeara
 		item->blockPathfinder = flags.avoid();
 		item->pickupable = flags.take();
 		item->moveable = !flags.unmove();
-		item->canReadText = flags.has_write() || flags.has_write_once() ||
-			(flags.has_lenshelp() && flags.lenshelp().id() == 1112);
-		item->canWriteText =
-			(flags.has_write() && flags.write().max_text_length() != 0) ||
-			(flags.has_write_once() && flags.write_once().max_text_length_once() != 0);
+		item->canReadText = flags.has_write() || flags.has_write_once() || (flags.has_lenshelp() && flags.lenshelp().id() == 1112);
+		item->canWriteText = (flags.has_write() && flags.write().max_text_length() != 0) || (flags.has_write_once() && flags.write_once().max_text_length_once() != 0);
 		item->isHangable = flags.hang();
 		item->stackable = flags.cumulative();
 		item->rotable = flags.rotate();

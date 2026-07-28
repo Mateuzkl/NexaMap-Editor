@@ -119,12 +119,7 @@ bool SpriteAppearances::loadSpriteSheet(const ClientSpriteSheetPtr& sheet, wxStr
 	while (offset < input.size() && input[offset] == 0) {
 		++offset;
 	}
-	if (offset + 5 > input.size() ||
-		input[offset] != 0x70 ||
-		input[offset + 1] != 0x0A ||
-		input[offset + 2] != 0xFA ||
-		input[offset + 3] != 0x80 ||
-		input[offset + 4] != 0x24) {
+	if (offset + 5 > input.size() || input[offset] != 0x70 || input[offset + 1] != 0x0A || input[offset + 2] != 0xFA || input[offset + 3] != 0x80 || input[offset + 4] != 0x24) {
 		error = "Sprite sheet has an invalid Canary/Crystal header: " + wxstr(sheet->file.string());
 		return false;
 	}
@@ -212,9 +207,7 @@ bool SpriteAppearances::loadSpriteSheet(const ClientSpriteSheetPtr& sheet, wxStr
 	for (size_t pixel = 0; pixel < PixelBytes; pixel += BytesPerPixel) {
 		// CipSoft sheets are BGRA bitmaps and use magenta as an additional
 		// transparency key. Some OTC packages preserve the key with alpha 255.
-		if (pixelData[pixel + 0] == 0xFF &&
-			pixelData[pixel + 1] == 0x00 &&
-			pixelData[pixel + 2] == 0xFF) {
+		if (pixelData[pixel + 0] == 0xFF && pixelData[pixel + 1] == 0x00 && pixelData[pixel + 2] == 0xFF) {
 			pixelData[pixel + 3] = 0x00;
 		}
 	}
@@ -271,8 +264,7 @@ bool SpriteAppearances::getSpritePixels(uint32_t spriteId, std::vector<uint8_t>&
 
 	output.resize(static_cast<size_t>(size.width) * size.height * BytesPerPixel);
 	for (int y = 0; y < size.height; ++y) {
-		const size_t sourceOffset =
-			((row * size.height + static_cast<size_t>(y)) * SpriteSheetWidth + column * size.width) * BytesPerPixel;
+		const size_t sourceOffset = ((row * size.height + static_cast<size_t>(y)) * SpriteSheetWidth + column * size.width) * BytesPerPixel;
 		const size_t destinationOffset = static_cast<size_t>(y) * size.width * BytesPerPixel;
 		std::memcpy(output.data() + destinationOffset, sheet->pixels.get() + sourceOffset, static_cast<size_t>(size.width) * BytesPerPixel);
 	}

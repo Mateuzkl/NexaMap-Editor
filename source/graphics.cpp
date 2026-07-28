@@ -661,11 +661,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 }
 
 GameSprite::NormalImage* GraphicManager::getOrCreateAssetImage(uint32_t spriteId, uint8_t cropX, uint8_t cropY) {
-	const uint64_t key =
-		0x8000000000000000ULL |
-		(static_cast<uint64_t>(spriteId) << 16) |
-		(static_cast<uint64_t>(cropY) << 8) |
-		static_cast<uint64_t>(cropX);
+	const uint64_t key = 0x8000000000000000ULL | (static_cast<uint64_t>(spriteId) << 16) | (static_cast<uint64_t>(cropY) << 8) | static_cast<uint64_t>(cropX);
 	const auto iterator = image_space.find(key);
 	if (iterator != image_space.end()) {
 		return static_cast<GameSprite::NormalImage*>(iterator->second);
@@ -724,11 +720,7 @@ bool GraphicManager::loadAppearanceSprite(
 	sprite->pattern_y = static_cast<uint8_t>(std::clamp<uint32_t>(spriteInfo.pattern_height(), 1, 255));
 	sprite->pattern_z = static_cast<uint8_t>(std::clamp<uint32_t>(spriteInfo.pattern_depth(), 1, 255));
 
-	const uint64_t sourceSpritesPerFrame =
-		static_cast<uint64_t>(sprite->layers) *
-		sprite->pattern_x *
-		sprite->pattern_y *
-		sprite->pattern_z;
+	const uint64_t sourceSpritesPerFrame = static_cast<uint64_t>(sprite->layers) * sprite->pattern_x * sprite->pattern_y * sprite->pattern_z;
 	uint32_t frameCount = 1;
 	if (spriteInfo.has_animation() && spriteInfo.animation().sprite_phase_size() > 0) {
 		frameCount = static_cast<uint32_t>(spriteInfo.animation().sprite_phase_size());
@@ -1547,8 +1539,7 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 					data[destination + 2] = 0xFF;
 					continue;
 				}
-				const size_t source =
-					(static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
+				const size_t source = (static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
 				const uint8_t alpha = pixels[source + 3];
 				data[destination + 0] = alpha == 0 ? 0xFF : pixels[source + 2];
 				data[destination + 1] = alpha == 0 ? 0x00 : pixels[source + 1];
@@ -1632,8 +1623,7 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 					data[destination + 3] = 0;
 					continue;
 				}
-				const size_t source =
-					(static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
+				const size_t source = (static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
 				data[destination + 0] = pixels[source + 2];
 				data[destination + 1] = pixels[source + 1];
 				data[destination + 2] = pixels[source + 0];

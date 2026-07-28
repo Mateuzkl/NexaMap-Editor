@@ -444,13 +444,9 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			mapsaver.useItemVersionHeader(map.sourceItemMajorVersion, map.sourceItemMinorVersion);
 		}
 		std::optional<MappingItemIdCodec> itemIdCodec;
-		const ItemIdSpace targetSpace =
-			map.storageFormat == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
+		const ItemIdSpace targetSpace = map.storageFormat == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
 		if (map.itemIdSpace != targetSpace) {
-			const ItemIdMapping::Direction direction =
-				targetSpace == ItemIdSpace::Client ?
-					ItemIdMapping::Direction::ServerToClient :
-					ItemIdMapping::Direction::ClientToServer;
+			const ItemIdMapping::Direction direction = targetSpace == ItemIdSpace::Client ? ItemIdMapping::Direction::ServerToClient : ItemIdMapping::Direction::ClientToServer;
 			itemIdCodec.emplace(direction);
 			mapsaver.useItemIdCodec(&*itemIdCodec);
 		}

@@ -110,10 +110,8 @@ namespace {
 	}
 
 	std::string FormatOtcVersion(const std::string& versionDirectory) {
-		if (versionDirectory.size() >= 3 &&
-			std::ranges::all_of(versionDirectory, [](unsigned char value) { return std::isdigit(value) != 0; })) {
-			return versionDirectory.substr(0, versionDirectory.size() - 2) + "." +
-				versionDirectory.substr(versionDirectory.size() - 2) + " (OTC)";
+		if (versionDirectory.size() >= 3 && std::ranges::all_of(versionDirectory, [](unsigned char value) { return std::isdigit(value) != 0; })) {
+			return versionDirectory.substr(0, versionDirectory.size() - 2) + "." + versionDirectory.substr(versionDirectory.size() - 2) + " (OTC)";
 		}
 		return versionDirectory.empty() ? "OTC Assets" : versionDirectory + " (OTC)";
 	}
@@ -190,8 +188,7 @@ namespace {
 	}
 
 	bool IsSupportedSpriteType(uint32_t spriteType) {
-		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 ||
-			spriteType == 11 || spriteType == 16 || spriteType == 22;
+		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 || spriteType == 11 || spriteType == 16 || spriteType == 22;
 	}
 
 	uint32_t SpriteSheetCapacity(uint32_t spriteType) {
@@ -251,15 +248,13 @@ ClientAssetsValidationResult ClientAssetsManifestLoader::Validate(const std::fil
 			if (!ReadJson(manifest.assetsIndexFile, assetsIndexDocument, jsonError)) {
 				return Failure(std::move(jsonError));
 			}
-			if (!assetsIndexDocument.is_object() || !assetsIndexDocument.contains("files") ||
-				!assetsIndexDocument["files"].is_array()) {
+			if (!assetsIndexDocument.is_object() || !assetsIndexDocument.contains("files") || !assetsIndexDocument["files"].is_array()) {
 				return Failure("assets.json must contain an array field named \"files\".");
 			}
 		} else {
 			manifest.warnings.emplace_back("assets.json is not present; catalog-content.json will be used directly.");
 		}
-		if (!IsRegularFile(manifest.root / "assets.json.sha256") &&
-			!IsRegularFile(manifest.assetsDirectory.parent_path() / "assets.json.sha256")) {
+		if (!IsRegularFile(manifest.root / "assets.json.sha256") && !IsRegularFile(manifest.assetsDirectory.parent_path() / "assets.json.sha256")) {
 			manifest.warnings.emplace_back("assets.json.sha256 is not present; file paths will still be validated.");
 		}
 	} else {
@@ -317,12 +312,7 @@ ClientAssetsValidationResult ClientAssetsManifestLoader::Validate(const std::fil
 		ClientSpriteSheetManifest sheet;
 		sheet.file = resolvedFile;
 		uint32_t spriteType = 0;
-		if (!ReadRequiredUInt(entry, "firstspriteid", sheet.firstSpriteId) ||
-			!ReadRequiredUInt(entry, "lastspriteid", sheet.lastSpriteId) ||
-			!ReadRequiredUInt(entry, "spritetype", spriteType) ||
-			sheet.lastSpriteId < sheet.firstSpriteId ||
-			!IsSupportedSpriteType(spriteType) ||
-			static_cast<uint64_t>(sheet.lastSpriteId) - sheet.firstSpriteId + 1 > SpriteSheetCapacity(spriteType)) {
+		if (!ReadRequiredUInt(entry, "firstspriteid", sheet.firstSpriteId) || !ReadRequiredUInt(entry, "lastspriteid", sheet.lastSpriteId) || !ReadRequiredUInt(entry, "spritetype", spriteType) || sheet.lastSpriteId < sheet.firstSpriteId || !IsSupportedSpriteType(spriteType) || static_cast<uint64_t>(sheet.lastSpriteId) - sheet.firstSpriteId + 1 > SpriteSheetCapacity(spriteType)) {
 			return Failure("Invalid sprite range/layout in catalog entry #" + std::to_string(index) + ".");
 		}
 		sheet.spriteType = static_cast<uint8_t>(spriteType);
@@ -345,8 +335,7 @@ ClientAssetsValidationResult ClientAssetsManifestLoader::Validate(const std::fil
 		if (hasPreviousSheet && sheet.firstSpriteId <= previousLast) {
 			if (sheet.lastSpriteId <= previousLast) {
 				manifest.warnings.push_back(
-					"Dropped duplicate/covered sprite sheet range " +
-					std::to_string(sheet.firstSpriteId) + ".." + std::to_string(sheet.lastSpriteId) + "."
+					"Dropped duplicate/covered sprite sheet range " + std::to_string(sheet.firstSpriteId) + ".." + std::to_string(sheet.lastSpriteId) + "."
 				);
 				continue;
 			}

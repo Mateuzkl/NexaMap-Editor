@@ -165,8 +165,7 @@ void SpawnExportWindow::OnConfirm(wxCommandEvent& WXUNUSED(event)) {
 		return;
 	}
 	const bool modern = formatChoice->GetSelection() == 1;
-	if ((!modern && !ValidateFilename(tfsFilename->GetValue(), "TFS filename")) ||
-		(modern && (!ValidateFilename(monsterFilename->GetValue(), "Monster filename") || !ValidateFilename(npcFilename->GetValue(), "NPC filename")))) {
+	if ((!modern && !ValidateFilename(tfsFilename->GetValue(), "TFS filename")) || (modern && (!ValidateFilename(monsterFilename->GetValue(), "Monster filename") || !ValidateFilename(npcFilename->GetValue(), "NPC filename")))) {
 		return;
 	}
 
@@ -198,18 +197,11 @@ void SpawnExportWindow::OnConfirm(wxCommandEvent& WXUNUSED(event)) {
 	const ItemIdSpace targetSpace = modern ? ItemIdSpace::Client : ItemIdSpace::Server;
 	if (targetSpace != map.getItemIdSpace()) {
 		const ItemIdConversionPreview& conversion = modern ? serverToClientPreview : clientToServerPreview;
-		if ((conversion.missingItems > 0 || conversion.ambiguousItems > 0) &&
-			wxMessageBox(
-				wxString::Format(
-					"Item ID conversion found %llu unmapped and %llu ambiguous occurrence(s).\n"
-					"Unmapped IDs remain unchanged; ambiguous IDs use the preferred candidate.\n\nContinue?",
-					static_cast<unsigned long long>(conversion.missingItems),
-					static_cast<unsigned long long>(conversion.ambiguousItems)
-				),
-				"Confirm item ID conversion",
-				wxYES_NO | wxNO_DEFAULT | wxICON_WARNING,
-				this
-			) != wxYES) {
+		if ((conversion.missingItems > 0 || conversion.ambiguousItems > 0) && wxMessageBox(wxString::Format("Item ID conversion found %llu unmapped and %llu ambiguous occurrence(s).\n"
+																											"Unmapped IDs remain unchanged; ambiguous IDs use the preferred candidate.\n\nContinue?",
+																											static_cast<unsigned long long>(conversion.missingItems), static_cast<unsigned long long>(conversion.ambiguousItems)),
+																						   "Confirm item ID conversion", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING, this)
+				!= wxYES) {
 			return;
 		}
 	}

@@ -762,9 +762,7 @@ bool GUI::ConfigureSpawnSaveAs(const FileName& mapFilename) {
 	MapVersion targetVersion = map.getVersion();
 	if (options.mapFormat == MapStorageFormat::CanaryCrystal) {
 		targetVersion.otbm = std::max(targetVersion.otbm, MAP_OTBM_5);
-		targetVersion.client = g_gui.IsCanaryCrystalAssetsLoaded() ?
-			g_gui.GetCurrentVersionID() :
-			ClientVersion::getLatestVersion()->getID();
+		targetVersion.client = g_gui.IsCanaryCrystalAssetsLoaded() ? g_gui.GetCurrentVersionID() : ClientVersion::getLatestVersion()->getID();
 		map.setSourceItemVersion(4, 4);
 	} else {
 		targetVersion.otbm = MAP_OTBM_3;

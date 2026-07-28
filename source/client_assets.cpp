@@ -104,11 +104,9 @@ bool ClientAssets::load(wxString& error, wxArrayString& warnings) {
 
 	versionName = manifest.version;
 	loaded = true;
-	const wxString layoutName =
-		manifest.layout == ClientAssetsLayout::OtClient ? "OTC" : "CipSoft/Crystal";
+	const wxString layoutName = manifest.layout == ClientAssetsLayout::OtClient ? "OTC" : "CipSoft/Crystal";
 	wxLogMessage(
-		"Loaded " + layoutName + " Assets version " + wxstr(versionName) +
-		" from " + wxstr(manifest.assetsDirectory.string())
+		"Loaded " + layoutName + " Assets version " + wxstr(versionName) + " from " + wxstr(manifest.assetsDirectory.string())
 	);
 	return true;
 }
