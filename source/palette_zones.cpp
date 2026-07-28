@@ -859,9 +859,9 @@ void ZonesPalettePanel::OnClickImportZone(wxCommandEvent&) {
 	}
 
 	if (invalidDefinitions != 0 || duplicateDefinitions != 0) {
-		const std::string report =
-			"Import aborted before changing the map.\n\nInvalid zone definitions: " +
-			std::to_string(invalidDefinitions) + "\nDuplicate names or IDs in file: " +
+		const std::string report = "Import aborted before changing the map.\n\nInvalid zone definitions: " +
+			std::to_string(invalidDefinitions) +
+			"\nDuplicate names or IDs in file: " +
 			std::to_string(duplicateDefinitions);
 		wxMessageBox(wxstr(report), "Zone Import Error", wxOK | wxICON_ERROR, this);
 		g_gui.SetStatusText("Zone import aborted: invalid or duplicate definitions.");
