@@ -20,6 +20,7 @@ ${CMAKE_CURRENT_LIST_DIR}/copybuffer.h
 ${CMAKE_CURRENT_LIST_DIR}/creature.h
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/creatures.h
+${CMAKE_CURRENT_LIST_DIR}/dat_format_probe.h
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.h
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.h
 ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.h
@@ -143,6 +144,7 @@ ${CMAKE_CURRENT_LIST_DIR}/copybuffer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp
+${CMAKE_CURRENT_LIST_DIR}/dat_format_probe.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.cpp

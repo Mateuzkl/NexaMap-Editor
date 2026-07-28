@@ -112,6 +112,9 @@
     <ClInclude Include="..\..\source\filehandle.h">
       <Filter>common</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\dat_format_probe.h">
+      <Filter>common</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\graphics.h">
       <Filter>gui\graphics</Filter>
     </ClInclude>
@@ -415,6 +418,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\common_windows.cpp">
       <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\dat_format_probe.cpp">
+      <Filter>common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\dat_debug_view.cpp">
       <Filter>gui\dialogs</Filter>

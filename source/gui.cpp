@@ -335,9 +335,10 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	}
 
 	g_gui.CreateLoadBar("Loading asset files");
-	g_gui.SetLoadDone(0, "Loading metadata file...");
 
 	wxFileName metadata_path = g_gui.gfx.getMetadataFileName();
+	const bool using_assets_dat = metadata_path.GetFullName().CmpNoCase("assets.dat") == 0;
+	g_gui.SetLoadDone(0, using_assets_dat ? "Loading assets.dat metadata..." : "Loading metadata file...");
 	if (!g_gui.gfx.loadSpriteMetadata(metadata_path, error, warnings)) {
 		error = "Couldn't load metadata: " + error;
 		g_gui.DestroyLoadBar();
@@ -355,7 +356,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		return false;
 	}
 
-	g_gui.SetLoadDone(20, "Loading items.otb file...");
+	g_gui.SetLoadDone(20, using_assets_dat ? "Loading items.otb server ID table..." : "Loading items.otb file...");
 	if (!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
 		error = "Couldn't load items.otb: " + error;
 		g_gui.DestroyLoadBar();

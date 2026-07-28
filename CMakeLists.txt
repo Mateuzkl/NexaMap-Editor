@@ -45,6 +45,7 @@ if(ENABLE_UNITY_BUILD)
 		message(WARNING "ENABLE_UNITY_BUILD requires CMake 3.16 or newer; continuing without unity build")
 	else()
 		set_source_files_properties(
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/dat_format_probe.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/gl_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
@@ -83,6 +84,19 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+	add_executable(dat_format_probe_tests
+		tests/dat_format_probe_tests.cpp
+		source/dat_format_probe.cpp
+	)
+	target_include_directories(dat_format_probe_tests PRIVATE source)
+	set_target_properties(dat_format_probe_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/dat_format_probe_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/dat_format_probe_tests"
+	)
+	add_test(NAME dat_format_probe_tests COMMAND dat_format_probe_tests)
+
 	add_executable(item_id_mapping_tests
 		tests/item_id_mapping_tests.cpp
 		source/item_id_mapping.cpp

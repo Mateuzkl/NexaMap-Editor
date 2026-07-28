@@ -335,10 +335,8 @@ void ClientVersion::saveVersions() {
 
 	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
 		ClientVersion* version = i->second;
-		vers_obj.push_back({
-			{"id", version->getName()},
-			{"path", nstr(version->getClientPath().GetFullPath())}
-		});
+		vers_obj.push_back({ { "id", version->getName() },
+							 { "path", nstr(version->getClientPath().GetFullPath()) } });
 	}
 	g_settings.setString(Config::ASSETS_DATA_DIRS, vers_obj.dump());
 }
@@ -420,6 +418,7 @@ bool ClientVersion::hasValidPaths() {
 
 	wxDir dir(client_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR));
 	wxString otfi_file;
+	bool otfi_metadata_configured = false;
 	metadata_path = wxFileName(client_path.GetFullPath(), wxString(ASSETS_NAME) + ".dat");
 	sprites_path = wxFileName(client_path.GetFullPath(), wxString(ASSETS_NAME) + ".spr");
 
@@ -430,8 +429,22 @@ bool ClientVersion::hasValidPaths() {
 			OTMLNodePtr node = doc->get("DatSpr");
 			auto metadata = node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat");
 			auto sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
+			otfi_metadata_configured = node->hasChildAt("metadata-file");
 			metadata_path = wxFileName(client_path.GetFullPath(), wxString(metadata));
 			sprites_path = wxFileName(client_path.GetFullPath(), wxString(sprites));
+		}
+	}
+
+	// Tibia 8.60 may use a server-provided assets.dat as client metadata.
+	// It supplements Tibia.spr; items.otb remains the server-ID database.
+	if (getID() == CLIENT_VERSION_860 && !otfi_metadata_configured) {
+		FileName version_assets = getDataPath();
+		version_assets.SetFullName("assets.dat");
+		wxFileName client_assets(client_path.GetFullPath(), "assets.dat");
+		if (version_assets.FileExists()) {
+			metadata_path = version_assets;
+		} else if (client_assets.FileExists()) {
+			metadata_path = client_assets;
 		}
 	}
 
