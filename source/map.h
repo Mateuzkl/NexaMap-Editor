@@ -57,7 +57,6 @@ public:
 
 	// Operations on the entire map
 	void cleanInvalidTiles(bool showdialog = false);
-	void cleanDeletedZones(bool showdialog = false);
 	Position getZonePosition(unsigned int zoneId);
 	void convertHouseTiles(uint32_t fromId, uint32_t toId);
 

@@ -1682,18 +1682,26 @@ bool IOMapOTBM::loadZones(Map& map, pugi::xml_document& doc) {
 		return false;
 	}
 
-	pugi::xml_attribute attribute;
 	for (pugi::xml_node zoneNode = node.first_child(); zoneNode; zoneNode = zoneNode.next_sibling()) {
 		if (as_lower_str(zoneNode.name()) != "zone") {
 			continue;
 		}
 
-		std::string name = zoneNode.attribute("name").as_string();
-		unsigned int id = zoneNode.attribute("zoneid").as_uint(zoneNode.attribute("id").as_uint());
-		if (id == 0) {
+		const std::string name = zoneNode.attribute("name").as_string();
+		const unsigned int id = zoneNode.attribute("zoneid").as_uint(zoneNode.attribute("id").as_uint());
+		if (!Zones::isValidName(name) || !Zones::isValidID(id)) {
+			warnings.push_back("IOMapOTBM::loadZones: Zone has an empty name or invalid id.");
 			continue;
 		}
-		map.zones.addZone(name, id);
+		if (!map.zones.addZone(name, id)) {
+			const bool exactExisting = map.zones.hasZone(name, id);
+			if (!exactExisting) {
+				warnings.push_back(
+					"IOMapOTBM::loadZones: Conflicting zone name or id for '" + name + "' (" + i2s(id) + ")."
+				);
+				continue;
+			}
+		}
 
 		for (pugi::xml_node positionNode = zoneNode.child("position"); positionNode; positionNode = positionNode.next_sibling("position")) {
 			Position position(
@@ -2253,7 +2261,7 @@ bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 	wxString filepath = dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
 	filepath += wxString(map.zonefile.c_str(), wxConvUTF8);
 
-	bool hasZones = !map.zones.zones.empty();
+	bool hasZones = !map.zones.empty();
 	for (MapIterator miter = map.begin(); !hasZones && miter != map.end(); ++miter) {
 		Tile* tile = (*miter)->get();
 		hasZones = tile && tile->hasZone();
@@ -2277,9 +2285,11 @@ bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {
 
 	pugi::xml_node zoneNodes = doc.append_child("zones");
 	std::set<unsigned int> zoneIds;
-	for (const auto& zone : map.zones.zones) {
+	std::map<unsigned int, std::string> zoneNames;
+	for (const auto& zone : map.zones) {
 		if (zone.second != 0) {
 			zoneIds.insert(zone.second);
+			zoneNames.emplace(zone.second, zone.first);
 		}
 	}
 
@@ -2301,13 +2311,8 @@ bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {
 	}
 
 	for (const auto& zoneId : zoneIds) {
-		std::string zoneName = "Zone " + i2s(zoneId);
-		for (const auto& zone : map.zones.zones) {
-			if (zone.second == zoneId) {
-				zoneName = zone.first;
-				break;
-			}
-		}
+		const auto nameIt = zoneNames.find(zoneId);
+		const std::string zoneName = nameIt == zoneNames.end() ? "Zone " + i2s(zoneId) : nameIt->second;
 
 		pugi::xml_node zoneNode = zoneNodes.append_child("zone");
 		zoneNode.append_attribute("name") = zoneName.c_str();

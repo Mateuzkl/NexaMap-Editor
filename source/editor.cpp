@@ -27,6 +27,7 @@
 #include "ground_brush.h"
 #include "wall_brush.h"
 #include "waypoint_brush.h"
+#include "zone_brush.h"
 #include "house_exit_brush.h"
 #include "doodad_brush.h"
 #include "spawn_brush.h"
@@ -94,6 +95,22 @@ namespace {
 			return CLIENT_VERSION_NONE;
 		}
 		return identifiers.at(static_cast<size_t>(dialog.GetSelection()));
+	}
+
+	bool ShouldSkipZoneChange(Brush* brush, const Tile* tile, bool drawing) {
+		if (!brush->isZone()) {
+			return false;
+		}
+
+		const ZoneBrush* zoneBrush = brush->asZone();
+		const unsigned int zoneId = zoneBrush->getZone();
+		if (zoneId == 0) {
+			return true;
+		}
+
+		const bool removing = !drawing || zoneBrush->isEraseMode();
+		const bool hasZone = tile->hasZone(zoneId);
+		return (removing && !hasZone) || (!removing && (!tile->hasGround() || hasZone));
 	}
 }
 
@@ -1717,6 +1734,10 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
+				if (ShouldSkipZoneChange(brush, tile, dodraw)) {
+					continue;
+				}
+
 				Tile* new_tile = tile->deepCopy(map);
 				if (dodraw) {
 					brush->draw(&map, new_tile, &alt);
@@ -1724,7 +1745,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 					brush->undraw(&map, new_tile);
 				}
 				action->addChange(newd Change(new_tile));
-			} else if (dodraw) {
+			} else if (dodraw && !brush->isZone()) {
 				Tile* new_tile = map.allocator(location);
 				brush->draw(&map, new_tile, &alt);
 				action->addChange(newd Change(new_tile));
@@ -2000,6 +2021,10 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
+				if (ShouldSkipZoneChange(brush, tile, dodraw)) {
+					continue;
+				}
+
 				Tile* new_tile = tile->deepCopy(map);
 				if (dodraw) {
 					g_gui.GetCurrentBrush()->draw(&map, new_tile);
@@ -2007,7 +2032,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 					g_gui.GetCurrentBrush()->undraw(&map, new_tile);
 				}
 				action->addChange(newd Change(new_tile));
-			} else if (dodraw) {
+			} else if (dodraw && !brush->isZone()) {
 				Tile* new_tile = map.allocator(location);
 				g_gui.GetCurrentBrush()->draw(&map, new_tile);
 				action->addChange(newd Change(new_tile));

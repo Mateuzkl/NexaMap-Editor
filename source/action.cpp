@@ -54,6 +54,20 @@ Change* Change::Create(Waypoint* wp, const Position& where) {
 	return c;
 }
 
+Change* Change::CreateZone(const std::string& name, unsigned int id, bool add) {
+	auto* c = newd Change();
+	c->type = CHANGE_ZONE_REGISTRY;
+	c->data = newd ZoneRegistryChange { name, id, add };
+	return c;
+}
+
+Change* Change::RenameZone(const std::string& oldName, const std::string& newName) {
+	auto* c = newd Change();
+	c->type = CHANGE_RENAME_ZONE;
+	c->data = newd ZoneRenameChange { oldName, newName };
+	return c;
+}
+
 Change::~Change() {
 	clear();
 }
@@ -71,6 +85,14 @@ void Change::clear() {
 		case CHANGE_MOVE_WAYPOINT:
 			ASSERT(data);
 			delete reinterpret_cast<std::pair<std::string, Position>*>(data);
+			break;
+		case CHANGE_ZONE_REGISTRY:
+			ASSERT(data);
+			delete reinterpret_cast<ZoneRegistryChange*>(data);
+			break;
+		case CHANGE_RENAME_ZONE:
+			ASSERT(data);
+			delete reinterpret_cast<ZoneRenameChange*>(data);
 			break;
 		case CHANGE_NONE:
 			break;
@@ -93,6 +115,18 @@ uint32_t Change::memsize() const {
 			ASSERT(data);
 			mem += reinterpret_cast<Tile*>(data)->memsize();
 			break;
+		case CHANGE_ZONE_REGISTRY: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<ZoneRegistryChange*>(data);
+			mem += sizeof(ZoneRegistryChange) + change->name.capacity();
+			break;
+		}
+		case CHANGE_RENAME_ZONE: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<ZoneRenameChange*>(data);
+			mem += sizeof(ZoneRenameChange) + change->from.capacity() + change->to.capacity();
+			break;
+		}
 		default:
 			break;
 	}
@@ -103,6 +137,33 @@ Action::Action(Editor& editor, ActionIdentifier ident) :
 	commited(false),
 	editor(editor),
 	type(ident) {
+}
+
+void Action::applyZoneChange(Change* c) {
+	switch (c->type) {
+		case CHANGE_ZONE_REGISTRY: {
+			auto* change = reinterpret_cast<Change::ZoneRegistryChange*>(c->data);
+			ASSERT(change);
+			const bool changed = change->add ? editor.map.zones.addZone(change->name, change->id) : editor.map.zones.removeZone(change->name);
+			if (changed) {
+				change->add = !change->add;
+			}
+			break;
+		}
+
+		case CHANGE_RENAME_ZONE: {
+			auto* change = reinterpret_cast<Change::ZoneRenameChange*>(c->data);
+			ASSERT(change);
+			if (editor.map.zones.renameZone(change->from, change->to)) {
+				std::swap(change->from, change->to);
+			}
+			break;
+		}
+
+		default:
+			ASSERT(false);
+			break;
+	}
 }
 
 Action::~Action() {
@@ -131,6 +192,11 @@ size_t Action::memsize() const {
 				mem += reinterpret_cast<Tile*>(c->data)->memsize();
 				break;
 			}
+
+			case CHANGE_ZONE_REGISTRY:
+			case CHANGE_RENAME_ZONE:
+				mem += c->memsize();
+				break;
 
 			default:
 				break;
@@ -257,6 +323,11 @@ void Action::commit(DirtyList* dirty_list) {
 				break;
 			}
 
+			case CHANGE_ZONE_REGISTRY:
+			case CHANGE_RENAME_ZONE:
+				applyZoneChange(c);
+				break;
+
 			default:
 				break;
 		}
@@ -365,6 +436,11 @@ void Action::undo(DirtyList* dirty_list) {
 				}
 				break;
 			}
+
+			case CHANGE_ZONE_REGISTRY:
+			case CHANGE_RENAME_ZONE:
+				applyZoneChange(c);
+				break;
 
 			default:
 				break;
@@ -618,6 +694,14 @@ void ActionQueue::clear() {
 		it = actions.erase(it);
 	}
 	current = 0;
+}
+
+ActionIdentifier ActionQueue::getUndoType() const {
+	return current > 0 ? actions[current - 1]->getType() : ACTION_NONE;
+}
+
+ActionIdentifier ActionQueue::getRedoType() const {
+	return current < actions.size() ? actions[current]->getType() : ACTION_NONE;
 }
 
 DirtyList::DirtyList() :

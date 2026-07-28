@@ -89,6 +89,29 @@ void GenerateColors() {
 	}
 }
 
+static Color GetZoneColor(const Tile& tile, unsigned int activeZoneId) {
+	if (activeZoneId != 0 && tile.hasZone(activeZoneId)) {
+		return colors.at(activeZoneId % colors.size());
+	}
+
+	uint32_t red = 0;
+	uint32_t green = 0;
+	uint32_t blue = 0;
+	for (const unsigned int zoneId : tile.zones) {
+		const Color& colour = colors.at(zoneId % colors.size());
+		red += std::get<0>(colour);
+		green += std::get<1>(colour);
+		blue += std::get<2>(colour);
+	}
+
+	const size_t zoneCount = tile.zones.size();
+	return {
+		static_cast<int>(red / zoneCount),
+		static_cast<int>(green / zoneCount),
+		static_cast<int>(blue / zoneCount),
+	};
+}
+
 DrawingOptions::DrawingOptions() {
 	SetDefault();
 	GenerateColors();
@@ -114,6 +137,7 @@ void DrawingOptions::SetDefault() {
 	show_special_tiles = true;
 	show_zone_areas = true;
 	show_items = true;
+	active_zone_id = 0;
 
 	highlight_items = false;
 	highlight_locked_doors = true;
@@ -148,6 +172,7 @@ void DrawingOptions::SetIngame() {
 	show_special_tiles = false;
 	show_zone_areas = false;
 	show_items = true;
+	active_zone_id = 0;
 
 	highlight_items = false;
 	highlight_locked_doors = false;
@@ -527,6 +552,7 @@ void MapDrawer::DrawMap() {
 
 						// Draw ground
 						uint8_t r = 160, g = 160, b = 160;
+						uint8_t ground_alpha = 160;
 						if (tile->ground) {
 							if (tile->isBlocking() && options.show_blocking) {
 								g = g / 3 * 2;
@@ -554,22 +580,15 @@ void MapDrawer::DrawMap() {
 								g /= 2;
 							}
 							if (options.show_zone_areas && tile->hasZone()) {
-								size_t zones = tile->zones.size();
-								uint16_t r16 = 0, g16 = 0, b16 = 0;
-								for (const auto& zoneId : tile->zones) {
-									const uint16_t colorIndex = zoneId % colors.size();
-									const Color& colour = colors.at(colorIndex);
-
-									r16 += std::get<0>(colour);
-									g16 += std::get<1>(colour);
-									b16 += std::get<2>(colour);
+								const Color colour = GetZoneColor(*tile, options.active_zone_id);
+								r = std::get<0>(colour);
+								g = std::get<1>(colour);
+								b = std::get<2>(colour);
+								if (options.active_zone_id != 0 && tile->hasZone(options.active_zone_id)) {
+									ground_alpha = 220;
 								}
-
-								r = r16 / zones;
-								g = g16 / zones;
-								b = b16 / zones;
 							}
-							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, 160);
+							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, ground_alpha);
 						}
 
 						// Draw items on the tile
@@ -1637,20 +1656,10 @@ void MapDrawer::DrawTile(TileLocation* location) {
 		}
 
 		if (options.show_zone_areas && tile->hasZone()) {
-			size_t zones = tile->zones.size();
-			uint16_t r16 = 0, g16 = 0, b16 = 0;
-			for (const auto& zoneId : tile->zones) {
-				const uint16_t colorIndex = zoneId % colors.size();
-				const Color& colour = colors.at(colorIndex);
-
-				r16 += std::get<0>(colour);
-				g16 += std::get<1>(colour);
-				b16 += std::get<2>(colour);
-			}
-
-			r = r16 / zones;
-			g = g16 / zones;
-			b = b16 / zones;
+			const Color colour = GetZoneColor(*tile, options.active_zone_id);
+			r = std::get<0>(colour);
+			g = std::get<1>(colour);
+			b = std::get<2>(colour);
 		}
 	}
 
@@ -2212,8 +2221,7 @@ void MapDrawer::UpdateCPUUsage() {
 
 	if (last_now_time.QuadPart != 0) {
 		auto process_diff = static_cast<double>(
-			(sys.QuadPart - last_sys_time.QuadPart) +
-			(user.QuadPart - last_cpu_time.QuadPart)
+			(sys.QuadPart - last_sys_time.QuadPart) + (user.QuadPart - last_cpu_time.QuadPart)
 		);
 		auto system_diff = static_cast<double>(now.QuadPart - last_now_time.QuadPart);
 
@@ -2251,9 +2259,7 @@ void MapDrawer::UpdateCPUUsage() {
 
 	unsigned long long utime;
 	unsigned long long stime;
-	int fields = sscanf(ptr + 2,
-		"%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu",
-		&utime, &stime);
+	int fields = sscanf(ptr + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu", &utime, &stime);
 
 	if (fields != 2) {
 		return;

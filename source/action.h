@@ -21,6 +21,7 @@
 #include "position.h"
 
 #include <deque>
+#include <string>
 
 class Editor;
 class Tile;
@@ -36,10 +37,23 @@ enum ChangeType {
 	CHANGE_TILE,
 	CHANGE_MOVE_HOUSE_EXIT,
 	CHANGE_MOVE_WAYPOINT,
+	CHANGE_ZONE_REGISTRY,
+	CHANGE_RENAME_ZONE,
 };
 
 class Change {
 private:
+	struct ZoneRegistryChange {
+		std::string name;
+		unsigned int id;
+		bool add;
+	};
+
+	struct ZoneRenameChange {
+		std::string from;
+		std::string to;
+	};
+
 	ChangeType type;
 	void* data;
 
@@ -49,6 +63,8 @@ public:
 	Change(Tile* tile);
 	static Change* Create(House* house, const Position& where);
 	static Change* Create(Waypoint* wp, const Position& where);
+	static Change* CreateZone(const std::string& name, unsigned int id, bool add);
+	static Change* RenameZone(const std::string& oldName, const std::string& newName);
 	~Change();
 	void clear();
 
@@ -102,6 +118,7 @@ protected:
 };
 
 enum ActionIdentifier {
+	ACTION_NONE,
 	ACTION_MOVE,
 	ACTION_REMOTE,
 	ACTION_SELECT,
@@ -116,6 +133,7 @@ enum ActionIdentifier {
 	ACTION_REPLACE_ITEMS,
 	ACTION_CHANGE_PROPERTIES,
 	ACTION_GENERATE_AREA,
+	ACTION_ZONE_EDIT,
 };
 
 class Action {
@@ -147,6 +165,7 @@ public:
 
 protected:
 	Action(Editor& editor, ActionIdentifier ident);
+	void applyZoneChange(Change* change);
 
 	bool commited;
 	ChangeList changes;
@@ -225,6 +244,8 @@ public:
 	bool canRedo() {
 		return current < actions.size();
 	}
+	ActionIdentifier getUndoType() const;
+	ActionIdentifier getRedoType() const;
 
 protected:
 	size_t current;

@@ -81,6 +81,7 @@ struct DrawingOptions {
 	bool show_special_tiles;
 	bool show_zone_areas;
 	bool show_items;
+	unsigned int active_zone_id;
 
 	bool highlight_items;
 	bool highlight_locked_doors;

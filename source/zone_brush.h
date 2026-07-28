@@ -10,7 +10,7 @@
 class ZoneBrush : public FlagBrush {
 public:
 	ZoneBrush();
-	~ZoneBrush() override;
+	~ZoneBrush() override = default;
 
 	bool isZone() const override {
 		return true;
@@ -24,6 +24,15 @@ public:
 	void undraw(BaseMap* map, Tile* tile) override;
 
 	void setZone(unsigned int id);
+	unsigned int getZone() const {
+		return zoneId;
+	}
+	void setEraseMode(bool erase) {
+		eraseMode = erase;
+	}
+	bool isEraseMode() const {
+		return eraseMode;
+	}
 	int getLookID() const override {
 		return 0;
 	}
@@ -33,6 +42,7 @@ public:
 
 protected:
 	unsigned int zoneId;
+	bool eraseMode;
 };
 
 #endif
