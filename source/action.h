@@ -165,6 +165,7 @@ public:
 
 protected:
 	Action(Editor& editor, ActionIdentifier ident);
+	void applyZoneChange(Change* change);
 
 	bool commited;
 	ChangeList changes;

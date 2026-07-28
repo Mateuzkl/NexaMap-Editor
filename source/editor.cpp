@@ -96,6 +96,22 @@ namespace {
 		}
 		return identifiers.at(static_cast<size_t>(dialog.GetSelection()));
 	}
+
+	bool ShouldSkipZoneChange(Brush* brush, const Tile* tile, bool drawing) {
+		if (!brush->isZone()) {
+			return false;
+		}
+
+		const ZoneBrush* zoneBrush = brush->asZone();
+		const unsigned int zoneId = zoneBrush->getZone();
+		if (zoneId == 0) {
+			return true;
+		}
+
+		const bool removing = !drawing || zoneBrush->isEraseMode();
+		const bool hasZone = tile->hasZone(zoneId);
+		return (removing && !hasZone) || (!removing && (!tile->hasGround() || hasZone));
+	}
 }
 
 Editor::Editor(CopyBuffer& copybuffer) :
@@ -1718,16 +1734,8 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
-				if (brush->isZone()) {
-					ZoneBrush* zoneBrush = brush->asZone();
-					if (zoneBrush->getZone() == 0) {
-						continue;
-					}
-					const bool removing = !dodraw || zoneBrush->isEraseMode();
-					const bool hasZone = tile->hasZone(zoneBrush->getZone());
-					if ((removing && !hasZone) || (!removing && (!tile->hasGround() || hasZone))) {
-						continue;
-					}
+				if (ShouldSkipZoneChange(brush, tile, dodraw)) {
+					continue;
 				}
 
 				Tile* new_tile = tile->deepCopy(map);
@@ -2013,16 +2021,8 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 			TileLocation* location = map.createTileL(*it);
 			Tile* tile = location->get();
 			if (tile) {
-				if (brush->isZone()) {
-					ZoneBrush* zoneBrush = brush->asZone();
-					if (zoneBrush->getZone() == 0) {
-						continue;
-					}
-					const bool removing = !dodraw || zoneBrush->isEraseMode();
-					const bool hasZone = tile->hasZone(zoneBrush->getZone());
-					if ((removing && !hasZone) || (!removing && (!tile->hasGround() || hasZone))) {
-						continue;
-					}
+				if (ShouldSkipZoneChange(brush, tile, dodraw)) {
+					continue;
 				}
 
 				Tile* new_tile = tile->deepCopy(map);

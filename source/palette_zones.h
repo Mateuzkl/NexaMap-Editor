@@ -11,13 +11,12 @@
 #include <wx/stattext.h>
 #include <wx/tglbtn.h>
 
-#include "zones.h"
 #include "palette_common.h"
 
 class ZonesPalettePanel : public NamedEntityPalettePanel {
 public:
 	ZonesPalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY);
-	~ZonesPalettePanel() override;
+	~ZonesPalettePanel() override = default;
 
 	wxString GetName() const override;
 	PaletteType GetType() const override;
@@ -25,6 +24,7 @@ public:
 	Brush* GetSelectedBrush() const override;
 	bool SelectBrush(const Brush* whatbrush) override;
 
+	void OnSwitchIn() override;
 	void OnUpdate() override;
 
 	void OnClickZone(wxListEvent& event);
@@ -69,7 +69,6 @@ protected:
 	wxButton* import_zone_button;
 	wxButton* export_zone_button;
 
-	unsigned int active_zone_id;
 	bool editing_new_zone;
 	bool rebuilding_list;
 

@@ -4,10 +4,9 @@
 
 #include "main.h"
 
-#include <limits>
 #include <map>
 #include <set>
-#include <sstream>
+#include <utility>
 #include <vector>
 
 #include <wx/menu.h>
@@ -22,6 +21,7 @@
 #include "palette_zones.h"
 #include "settings.h"
 #include "zone_brush.h"
+#include "zones.h"
 
 BEGIN_EVENT_TABLE(ZonesPalettePanel, PalettePanel)
 EVT_BUTTON(PALETTE_ZONES_NEW_ZONE, ZonesPalettePanel::OnClickNewZone)
@@ -64,7 +64,6 @@ ZonesPalettePanel::ZonesPalettePanel(wxWindow* parent, wxWindowID id) :
 	show_overlay_checkbox(nullptr),
 	import_zone_button(nullptr),
 	export_zone_button(nullptr),
-	active_zone_id(0),
 	editing_new_zone(false),
 	rebuilding_list(false) {
 	auto* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Zones");
@@ -110,28 +109,26 @@ ZonesPalettePanel::ZonesPalettePanel(wxWindow* parent, wxWindowID id) :
 	updateControlStates();
 }
 
-ZonesPalettePanel::~ZonesPalettePanel() {
-	////
-}
-
 void ZonesPalettePanel::SetMap(Map* m) {
 	if (map != m) {
-		active_zone_id = 0;
 		editing_new_zone = false;
+	}
+	map = m;
+	if (!map || !map->zones.hasZone(g_gui.zone_brush->getZone())) {
 		g_gui.zone_brush->setZone(0);
 		g_gui.zone_brush->setEraseMode(false);
 	}
-	map = m;
 	Enable(m && m->getVersion().otbm >= MAP_OTBM_3);
 }
 
 Brush* ZonesPalettePanel::GetSelectedBrush() const {
-	if (!map || !map->zones.hasZone(active_zone_id)) {
+	const unsigned int zoneId = g_gui.zone_brush->getZone();
+	if (!map || !map->zones.hasZone(zoneId)) {
 		g_gui.zone_brush->setZone(0);
+		g_gui.zone_brush->setEraseMode(false);
 		return g_gui.zone_brush;
 	}
 
-	g_gui.zone_brush->setZone(active_zone_id);
 	return g_gui.zone_brush;
 }
 
@@ -139,9 +136,11 @@ bool ZonesPalettePanel::SelectBrush(const Brush* whatbrush) {
 	if (whatbrush != g_gui.zone_brush) {
 		return false;
 	}
-	if (map && map->zones.hasZone(active_zone_id)) {
-		g_gui.zone_brush->setZone(active_zone_id);
-		selectZoneItem(active_zone_id);
+	const unsigned int zoneId = g_gui.zone_brush->getZone();
+	if (map && map->zones.hasZone(zoneId)) {
+		selectZoneItem(zoneId);
+		updateActiveZoneDisplay();
+		updateControlStates();
 	}
 	return true;
 }
@@ -152,6 +151,11 @@ PaletteType ZonesPalettePanel::GetType() const {
 
 wxString ZonesPalettePanel::GetName() const {
 	return "Zone Palette";
+}
+
+void ZonesPalettePanel::OnSwitchIn() {
+	NamedEntityPalettePanel::OnSwitchIn();
+	OnUpdate();
 }
 
 void ZonesPalettePanel::OnUpdate() {
@@ -171,7 +175,6 @@ void ZonesPalettePanel::OnUpdate() {
 	zone_list->DeleteAllItems();
 
 	if (!map) {
-		active_zone_id = 0;
 		g_gui.zone_brush->setZone(0);
 		g_gui.zone_brush->setEraseMode(false);
 		rebuilding_list = false;
@@ -180,19 +183,19 @@ void ZonesPalettePanel::OnUpdate() {
 		return;
 	}
 
-	if (!map->zones.hasZone(active_zone_id)) {
-		active_zone_id = 0;
+	unsigned int activeZoneId = g_gui.zone_brush->getZone();
+	if (!map->zones.hasZone(activeZoneId)) {
+		activeZoneId = 0;
 		g_gui.zone_brush->setZone(0);
 		g_gui.zone_brush->setEraseMode(false);
 	}
 
-	for (const auto& zone : map->zones.zones) {
+	for (const auto& zone : map->zones) {
 		zone_list->InsertItem(zone_list->GetItemCount(), wxstr(zone.first));
 	}
 
-	if (active_zone_id != 0) {
-		selectZoneItem(active_zone_id, false);
-		g_gui.zone_brush->setZone(active_zone_id);
+	if (activeZoneId != 0) {
+		selectZoneItem(activeZoneId, false);
 	}
 
 	if (!topName.empty()) {
@@ -252,7 +255,6 @@ bool ZonesPalettePanel::activateZone(unsigned int zoneId, bool eraseMode, bool s
 		return false;
 	}
 
-	active_zone_id = zoneId;
 	g_gui.zone_brush->setZone(zoneId);
 	g_gui.zone_brush->setEraseMode(eraseMode);
 	selectZoneItem(zoneId);
@@ -270,14 +272,15 @@ bool ZonesPalettePanel::activateZone(unsigned int zoneId, bool eraseMode, bool s
 }
 
 void ZonesPalettePanel::updateActiveZoneDisplay() {
-	if (!map || active_zone_id == 0 || !map->zones.hasZone(active_zone_id)) {
+	const unsigned int activeZoneId = g_gui.zone_brush->getZone();
+	if (!map || activeZoneId == 0 || !map->zones.hasZone(activeZoneId)) {
 		active_zone_label->SetLabel("Active Zone: None");
 		Layout();
 		return;
 	}
 
 	active_zone_label->SetLabel(
-		wxstr("Active Zone: " + map->zones.getZoneName(active_zone_id) + " [ID: " + std::to_string(active_zone_id) + "]")
+		wxstr("Active Zone: " + map->zones.getZoneName(activeZoneId) + " [ID: " + std::to_string(activeZoneId) + "]")
 	);
 	Layout();
 }
@@ -285,7 +288,8 @@ void ZonesPalettePanel::updateActiveZoneDisplay() {
 void ZonesPalettePanel::updateControlStates() {
 	const bool hasMap = map != nullptr;
 	const bool hasSelectedZone = hasMap && getSelectedZoneId() != 0;
-	const bool hasActiveZone = hasMap && active_zone_id != 0 && map->zones.hasZone(active_zone_id);
+	const unsigned int activeZoneId = g_gui.zone_brush->getZone();
+	const bool hasActiveZone = hasMap && activeZoneId != 0 && map->zones.hasZone(activeZoneId);
 
 	zone_list->Enable(hasMap);
 	new_zone_button->Enable(hasMap);
@@ -368,7 +372,7 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 				if (item >= 0 && item < zone_list->GetItemCount() && getSelectedName(zone_list, item).empty()) {
 					zone_list->DeleteItem(item);
 				}
-				selectZoneItem(active_zone_id);
+				selectZoneItem(g_gui.zone_brush->getZone());
 				updateControlStates();
 			});
 		}
@@ -378,19 +382,19 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 	}
 
 	const std::string name = nstr(event.GetLabel());
-	const bool emptyName = name.empty() || name.find_first_not_of(" \t\r\n") == std::string::npos;
 	const std::string oldName = getSelectedName(zone_list, event.GetIndex());
+	const bool validName = Zones::isValidName(name);
 
-	if (emptyName || (name != oldName && map->zones.hasZone(name))) {
+	if (!validName || (name != oldName && map->zones.hasZone(name))) {
 		event.Veto();
-		g_gui.SetStatusText(emptyName ? "Zone name cannot be empty." : "There already is a zone with this name.");
+		g_gui.SetStatusText(!validName ? "Zone name cannot be empty." : "There already is a zone with this name.");
 		if (editing_new_zone) {
 			const long item = event.GetIndex();
 			CallAfter([this, item]() {
 				if (item >= 0 && item < zone_list->GetItemCount() && getSelectedName(zone_list, item).empty()) {
 					zone_list->DeleteItem(item);
 				}
-				selectZoneItem(active_zone_id);
+				selectZoneItem(g_gui.zone_brush->getZone());
 				updateControlStates();
 			});
 		}
@@ -428,7 +432,6 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 		}
 
 		editing_new_zone = false;
-		active_zone_id = zoneId;
 		zone_list->SetItem(event.GetIndex(), 0, wxstr(name));
 		g_gui.zone_brush->setZone(zoneId);
 		g_gui.zone_brush->setEraseMode(false);
@@ -557,8 +560,7 @@ void ZonesPalettePanel::OnClickDeleteZone(wxCommandEvent&) {
 		g_gui.DestroyLoadBar();
 	}
 
-	if (active_zone_id == zoneId) {
-		active_zone_id = 0;
+	if (g_gui.zone_brush->getZone() == zoneId) {
 		g_gui.zone_brush->setZone(0);
 		g_gui.zone_brush->setEraseMode(false);
 	}
@@ -572,7 +574,7 @@ void ZonesPalettePanel::OnClickDeleteZone(wxCommandEvent&) {
 void ZonesPalettePanel::OnClickActivateZone(wxCommandEvent&) {
 	unsigned int zoneId = getSelectedZoneId();
 	if (zoneId == 0) {
-		zoneId = active_zone_id;
+		zoneId = g_gui.zone_brush->getZone();
 	}
 	activateZone(zoneId, g_gui.zone_brush->isEraseMode());
 }
@@ -580,7 +582,7 @@ void ZonesPalettePanel::OnClickActivateZone(wxCommandEvent&) {
 void ZonesPalettePanel::OnClickPaintZone(wxCommandEvent&) {
 	unsigned int zoneId = getSelectedZoneId();
 	if (zoneId == 0) {
-		zoneId = active_zone_id;
+		zoneId = g_gui.zone_brush->getZone();
 	}
 	if (activateZone(zoneId, false, false)) {
 		g_gui.SetStatusText(
@@ -592,7 +594,7 @@ void ZonesPalettePanel::OnClickPaintZone(wxCommandEvent&) {
 void ZonesPalettePanel::OnClickEraseZone(wxCommandEvent&) {
 	unsigned int zoneId = getSelectedZoneId();
 	if (zoneId == 0) {
-		zoneId = active_zone_id;
+		zoneId = g_gui.zone_brush->getZone();
 	}
 	if (activateZone(zoneId, true, false)) {
 		g_gui.SetStatusText(
@@ -602,7 +604,8 @@ void ZonesPalettePanel::OnClickEraseZone(wxCommandEvent&) {
 }
 
 void ZonesPalettePanel::applyZoneToSelection(bool remove) {
-	if (!map || active_zone_id == 0 || !map->zones.hasZone(active_zone_id)) {
+	const unsigned int activeZoneId = g_gui.zone_brush->getZone();
+	if (!map || activeZoneId == 0 || !map->zones.hasZone(activeZoneId)) {
 		g_gui.SetStatusText("Select a zone first.");
 		return;
 	}
@@ -623,16 +626,16 @@ void ZonesPalettePanel::applyZoneToSelection(bool remove) {
 			continue;
 		}
 
-		const bool alreadyHasZone = tile->hasZone(active_zone_id);
+		const bool alreadyHasZone = tile->hasZone(activeZoneId);
 		if ((!remove && alreadyHasZone) || (remove && !alreadyHasZone)) {
 			continue;
 		}
 
 		Tile* newTile = tile->deepCopy(*map);
 		if (remove) {
-			newTile->removeZone(active_zone_id);
+			newTile->removeZone(activeZoneId);
 		} else {
-			newTile->addZone(active_zone_id);
+			newTile->addZone(activeZoneId);
 		}
 		action->addChange(newd Change(newTile));
 		++changedTiles;
@@ -640,9 +643,9 @@ void ZonesPalettePanel::applyZoneToSelection(bool remove) {
 	editor->addAction(action);
 
 	g_gui.RefreshView();
-	const std::string name = map->zones.getZoneName(active_zone_id);
+	const std::string name = map->zones.getZoneName(activeZoneId);
 	g_gui.SetStatusText(
-		std::string(remove ? "Removed " : "Applied ") + name + " [ID: " + std::to_string(active_zone_id) + (remove ? "] from " : "] to ") + std::to_string(changedTiles) + " tiles."
+		std::string(remove ? "Removed " : "Applied ") + name + " [ID: " + std::to_string(activeZoneId) + (remove ? "] from " : "] to ") + std::to_string(changedTiles) + " tiles."
 	);
 }
 
@@ -668,7 +671,7 @@ void ZonesPalettePanel::OnClickFindFirstTile(wxCommandEvent&) {
 
 	unsigned int zoneId = getSelectedZoneId();
 	if (zoneId == 0) {
-		zoneId = active_zone_id;
+		zoneId = g_gui.zone_brush->getZone();
 	}
 	if (zoneId == 0 || !map->zones.hasZone(zoneId)) {
 		g_gui.SetStatusText("Select a zone first.");
@@ -695,7 +698,7 @@ void ZonesPalettePanel::OnClickSelectZoneTiles(wxCommandEvent&) {
 
 	unsigned int zoneId = getSelectedZoneId();
 	if (zoneId == 0) {
-		zoneId = active_zone_id;
+		zoneId = g_gui.zone_brush->getZone();
 	}
 	if (!activateZone(zoneId, g_gui.zone_brush->isEraseMode(), false)) {
 		return;
@@ -807,19 +810,20 @@ void ZonesPalettePanel::OnClickImportZone(wxCommandEvent&) {
 	for (pugi::xml_node zoneNode : document.child("zones").children("zone")) {
 		const std::string name = zoneNode.attribute("name").as_string();
 		const unsigned int id = zoneNode.attribute("zoneid").as_uint(zoneNode.attribute("id").as_uint());
-		const bool emptyName = name.empty() || name.find_first_not_of(" \t\r\n") == std::string::npos;
-		if (emptyName || id == 0 || id > std::numeric_limits<uint16_t>::max()) {
+		if (!Zones::isValidName(name) || !Zones::isValidID(id)) {
 			++invalidDefinitions;
 			continue;
 		}
-		if (!fileNames.insert(name).second || !fileIds.insert(id).second) {
+		const bool uniqueName = fileNames.insert(name).second;
+		const bool uniqueId = fileIds.insert(id).second;
+		if (!uniqueName || !uniqueId) {
 			++duplicateDefinitions;
 			continue;
 		}
 
 		const bool nameExists = map->zones.hasZone(name);
 		const bool idExists = map->zones.hasZone(id);
-		const bool exactExisting = nameExists && idExists && map->zones.getZoneID(name) == id && map->zones.getZoneName(id) == name;
+		const bool exactExisting = map->zones.hasZone(name, id);
 		const bool conflict = (nameExists || idExists) && !exactExisting;
 
 		ImportedZone imported { name, id, !exactExisting, {} };
@@ -917,11 +921,11 @@ void ZonesPalettePanel::OnClickImportZone(wxCommandEvent&) {
 
 	editor->addAction(action);
 
-	active_zone_id = importedZones.front().id;
-	g_gui.zone_brush->setZone(active_zone_id);
+	const unsigned int activeZoneId = importedZones.front().id;
+	g_gui.zone_brush->setZone(activeZoneId);
 	g_gui.zone_brush->setEraseMode(false);
 	OnUpdate();
-	activateZone(active_zone_id, false, false);
+	activateZone(activeZoneId, false, false);
 	g_gui.SetStatusText(
 		"Imported " + std::to_string(createdZones) + " new zones, reused " + std::to_string(reusedZones) + ", applied " + std::to_string(appliedAssociations) + " tile associations, skipped " + std::to_string(conflicts) + " conflicts and " + std::to_string(invalidPositions) + " invalid positions."
 	);

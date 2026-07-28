@@ -4,15 +4,21 @@
 
 #include "main.h"
 
+#include <cstdint>
+#include <limits>
+
 #include "zones.h"
 
-Zones::~Zones() {
-	zones.clear();
+bool Zones::isValidName(const std::string& name) {
+	return !name.empty() && name.find_first_not_of(" \t\r\n") != std::string::npos;
+}
+
+bool Zones::isValidID(unsigned int id) {
+	return id != 0 && id <= std::numeric_limits<uint16_t>::max();
 }
 
 bool Zones::addZone(const std::string& name, unsigned int id) {
-	const bool emptyName = name.empty() || name.find_first_not_of(" \t\r\n") == std::string::npos;
-	if (emptyName || id == 0 || id > std::numeric_limits<uint16_t>::max() || hasZone(name)) {
+	if (!isValidName(name) || !isValidID(id) || hasZone(name)) {
 		return false;
 	}
 	if (used_ids.find(id) != used_ids.end()) {
@@ -23,13 +29,8 @@ bool Zones::addZone(const std::string& name, unsigned int id) {
 	return true;
 }
 
-bool Zones::addZone(const std::string& name) {
-	return addZone(name, generateID());
-}
-
 bool Zones::renameZone(const std::string& oldName, const std::string& newName) {
-	const bool emptyNewName = newName.empty() || newName.find_first_not_of(" \t\r\n") == std::string::npos;
-	if (oldName.empty() || emptyNewName) {
+	if (!isValidName(oldName) || !isValidName(newName)) {
 		return false;
 	}
 
@@ -56,6 +57,11 @@ bool Zones::hasZone(const std::string& name) const {
 
 bool Zones::hasZone(unsigned int id) const {
 	return used_ids.find(id) != used_ids.end();
+}
+
+bool Zones::hasZone(const std::string& name, unsigned int id) const {
+	auto it = zones.find(name);
+	return it != zones.end() && it->second == id;
 }
 
 bool Zones::removeZone(const std::string& name) {

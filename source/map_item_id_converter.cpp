@@ -825,7 +825,7 @@ namespace {
 			hash.add(waypoint->pos.z);
 		}
 
-		hash.add(static_cast<uint64_t>(map.zones.zones.size()));
+		hash.add(static_cast<uint64_t>(map.zones.size()));
 		for (const auto& [zoneName, zoneId] : map.zones) {
 			hash.addString(zoneName);
 			hash.add(zoneId);

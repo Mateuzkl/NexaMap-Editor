@@ -14,10 +14,6 @@ ZoneBrush::ZoneBrush() :
 	////
 }
 
-ZoneBrush::~ZoneBrush() {
-	////
-}
-
 void ZoneBrush::setZone(unsigned int id) {
 	zoneId = id;
 }
@@ -26,11 +22,11 @@ bool ZoneBrush::canDraw(BaseMap* map, const Position& position) const {
 	return map->getTile(position) != nullptr && zoneId != 0;
 }
 
-void ZoneBrush::undraw(BaseMap* map, Tile* tile) {
+void ZoneBrush::undraw(BaseMap*, Tile* tile) {
 	tile->removeZone(zoneId);
 }
 
-void ZoneBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
+void ZoneBrush::draw(BaseMap*, Tile* tile, void*) {
 	if (eraseMode) {
 		tile->removeZone(zoneId);
 	} else if (tile->hasGround()) {

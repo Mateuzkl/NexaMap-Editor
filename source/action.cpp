@@ -139,6 +139,33 @@ Action::Action(Editor& editor, ActionIdentifier ident) :
 	type(ident) {
 }
 
+void Action::applyZoneChange(Change* c) {
+	switch (c->type) {
+		case CHANGE_ZONE_REGISTRY: {
+			auto* change = reinterpret_cast<Change::ZoneRegistryChange*>(c->data);
+			ASSERT(change);
+			const bool changed = change->add ? editor.map.zones.addZone(change->name, change->id) : editor.map.zones.removeZone(change->name);
+			if (changed) {
+				change->add = !change->add;
+			}
+			break;
+		}
+
+		case CHANGE_RENAME_ZONE: {
+			auto* change = reinterpret_cast<Change::ZoneRenameChange*>(c->data);
+			ASSERT(change);
+			if (editor.map.zones.renameZone(change->from, change->to)) {
+				std::swap(change->from, change->to);
+			}
+			break;
+		}
+
+		default:
+			ASSERT(false);
+			break;
+	}
+}
+
 Action::~Action() {
 	auto it = changes.rbegin();
 	while (it != changes.rend()) {
@@ -296,24 +323,10 @@ void Action::commit(DirtyList* dirty_list) {
 				break;
 			}
 
-			case CHANGE_ZONE_REGISTRY: {
-				auto* change = reinterpret_cast<Change::ZoneRegistryChange*>(c->data);
-				ASSERT(change);
-				const bool changed = change->add ? editor.map.zones.addZone(change->name, change->id) : editor.map.zones.removeZone(change->name);
-				if (changed) {
-					change->add = !change->add;
-				}
+			case CHANGE_ZONE_REGISTRY:
+			case CHANGE_RENAME_ZONE:
+				applyZoneChange(c);
 				break;
-			}
-
-			case CHANGE_RENAME_ZONE: {
-				auto* change = reinterpret_cast<Change::ZoneRenameChange*>(c->data);
-				ASSERT(change);
-				if (editor.map.zones.renameZone(change->from, change->to)) {
-					std::swap(change->from, change->to);
-				}
-				break;
-			}
 
 			default:
 				break;
@@ -424,24 +437,10 @@ void Action::undo(DirtyList* dirty_list) {
 				break;
 			}
 
-			case CHANGE_ZONE_REGISTRY: {
-				auto* change = reinterpret_cast<Change::ZoneRegistryChange*>(c->data);
-				ASSERT(change);
-				const bool changed = change->add ? editor.map.zones.addZone(change->name, change->id) : editor.map.zones.removeZone(change->name);
-				if (changed) {
-					change->add = !change->add;
-				}
+			case CHANGE_ZONE_REGISTRY:
+			case CHANGE_RENAME_ZONE:
+				applyZoneChange(c);
 				break;
-			}
-
-			case CHANGE_RENAME_ZONE: {
-				auto* change = reinterpret_cast<Change::ZoneRenameChange*>(c->data);
-				ASSERT(change);
-				if (editor.map.zones.renameZone(change->from, change->to)) {
-					std::swap(change->from, change->to);
-				}
-				break;
-			}
 
 			default:
 				break;

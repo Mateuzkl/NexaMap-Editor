@@ -89,6 +89,29 @@ void GenerateColors() {
 	}
 }
 
+static Color GetZoneColor(const Tile& tile, unsigned int activeZoneId) {
+	if (activeZoneId != 0 && tile.hasZone(activeZoneId)) {
+		return colors.at(activeZoneId % colors.size());
+	}
+
+	uint32_t red = 0;
+	uint32_t green = 0;
+	uint32_t blue = 0;
+	for (const unsigned int zoneId : tile.zones) {
+		const Color& colour = colors.at(zoneId % colors.size());
+		red += std::get<0>(colour);
+		green += std::get<1>(colour);
+		blue += std::get<2>(colour);
+	}
+
+	const size_t zoneCount = tile.zones.size();
+	return {
+		static_cast<int>(red / zoneCount),
+		static_cast<int>(green / zoneCount),
+		static_cast<int>(blue / zoneCount),
+	};
+}
+
 DrawingOptions::DrawingOptions() {
 	SetDefault();
 	GenerateColors();
@@ -557,27 +580,12 @@ void MapDrawer::DrawMap() {
 								g /= 2;
 							}
 							if (options.show_zone_areas && tile->hasZone()) {
+								const Color colour = GetZoneColor(*tile, options.active_zone_id);
+								r = std::get<0>(colour);
+								g = std::get<1>(colour);
+								b = std::get<2>(colour);
 								if (options.active_zone_id != 0 && tile->hasZone(options.active_zone_id)) {
-									const Color& colour = colors.at(options.active_zone_id % colors.size());
-									r = std::get<0>(colour);
-									g = std::get<1>(colour);
-									b = std::get<2>(colour);
 									ground_alpha = 220;
-								} else {
-									size_t zones = tile->zones.size();
-									uint32_t r32 = 0, g32 = 0, b32 = 0;
-									for (const auto& zoneId : tile->zones) {
-										const uint16_t colorIndex = zoneId % colors.size();
-										const Color& colour = colors.at(colorIndex);
-
-										r32 += std::get<0>(colour);
-										g32 += std::get<1>(colour);
-										b32 += std::get<2>(colour);
-									}
-
-									r = static_cast<uint8_t>(r32 / zones);
-									g = static_cast<uint8_t>(g32 / zones);
-									b = static_cast<uint8_t>(b32 / zones);
 								}
 							}
 							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, ground_alpha);
@@ -1648,27 +1656,10 @@ void MapDrawer::DrawTile(TileLocation* location) {
 		}
 
 		if (options.show_zone_areas && tile->hasZone()) {
-			if (options.active_zone_id != 0 && tile->hasZone(options.active_zone_id)) {
-				const Color& colour = colors.at(options.active_zone_id % colors.size());
-				r = std::get<0>(colour);
-				g = std::get<1>(colour);
-				b = std::get<2>(colour);
-			} else {
-				size_t zones = tile->zones.size();
-				uint32_t r32 = 0, g32 = 0, b32 = 0;
-				for (const auto& zoneId : tile->zones) {
-					const uint16_t colorIndex = zoneId % colors.size();
-					const Color& colour = colors.at(colorIndex);
-
-					r32 += std::get<0>(colour);
-					g32 += std::get<1>(colour);
-					b32 += std::get<2>(colour);
-				}
-
-				r = static_cast<uint8_t>(r32 / zones);
-				g = static_cast<uint8_t>(g32 / zones);
-				b = static_cast<uint8_t>(b32 / zones);
-			}
+			const Color colour = GetZoneColor(*tile, options.active_zone_id);
+			r = std::get<0>(colour);
+			g = std::get<1>(colour);
+			b = std::get<2>(colour);
 		}
 	}
 

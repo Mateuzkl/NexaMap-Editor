@@ -10,7 +10,7 @@
 class ZoneBrush : public FlagBrush {
 public:
 	ZoneBrush();
-	~ZoneBrush() override;
+	~ZoneBrush() override = default;
 
 	bool isZone() const override {
 		return true;
