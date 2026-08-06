@@ -343,6 +343,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		const bool animate_preview = options.show_preview && zoom <= 2.0;
 		if (animate_position_indicator) {
 			animation_timer->StartRefresh(16);
+			drawer->markDirty();
 		} else if (animate_preview) {
 			int animation_fps = g_settings.getInteger(Config::ANIMATION_FPS);
 			if (animation_fps < 1) {
@@ -351,6 +352,8 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 				animation_fps = 60;
 			}
 			animation_timer->StartRefresh(1000 / animation_fps);
+			// Mark dirty so the FBO cache is refreshed for the new animation frame
+			drawer->markDirty();
 		} else if (options.show_performance_stats) {
 			animation_timer->StartRefresh(500);
 		} else {

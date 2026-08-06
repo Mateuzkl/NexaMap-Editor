@@ -1706,7 +1706,8 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 			constexpr int S = SPRITE_PIXELS;
 			constexpr int CW = S + 2 * PAD;
 
-			std::vector<uint8_t> padded(static_cast<size_t>(CW) * CW * 4);
+			thread_local static std::vector<uint8_t> padded;
+			padded.resize(static_cast<size_t>(CW) * CW * 4);
 			for (int y = 0; y < CW; ++y) {
 				int sy = std::clamp(y - PAD, 0, S - 1);
 				for (int x = 0; x < CW; ++x) {

@@ -46,6 +46,8 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 		buffer.resize(bufferSize);
 	}
 
+	light_grid.build(lights, map_x, map_y, end_x, end_y);
+
 	for (int y = 0; y < h; ++y) {
 		for (int x = 0; x < w; ++x) {
 			int const mx = (map_x + x);
@@ -58,7 +60,9 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 			buffer[color_index + 2] = global_color.Blue();
 			buffer[color_index + 3] = 140; // global_color.Alpha();
 
-			for (const auto& light : lights) {
+			const auto& nearby = light_grid.getCell(mx, my);
+			for (uint16_t li : nearby) {
+				const Light& light = lights[li];
 				float const intensity = calculateIntensity(mx, my, light);
 				if (intensity == 0.f) {
 					continue;
@@ -146,4 +150,46 @@ void LightDrawer::unloadGLTexture() {
 		glDeleteTextures(1, &texture);
 		texture = 0;
 	}
+}
+
+void LightDrawer::LightGrid::build(const std::vector<Light>& lights, int map_x, int map_y, int end_x, int end_y) {
+	origin_x = map_x;
+	origin_y = map_y;
+	grid_w = (end_x - map_x + GRID_CELL_SIZE - 1) / GRID_CELL_SIZE + 2; // +2 for border cells
+	grid_h = (end_y - map_y + GRID_CELL_SIZE - 1) / GRID_CELL_SIZE + 2;
+	if (grid_w <= 0 || grid_h <= 0) {
+		return;
+	}
+	cells.resize(static_cast<size_t>(grid_w) * grid_h);
+	for (auto& cell : cells) {
+		cell.clear();
+	}
+	for (uint16_t i = 0; i < static_cast<uint16_t>(lights.size()); ++i) {
+		const Light& light = lights[i];
+		int radius = light.intensity; // MaxLightIntensity is 8
+		int min_gx = (light.map_x - radius - origin_x) / GRID_CELL_SIZE;
+		int max_gx = (light.map_x + radius - origin_x) / GRID_CELL_SIZE;
+		int min_gy = (light.map_y - radius - origin_y) / GRID_CELL_SIZE;
+		int max_gy = (light.map_y + radius - origin_y) / GRID_CELL_SIZE;
+		min_gx = std::max(0, min_gx);
+		max_gx = std::min(grid_w - 1, max_gx);
+		min_gy = std::max(0, min_gy);
+		max_gy = std::min(grid_h - 1, max_gy);
+		for (int gy = min_gy; gy <= max_gy; ++gy) {
+			for (int gx = min_gx; gx <= max_gx; ++gx) {
+				cells[static_cast<size_t>(gy) * grid_w + gx].push_back(i);
+			}
+		}
+	}
+}
+
+static const std::vector<uint16_t> s_emptyCell;
+
+const std::vector<uint16_t>& LightDrawer::LightGrid::getCell(int mx, int my) const {
+	int gx = (mx - origin_x) / GRID_CELL_SIZE;
+	int gy = (my - origin_y) / GRID_CELL_SIZE;
+	if (gx < 0 || gx >= grid_w || gy < 0 || gy >= grid_h) {
+		return s_emptyCell;
+	}
+	return cells[static_cast<size_t>(gy) * grid_w + gx];
 }
