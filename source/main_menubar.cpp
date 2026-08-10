@@ -180,6 +180,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(EXPERIMENTAL_FOG, wxITEM_CHECK, OnChangeViewSettings); // experimental
 
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
+	MAKE_ACTION(WIN_INGAME_PREVIEW, wxITEM_NORMAL, OnIngamePreviewWindow);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
 	MAKE_ACTION(MATERIALS_WORKBENCH, wxITEM_NORMAL, OnMaterialsWorkbench);
@@ -416,6 +417,7 @@ void MainMenuBar::Update() {
 	}
 
 	EnableItem(WIN_MINIMAP, loaded);
+	EnableItem(WIN_INGAME_PREVIEW, loaded);
 	EnableItem(NEW_PALETTE, loaded);
 	EnableItem(MATERIALS_WORKBENCH, loaded);
 	EnableItem(BORDER_WORKSPACE, loaded);
@@ -2183,6 +2185,10 @@ void MainMenuBar::OnChangeFloor(wxCommandEvent& event) {
 
 void MainMenuBar::OnMinimapWindow(wxCommandEvent& event) {
 	g_gui.CreateMinimap();
+}
+
+void MainMenuBar::OnIngamePreviewWindow(wxCommandEvent& event) {
+	g_gui.CreateIngamePreview();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event) {

@@ -56,6 +56,7 @@ MapTab::~MapTab() {
 	iref->owner_count--;
 	if (iref->owner_count <= 0) {
 		Editor* ed = iref->editor;
+		g_gui.ReleaseIngamePreviewEditor(ed);
 		iref->editor = nullptr;
 		delete iref;
 

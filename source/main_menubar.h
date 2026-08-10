@@ -133,6 +133,7 @@ namespace MenuBar {
 		ALWAYS_SHOW_ZONES,
 		EXT_HOUSE_SHADER,
 		WIN_MINIMAP,
+		WIN_INGAME_PREVIEW,
 		NEW_PALETTE,
 		TAKE_SCREENSHOT,
 		MATERIALS_WORKBENCH,
@@ -294,6 +295,7 @@ public:
 
 	// Window Menu
 	void OnMinimapWindow(wxCommandEvent& event);
+	void OnIngamePreviewWindow(wxCommandEvent& event);
 	void OnNewPalette(wxCommandEvent& event);
 	void OnTakeScreenshot(wxCommandEvent& event);
 	void OnMaterialsWorkbench(wxCommandEvent& event);

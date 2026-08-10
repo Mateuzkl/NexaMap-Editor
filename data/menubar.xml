@@ -215,6 +215,7 @@
 	</menu>
 	<menu name="Window">
 		<item name="Minimap" hotkey="M" action="WIN_MINIMAP" help="Displays the minimap window."/>
+		<item name="In-game Preview" action="WIN_INGAME_PREVIEW" help="Open a dockable 15 x 11 in-game view that follows the current selection."/>
 		<item name="New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
 		<item name="Materials Workbench..." action="MATERIALS_WORKBENCH" help="Visually edit XML ground, wall, doodad, carpet, and table brushes."/>
 		<item name="Border Workspace..." action="BORDER_WORKSPACE" help="Visually edit XML autoborder sets and item slots."/>

@@ -31,7 +31,7 @@ class MapDrawer;
 
 class MapCanvas : public wxGLCanvas {
 public:
-	MapCanvas(MapWindow* parent, Editor& editor, int* attriblist);
+	MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool ingamePreview = false);
 	~MapCanvas() override;
 	void Reset();
 
@@ -124,6 +124,9 @@ public:
 	double GetZoom() const {
 		return zoom;
 	}
+	bool IsIngamePreview() const {
+		return ingamePreview;
+	}
 	void SetZoom(double value);
 	void GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const;
 
@@ -151,6 +154,7 @@ private:
 
 	Editor& editor;
 	MapDrawer* drawer;
+	bool ingamePreview;
 	int keyCode;
 	int countMaxFills = 0;
 

@@ -31,7 +31,7 @@ class AdvancedReplaceWindow;
 // MapCanvas does that. (mapdisplay.h)
 class MapWindow : public wxPanel {
 public:
-	MapWindow(wxWindow* parent, Editor& editor);
+	MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview = false);
 	~MapWindow() override;
 
 	// Event handlers
@@ -88,6 +88,7 @@ protected:
 
 protected:
 	Editor& editor;
+	bool ingamePreview;
 	DCButton* gem;
 	MapCanvas* canvas;
 	wxScrollBar* hScroll;

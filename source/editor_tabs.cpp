@@ -108,6 +108,7 @@ void MapTabbook::OnNotebookPageChanged(wxAuiNotebookEvent& evt) {
 		newMapTab->VisibilityCheck();
 	}
 	g_gui.InvalidateAutoborderPreview();
+	g_gui.UpdateIngamePreview();
 }
 
 // Wrappers
