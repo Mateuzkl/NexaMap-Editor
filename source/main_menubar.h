@@ -124,6 +124,7 @@ namespace MenuBar {
 		SHOW_HOUSES,
 		SHOW_PATHING,
 		SHOW_TOOLTIPS,
+		SHOW_PERFORMANCE_STATS,
 		SHOW_PREVIEW,
 		SHOW_WALL_HOOKS,
 		SHOW_TOWNS,
@@ -315,7 +316,9 @@ public:
 	void OnShowHotkeys(wxCommandEvent& event);
 
 	// Access actions map for hotkey discovery
-	const std::map<std::string, MenuBar::Action*>& GetActions() const { return actions; }
+	const std::map<std::string, MenuBar::Action*>& GetActions() const {
+		return actions;
+	}
 	// Update menu item labels to match current HotkeyManager effective keys
 	void UpdateLabelHotkeys();
 

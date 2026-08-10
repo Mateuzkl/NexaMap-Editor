@@ -20,7 +20,9 @@
 
 #include "outfit.h"
 #include "common.h"
+#include <chrono>
 #include <deque>
+#include <memory>
 
 #include "client_version.h"
 #include <wx/artprov.h>
@@ -51,6 +53,7 @@ enum ItemAnimationDuration {
 
 class MapCanvas;
 class GraphicManager;
+class GLRenderer;
 class FileReadHandle;
 class Animator;
 class ItemType;
@@ -358,11 +361,39 @@ public:
 	// Cleans old & unused textures according to config settings
 	void garbageCollection();
 	void addSpriteToCleanup(GameSprite* spr);
+	void beginMapRenderTextureBudget(GLRenderer* activeRenderer, bool limitUploads = true);
+	bool endMapRenderTextureBudget();
+	bool canPrepareTextureUpload();
+	void recordTextureUploadAttempt() noexcept;
+	void recordTextureUpload() noexcept;
+	void deferTextureUpload() noexcept;
+	void markTextureMissing() noexcept;
+	bool isCurrentMapRenderComplete() const noexcept {
+		return !frame_had_missing_texture && !texture_upload_deferred;
+	}
+	bool hasPendingTextureWork() const noexcept {
+		return texture_upload_deferred;
+	}
+	bool isMapRenderTextureBudgetActive() const noexcept {
+		return texture_upload_budget_active;
+	}
+	int getLastFrameTextureUploads() const noexcept {
+		return last_frame_texture_uploads;
+	}
+	int getLastFrameTextureAttempts() const noexcept {
+		return last_frame_texture_attempts;
+	}
 
 	// Sprite atlas: packs 32x32 sprites into large pages so they can be batched.
 	bool allocAtlasSlot(GLuint& outTex, int& outX, int& outY);
 	int getAtlasSize() const {
 		return atlas_size;
+	}
+	size_t getAtlasPageCount() const noexcept {
+		return atlas_textures.size();
+	}
+	size_t getAtlasMemoryBytes() const noexcept {
+		return atlas_textures.size() * static_cast<size_t>(atlas_size) * static_cast<size_t>(atlas_size) * 4;
 	}
 
 	wxFileName getMetadataFileName() const {
@@ -381,6 +412,8 @@ private:
 	bool unloaded;
 	// This is used if memcaching is NOT on
 	std::string spritefile;
+	std::unique_ptr<FileReadHandle> sprite_file_handle;
+	std::vector<uint32_t> sprite_offsets;
 	bool loadSpriteDump(uint8_t*& target, uint16_t& size, int sprite_id);
 	GameSprite::NormalImage* getOrCreateAssetImage(uint32_t spriteId, uint8_t cropX, uint8_t cropY);
 	bool loadAppearanceSprite(
@@ -409,10 +442,27 @@ private:
 
 	int loaded_textures;
 	int lastclean;
+	bool texture_upload_budget_active = false;
+	bool texture_upload_deferred = false;
+	bool frame_had_missing_texture = false;
+	int frame_texture_attempts = 0;
+	int frame_texture_uploads = 0;
+	int last_frame_texture_attempts = 0;
+	int last_frame_texture_uploads = 0;
+	std::chrono::steady_clock::time_point texture_upload_budget_started;
 
 	std::vector<GLuint> atlas_textures;
+	std::vector<uint64_t> atlas_page_last_use;
+	std::vector<uint64_t> atlas_page_last_frame;
+	uint64_t atlas_access_counter = 0;
+	uint64_t atlas_frame_counter = 0;
+	bool atlas_frame_active = false;
+	bool atlas_allocation_failure_logged = false;
+	GLRenderer* active_map_renderer = nullptr;
 	int atlas_size = 0;
 	int atlas_count = 0;
+	bool recycleAtlasPage();
+	void touchAtlasPage(GLuint texture) noexcept;
 
 	wxStopWatch* animation_timer;
 

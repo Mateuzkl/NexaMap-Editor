@@ -91,7 +91,8 @@ Item::Item(unsigned short _type, unsigned short _count) :
 	subtypeKinds(SUBTYPE_NONE),
 	subtypeAttributes(SUBTYPE_ATTR_NONE),
 	selected(false),
-	frame(0) {
+	frame(0),
+	last_ready_frame(-1) {
 	const ItemType& itemType = g_items[id];
 	if (itemType.stackable) {
 		addSubtypeKind(SUBTYPE_STACK_COUNT);
@@ -192,6 +193,7 @@ uint32_t Item::memsize() const {
 
 void Item::setID(uint16_t newid) {
 	id = newid;
+	last_ready_frame = -1;
 }
 
 void Item::setSubtype(uint16_t n) {

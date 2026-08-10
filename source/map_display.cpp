@@ -240,7 +240,10 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 MapCanvas::~MapCanvas() {
 	delete popup_menu;
 	delete animation_timer;
-	delete drawer;
+	if (drawer) {
+		SetCurrent(*g_gui.GetGLContext(this));
+		delete drawer;
+	}
 	std::free(screenshot_buffer);
 }
 
@@ -248,14 +251,18 @@ void MapCanvas::Refresh() {
 	if (drawer) {
 		drawer->markDirty();
 	}
-	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
-		refresh_watch.Start();
-		wxGLCanvas::Update();
-	}
-	wxGLCanvas::Refresh();
+	RefreshWithoutDirty();
 }
 
 void MapCanvas::RefreshAnimation() {
+	RefreshWithoutDirty();
+}
+
+void MapCanvas::RefreshViewport() {
+	RefreshWithoutDirty();
+}
+
+void MapCanvas::RefreshWithoutDirty() {
 	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
 		refresh_watch.Start();
 		wxGLCanvas::Update();
@@ -281,7 +288,7 @@ void MapCanvas::SetZoom(double value) {
 
 		UpdatePositionStatus();
 		UpdateZoomStatus();
-		Refresh();
+		RefreshViewport();
 	}
 }
 
@@ -341,25 +348,30 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 		const bool animate_position_indicator = drawer->GetPositionIndicatorTime() != 0;
 		const bool animate_preview = options.show_preview && zoom <= 2.0;
-		if (animate_position_indicator) {
+		if (animate_preview && !drawer->isViewportInteractionActive()) {
+			// Mark dirty so the FBO cache is refreshed for the new animation frame
+			drawer->markDirty();
+		}
+
+		drawer->SetupVars();
+		drawer->SetupGL();
+		g_gui.gfx.beginMapRenderTextureBudget(drawer->getRenderer(), !screenshot_buffer);
+		drawer->Draw();
+		const bool texture_uploads_deferred = g_gui.gfx.endMapRenderTextureBudget();
+		if (texture_uploads_deferred) {
+			drawer->markDirty();
+		}
+
+		if (animate_position_indicator || drawer->isViewportInteractionActive() || texture_uploads_deferred) {
 			animation_timer->StartRefresh(16);
 		} else if (animate_preview) {
-			int animation_fps = g_settings.getInteger(Config::ANIMATION_FPS);
-			if (animation_fps < 1) {
-				animation_fps = 1;
-			} else if (animation_fps > 60) {
-				animation_fps = 60;
-			}
+			int animation_fps = std::clamp(g_settings.getInteger(Config::ANIMATION_FPS), 1, 60);
 			animation_timer->StartRefresh(1000 / animation_fps);
 		} else if (options.show_performance_stats) {
 			animation_timer->StartRefresh(500);
 		} else {
 			animation_timer->Stop();
 		}
-
-		drawer->SetupVars();
-		drawer->SetupGL();
-		drawer->Draw();
 
 		if (screenshot_buffer) {
 			drawer->TakeScreenshot(screenshot_buffer);
@@ -586,7 +598,7 @@ void MapCanvas::UpdateZoomStatus() {
 void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 	if (screendragging) {
 		static_cast<MapWindow*>(GetParent())->ScrollRelative(int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (event.GetX() - cursor_x)), int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (event.GetY() - cursor_y)));
-		Refresh();
+		RefreshViewport();
 	}
 
 	cursor_x = event.GetX();
@@ -620,7 +632,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 			ss << "Dragging " << -move_x << "," << -move_y << "," << -move_z;
 			g_gui.SetStatusText(ss);
 
-			Refresh();
+			RefreshViewport();
 		} else if (boundbox_selection) {
 			if (map_update) {
 				wxString ss;
@@ -631,7 +643,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 				g_gui.SetStatusText(ss);
 			}
 
-			Refresh();
+			RefreshViewport();
 		}
 	} else { // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
@@ -713,7 +725,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 		} else if (dragging_draw) {
 			g_gui.RefreshView();
 		} else if (map_update && brush) {
-			Refresh();
+			RefreshViewport();
 		}
 	}
 }
@@ -1363,7 +1375,7 @@ void MapCanvas::OnMouseCameraClick(wxMouseEvent& event) {
 
 		static_cast<MapWindow*>(GetParent())->ScrollRelative(int(-screensize_x * (1.0 - zoom) * (std::max(cursor_x, 1) / double(screensize_x))), int(-screensize_y * (1.0 - zoom) * (std::max(cursor_y, 1) / double(screensize_y))));
 		zoom = 1.0;
-		Refresh();
+		RefreshViewport();
 	} else {
 		screendragging = true;
 	}
@@ -1379,7 +1391,7 @@ void MapCanvas::OnMouseCameraRelease(wxMouseEvent& event) {
 		int screensize_x, screensize_y;
 		static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
 		static_cast<MapWindow*>(GetParent())->ScrollRelative(int(zoom * (2 * cursor_x - screensize_x)), int(zoom * (2 * cursor_y - screensize_y)));
-		Refresh();
+		RefreshViewport();
 	}
 }
 
@@ -1596,6 +1608,7 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event) {
 }
 
 void MapCanvas::OnWheel(wxMouseEvent& event) {
+	bool viewport_only = false;
 	if (event.ControlDown()) {
 		static double diff = 0.0;
 		diff += event.GetWheelRotation();
@@ -1620,6 +1633,7 @@ void MapCanvas::OnWheel(wxMouseEvent& event) {
 			diff = 0.0;
 		}
 	} else {
+		viewport_only = true;
 		double diff = -event.GetWheelRotation() * g_settings.getFloat(Config::ZOOM_SPEED) / 640.0;
 		double oldzoom = zoom;
 		zoom += diff;
@@ -1645,7 +1659,11 @@ void MapCanvas::OnWheel(wxMouseEvent& event) {
 		static_cast<MapWindow*>(GetParent())->ScrollRelative(-scroll_x, -scroll_y);
 	}
 
-	Refresh();
+	if (viewport_only) {
+		RefreshViewport();
+	} else {
+		Refresh();
+	}
 }
 
 void MapCanvas::OnLoseMouse(wxMouseEvent& event) {
@@ -1701,7 +1719,7 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 			UpdatePositionStatus();
 			UpdateZoomStatus();
-			Refresh();
+			RefreshViewport();
 			break;
 		}
 		case WXK_NUMPAD_DIVIDE: {
@@ -1725,7 +1743,7 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 			UpdatePositionStatus();
 			UpdateZoomStatus();
-			Refresh();
+			RefreshViewport();
 			break;
 		}
 		// This will work like crap with non-us layouts, well, sucks for them until there is another solution.

@@ -100,6 +100,7 @@ public:
 
 	void Refresh();
 	void RefreshAnimation();
+	void RefreshViewport();
 
 	void ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y);
 	void MouseToMap(int* map_x, int* map_y) {
@@ -135,6 +136,8 @@ protected:
 	bool floodFill(Map* map, const Position& center, int x, int y, GroundBrush* brush, PositionVector* positions);
 
 private:
+	void RefreshWithoutDirty();
+
 	enum {
 		BLOCK_SIZE = 100
 	};

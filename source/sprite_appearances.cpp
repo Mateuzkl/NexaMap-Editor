@@ -54,12 +54,18 @@ ClientSpriteSize ClientSpriteSheet::getSpriteSize() const noexcept {
 	}
 }
 
+SpriteAppearances::~SpriteAppearances() {
+	unload();
+}
+
 void SpriteAppearances::init() {
 	unload();
 	sheets.reserve(4000);
+	startWorker();
 }
 
 void SpriteAppearances::unload() {
+	stopWorker();
 	sheets.clear();
 	accessCounter = 0;
 }
@@ -94,14 +100,10 @@ ClientSpriteSheetPtr SpriteAppearances::getSheetBySpriteId(uint32_t spriteId) co
 	return *iterator;
 }
 
-bool SpriteAppearances::loadSpriteSheet(const ClientSpriteSheetPtr& sheet, wxString& error) {
+bool SpriteAppearances::decodeSpriteSheet(const ClientSpriteSheetPtr& sheet, std::unique_ptr<uint8_t[]>& output, wxString& error) const {
 	if (!sheet) {
 		error = "Cannot load a null Canary/Crystal sprite sheet.";
 		return false;
-	}
-	if (sheet->pixels) {
-		sheet->lastAccess = ++accessCounter;
-		return true;
 	}
 
 	std::ifstream stream(sheet->file, std::ios::in | std::ios::binary);
@@ -212,8 +214,42 @@ bool SpriteAppearances::loadSpriteSheet(const ClientSpriteSheetPtr& sheet, wxStr
 		}
 	}
 
-	sheet->pixels = std::make_unique<uint8_t[]>(PixelBytes);
-	std::memcpy(sheet->pixels.get(), pixelData, PixelBytes);
+	output = std::make_unique<uint8_t[]>(PixelBytes);
+	std::memcpy(output.get(), pixelData, PixelBytes);
+	return true;
+}
+
+bool SpriteAppearances::loadSpriteSheet(const ClientSpriteSheetPtr& sheet, wxString& error) {
+	if (!sheet) {
+		error = "Cannot load a null Canary/Crystal sprite sheet.";
+		return false;
+	}
+	processReadySheets();
+	if (!sheet->pixels) {
+		{
+			std::unique_lock<std::mutex> lock(workerMutex);
+			const auto pendingEnd = std::remove(pendingSheets.begin(), pendingSheets.end(), sheet);
+			if (pendingEnd != pendingSheets.end()) {
+				pendingSheets.erase(pendingEnd, pendingSheets.end());
+				queuedSheetIds.erase(sheet->firstSpriteId);
+			}
+			workerCondition.wait(lock, [&]() { return activeSheet != sheet; });
+		}
+		processReadySheets();
+	}
+	if (!sheet->pixels) {
+		std::unique_ptr<uint8_t[]> decoded;
+		if (!decodeSpriteSheet(sheet, decoded, error)) {
+			if (!sheet->synchronousFailureLogged) {
+				wxLogWarning("Synchronous sprite-sheet decode failed: " + error);
+				sheet->synchronousFailureLogged = true;
+			}
+			return false;
+		}
+		sheet->pixels = std::move(decoded);
+		sheet->asyncFailed = false;
+		sheet->synchronousFailureLogged = false;
+	}
 	sheet->lastAccess = ++accessCounter;
 	trimLoadedSheets(sheet);
 	return true;
@@ -242,13 +278,128 @@ void SpriteAppearances::trimLoadedSheets(const ClientSpriteSheetPtr& keep) {
 	}
 }
 
-bool SpriteAppearances::getSpritePixels(uint32_t spriteId, std::vector<uint8_t>& output, ClientSpriteSize& size, wxString& error) {
-	const ClientSpriteSheetPtr sheet = getSheetBySpriteId(spriteId);
-	if (!sheet) {
-		error = wxString::Format("Sprite ID %u is not present in assets/catalog-content.json.", spriteId);
-		return false;
+void SpriteAppearances::startWorker() {
+	std::lock_guard<std::mutex> lock(workerMutex);
+	if (worker.joinable()) {
+		return;
 	}
-	if (!loadSpriteSheet(sheet, error)) {
+	workerStopping = false;
+	worker = std::thread(&SpriteAppearances::workerLoop, this);
+}
+
+void SpriteAppearances::stopWorker() {
+	{
+		std::lock_guard<std::mutex> lock(workerMutex);
+		workerStopping = true;
+		pendingSheets.clear();
+	}
+	workerCondition.notify_all();
+	if (worker.joinable()) {
+		worker.join();
+	}
+	{
+		std::lock_guard<std::mutex> lock(workerMutex);
+		pendingSheets.clear();
+		readySheets.clear();
+		readyCount.store(0, std::memory_order_release);
+		queuedSheetIds.clear();
+		activeSheet.reset();
+		workerStopping = false;
+	}
+}
+
+void SpriteAppearances::workerLoop() {
+	for (;;) {
+		ClientSpriteSheetPtr sheet;
+		{
+			std::unique_lock<std::mutex> lock(workerMutex);
+			workerCondition.wait(lock, [this]() { return workerStopping || !pendingSheets.empty(); });
+			if (workerStopping) {
+				return;
+			}
+			sheet = pendingSheets.front();
+			pendingSheets.pop_front();
+			activeSheet = sheet;
+		}
+
+		DecodedSheet decoded;
+		decoded.sheet = sheet;
+		decodeSpriteSheet(sheet, decoded.pixels, decoded.error);
+
+		bool stop = false;
+		{
+			std::lock_guard<std::mutex> lock(workerMutex);
+			activeSheet.reset();
+			if (workerStopping) {
+				stop = true;
+			} else {
+				readySheets.push_back(std::move(decoded));
+				readyCount.fetch_add(1, std::memory_order_release);
+			}
+		}
+		workerCondition.notify_all();
+		if (stop) {
+			return;
+		}
+	}
+}
+
+void SpriteAppearances::requestSpriteSheet(const ClientSpriteSheetPtr& sheet) {
+	if (!sheet || sheet->pixels || sheet->asyncFailed) {
+		return;
+	}
+	{
+		std::lock_guard<std::mutex> lock(workerMutex);
+		constexpr size_t MAX_PENDING_SHEETS = 12;
+		if (workerStopping || !worker.joinable() || queuedSheetIds.size() >= MAX_PENDING_SHEETS || !queuedSheetIds.insert(sheet->firstSpriteId).second) {
+			return;
+		}
+		pendingSheets.push_back(sheet);
+	}
+	workerCondition.notify_one();
+}
+
+void SpriteAppearances::processReadySheets() {
+	if (readyCount.load(std::memory_order_acquire) == 0) {
+		return;
+	}
+
+	std::deque<DecodedSheet> ready;
+	{
+		std::lock_guard<std::mutex> lock(workerMutex);
+		ready.swap(readySheets);
+		readyCount.store(0, std::memory_order_release);
+		for (const DecodedSheet& decoded : ready) {
+			queuedSheetIds.erase(decoded.sheet->firstSpriteId);
+		}
+	}
+
+	for (DecodedSheet& decoded : ready) {
+		if (std::find(sheets.begin(), sheets.end(), decoded.sheet) == sheets.end()) {
+			continue;
+		}
+		if (!decoded.pixels) {
+			decoded.sheet->asyncFailed = true;
+			if (!decoded.error.empty()) {
+				wxLogWarning("Background sprite-sheet decode failed: " + decoded.error);
+			}
+			continue;
+		}
+		if (!decoded.sheet->pixels) {
+			decoded.sheet->pixels = std::move(decoded.pixels);
+			decoded.sheet->lastAccess = ++accessCounter;
+			trimLoadedSheets(decoded.sheet);
+		}
+	}
+}
+
+size_t SpriteAppearances::getPendingSheetCount() const {
+	std::lock_guard<std::mutex> lock(workerMutex);
+	return queuedSheetIds.size();
+}
+
+bool SpriteAppearances::copySpritePixels(const ClientSpriteSheetPtr& sheet, uint32_t spriteId, std::vector<uint8_t>& output, ClientSpriteSize& size, wxString& error) {
+	if (!sheet || !sheet->pixels) {
 		return false;
 	}
 
@@ -270,4 +421,32 @@ bool SpriteAppearances::getSpritePixels(uint32_t spriteId, std::vector<uint8_t>&
 	}
 	sheet->lastAccess = ++accessCounter;
 	return true;
+}
+
+bool SpriteAppearances::getSpritePixels(uint32_t spriteId, std::vector<uint8_t>& output, ClientSpriteSize& size, wxString& error) {
+	const ClientSpriteSheetPtr sheet = getSheetBySpriteId(spriteId);
+	if (!sheet) {
+		error = wxString::Format("Sprite ID %u is not present in assets/catalog-content.json.", spriteId);
+		return false;
+	}
+	if (!loadSpriteSheet(sheet, error)) {
+		return false;
+	}
+	return copySpritePixels(sheet, spriteId, output, size, error);
+}
+
+bool SpriteAppearances::getSpritePixelsIfLoaded(uint32_t spriteId, std::vector<uint8_t>& output, ClientSpriteSize& size, bool& pending) {
+	processReadySheets();
+	pending = false;
+	const ClientSpriteSheetPtr sheet = getSheetBySpriteId(spriteId);
+	if (!sheet || sheet->asyncFailed) {
+		return false;
+	}
+	if (!sheet->pixels) {
+		requestSpriteSheet(sheet);
+		pending = true;
+		return false;
+	}
+	wxString error;
+	return copySpritePixels(sheet, spriteId, output, size, error);
 }

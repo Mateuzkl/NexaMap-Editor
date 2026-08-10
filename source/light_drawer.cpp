@@ -35,38 +35,42 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 		createGLTexture();
 	}
 
-	int const w = end_x - map_x;
-	int const h = end_y - map_y;
+	const int w = end_x - map_x;
+	const int h = end_y - map_y;
 	if (w <= 0 || h <= 0) {
 		return;
 	}
 
-	const auto bufferSize = static_cast<size_t>(w * h * PixelFormatRGBA);
+	const auto bufferSize = static_cast<size_t>(w) * static_cast<size_t>(h) * PixelFormatRGBA;
 	if (buffer.size() != bufferSize) {
 		buffer.resize(bufferSize);
 	}
 
+	light_grid.build(lights, map_x, map_y, end_x, end_y);
+
 	for (int y = 0; y < h; ++y) {
 		for (int x = 0; x < w; ++x) {
-			int const mx = (map_x + x);
-			int const my = (map_y + y);
-			int const index = (y * w + x);
-			int const color_index = index * PixelFormatRGBA;
+			const int mx = (map_x + x);
+			const int my = (map_y + y);
+			const int index = (y * w + x);
+			const int color_index = index * PixelFormatRGBA;
 
 			buffer[color_index] = global_color.Red();
 			buffer[color_index + 1] = global_color.Green();
 			buffer[color_index + 2] = global_color.Blue();
 			buffer[color_index + 3] = 140; // global_color.Alpha();
 
-			for (const auto& light : lights) {
-				float const intensity = calculateIntensity(mx, my, light);
+			const auto& nearby = light_grid.getCell(mx, my);
+			for (std::size_t li : nearby) {
+				const Light& light = lights[li];
+				const float intensity = calculateIntensity(mx, my, light);
 				if (intensity == 0.f) {
 					continue;
 				}
-				wxColor const light_color = colorFromEightBit(light.color);
-				auto const red = static_cast<uint8_t>(light_color.Red() * intensity);
-				auto const green = static_cast<uint8_t>(light_color.Green() * intensity);
-				auto const blue = static_cast<uint8_t>(light_color.Blue() * intensity);
+				const wxColor light_color = colorFromEightBit(light.color);
+				const auto red = static_cast<uint8_t>(light_color.Red() * intensity);
+				const auto green = static_cast<uint8_t>(light_color.Green() * intensity);
+				const auto blue = static_cast<uint8_t>(light_color.Blue() * intensity);
 				buffer[color_index] = std::max(buffer[color_index], red);
 				buffer[color_index + 1] = std::max(buffer[color_index + 1], green);
 				buffer[color_index + 2] = std::max(buffer[color_index + 2], blue);
@@ -76,8 +80,8 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 
 	const int draw_x = map_x * TileSize - scroll_x;
 	const int draw_y = map_y * TileSize - scroll_y;
-	int const draw_width = w * TileSize;
-	int const draw_height = h * TileSize;
+	const int draw_width = w * TileSize;
+	const int draw_height = h * TileSize;
 
 	glBindTexture(GL_TEXTURE_2D, texture);
 
@@ -85,7 +89,13 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+	if (texture_width != w || texture_height != h) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+		texture_width = w;
+		texture_height = h;
+	} else {
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+	}
 
 	if (renderer) {
 		renderer->flush();
@@ -118,7 +128,7 @@ void LightDrawer::addLight(int map_x, int map_y, int map_z, const SpriteLight& l
 		return;
 	}
 
-	uint8_t const intensity = std::min(light.intensity, static_cast<uint8_t>(MaxLightIntensity));
+	const uint8_t intensity = std::min(light.intensity, static_cast<uint8_t>(MaxLightIntensity));
 
 	if (!lights.empty()) {
 		Light& previous = lights.back();
@@ -145,5 +155,49 @@ void LightDrawer::unloadGLTexture() {
 		GLRenderer::invalidateTexture(texture);
 		glDeleteTextures(1, &texture);
 		texture = 0;
+		texture_width = 0;
+		texture_height = 0;
 	}
+}
+
+void LightDrawer::LightGrid::build(const std::vector<Light>& lights, int map_x, int map_y, int end_x, int end_y) {
+	origin_x = map_x;
+	origin_y = map_y;
+	grid_w = (end_x - map_x + GRID_CELL_SIZE - 1) / GRID_CELL_SIZE + 2; // +2 for border cells
+	grid_h = (end_y - map_y + GRID_CELL_SIZE - 1) / GRID_CELL_SIZE + 2;
+	if (grid_w <= 0 || grid_h <= 0) {
+		return;
+	}
+	cells.resize(static_cast<size_t>(grid_w) * grid_h);
+	for (auto& cell : cells) {
+		cell.clear();
+	}
+	for (std::size_t i = 0; i < lights.size(); ++i) {
+		const Light& light = lights[i];
+		int radius = light.intensity; // MaxLightIntensity is 8
+		int min_gx = (light.map_x - radius - origin_x) / GRID_CELL_SIZE;
+		int max_gx = (light.map_x + radius - origin_x) / GRID_CELL_SIZE;
+		int min_gy = (light.map_y - radius - origin_y) / GRID_CELL_SIZE;
+		int max_gy = (light.map_y + radius - origin_y) / GRID_CELL_SIZE;
+		min_gx = std::max(0, min_gx);
+		max_gx = std::min(grid_w - 1, max_gx);
+		min_gy = std::max(0, min_gy);
+		max_gy = std::min(grid_h - 1, max_gy);
+		for (int gy = min_gy; gy <= max_gy; ++gy) {
+			for (int gx = min_gx; gx <= max_gx; ++gx) {
+				cells[static_cast<size_t>(gy) * grid_w + gx].push_back(i);
+			}
+		}
+	}
+}
+
+static const std::vector<std::size_t> s_emptyCell;
+
+const std::vector<std::size_t>& LightDrawer::LightGrid::getCell(int mx, int my) const {
+	int gx = (mx - origin_x) / GRID_CELL_SIZE;
+	int gy = (my - origin_y) / GRID_CELL_SIZE;
+	if (gx < 0 || gx >= grid_w || gy < 0 || gy >= grid_h) {
+		return s_emptyCell;
+	}
+	return cells[static_cast<size_t>(gy) * grid_w + gx];
 }

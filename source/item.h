@@ -102,8 +102,7 @@ protected:
 		subtypeAttributes |= static_cast<uint8_t>(attribute);
 	}
 	bool shouldSerializeCountSubtype() const {
-		return hasSubtypeAttribute(SUBTYPE_ATTR_COUNT) ||
-			(subtypeAttributes == SUBTYPE_ATTR_NONE && (hasSubtypeKind(SUBTYPE_STACK_COUNT) || hasSubtypeKind(SUBTYPE_FLUID) || hasSubtypeKind(SUBTYPE_PERSISTED_COUNT_OR_FLUID)));
+		return hasSubtypeAttribute(SUBTYPE_ATTR_COUNT) || (subtypeAttributes == SUBTYPE_ATTR_NONE && (hasSubtypeKind(SUBTYPE_STACK_COUNT) || hasSubtypeKind(SUBTYPE_FLUID) || hasSubtypeKind(SUBTYPE_PERSISTED_COUNT_OR_FLUID)));
 	}
 	void copyBaseStateTo(Item& copy) const;
 
@@ -342,14 +341,14 @@ public:
 
 	// Slot-based Item Types
 	bool isWeapon() const {
-		uint8_t const weaponType = g_items[id].weapon_type;
+		const uint8_t weaponType = g_items[id].weapon_type;
 		return weaponType != WEAPON_NONE && weaponType != WEAPON_AMMO;
 	}
 	bool isAmmunition() const {
 		return g_items[id].weapon_type == WEAPON_AMMO;
 	}
 	bool isWearableEquipment() const { // Determine if the item is wearable piece of armor
-		uint16_t const slotPosition = g_items[id].slot_position;
+		const uint16_t slotPosition = g_items[id].slot_position;
 		return slotPosition & SLOTP_HEAD || slotPosition & SLOTP_NECKLACE ||
 			// slotPosition & SLOTP_BACKPACK || // handled as container in properties window
 			slotPosition & SLOTP_ARMOR || slotPosition & SLOTP_LEGS || slotPosition & SLOTP_FEET || slotPosition & SLOTP_RING || (slotPosition & SLOTP_AMMO && !isAmmunition()); // light sources that give stats
@@ -423,6 +422,12 @@ public:
 	int getFrame() const {
 		return frame;
 	}
+	int getLastReadyFrame() const {
+		return last_ready_frame;
+	}
+	void setLastReadyFrame(int readyFrame) {
+		last_ready_frame = readyFrame;
+	}
 
 protected:
 	uint16_t id; // the same id as in ItemType
@@ -432,6 +437,7 @@ protected:
 	uint8_t subtypeAttributes;
 	bool selected;
 	int frame;
+	int last_ready_frame;
 
 private:
 	Item& operator=(const Item& i); // Can't copy

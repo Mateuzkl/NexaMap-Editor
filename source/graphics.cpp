@@ -19,6 +19,7 @@
 
 #include "sprites.h"
 #include "graphics.h"
+#include "gl_renderer.h"
 #include "artprovider.h"
 #include "filehandle.h"
 #include "settings.h"
@@ -27,6 +28,8 @@
 #include "sprite_appearances.h"
 
 #include <appearances.pb.h>
+#include <iterator>
+#include <limits>
 #include <wx/mstream.h>
 #include <wx/stopwatch.h>
 #include <wx/dir.h>
@@ -240,30 +243,195 @@ bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
 
 	const int perRow = atlas_size / CELL;
 	const int perPage = perRow * perRow;
+	constexpr size_t MAX_ATLAS_MEMORY_BYTES = 256ull * 1024ull * 1024ull;
+	constexpr size_t MAX_ATLAS_PAGES = 64;
+	const size_t pageBytes = static_cast<size_t>(atlas_size) * static_cast<size_t>(atlas_size) * 4;
+	const size_t maxAtlasPages = std::min(MAX_ATLAS_PAGES, std::max<size_t>(1, MAX_ATLAS_MEMORY_BYTES / pageBytes));
 
 	if (atlas_textures.empty() || atlas_count >= perPage) {
-		GLuint tex = 0;
-		glGenTextures(1, &tex);
-		if (tex == 0) {
-			return false;
+		if (atlas_textures.size() >= maxAtlasPages) {
+			if (!recycleAtlasPage()) {
+				deferTextureUpload();
+				return false;
+			}
+		} else {
+			GLuint tex = 0;
+			glGenTextures(1, &tex);
+			if (tex == 0) {
+				if (!atlas_allocation_failure_logged) {
+					wxLogError("GraphicManager::allocAtlasSlot - OpenGL could not allocate an atlas texture page.");
+					atlas_allocation_failure_logged = true;
+				}
+				return false;
+			}
+			atlas_allocation_failure_logged = false;
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			atlas_textures.push_back(tex);
+			atlas_page_last_use.push_back(++atlas_access_counter);
+			atlas_page_last_frame.push_back(atlas_frame_active ? atlas_frame_counter : 0);
+			atlas_count = 0;
 		}
-		glBindTexture(GL_TEXTURE_2D, tex);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-		atlas_textures.push_back(tex);
-		atlas_count = 0;
 	}
 
 	const int slot = atlas_count++;
 	const int col = slot % perRow;
 	const int row = slot / perRow;
 	outTex = atlas_textures.back();
+	touchAtlasPage(outTex);
 	outX = col * CELL;
 	outY = row * CELL;
 	return true;
+}
+
+bool GraphicManager::recycleAtlasPage() {
+	if (atlas_textures.empty() || atlas_textures.size() != atlas_page_last_use.size() || atlas_textures.size() != atlas_page_last_frame.size()) {
+		if (!atlas_allocation_failure_logged) {
+			wxLogError(
+				"GraphicManager::recycleAtlasPage - invalid atlas state (%zu textures, %zu usage entries, %zu frame entries).",
+				atlas_textures.size(),
+				atlas_page_last_use.size(),
+				atlas_page_last_frame.size()
+			);
+			atlas_allocation_failure_logged = true;
+		}
+		return false;
+	}
+
+	size_t victimIndex = atlas_textures.size();
+	uint64_t oldestUse = std::numeric_limits<uint64_t>::max();
+	for (size_t pageIndex = 0; pageIndex < atlas_textures.size(); ++pageIndex) {
+		if (atlas_frame_active && atlas_page_last_frame[pageIndex] == atlas_frame_counter) {
+			continue;
+		}
+		if (atlas_page_last_use[pageIndex] < oldestUse) {
+			oldestUse = atlas_page_last_use[pageIndex];
+			victimIndex = pageIndex;
+		}
+	}
+	if (victimIndex == atlas_textures.size()) {
+		deferTextureUpload();
+		return false;
+	}
+	if (atlas_frame_active && !active_map_renderer) {
+		if (!atlas_allocation_failure_logged) {
+			wxLogError("GraphicManager::recycleAtlasPage - no active renderer available to flush the atlas batch.");
+			atlas_allocation_failure_logged = true;
+		}
+		deferTextureUpload();
+		return false;
+	}
+	const GLuint victimTexture = atlas_textures[victimIndex];
+	if (active_map_renderer) {
+		active_map_renderer->flush();
+	}
+	int invalidated = 0;
+	for (const auto& entry : image_space) {
+		auto* image = dynamic_cast<GameSprite::NormalImage*>(entry.second);
+		if (!image || !image->atlas_loaded || image->atlas_tex != victimTexture) {
+			continue;
+		}
+		image->atlas_loaded = false;
+		image->isGLLoaded = false;
+		image->atlas_tex = 0;
+		++invalidated;
+	}
+	loaded_textures = std::max(0, loaded_textures - invalidated);
+
+	GLRenderer::invalidateTexture(victimTexture);
+	glBindTexture(GL_TEXTURE_2D, victimTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+	if (victimIndex + 1 != atlas_textures.size()) {
+		atlas_textures.erase(atlas_textures.begin() + victimIndex);
+		atlas_textures.push_back(victimTexture);
+		atlas_page_last_use.erase(atlas_page_last_use.begin() + victimIndex);
+		atlas_page_last_use.push_back(++atlas_access_counter);
+		atlas_page_last_frame.erase(atlas_page_last_frame.begin() + victimIndex);
+		atlas_page_last_frame.push_back(atlas_frame_active ? atlas_frame_counter : 0);
+	} else {
+		atlas_page_last_use.back() = ++atlas_access_counter;
+		atlas_page_last_frame.back() = atlas_frame_active ? atlas_frame_counter : 0;
+	}
+	atlas_count = 0;
+	atlas_allocation_failure_logged = false;
+	return true;
+}
+
+void GraphicManager::touchAtlasPage(GLuint texture) noexcept {
+	const auto page = std::find(atlas_textures.begin(), atlas_textures.end(), texture);
+	if (page == atlas_textures.end()) {
+		return;
+	}
+	const size_t pageIndex = static_cast<size_t>(std::distance(atlas_textures.begin(), page));
+	atlas_page_last_use[pageIndex] = ++atlas_access_counter;
+	if (atlas_frame_active) {
+		atlas_page_last_frame[pageIndex] = atlas_frame_counter;
+	}
+}
+
+void GraphicManager::beginMapRenderTextureBudget(GLRenderer* activeRenderer, bool limitUploads) {
+	texture_upload_budget_active = limitUploads;
+	texture_upload_deferred = false;
+	frame_had_missing_texture = false;
+	frame_texture_attempts = 0;
+	frame_texture_uploads = 0;
+	texture_upload_budget_started = std::chrono::steady_clock::now();
+	atlas_frame_active = true;
+	++atlas_frame_counter;
+	active_map_renderer = activeRenderer;
+}
+
+bool GraphicManager::endMapRenderTextureBudget() {
+	last_frame_texture_attempts = frame_texture_attempts;
+	last_frame_texture_uploads = frame_texture_uploads;
+	texture_upload_budget_active = false;
+	atlas_frame_active = false;
+	active_map_renderer = nullptr;
+	return texture_upload_deferred;
+}
+
+bool GraphicManager::canPrepareTextureUpload() {
+	if (!texture_upload_budget_active) {
+		return true;
+	}
+
+	constexpr int MAX_UPLOADS_PER_FRAME = 32;
+	constexpr auto MAX_UPLOAD_TIME = std::chrono::milliseconds(3);
+	if (frame_texture_attempts >= MAX_UPLOADS_PER_FRAME || std::chrono::steady_clock::now() - texture_upload_budget_started >= MAX_UPLOAD_TIME) {
+		texture_upload_deferred = true;
+		return false;
+	}
+
+	return true;
+}
+
+void GraphicManager::recordTextureUploadAttempt() noexcept {
+	if (texture_upload_budget_active) {
+		++frame_texture_attempts;
+	}
+}
+
+void GraphicManager::recordTextureUpload() noexcept {
+	if (texture_upload_budget_active) {
+		++frame_texture_uploads;
+	}
+}
+
+void GraphicManager::deferTextureUpload() noexcept {
+	if (texture_upload_budget_active) {
+		texture_upload_deferred = true;
+	}
+}
+
+void GraphicManager::markTextureMissing() noexcept {
+	if (atlas_frame_active) {
+		frame_had_missing_texture = true;
+	}
 }
 
 void GraphicManager::clear() {
@@ -289,15 +457,26 @@ void GraphicManager::clear() {
 	loaded_textures = 0;
 	lastclean = time(nullptr);
 	spritefile = "";
+	sprite_file_handle.reset();
+	sprite_offsets.clear();
 
 	for (GLuint tex : atlas_textures) {
 		if (tex) {
+			GLRenderer::invalidateTexture(tex);
 			glDeleteTextures(1, &tex);
 		}
 	}
 	atlas_textures.clear();
+	atlas_page_last_use.clear();
+	atlas_page_last_frame.clear();
 	atlas_size = 0;
 	atlas_count = 0;
+	atlas_access_counter = 0;
+	atlas_frame_counter = 0;
+	atlas_frame_active = false;
+	atlas_allocation_failure_logged = false;
+	active_map_renderer = nullptr;
+	frame_had_missing_texture = false;
 
 	unloaded = true;
 }
@@ -1098,6 +1277,17 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 
 	if (!g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
 		spritefile = nstr(datafile.GetFullPath());
+		sprite_offsets.assign(static_cast<size_t>(total_pics) + 1, 0);
+		for (uint32_t sprite_id = 1; sprite_id <= total_pics; ++sprite_id) {
+			safe_get(U32, sprite_offsets[sprite_id]);
+		}
+		sprite_file_handle = std::make_unique<FileReadHandle>(spritefile);
+		if (!sprite_file_handle->isOk()) {
+			error = "Failed to keep the sprite file open for progressive loading";
+			sprite_file_handle.reset();
+			sprite_offsets.clear();
+			return false;
+		}
 		unloaded = false;
 		return true;
 	}
@@ -1157,23 +1347,27 @@ bool GraphicManager::loadSpriteDump(uint8_t*& target, uint16_t& size, int sprite
 		return true;
 	}
 
-	FileReadHandle fh(spritefile);
-	if (!fh.isOk()) {
+	if (!sprite_file_handle || !sprite_file_handle->isOk()) {
 		return false;
 	}
 	unloaded = false;
 
-	if (!fh.seek((is_extended ? 4 : 2) + sprite_id * sizeof(uint32_t))) {
+	if (sprite_id < 0 || static_cast<size_t>(sprite_id) >= sprite_offsets.size()) {
 		return false;
 	}
 
-	uint32_t to_seek = 0;
-	if (fh.getU32(to_seek)) {
-		fh.seek(to_seek + 3);
-		uint16_t sprite_size;
-		if (fh.getU16(sprite_size)) {
+	const uint32_t sprite_offset = sprite_offsets[static_cast<size_t>(sprite_id)];
+	if (sprite_offset == 0) {
+		size = 0;
+		target = nullptr;
+		return true;
+	}
+
+	if (sprite_file_handle->seek(static_cast<size_t>(sprite_offset) + 3)) {
+		uint16_t sprite_size = 0;
+		if (sprite_file_handle->getU16(sprite_size)) {
 			target = newd uint8_t[sprite_size];
-			if (fh.getRAW(target, sprite_size)) {
+			if (sprite_file_handle->getRAW(target, sprite_size)) {
 				size = sprite_size;
 				return true;
 			}
@@ -1329,6 +1523,9 @@ GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _layer, int _
 	}
 	SpriteTex st;
 	st.texture = spriteList[v]->getHardwareID();
+	if (st.texture == 0) {
+		g_gui.gfx.markTextureMissing();
+	}
 	spriteList[v]->getUV(st.u0, st.v0, st.u1, st.v1);
 	return st;
 }
@@ -1383,6 +1580,9 @@ GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _dir, int _ad
 	} else {
 		st.texture = spriteList[v]->getHardwareID();
 		spriteList[v]->getUV(st.u0, st.v0, st.u1, st.v1);
+	}
+	if (st.texture == 0) {
+		g_gui.gfx.markTextureMissing();
 	}
 	return st;
 }
@@ -1481,9 +1681,15 @@ void GameSprite::Image::createGLTexture(GLuint whatid) {
 }
 
 void GameSprite::Image::unloadGLTexture(GLuint whatid) {
+	if (!isGLLoaded) {
+		return;
+	}
 	isGLLoaded = false;
-	g_gui.gfx.loaded_textures -= 1;
-	glDeleteTextures(1, &whatid);
+	g_gui.gfx.loaded_textures = std::max(0, g_gui.gfx.loaded_textures - 1);
+	if (whatid != 0) {
+		GLRenderer::invalidateTexture(whatid);
+		glDeleteTextures(1, &whatid);
+	}
 }
 
 void GameSprite::Image::visit() {
@@ -1522,7 +1728,19 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 		std::vector<uint8_t> pixels;
 		ClientSpriteSize sourceSize;
 		wxString error;
-		if (id == 0 || !g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error)) {
+		bool loaded = false;
+		if (id != 0 && g_gui.gfx.isMapRenderTextureBudgetActive()) {
+			bool pending = false;
+			loaded = g_spriteAppearances.getSpritePixelsIfLoaded(id, pixels, sourceSize, pending);
+			if (pending) {
+				g_gui.gfx.deferTextureUpload();
+			} else if (!loaded) {
+				loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
+			}
+		} else if (id != 0) {
+			loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
+		}
+		if (!loaded) {
 			return nullptr;
 		}
 
@@ -1605,7 +1823,19 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 		std::vector<uint8_t> pixels;
 		ClientSpriteSize sourceSize;
 		wxString error;
-		if (id == 0 || !g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error)) {
+		bool loaded = false;
+		if (id != 0 && g_gui.gfx.isMapRenderTextureBudgetActive()) {
+			bool pending = false;
+			loaded = g_spriteAppearances.getSpritePixelsIfLoaded(id, pixels, sourceSize, pending);
+			if (pending) {
+				g_gui.gfx.deferTextureUpload();
+			} else if (!loaded) {
+				loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
+			}
+		} else if (id != 0) {
+			loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
+		}
+		if (!loaded) {
 			return nullptr;
 		}
 
@@ -1693,6 +1923,9 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 
 GLuint GameSprite::NormalImage::getHardwareID() {
 	if (!atlas_loaded) {
+		if (!g_gui.gfx.canPrepareTextureUpload()) {
+			return 0;
+		}
 		uint8_t* rgba = getRGBAData();
 		if (!rgba) {
 			return 0;
@@ -1706,7 +1939,8 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 			constexpr int S = SPRITE_PIXELS;
 			constexpr int CW = S + 2 * PAD;
 
-			std::vector<uint8_t> padded(static_cast<size_t>(CW) * CW * 4);
+			thread_local static std::vector<uint8_t> padded;
+			padded.resize(static_cast<size_t>(CW) * CW * 4);
 			for (int y = 0; y < CW; ++y) {
 				int sy = std::clamp(y - PAD, 0, S - 1);
 				for (int x = 0; x < CW; ++x) {
@@ -1732,11 +1966,16 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 			atlas_loaded = true;
 			isGLLoaded = true;
 			g_gui.gfx.loaded_textures += 1;
+			g_gui.gfx.recordTextureUploadAttempt();
+			g_gui.gfx.recordTextureUpload();
 		}
 
 		delete[] rgba;
 	}
 	visit();
+	if (atlas_loaded) {
+		g_gui.gfx.touchAtlasPage(atlas_tex);
+	}
 	return atlas_tex;
 }
 
@@ -1960,6 +2199,9 @@ uint8_t* GameSprite::TemplateImage::getRGBAData() {
 
 GLuint GameSprite::TemplateImage::getHardwareID() {
 	if (!isGLLoaded) {
+		if (!g_gui.gfx.canPrepareTextureUpload()) {
+			return 0;
+		}
 		if (gl_tid == 0) {
 			gl_tid = g_gui.gfx.getFreeTextureID();
 		}
@@ -1967,6 +2209,8 @@ GLuint GameSprite::TemplateImage::getHardwareID() {
 		if (!isGLLoaded) {
 			return 0;
 		}
+		g_gui.gfx.recordTextureUploadAttempt();
+		g_gui.gfx.recordTextureUpload();
 	}
 	visit();
 	return gl_tid;

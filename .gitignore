@@ -16,6 +16,7 @@ rme
 rme.cfg
 data/user
 /rme.log
+/performance.log
 /tmp/
 
 # exe and dll

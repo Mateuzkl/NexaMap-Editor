@@ -167,6 +167,7 @@
 	</menu>
 	<menu name="Show">
 		<!-- item/zone filters -->
+		<item name="Show Performance Stats" hotkey="" action="SHOW_PERFORMANCE_STATS" help="Show FPS, CPU, and RAM usage on the screen."/>
 		<item name="Show Animation" hotkey="L" action="SHOW_PREVIEW" help="Show item animations."/>
 		<item name="Show Light" hotkey="Shift+L" action="SHOW_LIGHTS" help="Show lights."/>
 		<item name="Show Light Strength" hotkey="Shift+K" action="SHOW_LIGHT_STR" help="Show indicators of light strength."/>
