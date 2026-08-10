@@ -355,11 +355,9 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 		drawer->SetupVars();
 		drawer->SetupGL();
-		if (!screenshot_buffer) {
-			g_gui.gfx.beginMapRenderTextureBudget();
-		}
+		g_gui.gfx.beginMapRenderTextureBudget(drawer->getRenderer(), !screenshot_buffer);
 		drawer->Draw();
-		const bool texture_uploads_deferred = !screenshot_buffer && g_gui.gfx.endMapRenderTextureBudget();
+		const bool texture_uploads_deferred = g_gui.gfx.endMapRenderTextureBudget();
 		if (texture_uploads_deferred) {
 			drawer->markDirty();
 		}

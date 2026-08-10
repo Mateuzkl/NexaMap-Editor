@@ -43,6 +43,7 @@ public:
 	std::unique_ptr<uint8_t[]> pixels;
 	uint64_t lastAccess = 0;
 	bool asyncFailed = false;
+	bool synchronousFailureLogged = false;
 };
 
 using ClientSpriteSheetPtr = std::shared_ptr<ClientSpriteSheet>;
@@ -61,6 +62,9 @@ public:
 		return sheets.size();
 	}
 	size_t getPendingSheetCount() const;
+	size_t getReadySheetCount() const noexcept {
+		return readyCount.load(std::memory_order_acquire);
+	}
 
 private:
 	struct DecodedSheet {

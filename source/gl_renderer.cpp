@@ -561,11 +561,23 @@ void GLRenderer::ensureFBO(int w, int h) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboData.texture, 0);
 
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+	const GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
+		if (!fbo_failure_logged) {
+			wxLogError(
+				"GLRenderer::ensureFBO - incomplete framebuffer (status 0x%X, size %dx%d); scene cache disabled.",
+				static_cast<unsigned int>(framebufferStatus),
+				w,
+				h
+			);
+			fbo_failure_logged = true;
+		}
 		glDeleteTextures(1, &fboData.texture);
 		glDeleteFramebuffers(1, &fboData.fbo);
 		fboData.fbo = 0;
 		fboData.texture = 0;
+	} else {
+		fbo_failure_logged = false;
 	}
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);

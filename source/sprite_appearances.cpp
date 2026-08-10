@@ -240,10 +240,15 @@ bool SpriteAppearances::loadSpriteSheet(const ClientSpriteSheetPtr& sheet, wxStr
 	if (!sheet->pixels) {
 		std::unique_ptr<uint8_t[]> decoded;
 		if (!decodeSpriteSheet(sheet, decoded, error)) {
+			if (!sheet->synchronousFailureLogged) {
+				wxLogWarning("Synchronous sprite-sheet decode failed: " + error);
+				sheet->synchronousFailureLogged = true;
+			}
 			return false;
 		}
 		sheet->pixels = std::move(decoded);
 		sheet->asyncFailed = false;
+		sheet->synchronousFailureLogged = false;
 	}
 	sheet->lastAccess = ++accessCounter;
 	trimLoadedSheets(sheet);

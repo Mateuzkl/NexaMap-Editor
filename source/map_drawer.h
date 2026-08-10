@@ -291,6 +291,9 @@ public:
 	void SetupVars();
 	void SetupGL();
 	void Release();
+	GLRenderer* getRenderer() const noexcept {
+		return renderer.get();
+	}
 
 	void Draw();
 	void DrawScene();

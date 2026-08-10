@@ -105,6 +105,7 @@ private:
 		int height = 0;
 	};
 	FBOData fboData;
+	bool fbo_failure_logged = false;
 
 	void flushBatch();
 	void bindProgram();

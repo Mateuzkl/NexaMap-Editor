@@ -55,6 +55,30 @@
 
 using Color = std::tuple<int, int, int>;
 
+namespace {
+	struct PreparedSpritePart {
+		int screen_x;
+		int screen_y;
+		GameSprite::SpriteTex texture;
+	};
+
+	template <typename Loader>
+	bool AppendPreparedSpriteParts(int screenX, int screenY, int width, int height, int layers, Loader loader, std::vector<PreparedSpritePart>& parts) {
+		parts.reserve(parts.size() + static_cast<size_t>(width) * height * layers);
+		bool complete = true;
+		for (int cx = 0; cx != width; ++cx) {
+			for (int cy = 0; cy != height; ++cy) {
+				for (int layer = 0; layer != layers; ++layer) {
+					auto texture = loader(cx, cy, layer);
+					complete = texture.texture != 0 && complete;
+					parts.push_back({ screenX - cx * TileSize, screenY - cy * TileSize, texture });
+				}
+			}
+		}
+		return complete;
+	}
+}
+
 static std::vector<Color> colors;
 void GenerateColors() {
 	if (!colors.empty()) {
@@ -401,7 +425,8 @@ void MapDrawer::Draw() {
 		DrawScene();
 		renderer->flush();
 		renderer->endFBO();
-		scene_dirty = false;
+		const bool frameComplete = g_gui.gfx.isCurrentMapRenderComplete();
+		scene_dirty = !frameComplete && g_gui.gfx.hasPendingTextureWork();
 		cached_scene_initialized = true;
 		cached_scene_zoom = zoom;
 		cached_scroll_x = view_scroll_x;
@@ -1296,13 +1321,51 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 		}
 	}
 
-	int frame = item->getFrame();
-	for (int cx = 0; cx != spr->width; cx++) {
-		for (int cy = 0; cy != spr->height; cy++) {
-			for (int cf = 0; cf != spr->layers; cf++) {
-				auto st = spr->getSpriteTex(cx, cy, cf, subtype, pattern_x, pattern_y, pattern_z, frame);
-				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
+	const int requestedFrame = item->getFrame();
+	if (spr->width == 1 && spr->height == 1 && spr->layers == 1) {
+		auto st = spr->getSpriteTex(0, 0, 0, subtype, pattern_x, pattern_y, pattern_z, requestedFrame);
+		if (st.texture != 0) {
+			item->setLastReadyFrame(requestedFrame);
+		} else {
+			const int lastReadyFrame = item->getLastReadyFrame();
+			if (lastReadyFrame < 0 || lastReadyFrame == requestedFrame) {
+				return;
 			}
+			st = spr->getSpriteTex(0, 0, 0, subtype, pattern_x, pattern_y, pattern_z, lastReadyFrame);
+			if (st.texture == 0) {
+				return;
+			}
+		}
+		glBlitTexture(screenx, screeny, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
+	} else {
+		std::vector<PreparedSpritePart> parts;
+		auto prepareFrame = [&](int requestedFrameToPrepare) {
+			parts.clear();
+			return AppendPreparedSpriteParts(
+				screenx,
+				screeny,
+				spr->width,
+				spr->height,
+				spr->layers,
+				[&](int cx, int cy, int layer) {
+					return spr->getSpriteTex(cx, cy, layer, subtype, pattern_x, pattern_y, pattern_z, requestedFrameToPrepare);
+				},
+				parts
+			);
+		};
+
+		if (prepareFrame(requestedFrame)) {
+			item->setLastReadyFrame(requestedFrame);
+		} else {
+			const int lastReadyFrame = item->getLastReadyFrame();
+			if (lastReadyFrame < 0 || lastReadyFrame == requestedFrame || !prepareFrame(lastReadyFrame)) {
+				return;
+			}
+		}
+
+		for (const PreparedSpritePart& part : parts) {
+			const auto& st = part.texture;
+			glBlitTexture(part.screen_x, part.screen_y, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 		}
 	}
 
@@ -1357,22 +1420,7 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 }
 
 void MapDrawer::BlitSpriteType(int screenx, int screeny, uint32_t spriteid, int red, int green, int blue, int alpha) {
-	GameSprite* spr = g_items[spriteid].sprite;
-	if (spr == nullptr) {
-		return;
-	}
-	screenx -= spr->getDrawOffset().first;
-	screeny -= spr->getDrawOffset().second;
-
-	int tme = 0; // GetTime() % itype->FPA;
-	for (int cx = 0; cx != spr->width; ++cx) {
-		for (int cy = 0; cy != spr->height; ++cy) {
-			for (int cf = 0; cf != spr->layers; ++cf) {
-				auto st = spr->getSpriteTex(cx, cy, cf, -1, 0, 0, 0, tme);
-				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
-			}
-		}
-	}
+	BlitSpriteType(screenx, screeny, g_items[spriteid].sprite, red, green, blue, alpha);
 }
 
 void MapDrawer::BlitSpriteType(int screenx, int screeny, GameSprite* spr, int red, int green, int blue, int alpha) {
@@ -1382,14 +1430,33 @@ void MapDrawer::BlitSpriteType(int screenx, int screeny, GameSprite* spr, int re
 	screenx -= spr->getDrawOffset().first;
 	screeny -= spr->getDrawOffset().second;
 
-	int tme = 0; // GetTime() % itype->FPA;
-	for (int cx = 0; cx != spr->width; ++cx) {
-		for (int cy = 0; cy != spr->height; ++cy) {
-			for (int cf = 0; cf != spr->layers; ++cf) {
-				auto st = spr->getSpriteTex(cx, cy, cf, -1, 0, 0, 0, tme);
-				glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
-			}
+	const int frame = 0; // GetTime() % itype->FPA;
+	if (spr->width == 1 && spr->height == 1 && spr->layers == 1) {
+		const auto st = spr->getSpriteTex(0, 0, 0, -1, 0, 0, 0, frame);
+		if (st.texture != 0) {
+			glBlitTexture(screenx, screeny, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 		}
+		return;
+	}
+
+	std::vector<PreparedSpritePart> parts;
+	const bool complete = AppendPreparedSpriteParts(
+		screenx,
+		screeny,
+		spr->width,
+		spr->height,
+		spr->layers,
+		[&](int cx, int cy, int layer) {
+			return spr->getSpriteTex(cx, cy, layer, -1, 0, 0, 0, frame);
+		},
+		parts
+	);
+	if (!complete) {
+		return;
+	}
+	for (const PreparedSpritePart& part : parts) {
+		const auto& st = part.texture;
+		glBlitTexture(part.screen_x, part.screen_y, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 	}
 }
 
@@ -1404,7 +1471,9 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 			return;
 		}
 
-		int tme = 0; // GetTime() % itype->FPA;
+		const int frame = 0; // GetTime() % itype->FPA;
+		std::vector<PreparedSpritePart> parts;
+		bool complete = true;
 
 		// mount and addon drawing thanks to otc code
 		// mount colors by Zbizu
@@ -1419,12 +1488,18 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 				mountOutfit.lookLegs = outfit.lookMountLegs;
 				mountOutfit.lookFeet = outfit.lookMountFeet;
 
-				for (int cx = 0; cx != mountSpr->width; ++cx) {
-					for (int cy = 0; cy != mountSpr->height; ++cy) {
-						auto st = mountSpr->getSpriteTex(cx, cy, (int)dir, 0, 0, mountOutfit, tme);
-						glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
-					}
-				}
+				complete = AppendPreparedSpriteParts(
+							   screenx,
+							   screeny,
+							   mountSpr->width,
+							   mountSpr->height,
+							   1,
+							   [&](int cx, int cy, int) {
+								   return mountSpr->getSpriteTex(cx, cy, static_cast<int>(dir), 0, 0, mountOutfit, frame);
+							   },
+							   parts
+						   )
+					&& complete;
 
 				pattern_z = std::min<int>(1, spr->pattern_z - 1);
 			}
@@ -1438,12 +1513,26 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 				continue;
 			}
 
-			for (int cx = 0; cx != spr->width; ++cx) {
-				for (int cy = 0; cy != spr->height; ++cy) {
-					auto st = spr->getSpriteTex(cx, cy, (int)dir, pattern_y, pattern_z, outfit, tme);
-					glBlitTexture(screenx - cx * TileSize, screeny - cy * TileSize, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
-				}
-			}
+			complete = AppendPreparedSpriteParts(
+						   screenx,
+						   screeny,
+						   spr->width,
+						   spr->height,
+						   1,
+						   [&](int cx, int cy, int) {
+							   return spr->getSpriteTex(cx, cy, static_cast<int>(dir), pattern_y, pattern_z, outfit, frame);
+						   },
+						   parts
+					   )
+				&& complete;
+		}
+
+		if (!complete) {
+			return;
+		}
+		for (const PreparedSpritePart& part : parts) {
+			const auto& st = part.texture;
+			glBlitTexture(part.screen_x, part.screen_y, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 		}
 	}
 }
@@ -2467,9 +2556,9 @@ void MapDrawer::DrawPerformanceStats() {
 	drawText(text_x, text_y + 96, 0.7f, 0.7f, 0.7f, buf);
 	const char* render_mode = isViewportInteractionActive() ? "Scene: cached" : (far_zoom_mode ? "LOD: minimap" : (medium_zoom_mode ? "LOD: medium" : "Scene: exact"));
 	drawText(text_x, text_y + 112, 0.55f, 0.75f, 1.0f, render_mode);
-	snprintf(buf, sizeof(buf), "Texture uploads: %d", g_gui.gfx.getLastFrameTextureUploads());
+	snprintf(buf, sizeof(buf), "Texture up/try: %d/%d", g_gui.gfx.getLastFrameTextureUploads(), g_gui.gfx.getLastFrameTextureAttempts());
 	drawText(text_x, text_y + 128, 0.7f, 0.7f, 0.7f, buf);
-	snprintf(buf, sizeof(buf), "Pending sheets: %zu", g_spriteAppearances.getPendingSheetCount());
+	snprintf(buf, sizeof(buf), "Sheets Q/R: %zu/%zu", g_spriteAppearances.getPendingSheetCount(), g_spriteAppearances.getReadySheetCount());
 	drawText(text_x, text_y + 144, 0.7f, 0.7f, 0.7f, buf);
 	snprintf(buf, sizeof(buf), "Atlas: %zu pages / %zu MB", g_gui.gfx.getAtlasPageCount(), g_gui.gfx.getAtlasMemoryBytes() / (1024 * 1024));
 	drawText(text_x, text_y + 160, 0.7f, 0.7f, 0.7f, buf);
