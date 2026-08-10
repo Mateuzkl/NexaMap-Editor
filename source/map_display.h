@@ -101,6 +101,7 @@ public:
 	void Refresh();
 	void RefreshAnimation();
 	void RefreshViewport();
+	void UpdateAutoborderPreview(bool altPressed);
 
 	void ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y);
 	void MouseToMap(int* map_x, int* map_y) {

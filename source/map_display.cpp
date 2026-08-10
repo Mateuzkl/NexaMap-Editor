@@ -24,6 +24,7 @@
 #include <wx/wfstream.h>
 
 #include "gui.h"
+#include "autoborder_preview.h"
 #include "editor.h"
 #include "brush.h"
 #include "map.h"
@@ -647,6 +648,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 		}
 	} else { // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
+		UpdateAutoborderPreview(event.AltDown());
 		if (map_update && drawing && brush) {
 			if (brush->isDoodad()) {
 				if (event.ControlDown()) {
@@ -720,6 +722,8 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 
 			// Create newd doodad layout (does nothing if a non-doodad brush is selected)
 			g_gui.FillDoodadPreviewBuffer();
+			g_autoborder_preview.Invalidate();
+			UpdateAutoborderPreview(event.AltDown());
 
 			g_gui.RefreshView();
 		} else if (dragging_draw) {
@@ -1063,6 +1067,8 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event) {
 			}
 			// Change the doodad layout brush
 			g_gui.FillDoodadPreviewBuffer();
+			g_autoborder_preview.Invalidate();
+			UpdateAutoborderPreview(event.AltDown());
 		}
 	}
 	last_click_x = int(event.GetX() * zoom);
@@ -1359,6 +1365,8 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 		dragging_draw = false;
 		replace_dragging = false;
 		editor.replace_brush = nullptr;
+		g_autoborder_preview.Invalidate();
+		UpdateAutoborderPreview(event.AltDown());
 	}
 	g_gui.RefreshView();
 	g_gui.UpdateMinimap();
@@ -1684,6 +1692,10 @@ void MapCanvas::OnGainMouse(wxMouseEvent& event) {
 }
 
 void MapCanvas::OnKeyDown(wxKeyEvent& event) {
+	if (event.GetKeyCode() == WXK_ALT) {
+		UpdateAutoborderPreview(true);
+		Refresh();
+	}
 	// char keycode = event.GetKeyCode();
 	//  std::cout << "Keycode " << keycode << std::endl;
 	switch (event.GetKeyCode()) {
@@ -1961,6 +1973,41 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 void MapCanvas::OnKeyUp(wxKeyEvent& event) {
 	keyCode = WXK_NONE;
+	if (event.GetKeyCode() == WXK_ALT) {
+		UpdateAutoborderPreview(false);
+		Refresh();
+	}
+}
+
+void MapCanvas::UpdateAutoborderPreview(bool altPressed) {
+	Brush* brush = g_gui.GetCurrentBrush();
+	const Position cursor(last_cursor_map_x, last_cursor_map_y, floor);
+	const bool supportedBrush = brush && (brush->isGround() || brush->isWall() || brush->isDoor() || brush->isTable() || brush->isCarpet() || brush->isEraser());
+	const bool enabled = cursor.isValid() && g_gui.IsDrawingMode() && !isPasting() && supportedBrush && g_settings.getBoolean(Config::USE_AUTOMAGIC) && g_settings.getBoolean(Config::SHOW_AUTOBORDER_PREVIEW);
+	if (!enabled) {
+		if (g_autoborder_preview.Owns(g_gui.secondary_map)) {
+			g_gui.secondary_map = nullptr;
+		}
+		g_autoborder_preview.Clear();
+		return;
+	}
+
+	PositionVector tilesToDraw;
+	PositionVector tilesToBorder;
+	if (brush->isDoor()) {
+		tilesToDraw.push_back(cursor);
+		tilesToBorder = {
+			Position(cursor.x, cursor.y - 1, floor),
+			Position(cursor.x - 1, cursor.y, floor),
+			Position(cursor.x, cursor.y + 1, floor),
+			Position(cursor.x + 1, cursor.y, floor),
+		};
+	} else {
+		getTilesToDraw(cursor.x, cursor.y, floor, &tilesToDraw, &tilesToBorder);
+	}
+
+	g_autoborder_preview.Update(editor, cursor, *brush, g_gui.GetBrushSize(), g_gui.GetBrushShape(), altPressed, tilesToDraw, tilesToBorder);
+	g_gui.secondary_map = g_autoborder_preview.GetBufferMap();
 }
 
 void MapCanvas::OnCopy(wxCommandEvent& WXUNUSED(event)) {

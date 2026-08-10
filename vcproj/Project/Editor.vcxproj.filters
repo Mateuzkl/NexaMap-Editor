@@ -367,6 +367,7 @@
     <ClInclude Include="..\..\source\artprovider.h">
       <Filter>gui</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\autoborder_preview.h"><Filter>gui\map window</Filter></ClInclude>
     <ClInclude Include="..\..\source\welcome_dialog.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -705,6 +706,7 @@
     <ClCompile Include="..\..\source\artprovider.cpp">
       <Filter>gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\autoborder_preview.cpp"><Filter>gui\map window</Filter></ClCompile>
     <ClCompile Include="..\..\source\welcome_dialog.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>

@@ -279,6 +279,7 @@ void AdvancedReplaceWindow::ExecuteReplace() {
 	);
 	SetStatus(wxString::Format(dryRun ? "%s: %zu item(s) would change." : "%s: %zu item(s) changed.", mode, result.ChangedItems()));
 	if (result.committed) {
+		g_gui.InvalidateAutoborderPreview();
 		canvas.RefreshViewport();
 	}
 	wxMessageBox(summary, "Advanced Replace", wxOK | wxICON_INFORMATION, this);

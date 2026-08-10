@@ -39,6 +39,7 @@
 #include <iterator>
 
 #include "editor.h"
+#include "autoborder_preview.h"
 #include "gui.h"
 #include "sprites.h"
 #include "map_drawer.h"
@@ -593,6 +594,7 @@ void MapDrawer::DrawMap() {
 
 		// Draws the doodad preview or the paste preview (or import preview)
 		if (g_gui.secondary_map != nullptr && !options.ingame && !far_zoom_mode) {
+			const bool autoborderPreview = g_autoborder_preview.Owns(g_gui.secondary_map);
 			Position normalPos;
 			Position to(mouse_map_x, mouse_map_y, floor);
 
@@ -605,13 +607,19 @@ void MapDrawer::DrawMap() {
 			for (int map_x = start_x; map_x <= end_x; map_x++) {
 				for (int map_y = start_y; map_y <= end_y; map_y++) {
 					Position final(map_x, map_y, map_z);
-					Position pos = normalPos + final - to;
+					Position pos = autoborderPreview ? final : normalPos + final - to;
 					// Position pos = topos + copypos - Position(map_x, map_y, map_z);
 					if (pos.z >= MAP_LAYERS || pos.z < 0) {
 						continue;
 					}
 
 					Tile* tile = g_gui.secondary_map->getTile(pos);
+					if (autoborderPreview && g_autoborder_preview.IsDeletion(final)) {
+						const int offset = map_z <= GROUND_LAYER ? (GROUND_LAYER - map_z) * TileSize : TileSize * (floor - map_z);
+						const int draw_x = ((map_x * TileSize) - view_scroll_x) - offset;
+						const int draw_y = ((map_y * TileSize) - view_scroll_y) - offset;
+						drawFilledRect(draw_x, draw_y, TileSize, TileSize, wxColour(220, 45, 45, 110));
+					}
 					if (tile) {
 						// Compensate for underground/overground
 						int offset;

@@ -240,6 +240,8 @@ public:
 
 	// Brushes
 	void FillDoodadPreviewBuffer();
+	void RefreshAutoborderPreview();
+	void InvalidateAutoborderPreview();
 	// Selects the currently seleceted brush in the active palette
 	void SelectBrush();
 	// Updates the palette AND selects the brush, second parameter is first palette to look in

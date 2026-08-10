@@ -170,6 +170,7 @@
 		<!-- item/zone filters -->
 		<item name="Show Performance Stats" hotkey="" action="SHOW_PERFORMANCE_STATS" help="Show FPS, CPU, and RAM usage on the screen."/>
 		<item name="Show Animation" hotkey="L" action="SHOW_PREVIEW" help="Show item animations."/>
+		<item name="Show Autoborder Preview" hotkey="" action="SHOW_AUTOBORDER_PREVIEW" help="Preview terrain, wall, door, table, carpet, and eraser autoborders before drawing."/>
 		<item name="Show Light" hotkey="Shift+L" action="SHOW_LIGHTS" help="Show lights."/>
 		<item name="Show Light Strength" hotkey="Shift+K" action="SHOW_LIGHT_STR" help="Show indicators of light strength."/>
 		<item name="Show Technical Items" hotkey="Shift+T" action="SHOW_TECHNICAL_ITEMS" help="Shows some of special items that are not visible in game."/>

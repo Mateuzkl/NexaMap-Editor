@@ -23,6 +23,7 @@
 #include <utility>
 
 #include "gui.h"
+#include "autoborder_preview.h"
 #include "main_menubar.h"
 
 #include "editor.h"
@@ -1443,6 +1444,7 @@ bool GUI::DoUndo() {
 	if (editor && editor->actionQueue->canUndo()) {
 		const bool refreshZonePalettes = editor->actionQueue->getUndoType() == ACTION_ZONE_EDIT;
 		editor->actionQueue->undo();
+		InvalidateAutoborderPreview();
 		if (refreshZonePalettes) {
 			RefreshPalettes(nullptr, true, false);
 		}
@@ -1463,6 +1465,7 @@ bool GUI::DoRedo() {
 	if (editor && editor->actionQueue->canRedo()) {
 		const bool refreshZonePalettes = editor->actionQueue->getRedoType() == ACTION_ZONE_EDIT;
 		editor->actionQueue->redo();
+		InvalidateAutoborderPreview();
 		if (refreshZonePalettes) {
 			RefreshPalettes(nullptr, true, false);
 		}
@@ -1572,7 +1575,10 @@ void GUI::SetSelectionMode() {
 		return;
 	}
 
-	if (current_brush && current_brush->isDoodad()) {
+	if (g_autoborder_preview.Owns(secondary_map)) {
+		g_autoborder_preview.Clear();
+		secondary_map = nullptr;
+	} else if (current_brush && current_brush->isDoodad()) {
 		secondary_map = nullptr;
 	}
 
@@ -1631,6 +1637,7 @@ void GUI::SetBrushSize(int nz) {
 	}
 
 	root->GetAuiToolBar()->UpdateBrushSize(brush_shape, brush_size);
+	RefreshAutoborderPreview();
 }
 
 void GUI::SetBrushVariation(int nz) {
@@ -1656,6 +1663,7 @@ void GUI::SetBrushShape(BrushShape bs) {
 	}
 
 	root->GetAuiToolBar()->UpdateBrushSize(brush_shape, brush_size);
+	RefreshAutoborderPreview();
 }
 
 void GUI::SetBrushThickness(bool on, int x, int y) {
@@ -1841,7 +1849,20 @@ void GUI::SelectBrushInternal(Brush* brush) {
 	}
 
 	SetDrawingMode(current_brush->isZone());
+	InvalidateAutoborderPreview();
 	RefreshView();
+}
+
+void GUI::RefreshAutoborderPreview() {
+	MapTab* mapTab = GetCurrentMapTab();
+	if (mapTab && mapTab->GetView() && mapTab->GetView()->GetCanvas()) {
+		mapTab->GetView()->GetCanvas()->UpdateAutoborderPreview(wxGetKeyState(WXK_ALT));
+	}
+}
+
+void GUI::InvalidateAutoborderPreview() {
+	g_autoborder_preview.Invalidate();
+	RefreshAutoborderPreview();
 }
 
 void GUI::SelectPreviousBrush() {
