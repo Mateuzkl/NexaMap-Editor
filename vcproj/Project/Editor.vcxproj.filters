@@ -377,6 +377,8 @@
       <Filter>gui\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\replace_tool\advanced_replace_window.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_engine.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_execution_plan.h"><Filter>gui\dialogs</Filter></ClInclude>
     <ClInclude Include="..\..\source\replace_tool\replace_item_grid_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
     <ClInclude Include="..\..\source\replace_tool\replace_library_catalog.h"><Filter>gui\dialogs</Filter></ClInclude>
     <ClInclude Include="..\..\source\replace_tool\replace_library_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
@@ -710,6 +712,8 @@
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\replace_tool\advanced_replace_window.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_engine.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_execution_plan.cpp"><Filter>gui\dialogs</Filter></ClCompile>
     <ClCompile Include="..\..\source\replace_tool\replace_item_grid_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>
     <ClCompile Include="..\..\source\replace_tool\replace_library_catalog.cpp"><Filter>gui\dialogs</Filter></ClCompile>
     <ClCompile Include="..\..\source\replace_tool\replace_library_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>

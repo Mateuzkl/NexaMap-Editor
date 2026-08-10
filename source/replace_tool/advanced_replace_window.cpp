@@ -5,12 +5,15 @@
 #include "../main.h"
 #include "advanced_replace_window.h"
 
+#include "replace_engine.h"
+
 #include "../editor.h"
 #include "../gui.h"
 #include "../map_display.h"
 #include "../theme.h"
 
 #include <filesystem>
+#include <wx/checkbox.h>
 #include <wx/choice.h>
 #include <wx/radiobox.h>
 #include <wx/splitter.h>
@@ -69,8 +72,11 @@ AdvancedReplaceWindow::AdvancedReplaceWindow(wxWindow* parent, Editor& editor, M
 	controls->Add(statusSizer, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
 
 	executeButton = new wxButton(this, wxID_ANY, "Execute Replace");
+	dryRunCheck = new wxCheckBox(this, wxID_ANY, "Dry run");
+	dryRunCheck->SetValue(true);
+	dryRunCheck->SetToolTip("Count the exact result without modifying the map.");
+	controls->Add(dryRunCheck, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
 	executeButton->Enable(false);
-	executeButton->SetToolTip("The undoable execution engine is added in Port 07.");
 	controls->Add(executeButton, 0, wxALIGN_CENTER_VERTICAL);
 	root->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 8);
 	root->Add(controls, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
@@ -81,10 +87,15 @@ AdvancedReplaceWindow::AdvancedReplaceWindow(wxWindow* parent, Editor& editor, M
 	deleteButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { DeleteSelectedRuleSet(); });
 	addSelectedButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AddSelectedSource(); });
 	addVisibleButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AddVisibleSources(); });
-	scopeChoice->Bind(wxEVT_RADIOBOX, [this](wxCommandEvent&) { UpdateScopeStatus(); });
+	executeButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ExecuteReplace(); });
+	scopeChoice->Bind(wxEVT_RADIOBOX, [this](wxCommandEvent&) {
+		pendingExecutionSeed = 0;
+		UpdateScopeStatus();
+	});
 
 	RefreshSavedRuleSets();
 	UpdateScopeStatus();
+	UpdateExecuteState();
 	CentreOnParent();
 }
 
@@ -110,7 +121,9 @@ void AdvancedReplaceWindow::OnReplaceLibraryItemSelected(ServerItemId serverId) 
 }
 
 void AdvancedReplaceWindow::OnReplaceRulesChanged(const std::vector<ReplacementRule>& rules) {
+	pendingExecutionSeed = 0;
 	SetStatus(wxString::Format("Draft contains %zu replacement rule(s).", rules.size()));
+	UpdateExecuteState();
 }
 
 void AdvancedReplaceWindow::OnReplaceRulesSaveRequested(const std::vector<ReplacementRule>& rules) {
@@ -132,8 +145,10 @@ void AdvancedReplaceWindow::OnReplaceRulesSaveRequested(const std::vector<Replac
 }
 
 void AdvancedReplaceWindow::OnReplaceRulesCleared() {
+	pendingExecutionSeed = 0;
 	activeRuleSetName.clear();
 	SetStatus("Draft cleared.");
+	UpdateExecuteState();
 }
 
 void AdvancedReplaceWindow::RefreshSavedRuleSets(const std::string& preferredName) {
@@ -167,6 +182,7 @@ void AdvancedReplaceWindow::LoadSelectedRuleSet() {
 	}
 	activeRuleSetName = name;
 	builderPanel->SetRules(std::move(ruleSet->rules));
+	UpdateExecuteState();
 	SetStatus(wxString::Format("Loaded rule set '%s'.", savedRuleChoice->GetStringSelection()));
 }
 
@@ -231,9 +247,52 @@ void AdvancedReplaceWindow::AddVisibleSources() {
 	SetStatus(wxString::Format("Added %zu of %zu visible ServerIDs as source rules.", added, ids.size()));
 }
 
+void AdvancedReplaceWindow::ExecuteReplace() {
+	const std::vector<Tile*> tiles = CollectReplaceScopeTiles(editor.map, editor.selection, GetScope(), GetViewportBounds());
+	const bool dryRun = dryRunCheck->GetValue();
+	wxBusyCursor busy;
+	const ReplaceExecutionResult result = ReplaceEngine::Run(editor, tiles, builderPanel->GetRules(), { dryRun, dryRun ? 0 : pendingExecutionSeed });
+	if (!result.validation.isValid()) {
+		SetStatus("The replacement rules are invalid.", true);
+		UpdateExecuteState();
+		return;
+	}
+	if (dryRun) {
+		pendingExecutionSeed = result.randomSeed;
+	} else {
+		pendingExecutionSeed = 0;
+	}
+
+	const wxString mode = dryRun ? "Dry run" : "Replace complete";
+	const wxString summary = wxString::Format(
+		"%s\n\nTiles scanned: %zu\nItems scanned: %zu\nMatched: %zu\nReplaced: %zu\nDeleted: %zu\nUnchanged by probability: %zu\nChanged tiles: %zu\nRandom seed: %u%s",
+		mode,
+		result.tilesScanned,
+		result.itemsScanned,
+		result.matchedItems,
+		result.replacements,
+		result.deletions,
+		result.unchangedByProbability,
+		result.changedTiles,
+		result.randomSeed,
+		result.committed ? "\n\nThe operation is available as one Undo action." : ""
+	);
+	SetStatus(wxString::Format(dryRun ? "%s: %zu item(s) would change." : "%s: %zu item(s) changed.", mode, result.ChangedItems()));
+	if (result.committed) {
+		canvas.RefreshViewport();
+	}
+	wxMessageBox(summary, "Advanced Replace", wxOK | wxICON_INFORMATION, this);
+}
+
 void AdvancedReplaceWindow::UpdateScopeStatus() {
 	const std::vector<Tile*> tiles = CollectReplaceScopeTiles(editor.map, editor.selection, GetScope(), GetViewportBounds());
 	scopeStatus->SetLabel(wxString::Format("Current scope: %zu tile(s)", tiles.size()));
+}
+
+void AdvancedReplaceWindow::UpdateExecuteState() {
+	const auto& rules = builderPanel->GetRules();
+	const bool valid = !rules.empty() && ValidateRuleSet({ "Draft", rules }).isValid();
+	executeButton->Enable(valid);
 }
 
 void AdvancedReplaceWindow::SetStatus(const wxString& message, bool error) {

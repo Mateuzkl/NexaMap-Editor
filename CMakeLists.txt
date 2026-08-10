@@ -199,6 +199,20 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME visual_similarity_index_tests COMMAND visual_similarity_index_tests)
 
+	add_executable(replace_execution_plan_tests
+		tests/replace_execution_plan_tests.cpp
+		source/replace_tool/replace_rule.cpp
+		source/replace_tool/replace_execution_plan.cpp
+	)
+	target_include_directories(replace_execution_plan_tests PRIVATE source)
+	set_target_properties(replace_execution_plan_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_execution_plan_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_execution_plan_tests"
+	)
+	add_test(NAME replace_execution_plan_tests COMMAND replace_execution_plan_tests)
+
 	add_executable(depot_conversion_validation_tests
 		tests/depot_conversion_validation_tests.cpp
 		source/depot_conversion_validation.cpp

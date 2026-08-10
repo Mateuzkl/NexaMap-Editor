@@ -93,6 +93,8 @@ ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_execution_plan.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_item_grid_panel.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_library_catalog.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_library_panel.h
@@ -223,6 +225,8 @@ ${CMAKE_CURRENT_LIST_DIR}/properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_execution_plan.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_item_grid_panel.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_library_catalog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_library_panel.cpp

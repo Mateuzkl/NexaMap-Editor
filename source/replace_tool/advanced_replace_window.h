@@ -15,6 +15,7 @@
 class Editor;
 class MapCanvas;
 class wxButton;
+class wxCheckBox;
 class wxChoice;
 class wxRadioBox;
 class wxStaticText;
@@ -40,7 +41,9 @@ private:
 	void DeleteSelectedRuleSet();
 	void AddSelectedSource();
 	void AddVisibleSources();
+	void ExecuteReplace();
 	void UpdateScopeStatus();
+	void UpdateExecuteState();
 	void SetStatus(const wxString& message, bool error = false);
 	[[nodiscard]] ReplaceViewportBounds GetViewportBounds() const;
 
@@ -53,10 +56,12 @@ private:
 	wxRadioBox* scopeChoice = nullptr;
 	wxButton* addSelectedButton = nullptr;
 	wxButton* executeButton = nullptr;
+	wxCheckBox* dryRunCheck = nullptr;
 	wxStaticText* scopeStatus = nullptr;
 	wxStaticText* statusLabel = nullptr;
 	ServerItemId selectedLibraryItem;
 	std::string activeRuleSetName;
+	uint32_t pendingExecutionSeed = 0;
 };
 
 #endif
