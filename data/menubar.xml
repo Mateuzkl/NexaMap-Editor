@@ -56,6 +56,7 @@
 	</menu>
 	<menu name="Tools">
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
+		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>
 	</menu>
 	<menu name="Edit">
 		<item name="Undo" hotkey="Ctrl+Z" action="UNDO" help="Undo last action."/>

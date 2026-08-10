@@ -376,6 +376,17 @@
     <ClInclude Include="..\..\source\replace_items_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\advanced_replace_window.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_item_grid_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_library_catalog.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_library_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_builder_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_editor.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_manager.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_scope.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_visual_similarity_service.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\visual_similarity_index.h"><Filter>gui\dialogs</Filter></ClInclude>
     <ClInclude Include="..\..\source\tileset_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -698,6 +709,17 @@
     <ClCompile Include="..\..\source\replace_items_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\advanced_replace_window.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_item_grid_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_library_catalog.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_library_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_builder_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_editor.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_manager.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_scope.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_visual_similarity_service.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\visual_similarity_index.cpp"><Filter>gui\dialogs</Filter></ClCompile>
     <ClCompile Include="..\..\source\tileset_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>

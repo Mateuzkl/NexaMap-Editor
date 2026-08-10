@@ -21,6 +21,7 @@
 #include "replace_rule_editor.h"
 
 #include <functional>
+#include <span>
 #include <wx/scrolwin.h>
 
 class wxBoxSizer;
@@ -40,6 +41,8 @@ public:
 	ReplaceRuleBuilderPanel(wxWindow* parent, Listener* listener);
 
 	void SetRules(std::vector<ReplacementRule> rules);
+	bool AddSourceRule(ServerItemId serverId);
+	size_t AddSourceRules(std::span<const ServerItemId> serverIds);
 	[[nodiscard]] const std::vector<ReplacementRule>& GetRules() const {
 		return editor.GetRules();
 	}

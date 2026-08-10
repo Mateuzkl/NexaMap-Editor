@@ -78,6 +78,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 
 	MAKE_ACTION(FIND_ITEM, wxITEM_NORMAL, OnSearchForItem);
 	MAKE_ACTION(REPLACE_ITEMS, wxITEM_NORMAL, OnReplaceItems);
+	MAKE_ACTION(ADVANCED_REPLACE, wxITEM_NORMAL, OnAdvancedReplace);
 	MAKE_ACTION(SEARCH_ON_MAP_EVERYTHING, wxITEM_NORMAL, OnSearchForStuffOnMap);
 	MAKE_ACTION(SEARCH_ON_MAP_ZONES, wxITEM_NORMAL, OnSearchForZonesOnMap);
 	MAKE_ACTION(SEARCH_ON_MAP_UNIQUE, wxITEM_NORMAL, OnSearchForUniqueOnMap);
@@ -354,6 +355,7 @@ void MainMenuBar::Update() {
 
 	EnableItem(FIND_ITEM, is_host);
 	EnableItem(REPLACE_ITEMS, is_local);
+	EnableItem(ADVANCED_REPLACE, loaded && is_local);
 	EnableItem(SEARCH_ON_MAP_EVERYTHING, is_host);
 	EnableItem(SEARCH_ON_MAP_UNIQUE, is_host);
 	EnableItem(SEARCH_ON_MAP_ACTION, is_host);
@@ -1055,6 +1057,18 @@ void MainMenuBar::OnReplaceItems(wxCommandEvent& WXUNUSED(event)) {
 	if (MapTab* tab = g_gui.GetCurrentMapTab()) {
 		if (MapWindow* window = tab->GetView()) {
 			window->ShowReplaceItemsDialog(false);
+		}
+	}
+}
+
+void MainMenuBar::OnAdvancedReplace(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.IsVersionLoaded()) {
+		return;
+	}
+
+	if (MapTab* tab = g_gui.GetCurrentMapTab()) {
+		if (MapWindow* window = tab->GetView()) {
+			window->ShowAdvancedReplaceWindow();
 		}
 	}
 }

@@ -21,11 +21,13 @@
 #include "gui.h"
 #include "sprites.h"
 #include "editor.h"
+#include "replace_tool/advanced_replace_window.h"
 
 MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 	wxPanel(parent, PANE_MAIN),
 	editor(editor),
-	replaceItemsDialog(nullptr) {
+	replaceItemsDialog(nullptr),
+	advancedReplaceWindow(nullptr) {
 	int GL_settings[3];
 	GL_settings[0] = WX_GL_RGBA;
 	GL_settings[1] = WX_GL_DOUBLEBUFFER;
@@ -72,6 +74,27 @@ void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent& event) {
 	}
 }
 
+void MapWindow::ShowAdvancedReplaceWindow() {
+	if (advancedReplaceWindow) {
+		advancedReplaceWindow->Raise();
+		advancedReplaceWindow->SetFocus();
+		return;
+	}
+
+	advancedReplaceWindow = new AdvancedReplaceWindow(this, editor, *canvas);
+	advancedReplaceWindow->Bind(wxEVT_CLOSE_WINDOW, &MapWindow::OnAdvancedReplaceWindowClose, this);
+	advancedReplaceWindow->Show();
+}
+
+void MapWindow::OnAdvancedReplaceWindowClose(wxCloseEvent&) {
+	if (!advancedReplaceWindow) {
+		return;
+	}
+	advancedReplaceWindow->Unbind(wxEVT_CLOSE_WINDOW, &MapWindow::OnAdvancedReplaceWindowClose, this);
+	advancedReplaceWindow->Destroy();
+	advancedReplaceWindow = nullptr;
+}
+
 void MapWindow::SetSize(int x, int y, bool center) {
 	if (x == 0 || y == 0) {
 		return;
@@ -96,6 +119,9 @@ void MapWindow::UpdateScrollbars(int nx, int ny) {
 void MapWindow::UpdateDialogs(bool show) {
 	if (replaceItemsDialog) {
 		replaceItemsDialog->Show(show);
+	}
+	if (advancedReplaceWindow) {
+		advancedReplaceWindow->Show(show);
 	}
 }
 

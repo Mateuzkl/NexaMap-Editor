@@ -45,6 +45,7 @@ namespace MenuBar {
 		REDO,
 		FIND_ITEM,
 		REPLACE_ITEMS,
+		ADVANCED_REPLACE,
 		SEARCH_ON_MAP_EVERYTHING,
 		SEARCH_ON_MAP_ZONES,
 		SEARCH_ON_MAP_UNIQUE,
@@ -246,6 +247,7 @@ public:
 	void OnPaste(wxCommandEvent& event);
 	void OnSearchForItem(wxCommandEvent& event);
 	void OnReplaceItems(wxCommandEvent& event);
+	void OnAdvancedReplace(wxCommandEvent& event);
 	void OnSearchForStuffOnMap(wxCommandEvent& event);
 	void OnSearchForZonesOnMap(wxCommandEvent& event);
 	void OnSearchForUniqueOnMap(wxCommandEvent& event);

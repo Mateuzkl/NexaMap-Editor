@@ -23,6 +23,7 @@
 
 class MapCanvas;
 class DCButton;
+class AdvancedReplaceWindow;
 
 // Map window, a window displaying a map, complete with scrollbars
 // and everything. This is the window that's inside each tab in the
@@ -76,6 +77,8 @@ public:
 
 	void ShowReplaceItemsDialog(bool selectionOnly);
 	void OnReplaceItemsDialogClose(wxCloseEvent& event);
+	void ShowAdvancedReplaceWindow();
+	void OnAdvancedReplaceWindowClose(wxCloseEvent& event);
 
 protected:
 	// For internal use, call to resize the scrollbars with
@@ -92,6 +95,7 @@ protected:
 
 private:
 	ReplaceItemsDialog* replaceItemsDialog;
+	AdvancedReplaceWindow* advancedReplaceWindow;
 	Position previous_position;
 
 	friend class MainFrame;

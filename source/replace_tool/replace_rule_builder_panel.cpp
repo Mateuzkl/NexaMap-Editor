@@ -116,6 +116,29 @@ void ReplaceRuleBuilderPanel::SetRules(std::vector<ReplacementRule> rules) {
 	Rebuild();
 }
 
+bool ReplaceRuleBuilderPanel::AddSourceRule(ServerItemId serverId) {
+	if (!editor.AddRule(serverId)) {
+		return false;
+	}
+	NotifyChanged();
+	Rebuild();
+	return true;
+}
+
+size_t ReplaceRuleBuilderPanel::AddSourceRules(std::span<const ServerItemId> serverIds) {
+	size_t added = 0;
+	for (ServerItemId serverId : serverIds) {
+		if (editor.AddRule(serverId)) {
+			++added;
+		}
+	}
+	if (added != 0) {
+		NotifyChanged();
+		Rebuild();
+	}
+	return added;
+}
+
 void ReplaceRuleBuilderPanel::Rebuild() {
 	Freeze();
 	rulesSizer->Clear(true);
