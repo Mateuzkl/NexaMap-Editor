@@ -17,6 +17,7 @@ find_package(liblzma CONFIG REQUIRED)
 find_package(Protobuf REQUIRED)
 
 find_package(OpenGL REQUIRED)
+find_package(Threads REQUIRED)
 
 # LibArchive support is disabled by default. To enable OTGZ support, define
 # OTGZ_SUPPORT in source/definitions.h and add LibArchive back to the build.
@@ -65,6 +66,7 @@ include_directories(${OPENGL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR})
 target_link_libraries(${PROJECT_NAME}
 	${wxWidgets_LIBRARIES}
 	${OPENGL_LIBRARIES}
+	Threads::Threads
 	${ZLIB_LIBRARIES}
 	glad::glad
 	fmt::fmt

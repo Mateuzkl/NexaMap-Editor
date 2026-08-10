@@ -20,6 +20,7 @@
 
 #include "graphics.h"
 #include "position.h"
+#include <cstddef>
 #include <cstdint>
 
 class GLRenderer;
@@ -60,15 +61,17 @@ private:
 	}
 
 	GLuint texture;
+	int texture_width = 0;
+	int texture_height = 0;
 	std::vector<Light> lights;
 	// Spatial grid for fast light lookup
 	static constexpr int GRID_CELL_SIZE = 8; // MaxLightIntensity
 	struct LightGrid {
-		std::vector<std::vector<uint16_t>> cells; // indices into lights vector
+		std::vector<std::vector<std::size_t>> cells; // indices into lights vector
 		int grid_w = 0, grid_h = 0;
 		int origin_x = 0, origin_y = 0;
 		void build(const std::vector<Light>& lights, int map_x, int map_y, int end_x, int end_y);
-		const std::vector<uint16_t>& getCell(int mx, int my) const;
+		const std::vector<std::size_t>& getCell(int mx, int my) const;
 	};
 	LightGrid light_grid;
 	std::vector<uint8_t> buffer;

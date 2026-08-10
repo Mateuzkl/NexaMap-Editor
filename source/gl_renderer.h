@@ -20,6 +20,8 @@ struct GLColor {
 
 class GLRenderer {
 public:
+	~GLRenderer();
+
 	void init();
 
 	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);
@@ -45,7 +47,17 @@ public:
 	void destroyFBO();
 	void beginFBO();
 	void endFBO();
-	void blitFBO(int w, int h);
+	void blitFBO(
+		int srcX0,
+		int srcY0,
+		int srcX1,
+		int srcY1,
+		int dstX0,
+		int dstY0,
+		int dstX1,
+		int dstY1,
+		unsigned int filter
+	);
 	bool hasFBO() const {
 		return fboData.fbo != 0;
 	}

@@ -41,7 +41,7 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 		return;
 	}
 
-	const auto bufferSize = static_cast<size_t>(w * h * PixelFormatRGBA);
+	const auto bufferSize = static_cast<size_t>(w) * static_cast<size_t>(h) * PixelFormatRGBA;
 	if (buffer.size() != bufferSize) {
 		buffer.resize(bufferSize);
 	}
@@ -61,7 +61,7 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 			buffer[color_index + 3] = 140; // global_color.Alpha();
 
 			const auto& nearby = light_grid.getCell(mx, my);
-			for (uint16_t li : nearby) {
+			for (std::size_t li : nearby) {
 				const Light& light = lights[li];
 				float const intensity = calculateIntensity(mx, my, light);
 				if (intensity == 0.f) {
@@ -89,7 +89,13 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+	if (texture_width != w || texture_height != h) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+		texture_width = w;
+		texture_height = h;
+	} else {
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+	}
 
 	if (renderer) {
 		renderer->flush();
@@ -149,6 +155,8 @@ void LightDrawer::unloadGLTexture() {
 		GLRenderer::invalidateTexture(texture);
 		glDeleteTextures(1, &texture);
 		texture = 0;
+		texture_width = 0;
+		texture_height = 0;
 	}
 }
 
@@ -164,7 +172,7 @@ void LightDrawer::LightGrid::build(const std::vector<Light>& lights, int map_x, 
 	for (auto& cell : cells) {
 		cell.clear();
 	}
-	for (uint16_t i = 0; i < static_cast<uint16_t>(lights.size()); ++i) {
+	for (std::size_t i = 0; i < lights.size(); ++i) {
 		const Light& light = lights[i];
 		int radius = light.intensity; // MaxLightIntensity is 8
 		int min_gx = (light.map_x - radius - origin_x) / GRID_CELL_SIZE;
@@ -183,9 +191,9 @@ void LightDrawer::LightGrid::build(const std::vector<Light>& lights, int map_x, 
 	}
 }
 
-static const std::vector<uint16_t> s_emptyCell;
+static const std::vector<std::size_t> s_emptyCell;
 
-const std::vector<uint16_t>& LightDrawer::LightGrid::getCell(int mx, int my) const {
+const std::vector<std::size_t>& LightDrawer::LightGrid::getCell(int mx, int my) const {
 	int gx = (mx - origin_x) / GRID_CELL_SIZE;
 	int gy = (my - origin_y) / GRID_CELL_SIZE;
 	if (gx < 0 || gx >= grid_w || gy < 0 || gy >= grid_h) {

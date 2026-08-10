@@ -21,6 +21,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <array>
 #include <limits>
 #include <unordered_set>
 #include <unordered_map>
@@ -227,23 +228,27 @@ class MapDrawer {
 	int tile_size;
 	int floor;
 
-	static constexpr int MAX_RENDERED_TILES_X = 512;
-	static constexpr int MAX_RENDERED_TILES_Y = 384;
-	int render_step_x = 1;
-	int render_step_y = 1;
-	bool low_detail_mode = false;
+	static constexpr float FAR_ZOOM_THRESHOLD = 6.0f;
+	static constexpr long VIEWPORT_SETTLE_DELAY_MS = 200;
+	bool medium_zoom_mode = false;
+	bool far_zoom_mode = false;
 
 	bool scene_dirty = true;
-	bool prev_view_initialized = false;
-	int prev_view_scroll_x = 0;
-	int prev_view_scroll_y = 0;
-	float prev_zoom = -1.0f;
-	int prev_floor = -1;
-	int prev_start_z = -1;
-	int prev_screensize_x = -1;
-	int prev_screensize_y = -1;
-	wxStopWatch zoom_timer;
-	float last_fbo_zoom = -1.0f;
+	bool input_view_initialized = false;
+	float last_input_zoom = -1.0f;
+	int last_input_scroll_x = 0;
+	int last_input_scroll_y = 0;
+	wxStopWatch viewport_settle_timer;
+	bool viewport_settle_pending = false;
+
+	bool cached_scene_initialized = false;
+	float cached_scene_zoom = -1.0f;
+	int cached_scroll_x = 0;
+	int cached_scroll_y = 0;
+	int cached_floor = -1;
+	int cached_start_z = -1;
+	int cached_screensize_x = -1;
+	int cached_screensize_y = -1;
 
 protected:
 	std::unordered_map<unsigned int, std::vector<FinderPosition>> zoneTiles;
@@ -256,8 +261,16 @@ protected:
 	wxStopWatch perf_update_timer;
 	int frame_count = 0;
 	double current_fps = 0.0;
+	double average_fps = 0.0;
+	std::array<double, 60> fps_history {};
+	size_t fps_history_size = 0;
+	size_t fps_history_index = 0;
+	double fps_history_sum = 0.0;
 	double current_cpu = 0.0;
 	size_t current_ram = 0;
+	double last_scene_ms = 0.0;
+	size_t visible_tile_count = 0;
+	size_t visible_item_count = 0;
 
 #ifdef __WINDOWS__
 	ULARGE_INTEGER last_cpu_time;
@@ -284,6 +297,7 @@ public:
 	void DrawOverlays();
 	void markDirty();
 	bool isSceneDirty();
+	bool isViewportInteractionActive() const;
 	void DrawBackground();
 	void DrawMap();
 	void DrawDraggingShadow();

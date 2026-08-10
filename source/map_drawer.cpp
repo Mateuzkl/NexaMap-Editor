@@ -34,6 +34,9 @@
 #include <thread>
 #include <sstream>
 #include <iomanip>
+#include <chrono>
+#include <cmath>
+#include <iterator>
 
 #include "editor.h"
 #include "gui.h"
@@ -42,6 +45,7 @@
 #include "map_display.h"
 #include "copybuffer.h"
 #include "graphics.h"
+#include "sprite_appearances.h"
 
 #include "creature_brush.h"
 #include "house_exit_brush.h"
@@ -252,20 +256,8 @@ void MapDrawer::SetupVars() {
 	end_x = start_x + screensize_x / tile_size + 2;
 	end_y = start_y + screensize_y / tile_size + 2;
 
-	// Compute LOD stepping for zoom-out culling
-	int tiles_x = end_x - start_x;
-	int tiles_y = end_y - start_y;
-	if (tiles_x > MAX_RENDERED_TILES_X) {
-		render_step_x = (tiles_x + MAX_RENDERED_TILES_X - 1) / MAX_RENDERED_TILES_X;
-	} else {
-		render_step_x = 1;
-	}
-	if (tiles_y > MAX_RENDERED_TILES_Y) {
-		render_step_y = (tiles_y + MAX_RENDERED_TILES_Y - 1) / MAX_RENDERED_TILES_Y;
-	} else {
-		render_step_y = 1;
-	}
-	low_detail_mode = (render_step_x > 1 || render_step_y > 1);
+	medium_zoom_mode = zoom > 3.0f && zoom < FAR_ZOOM_THRESHOLD;
+	far_zoom_mode = zoom >= FAR_ZOOM_THRESHOLD;
 }
 
 void MapDrawer::SetupGL() {
@@ -306,51 +298,38 @@ void MapDrawer::Release() {
 	glPopMatrix();
 }
 
-#include <chrono>
-#include <fstream>
-
 void MapDrawer::DrawScene() {
-	auto t0 = std::chrono::high_resolution_clock::now();
+	const auto started = std::chrono::steady_clock::now();
 	DrawBackground();
-	auto t1 = std::chrono::high_resolution_clock::now();
 	DrawMap();
-	auto t2 = std::chrono::high_resolution_clock::now();
-	if (options.isDrawLight()) {
+	if (options.isDrawLight() && !far_zoom_mode) {
 		DrawLight();
 	}
-	auto t3 = std::chrono::high_resolution_clock::now();
-	DrawDraggingShadow();
-	auto t4 = std::chrono::high_resolution_clock::now();
-	DrawHigherFloors();
-	auto t5 = std::chrono::high_resolution_clock::now();
-
-	static std::ofstream log("performance.log", std::ios::app);
-	if (log.is_open()) {
-		auto total = std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t0).count();
-		if (total > 5) { // Only log frames that take more than 5ms
-			log << "DrawScene total: " << total << "ms"
-				<< " | BG: " << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() << "ms"
-				<< " | Map: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << "ms"
-				<< " | Light: " << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count() << "ms"
-				<< " | Drag: " << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count() << "ms"
-				<< " | HighFl: " << std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t4).count() << "ms\n";
-		}
+	if (!far_zoom_mode) {
+		DrawHigherFloors();
 	}
+	last_scene_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
 }
 
 void MapDrawer::DrawOverlays() {
+	if (!far_zoom_mode) {
+		DrawDraggingShadow();
+	}
 	if (options.dragging) {
 		DrawSelectionBox();
 	}
 	DrawBrush();
-	if (options.show_grid && zoom <= 10.f) {
+	if (options.show_grid && !medium_zoom_mode && !far_zoom_mode) {
 		DrawGrid();
 	}
 	if (options.show_ingame_box) {
 		DrawIngameBox();
 	}
-	if (options.show_tooltips) {
+	if (options.show_tooltips && !medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
 		DrawTooltips();
+	}
+	for (int map_z = start_z; map_z >= superend_z; --map_z) {
+		DrawPositionIndicator(map_z);
 	}
 	if (options.show_performance_stats) {
 		DrawPerformanceStats();
@@ -362,40 +341,43 @@ void MapDrawer::markDirty() {
 }
 
 bool MapDrawer::isSceneDirty() {
-	bool just_started_zooming = (prev_zoom != zoom);
-	if (just_started_zooming) {
-		zoom_timer.Start();
+	if (!input_view_initialized) {
+		input_view_initialized = true;
+		last_input_zoom = zoom;
+		last_input_scroll_x = view_scroll_x;
+		last_input_scroll_y = view_scroll_y;
+	} else if (last_input_zoom != zoom || last_input_scroll_x != view_scroll_x || last_input_scroll_y != view_scroll_y) {
+		last_input_zoom = zoom;
+		last_input_scroll_x = view_scroll_x;
+		last_input_scroll_y = view_scroll_y;
+		viewport_settle_timer.Start();
+		viewport_settle_pending = true;
 	}
 
-	bool is_actively_zooming = (zoom_timer.Time() < 250) && last_fbo_zoom > 0.0f;
-
-	if (scene_dirty
-		|| !prev_view_initialized
-		|| prev_floor != floor
-		|| prev_start_z != start_z
-		|| prev_screensize_x != screensize_x
-		|| prev_screensize_y != screensize_y) {
-		prev_view_initialized = true;
-		prev_view_scroll_x = view_scroll_x;
-		prev_view_scroll_y = view_scroll_y;
-		prev_zoom = zoom;
-		prev_floor = floor;
-		prev_start_z = start_z;
-		prev_screensize_x = screensize_x;
-		prev_screensize_y = screensize_y;
+	const bool hard_invalidation = !cached_scene_initialized
+		|| cached_floor != floor
+		|| cached_start_z != start_z
+		|| cached_screensize_x != screensize_x
+		|| cached_screensize_y != screensize_y;
+	if (hard_invalidation) {
 		return true;
 	}
 
-	if (!is_actively_zooming) {
-		if (prev_view_scroll_x != view_scroll_x || prev_view_scroll_y != view_scroll_y || prev_zoom != zoom) {
-			prev_view_scroll_x = view_scroll_x;
-			prev_view_scroll_y = view_scroll_y;
-			prev_zoom = zoom;
-			return true;
-		}
+	if (isViewportInteractionActive()) {
+		return false;
 	}
 
-	return false;
+	viewport_settle_pending = false;
+	return scene_dirty
+		|| cached_scroll_x != view_scroll_x
+		|| cached_scroll_y != view_scroll_y
+		|| cached_scene_zoom != zoom;
+}
+
+bool MapDrawer::isViewportInteractionActive() const {
+	return viewport_settle_pending
+		&& cached_scene_initialized
+		&& viewport_settle_timer.Time() < VIEWPORT_SETTLE_DELAY_MS;
 }
 
 void MapDrawer::Draw() {
@@ -407,6 +389,7 @@ void MapDrawer::Draw() {
 
 	renderer->ensureFBO(screensize_x, screensize_y);
 	if (!renderer->hasFBO()) {
+		cached_scene_initialized = false;
 		DrawScene();
 		DrawOverlays();
 		return;
@@ -418,22 +401,38 @@ void MapDrawer::Draw() {
 		renderer->flush();
 		renderer->endFBO();
 		scene_dirty = false;
-		last_fbo_zoom = zoom;
+		cached_scene_initialized = true;
+		cached_scene_zoom = zoom;
+		cached_scroll_x = view_scroll_x;
+		cached_scroll_y = view_scroll_y;
+		cached_floor = floor;
+		cached_start_z = start_z;
+		cached_screensize_x = screensize_x;
+		cached_screensize_y = screensize_y;
 	}
 
-	glPushMatrix();
-	if (last_fbo_zoom > 0.0f && last_fbo_zoom != zoom) {
-		float scale = last_fbo_zoom / zoom;
-		
-		float tx = (prev_view_scroll_x - view_scroll_x) * zoom;
-		float ty = (prev_view_scroll_y - view_scroll_y) * zoom;
-		
-		glTranslatef(tx, ty, 0.0f);
-		glScalef(scale, scale, 1.0f);
-	}
+	const double scale = cached_scene_zoom / zoom;
+	const double translated_x = static_cast<double>(cached_scroll_x - view_scroll_x) / zoom;
+	const double translated_y = static_cast<double>(cached_scroll_y - view_scroll_y) / zoom;
+	const int dst_left = static_cast<int>(std::lround(translated_x));
+	const int dst_top = static_cast<int>(std::lround(translated_y));
+	const int dst_right = static_cast<int>(std::lround(translated_x + screensize_x * scale));
+	const int dst_bottom = static_cast<int>(std::lround(translated_y + screensize_y * scale));
 
-	renderer->blitFBO(screensize_x, screensize_y);
-	glPopMatrix();
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	renderer->blitFBO(
+		0,
+		0,
+		screensize_x,
+		screensize_y,
+		dst_left,
+		screensize_y - dst_bottom,
+		dst_right,
+		screensize_y - dst_top,
+		(scale == 1.0 ? GL_NEAREST : GL_LINEAR)
+	);
 	DrawOverlays();
 }
 
@@ -461,6 +460,8 @@ inline int getFloorAdjustment(int floor) {
 
 void MapDrawer::DrawMap() {
 	Brush* brush = g_gui.GetCurrentBrush();
+	visible_tile_count = 0;
+	visible_item_count = 0;
 
 	// The current house we're drawing
 	current_house_id = 0;
@@ -473,7 +474,7 @@ void MapDrawer::DrawMap() {
 	}
 
 	bool only_colors = options.isOnlyColors();
-	bool show_zone_tooltips = options.isTooltips();
+	bool show_zone_tooltips = options.isTooltips() && !far_zoom_mode;
 
 	// Note: texture mode is controlled by uUseTexture in the shader
 
@@ -494,37 +495,26 @@ void MapDrawer::DrawMap() {
 			int nd_end_x = (end_x & ~3) + 4;
 			int nd_end_y = (end_y & ~3) + 4;
 
-			int node_jump_x = std::max(1, render_step_x / 4);
-			int node_jump_y = std::max(1, render_step_y / 4);
-			
-			int inner_step_x = (render_step_x < 4) ? render_step_x : 4;
-			int inner_step_y = (render_step_y < 4) ? render_step_y : 4;
-
 			zoneTiles.clear();
-			for (int nd_map_x = nd_start_x; nd_map_x <= nd_end_x; nd_map_x += 4 * node_jump_x) {
-				for (int nd_map_y = nd_start_y; nd_map_y <= nd_end_y; nd_map_y += 4 * node_jump_y) {
+			for (int nd_map_x = nd_start_x; nd_map_x <= nd_end_x; nd_map_x += 4) {
+				for (int nd_map_y = nd_start_y; nd_map_y <= nd_end_y; nd_map_y += 4) {
 					QTreeNode* nd = editor.map.getLeaf(nd_map_x, nd_map_y);
 					if (!nd) {
 						continue;
 					}
 
-					for (int map_x = 0; map_x < 4; map_x += inner_step_x) {
-						for (int map_y = 0; map_y < 4; map_y += inner_step_y) {
+					for (int map_x = 0; map_x < 4; ++map_x) {
+						for (int map_y = 0; map_y < 4; ++map_y) {
 							TileLocation* location = nd->getTile(map_x, map_y, map_z);
-							if (render_step_x > 1) {
-								glPushMatrix();
-								int cx = (nd_map_x + map_x) * TileSize - view_scroll_x - getFloorAdjustment(map_z);
-								int cy = (nd_map_y + map_y) * TileSize - view_scroll_y - getFloorAdjustment(map_z);
-								glTranslatef(cx, cy, 0.0f);
-								glScalef(render_step_x, render_step_y, 1.0f);
-								glTranslatef(-cx, -cy, 0.0f);
-							}
-							DrawTile(location);
-							if (render_step_x > 1) {
-								glPopMatrix();
+							if (far_zoom_mode) {
+								const int draw_x = (nd_map_x + map_x) * TileSize - view_scroll_x - getFloorAdjustment(map_z);
+								const int draw_y = (nd_map_y + map_y) * TileSize - view_scroll_y - getFloorAdjustment(map_z);
+								DrawTileMinimap(location, draw_x, draw_y, TileSize, TileSize);
+							} else {
+								DrawTile(location);
 							}
 							// draw light, but only if not zoomed too far
-							if (location && options.isDrawLight() && zoom <= 10.0) {
+							if (location && options.isDrawLight() && !far_zoom_mode) {
 								AddLight(location);
 							}
 						}
@@ -579,12 +569,8 @@ void MapDrawer::DrawMap() {
 			}
 		}
 
-		DrawPositionIndicator(map_z);
-
-
-
 		// Draws the doodad preview or the paste preview (or import preview)
-		if (g_gui.secondary_map != nullptr && !options.ingame) {
+		if (g_gui.secondary_map != nullptr && !options.ingame && !far_zoom_mode) {
 			Position normalPos;
 			Position to(mouse_map_x, mouse_map_y, floor);
 
@@ -1615,6 +1601,48 @@ void MapDrawer::WriteTooltip(Waypoint* waypoint, std::ostringstream& stream) {
 	stream << "Waypoint: " << waypoint->name << "\n";
 }
 
+void MapDrawer::DrawTileMinimap(TileLocation* location, int draw_x, int draw_y, int pixel_w, int pixel_h) {
+	if (!location) {
+		return;
+	}
+
+	Tile* tile = location->get();
+	if (!tile || (options.show_only_modified && !tile->isModified())) {
+		return;
+	}
+
+	++visible_tile_count;
+	visible_item_count += tile->items.size() + (tile->ground ? 1u : 0u) + (tile->creature ? 1u : 0u);
+
+	const uint8_t color = tile->getMiniMapColor();
+	uint8_t red = static_cast<uint8_t>((color / 36) % 6 * 51);
+	uint8_t green = static_cast<uint8_t>((color / 6) % 6 * 51);
+	uint8_t blue = static_cast<uint8_t>(color % 6 * 51);
+
+	if (options.show_zone_areas && tile->hasZone()) {
+		const Color zone_color = GetZoneColor(*tile, options.active_zone_id);
+		red = static_cast<uint8_t>(std::get<0>(zone_color));
+		green = static_cast<uint8_t>(std::get<1>(zone_color));
+		blue = static_cast<uint8_t>(std::get<2>(zone_color));
+	} else if (options.show_houses && tile->isHouseTile()) {
+		red = static_cast<uint8_t>(red / 2);
+		if (static_cast<int>(tile->getHouseID()) != current_house_id) {
+			green = static_cast<uint8_t>(green / 2);
+		}
+	} else if (options.show_special_tiles && tile->isPZ()) {
+		red = static_cast<uint8_t>(red / 2);
+		blue = static_cast<uint8_t>(blue / 2);
+	}
+
+	renderer->drawColoredQuad(
+		static_cast<float>(draw_x),
+		static_cast<float>(draw_y),
+		static_cast<float>(pixel_w),
+		static_cast<float>(pixel_h),
+		{ red, green, blue, 255 }
+	);
+}
+
 void MapDrawer::DrawTile(TileLocation* location) {
 	RME_PROFILE_SCOPE("MapDrawer::DrawTile");
 	if (!location) {
@@ -1630,13 +1658,16 @@ void MapDrawer::DrawTile(TileLocation* location) {
 		return;
 	}
 
+	++visible_tile_count;
+	visible_item_count += tile->items.size() + (tile->ground ? 1u : 0u) + (tile->creature ? 1u : 0u);
+
 	int map_x = location->getX();
 	int map_y = location->getY();
 	int map_z = location->getZ();
 
 	bool as_minimap = options.show_as_minimap;
 	bool only_colors = options.isOnlyColors();
-	bool show_tooltips = options.isTooltips();
+	bool show_tooltips = options.isTooltips() && !medium_zoom_mode;
 	bool draw_waypoints = !only_colors && zoom < 10.0 && !options.ingame && options.show_waypoints;
 
 	Waypoint* waypoint = nullptr;
@@ -1752,6 +1783,9 @@ void MapDrawer::DrawTile(TileLocation* location) {
 		if (zoom < 10.0 || !options.hide_items_when_zoomed) {
 			// items on tile
 			for (auto it = tile->items.begin(); it != tile->items.end(); it++) {
+				if (medium_zoom_mode && !(*it)->isBorder() && std::next(it) != tile->items.end()) {
+					continue;
+				}
 				// item tooltip
 				if (show_tooltips && map_z == floor) {
 					WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
@@ -1780,12 +1814,12 @@ void MapDrawer::DrawTile(TileLocation* location) {
 				}
 			}
 			// monster/npc on tile
-			if (tile->creature && options.show_creatures) {
+			if (!medium_zoom_mode && tile->creature && options.show_creatures) {
 				BlitCreature(draw_x, draw_y, tile->creature);
 			}
 		}
 
-		if (zoom < 10.0) {
+		if (!medium_zoom_mode && zoom < 10.0) {
 			// waypoint (blue flame)
 			if (draw_waypoints && waypoint) {
 				BlitSpriteType(draw_x, draw_y, SPRITE_WAYPOINT, 64, 64, 255);
@@ -2345,9 +2379,6 @@ void MapDrawer::UpdateCPUUsage() {
 void MapDrawer::DrawPerformanceStats() {
 	frame_count++;
 
-	static std::vector<double> fps_history;
-	static double avg_fps = 0.0;
-
 	long elapsed = perf_update_timer.Time();
 	if (elapsed >= 500) {
 		current_fps = (frame_count * 1000.0) / elapsed;
@@ -2356,13 +2387,17 @@ void MapDrawer::DrawPerformanceStats() {
 		UpdateCPUUsage();
 		perf_update_timer.Start();
 
-		fps_history.push_back(current_fps);
-		if (fps_history.size() > 60) {
-			fps_history.erase(fps_history.begin());
+		if (fps_history_size < fps_history.size()) {
+			fps_history[fps_history_index] = current_fps;
+			fps_history_sum += current_fps;
+			++fps_history_size;
+		} else {
+			fps_history_sum -= fps_history[fps_history_index];
+			fps_history[fps_history_index] = current_fps;
+			fps_history_sum += current_fps;
 		}
-		double sum = 0;
-		for (double f : fps_history) sum += f;
-		avg_fps = fps_history.empty() ? 0 : (sum / fps_history.size());
+		fps_history_index = (fps_history_index + 1) % fps_history.size();
+		average_fps = fps_history_size == 0 ? 0.0 : fps_history_sum / static_cast<double>(fps_history_size);
 	}
 
 	// Save current matrices and switch to screen-space projection
@@ -2375,12 +2410,14 @@ void MapDrawer::DrawPerformanceStats() {
 	glPushMatrix();
 	glLoadIdentity();
 
-	int width = 115;
-	int height = 85;
+	int width = 240;
+	int height = 184;
 	int margin = 10;
-	int x = screensize_x - width - margin;
+	int x = std::max(margin, screensize_x - width - margin);
 	int y = margin;
 
+	renderer->flush();
+	renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
 	renderer->drawColoredQuad(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), {20, 20, 20, 180});
 	renderer->drawRect(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), {60, 60, 60, 200}, 1.0f);
 	renderer->flushAndUnbind();
@@ -2408,9 +2445,9 @@ void MapDrawer::DrawPerformanceStats() {
 
 	// Avg
 	float ar = 0.7f, ag = 0.7f, ab = 0.7f;
-	if (avg_fps < 15) { ar = 1.0f; ag = 0.3f; ab = 0.3f; }
-	else if (avg_fps < 30) { ar = 1.0f; ag = 0.8f; ab = 0.0f; }
-	snprintf(buf, sizeof(buf), "Avg: %.1f", avg_fps);
+	if (average_fps < 15) { ar = 1.0f; ag = 0.3f; ab = 0.3f; }
+	else if (average_fps < 30) { ar = 1.0f; ag = 0.8f; ab = 0.0f; }
+	snprintf(buf, sizeof(buf), "Avg: %.1f", average_fps);
 	drawText(text_x, text_y + 16, ar, ag, ab, buf);
 
 	// Frame time
@@ -2426,8 +2463,23 @@ void MapDrawer::DrawPerformanceStats() {
 	snprintf(buf, sizeof(buf), "RAM: %zu MB", current_ram);
 	drawText(text_x, text_y + 64, 0.8f, 0.8f, 0.8f, buf);
 
+	// Last exact scene rebuild and scene complexity
+	snprintf(buf, sizeof(buf), "Scene: %.1fms", last_scene_ms);
+	drawText(text_x, text_y + 80, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Tiles: %zu  Items: %zu", visible_tile_count, visible_item_count);
+	drawText(text_x, text_y + 96, 0.7f, 0.7f, 0.7f, buf);
+	const char* render_mode = isViewportInteractionActive() ? "Scene: cached" : (far_zoom_mode ? "LOD: minimap" : (medium_zoom_mode ? "LOD: medium" : "Scene: exact"));
+	drawText(text_x, text_y + 112, 0.55f, 0.75f, 1.0f, render_mode);
+	snprintf(buf, sizeof(buf), "Texture uploads: %d", g_gui.gfx.getLastFrameTextureUploads());
+	drawText(text_x, text_y + 128, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Pending sheets: %zu", g_spriteAppearances.getPendingSheetCount());
+	drawText(text_x, text_y + 144, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Atlas: %zu pages / %zu MB", g_gui.gfx.getAtlasPageCount(), g_gui.gfx.getAtlasMemoryBytes() / (1024 * 1024));
+	drawText(text_x, text_y + 160, 0.7f, 0.7f, 0.7f, buf);
+
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
+	renderer->setOrtho(0.0f, static_cast<float>(screensize_x) * zoom, static_cast<float>(screensize_y) * zoom, 0.0f);
 }

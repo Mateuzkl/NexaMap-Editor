@@ -50,6 +50,10 @@ static void* rmeGetGLProc(const char* name) {
 
 std::vector<GLRenderer*> GLRenderer::s_instances;
 
+GLRenderer::~GLRenderer() {
+	s_instances.erase(std::remove(s_instances.begin(), s_instances.end(), this), s_instances.end());
+}
+
 static const char* const vertSrc = R"(
 #version 330
 layout(location=0) in vec2 aPos;
@@ -337,6 +341,9 @@ void GLRenderer::flushBatch() {
 }
 
 void GLRenderer::pushQuad(const Vertex &v0, const Vertex &v1, const Vertex &v2, const Vertex &v3) {
+	if (batch.size() + 4 > STREAM_VBO_CAPACITY) {
+		flushBatch();
+	}
 	batch.push_back(v0);
 	batch.push_back(v1);
 	batch.push_back(v2);
@@ -557,13 +564,23 @@ void GLRenderer::endFBO() {
 	}
 }
 
-void GLRenderer::blitFBO(int w, int h) {
-	if (fboData.fbo == 0 || w <= 0 || h <= 0) {
+void GLRenderer::blitFBO(
+	int srcX0,
+	int srcY0,
+	int srcX1,
+	int srcY1,
+	int dstX0,
+	int dstY0,
+	int dstX1,
+	int dstY1,
+	unsigned int filter
+) {
+	if (fboData.fbo == 0 || srcX0 == srcX1 || srcY0 == srcY1 || dstX0 == dstX1 || dstY0 == dstY1) {
 		return;
 	}
 	flush();
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, fboData.fbo);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, GL_COLOR_BUFFER_BIT, filter);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
