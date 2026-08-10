@@ -130,6 +130,19 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME item_id_mapping_tests COMMAND item_id_mapping_tests)
 
+	add_executable(replace_rule_tests
+		tests/replace_rule_tests.cpp
+		source/replace_tool/replace_rule.cpp
+	)
+	target_include_directories(replace_rule_tests PRIVATE source)
+	set_target_properties(replace_rule_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_rule_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_rule_tests"
+	)
+	add_test(NAME replace_rule_tests COMMAND replace_rule_tests)
+
 	add_executable(depot_conversion_validation_tests
 		tests/depot_conversion_validation_tests.cpp
 		source/depot_conversion_validation.cpp

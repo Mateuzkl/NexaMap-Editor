@@ -92,6 +92,7 @@ ${CMAKE_CURRENT_LIST_DIR}/process_com.h
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule.h
 ${CMAKE_CURRENT_LIST_DIR}/result_window.h
 ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/selection.h
@@ -211,6 +212,7 @@ ${CMAKE_CURRENT_LIST_DIR}/process_com.cpp
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
