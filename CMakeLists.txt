@@ -185,6 +185,20 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME replace_rule_editor_tests COMMAND replace_rule_editor_tests)
 
+	add_executable(visual_similarity_index_tests
+		tests/visual_similarity_index_tests.cpp
+		source/replace_tool/visual_similarity_index.cpp
+	)
+	target_include_directories(visual_similarity_index_tests PRIVATE source)
+	target_link_libraries(visual_similarity_index_tests PRIVATE Threads::Threads)
+	set_target_properties(visual_similarity_index_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/visual_similarity_index_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/visual_similarity_index_tests"
+	)
+	add_test(NAME visual_similarity_index_tests COMMAND visual_similarity_index_tests)
+
 	add_executable(depot_conversion_validation_tests
 		tests/depot_conversion_validation_tests.cpp
 		source/depot_conversion_validation.cpp

@@ -20,8 +20,10 @@
 
 #include "replace_item_grid_panel.h"
 #include "replace_library_catalog.h"
+#include "replace_visual_similarity_service.h"
 
 #include <wx/panel.h>
+#include <wx/timer.h>
 
 class wxNotebook;
 class wxSearchCtrl;
@@ -35,23 +37,31 @@ public:
 	};
 
 	ReplaceLibraryPanel(wxWindow* parent, Listener* listener);
+	~ReplaceLibraryPanel() override;
 
 	void Reload();
+	void SetSimilaritySource(ServerItemId serverId);
 
 private:
 	void BuildLayout();
 	void ApplyItemFilter();
 	void ApplyBrushFilter();
 	void OnGridSelection(ReplaceItemGridPanel* source, const ReplaceLibraryItem& item);
+	void UpdateSimilarityResults();
 
 	Listener* listener = nullptr;
 	ReplaceLibraryCatalog catalog;
+	ReplaceVisualSimilarityService similarityService;
+	wxTimer similarityRefreshTimer;
+	ServerItemId similaritySource;
 	wxNotebook* notebook = nullptr;
 	wxSearchCtrl* itemSearch = nullptr;
 	wxSearchCtrl* brushSearch = nullptr;
 	ReplaceItemGridPanel* itemGrid = nullptr;
 	ReplaceItemGridPanel* brushGrid = nullptr;
 	ReplaceItemGridPanel* relatedGrid = nullptr;
+	ReplaceItemGridPanel* similarityGrid = nullptr;
+	wxStaticText* similarityStatus = nullptr;
 };
 
 #endif

@@ -111,6 +111,7 @@ public:
 	void unloadDC() override;
 
 	void clean(int time);
+	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending);
 
 	int getDrawHeight() const;
 	std::pair<int, int> getDrawOffset() const;

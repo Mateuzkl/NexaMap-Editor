@@ -936,32 +936,19 @@ bool GraphicManager::loadAppearanceSprite(
 
 	const uint64_t expectedSourceCount = sourceSpritesPerFrame * sprite->frames;
 	if (expectedSourceCount != static_cast<uint64_t>(spriteInfo.sprite_id_size())) {
-		warnings.push_back(wxString::Format(
-			"Appearance %u declares %llu logical sprites but contains %d sprite IDs; available IDs will be reused safely.",
-			appearance.id(),
-			static_cast<unsigned long long>(expectedSourceCount),
-			spriteInfo.sprite_id_size()
-		));
+		warnings.push_back(wxString::Format("Appearance %u declares %llu logical sprites but contains %d sprite IDs; available IDs will be reused safely.", appearance.id(), static_cast<unsigned long long>(expectedSourceCount), spriteInfo.sprite_id_size()));
 	}
 
 	const auto appendSourceSprite = [&](uint32_t spriteId) {
 		const ClientSpriteSheetPtr sheet = g_spriteAppearances.getSheetBySpriteId(spriteId);
 		ClientSpriteSize actualSize = sourceSize;
 		if (!sheet) {
-			warnings.push_back(wxString::Format(
-				"Appearance %u references missing sprite ID %u; an empty sprite will be used.",
-				appearance.id(),
-				spriteId
-			));
+			warnings.push_back(wxString::Format("Appearance %u references missing sprite ID %u; an empty sprite will be used.", appearance.id(), spriteId));
 			spriteId = 0;
 		} else {
 			actualSize = sheet->getSpriteSize();
 			if (actualSize.width != sourceSize.width || actualSize.height != sourceSize.height) {
-				warnings.push_back(wxString::Format(
-					"Appearance %u mixes sprite layouts; sprite %u will be cropped to the first layout.",
-					appearance.id(),
-					spriteId
-				));
+				warnings.push_back(wxString::Format("Appearance %u mixes sprite layouts; sprite %u will be cropped to the first layout.", appearance.id(), spriteId));
 			}
 		}
 
@@ -1476,6 +1463,79 @@ void GameSprite::unloadDC() {
 	delete dc[SPRITE_SIZE_32x32];
 	dc[SPRITE_SIZE_16x16] = nullptr;
 	dc[SPRITE_SIZE_32x32] = nullptr;
+}
+
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending) {
+	pending = false;
+	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
+	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
+	if (pixelWidth <= 0 || pixelHeight <= 0 || layers == 0) {
+		pixels.clear();
+		return false;
+	}
+
+	pixels.assign(static_cast<size_t>(pixelWidth) * pixelHeight * 4, 0);
+	std::vector<uint8_t> tilePixels(SPRITE_PIXELS_SIZE * 4);
+	for (uint8_t layer = 0; layer < layers; ++layer) {
+		for (uint8_t tileX = 0; tileX < width; ++tileX) {
+			for (uint8_t tileY = 0; tileY < height; ++tileY) {
+				const int index = getIndex(tileX, tileY, layer, 0, 0, 0, 0);
+				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
+					continue;
+				}
+
+				NormalImage* image = spriteList[index];
+				if (image->fromAssets) {
+					std::vector<uint8_t> sourcePixels;
+					ClientSpriteSize sourceSize;
+					bool imagePending = false;
+					if (!g_spriteAppearances.getSpritePixelsIfLoaded(image->id, sourcePixels, sourceSize, imagePending)) {
+						pending = pending || imagePending;
+						pixels.clear();
+						return false;
+					}
+					const int originX = image->assetCropX * SPRITE_PIXELS;
+					const int originY = image->assetCropY * SPRITE_PIXELS;
+					for (int y = 0; y < SPRITE_PIXELS; ++y) {
+						for (int x = 0; x < SPRITE_PIXELS; ++x) {
+							const size_t destination = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 4;
+							if (originX + x >= sourceSize.width || originY + y >= sourceSize.height) {
+								std::fill_n(tilePixels.data() + destination, 4, 0);
+								continue;
+							}
+							const size_t source = (static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
+							tilePixels[destination + 0] = sourcePixels[source + 2];
+							tilePixels[destination + 1] = sourcePixels[source + 1];
+							tilePixels[destination + 2] = sourcePixels[source + 0];
+							tilePixels[destination + 3] = sourcePixels[source + 3];
+						}
+					}
+				} else {
+					uint8_t* rgba = image->getRGBAData();
+					if (!rgba) {
+						pixels.clear();
+						return false;
+					}
+					std::copy_n(rgba, tilePixels.size(), tilePixels.begin());
+					delete[] rgba;
+				}
+
+				const int destinationX = (static_cast<int>(width) - tileX - 1) * SPRITE_PIXELS;
+				const int destinationY = (static_cast<int>(height) - tileY - 1) * SPRITE_PIXELS;
+				for (int y = 0; y < SPRITE_PIXELS; ++y) {
+					for (int x = 0; x < SPRITE_PIXELS; ++x) {
+						const size_t source = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 4;
+						if (tilePixels[source + 3] == 0) {
+							continue;
+						}
+						const size_t destination = (static_cast<size_t>(destinationY + y) * pixelWidth + destinationX + x) * 4;
+						std::copy_n(tilePixels.data() + source, 4, pixels.data() + destination);
+					}
+				}
+			}
+		}
+	}
+	return true;
 }
 
 int GameSprite::getDrawHeight() const {

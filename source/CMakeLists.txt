@@ -99,6 +99,8 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_builder_panel.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_editor.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_manager.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_visual_similarity_service.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/visual_similarity_index.h
 ${CMAKE_CURRENT_LIST_DIR}/result_window.h
 ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/selection.h
@@ -225,6 +227,8 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_builder_panel.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_editor.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_manager.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_visual_similarity_service.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/visual_similarity_index.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp

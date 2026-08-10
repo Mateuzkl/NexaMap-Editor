@@ -33,9 +33,17 @@
 
 ReplaceLibraryPanel::ReplaceLibraryPanel(wxWindow* parent, Listener* listener) :
 	wxPanel(parent, wxID_ANY),
-	listener(listener) {
+	listener(listener),
+	similarityRefreshTimer(this) {
 	BuildLayout();
+	similarityRefreshTimer.Bind(wxEVT_TIMER, [this](wxTimerEvent&) {
+		UpdateSimilarityResults();
+	});
 	Reload();
+}
+
+ReplaceLibraryPanel::~ReplaceLibraryPanel() {
+	similarityRefreshTimer.Stop();
 }
 
 void ReplaceLibraryPanel::Reload() {
@@ -113,6 +121,18 @@ void ReplaceLibraryPanel::Reload() {
 	ApplyItemFilter();
 	ApplyBrushFilter();
 	relatedGrid->SetItems({});
+	similaritySource = ServerItemId();
+	similarityGrid->SetItems({});
+	similarityService.StartIndexing(catalog.GetItems());
+	similarityStatus->SetLabel(wxString::Format("Indexing sprites: 0 / %zu", similarityService.GetTotalCount()));
+}
+
+void ReplaceLibraryPanel::SetSimilaritySource(ServerItemId serverId) {
+	similaritySource = serverId;
+	UpdateSimilarityResults();
+	if (serverId.isValid() && similarityService.HasPendingWork() && !similarityRefreshTimer.IsRunning()) {
+		similarityRefreshTimer.Start(250);
+	}
 }
 
 void ReplaceLibraryPanel::BuildLayout() {
@@ -164,6 +184,18 @@ void ReplaceLibraryPanel::BuildLayout() {
 	brushPage->SetSizer(brushSizer);
 	notebook->AddPage(brushPage, "Brushes");
 
+	auto* similarityPage = new wxPanel(notebook);
+	auto* similaritySizer = new wxBoxSizer(wxVERTICAL);
+	similarityStatus = new wxStaticText(similarityPage, wxID_ANY, "Select an item to find visually similar sprites");
+	similarityGrid = new ReplaceItemGridPanel(similarityPage, [this](const ReplaceLibraryItem& item) {
+		OnGridSelection(similarityGrid, item);
+	});
+	similarityGrid->SetDraggable(true);
+	similaritySizer->Add(similarityStatus, 0, wxEXPAND | wxALL, 4);
+	similaritySizer->Add(similarityGrid, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+	similarityPage->SetSizer(similaritySizer);
+	notebook->AddPage(similarityPage, "Smart Suggestions");
+
 	mainSizer->Add(notebook, 1, wxEXPAND);
 	SetSizer(mainSizer);
 
@@ -189,7 +221,27 @@ void ReplaceLibraryPanel::OnGridSelection(ReplaceItemGridPanel* source, const Re
 		relatedGrid->SetItems(brush ? brush->relatedItems : std::vector<ReplaceLibraryItem>());
 		return;
 	}
-	if (listener && item.serverId.isValid()) {
-		listener->OnReplaceLibraryItemSelected(item.serverId);
+	if (item.serverId.isValid()) {
+		SetSimilaritySource(item.serverId);
+		if (listener) {
+			listener->OnReplaceLibraryItemSelected(item.serverId);
+		}
+	}
+}
+
+void ReplaceLibraryPanel::UpdateSimilarityResults() {
+	if (!similaritySource.isValid()) {
+		similarityGrid->SetItems({});
+		similarityStatus->SetLabel("Select an item to find visually similar sprites");
+		similarityRefreshTimer.Stop();
+		return;
+	}
+
+	std::vector<ReplaceLibraryItem> matches = similarityService.FindSimilar(similaritySource, 50);
+	similarityGrid->SetItems(std::move(matches));
+	const bool pending = similarityService.HasPendingWork();
+	similarityStatus->SetLabel(wxString::Format("Similar to SID %u - indexed %zu / %zu%s", similaritySource.value, similarityService.GetIndexedCount(), similarityService.GetTotalCount(), pending ? "" : " - complete"));
+	if (!pending) {
+		similarityRefreshTimer.Stop();
 	}
 }
