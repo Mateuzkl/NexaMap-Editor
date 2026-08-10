@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include <memory>
 #include "gl_renderer.h"
+#include "minimap_page_cache.h"
 
 class GameSprite;
 
@@ -215,6 +216,7 @@ class MapDrawer {
 	DrawingOptions options;
 	std::shared_ptr<LightDrawer> light_drawer;
 	std::unique_ptr<GLRenderer> renderer = std::make_unique<GLRenderer>();
+	MinimapPageCache minimap_page_cache;
 
 	float zoom;
 
@@ -299,10 +301,12 @@ public:
 	void DrawScene();
 	void DrawOverlays();
 	void markDirty();
+	void invalidateMinimapPages();
 	bool isSceneDirty();
 	bool isViewportInteractionActive() const;
 	void DrawBackground();
 	void DrawMap();
+	void DrawMapMinimapPages();
 	void DrawDraggingShadow();
 	void DrawHigherFloors();
 	void DrawSelectionBox();
@@ -339,7 +343,6 @@ protected:
 	void BlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size = 0);
 	void DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha);
 	void DrawTile(TileLocation* tile);
-	void DrawTileMinimap(TileLocation* location, int draw_x, int draw_y, int pixel_w, int pixel_h);
 	void DrawBrushIndicator(int x, int y, Brush* brush, uint8_t r, uint8_t g, uint8_t b);
 	void DrawHookIndicator(int x, int y, const ItemType& type);
 	void DrawIndicator(int x, int y, int indicator, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);

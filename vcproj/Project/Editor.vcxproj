@@ -390,7 +390,9 @@
     <ClInclude Include="..\..\source\map_tab.h" />
     <ClCompile Include="..\..\source\map_tab.cpp" />
     <ClInclude Include="..\..\source\minimap_window.h" />
+    <ClInclude Include="..\..\source\minimap_page_cache.h" />
     <ClCompile Include="..\..\source\minimap_window.cpp" />
+    <ClCompile Include="..\..\source\minimap_page_cache.cpp" />
     <ClInclude Include="..\..\source\process_com.h" />
     <ClCompile Include="..\..\source\process_com.cpp" />
     <ClInclude Include="..\..\source\palette_brushlist.h" />

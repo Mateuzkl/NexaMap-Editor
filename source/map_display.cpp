@@ -256,6 +256,7 @@ MapCanvas::~MapCanvas() {
 
 void MapCanvas::Refresh() {
 	if (drawer) {
+		drawer->invalidateMinimapPages();
 		drawer->markDirty();
 	}
 	RefreshWithoutDirty();

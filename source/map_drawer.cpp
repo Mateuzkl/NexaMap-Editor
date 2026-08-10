@@ -244,6 +244,7 @@ MapDrawer::MapDrawer(MapCanvas* canvas) :
 
 MapDrawer::~MapDrawer() {
 	Release();
+	minimap_page_cache.releaseGL();
 }
 
 void MapDrawer::SetupVars() {
@@ -368,6 +369,10 @@ void MapDrawer::markDirty() {
 	scene_dirty = true;
 }
 
+void MapDrawer::invalidateMinimapPages() {
+	minimap_page_cache.invalidateAll();
+}
+
 bool MapDrawer::isSceneDirty() {
 	if (!input_view_initialized) {
 		input_view_initialized = true;
@@ -489,8 +494,10 @@ inline int getFloorAdjustment(int floor) {
 
 void MapDrawer::DrawMap() {
 	Brush* brush = g_gui.GetCurrentBrush();
-	visible_tile_count = 0;
-	visible_item_count = 0;
+	if (!far_zoom_mode) {
+		visible_tile_count = 0;
+		visible_item_count = 0;
+	}
 
 	// The current house we're drawing
 	current_house_id = 0;
@@ -504,6 +511,10 @@ void MapDrawer::DrawMap() {
 
 	bool only_colors = options.isOnlyColors();
 	bool show_zone_tooltips = options.isTooltips() && !far_zoom_mode;
+	if (far_zoom_mode) {
+		DrawMapMinimapPages();
+		return;
+	}
 
 	// Note: texture mode is controlled by uUseTexture in the shader
 
@@ -532,15 +543,9 @@ void MapDrawer::DrawMap() {
 					for (int map_x = 0; map_x < 4; ++map_x) {
 						for (int map_y = 0; map_y < 4; ++map_y) {
 							TileLocation* location = nd->getTile(map_x, map_y, map_z);
-							if (far_zoom_mode) {
-								const int draw_x = (nd_map_x + map_x) * TileSize - view_scroll_x - getFloorAdjustment(map_z);
-								const int draw_y = (nd_map_y + map_y) * TileSize - view_scroll_y - getFloorAdjustment(map_z);
-								DrawTileMinimap(location, draw_x, draw_y, TileSize, TileSize);
-							} else {
-								DrawTile(location);
-							}
+							DrawTile(location);
 							// draw light, but only if not zoomed too far
-							if (location && options.isDrawLight() && !far_zoom_mode) {
+							if (location && options.isDrawLight()) {
 								AddLight(location);
 							}
 						}
@@ -695,6 +700,67 @@ void MapDrawer::DrawMap() {
 			}
 		}
 
+		--start_x;
+		--start_y;
+		++end_x;
+		++end_y;
+	}
+}
+
+void MapDrawer::DrawMapMinimapPages() {
+	minimap_page_cache.bindMap(&editor.map);
+	const uint64_t styleKey = static_cast<uint64_t>(options.show_only_modified)
+		| (static_cast<uint64_t>(options.show_zone_areas) << 1)
+		| (static_cast<uint64_t>(options.show_houses) << 2)
+		| (static_cast<uint64_t>(options.show_special_tiles) << 3)
+		| (static_cast<uint64_t>(options.active_zone_id) << 8)
+		| (static_cast<uint64_t>(current_house_id) << 40);
+
+	const auto resolvePixel = [this](const Tile& tile) -> GLColor {
+		if (options.show_only_modified && !tile.isModified()) {
+			return { 0, 0, 0, 0 };
+		}
+		const uint8_t color = tile.getMiniMapColor();
+		uint8_t red = static_cast<uint8_t>((color / 36) % 6 * 51);
+		uint8_t green = static_cast<uint8_t>((color / 6) % 6 * 51);
+		uint8_t blue = static_cast<uint8_t>(color % 6 * 51);
+		if (options.show_zone_areas && tile.hasZone()) {
+			const Color zoneColor = GetZoneColor(tile, options.active_zone_id);
+			red = static_cast<uint8_t>(std::get<0>(zoneColor));
+			green = static_cast<uint8_t>(std::get<1>(zoneColor));
+			blue = static_cast<uint8_t>(std::get<2>(zoneColor));
+		} else if (options.show_houses && tile.isHouseTile()) {
+			red = static_cast<uint8_t>(red / 2);
+			if (tile.getHouseID() != current_house_id) {
+				green = static_cast<uint8_t>(green / 2);
+			}
+		} else if (options.show_special_tiles && tile.isPZ()) {
+			red = static_cast<uint8_t>(red / 2);
+			blue = static_cast<uint8_t>(blue / 2);
+		}
+		return { red, green, blue, 255 };
+	};
+
+	for (int mapZ = start_z; mapZ >= superend_z; --mapZ) {
+		if (mapZ == end_z && start_z != end_z && options.show_shade) {
+			renderer->drawColoredQuad(0.0f, 0.0f, static_cast<float>(screensize_x) * zoom, static_cast<float>(screensize_y) * zoom, { 0, 0, 0, 128 });
+			renderer->flush();
+		}
+		if (mapZ >= end_z) {
+			minimap_page_cache.drawVisible(
+				*renderer,
+				mapZ,
+				start_x,
+				start_y,
+				end_x,
+				end_y,
+				view_scroll_x,
+				view_scroll_y,
+				getFloorAdjustment(mapZ),
+				styleKey,
+				resolvePixel
+			);
+		}
 		--start_x;
 		--start_y;
 		++end_x;
@@ -1717,48 +1783,6 @@ void MapDrawer::WriteTooltip(Waypoint* waypoint, std::ostringstream& stream) {
 	stream << "Waypoint: " << waypoint->name << "\n";
 }
 
-void MapDrawer::DrawTileMinimap(TileLocation* location, int draw_x, int draw_y, int pixel_w, int pixel_h) {
-	if (!location) {
-		return;
-	}
-
-	Tile* tile = location->get();
-	if (!tile || (options.show_only_modified && !tile->isModified())) {
-		return;
-	}
-
-	++visible_tile_count;
-	visible_item_count += tile->items.size() + (tile->ground ? 1u : 0u) + (tile->creature ? 1u : 0u);
-
-	const uint8_t color = tile->getMiniMapColor();
-	uint8_t red = static_cast<uint8_t>((color / 36) % 6 * 51);
-	uint8_t green = static_cast<uint8_t>((color / 6) % 6 * 51);
-	uint8_t blue = static_cast<uint8_t>(color % 6 * 51);
-
-	if (options.show_zone_areas && tile->hasZone()) {
-		const Color zone_color = GetZoneColor(*tile, options.active_zone_id);
-		red = static_cast<uint8_t>(std::get<0>(zone_color));
-		green = static_cast<uint8_t>(std::get<1>(zone_color));
-		blue = static_cast<uint8_t>(std::get<2>(zone_color));
-	} else if (options.show_houses && tile->isHouseTile()) {
-		red = static_cast<uint8_t>(red / 2);
-		if (static_cast<int>(tile->getHouseID()) != current_house_id) {
-			green = static_cast<uint8_t>(green / 2);
-		}
-	} else if (options.show_special_tiles && tile->isPZ()) {
-		red = static_cast<uint8_t>(red / 2);
-		blue = static_cast<uint8_t>(blue / 2);
-	}
-
-	renderer->drawColoredQuad(
-		static_cast<float>(draw_x),
-		static_cast<float>(draw_y),
-		static_cast<float>(pixel_w),
-		static_cast<float>(pixel_h),
-		{ red, green, blue, 255 }
-	);
-}
-
 void MapDrawer::DrawTile(TileLocation* location) {
 	RME_PROFILE_SCOPE("MapDrawer::DrawTile");
 	if (!location) {
@@ -2525,7 +2549,7 @@ void MapDrawer::DrawPerformanceStats() {
 	glLoadIdentity();
 
 	int width = 240;
-	int height = 184;
+	int height = 200;
 	int margin = 10;
 	int x = std::max(margin, screensize_x - width - margin);
 	int y = margin;
@@ -2611,6 +2635,8 @@ void MapDrawer::DrawPerformanceStats() {
 	drawText(text_x, text_y + 144, 0.7f, 0.7f, 0.7f, buf);
 	snprintf(buf, sizeof(buf), "Atlas: %zu pages / %zu MB", g_gui.gfx.getAtlasPageCount(), g_gui.gfx.getAtlasMemoryBytes() / (1024 * 1024));
 	drawText(text_x, text_y + 160, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Minimap: %zu pages / %zu KB", minimap_page_cache.getPageCount(), minimap_page_cache.getMemoryBytes() / 1024);
+	drawText(text_x, text_y + 176, 0.7f, 0.7f, 0.7f, buf);
 
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);

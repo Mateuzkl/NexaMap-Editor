@@ -367,6 +367,9 @@
     <ClInclude Include="..\..\source\artprovider.h">
       <Filter>gui</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\minimap_page_cache.h">
+      <Filter>Others</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\autoborder_preview.h"><Filter>gui\map window</Filter></ClInclude>
     <ClInclude Include="..\..\source\ingame_preview\ingame_preview_window.h"><Filter>gui\map window</Filter></ClInclude>
     <ClInclude Include="..\..\source\welcome_dialog.h">
@@ -706,6 +709,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\artprovider.cpp">
       <Filter>gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\minimap_page_cache.cpp">
+      <Filter>Others</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\autoborder_preview.cpp"><Filter>gui\map window</Filter></ClCompile>
     <ClCompile Include="..\..\source\ingame_preview\ingame_preview_window.cpp"><Filter>gui\map window</Filter></ClCompile>
