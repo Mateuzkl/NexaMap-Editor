@@ -482,11 +482,8 @@ void MapDrawer::DrawMap() {
 		if (map_z == end_z && start_z != end_z && options.show_shade) {
 			// Draw shade
 
-
 			renderer->drawColoredQuad(0.0f, 0.0f, static_cast<float>(screensize_x) * zoom, static_cast<float>(screensize_y) * zoom, { 0, 0, 0, 128 });
 			renderer->flush();
-
-
 		}
 
 		if (map_z >= end_z) {
@@ -667,8 +664,6 @@ void MapDrawer::DrawMap() {
 		++end_x;
 		++end_y;
 	}
-
-
 }
 
 void MapDrawer::DrawIngameBox() {
@@ -683,8 +678,6 @@ void MapDrawer::DrawIngameBox() {
 	int box_end_y = box_start_y + ClientMapHeight * TileSize;
 
 	static wxColor side_color(0, 0, 0, 200);
-
-
 
 	// left side
 	if (box_start_x > 0) {
@@ -728,8 +721,6 @@ void MapDrawer::DrawIngameBox() {
 	box_end_x = box_start_x + TileSize;
 	box_end_y = box_start_y + TileSize;
 	drawRect(box_start_x, box_start_y, box_end_x - box_start_x, box_end_y - box_start_y, *wxGREEN);
-
-
 }
 
 void MapDrawer::DrawGrid() {
@@ -758,7 +749,6 @@ void MapDrawer::DrawGrid() {
 }
 
 void MapDrawer::DrawDraggingShadow() {
-
 
 	// Draw dragging shadow
 	if (!editor.selection.isBusy() && dragging && !options.ingame) {
@@ -814,12 +804,9 @@ void MapDrawer::DrawDraggingShadow() {
 			}
 		}
 	}
-
-
 }
 
 void MapDrawer::DrawHigherFloors() {
-
 
 	// Draw "transparent higher floor"
 	if (floor != 8 && floor != 0 && options.transparent_floors) {
@@ -857,8 +844,6 @@ void MapDrawer::DrawHigherFloors() {
 			}
 		}
 	}
-
-
 }
 
 void MapDrawer::DrawSelectionBox() {
@@ -2374,8 +2359,6 @@ void MapDrawer::UpdateCPUUsage() {
 #endif
 }
 
-
-
 void MapDrawer::DrawPerformanceStats() {
 	frame_count++;
 
@@ -2418,8 +2401,8 @@ void MapDrawer::DrawPerformanceStats() {
 
 	renderer->flush();
 	renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
-	renderer->drawColoredQuad(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), {20, 20, 20, 180});
-	renderer->drawRect(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), {60, 60, 60, 200}, 1.0f);
+	renderer->drawColoredQuad(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), { 20, 20, 20, 180 });
+	renderer->drawRect(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), { 60, 60, 60, 200 }, 1.0f);
 	renderer->flushAndUnbind();
 
 	int padding = 8;
@@ -2438,15 +2421,29 @@ void MapDrawer::DrawPerformanceStats() {
 
 	// FPS
 	float r = 0.0f, g = 1.0f, b = 0.4f;
-	if (current_fps < 15) { r = 1.0f; g = 0.3f; b = 0.3f; }
-	else if (current_fps < 30) { r = 1.0f; g = 0.8f; b = 0.0f; }
+	if (current_fps < 15) {
+		r = 1.0f;
+		g = 0.3f;
+		b = 0.3f;
+	} else if (current_fps < 30) {
+		r = 1.0f;
+		g = 0.8f;
+		b = 0.0f;
+	}
 	snprintf(buf, sizeof(buf), "FPS: %.1f", current_fps);
 	drawText(text_x, text_y, r, g, b, buf);
 
 	// Avg
 	float ar = 0.7f, ag = 0.7f, ab = 0.7f;
-	if (average_fps < 15) { ar = 1.0f; ag = 0.3f; ab = 0.3f; }
-	else if (average_fps < 30) { ar = 1.0f; ag = 0.8f; ab = 0.0f; }
+	if (average_fps < 15) {
+		ar = 1.0f;
+		ag = 0.3f;
+		ab = 0.3f;
+	} else if (average_fps < 30) {
+		ar = 1.0f;
+		ag = 0.8f;
+		ab = 0.0f;
+	}
 	snprintf(buf, sizeof(buf), "Avg: %.1f", average_fps);
 	drawText(text_x, text_y + 16, ar, ag, ab, buf);
 

@@ -24,14 +24,14 @@ public:
 
 	void init();
 
-	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);
-	void drawColoredQuad(float x, float y, float w, float h, const GLColor &color);
+	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor& color, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);
+	void drawColoredQuad(float x, float y, float w, float h, const GLColor& color);
 
-	void drawRect(float x, float y, float w, float h, const GLColor &color, float lineWidth = 1.0f);
+	void drawRect(float x, float y, float w, float h, const GLColor& color, float lineWidth = 1.0f);
 
-	void drawLine(float x1, float y1, float x2, float y2, const GLColor &color, float width = 1.0f);
+	void drawLine(float x1, float y1, float x2, float y2, const GLColor& color, float width = 1.0f);
 	void drawLines(const float* vertices, int pairCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a, float width = 1.0f);
-	void drawStippledLines(const float* vertices, int pairCount, const GLColor &color, float width = 1.0f, int factor = 2, uint16_t pattern = 0xAAAA);
+	void drawStippledLines(const float* vertices, int pairCount, const GLColor& color, float width = 1.0f, int factor = 2, uint16_t pattern = 0xAAAA);
 
 	void drawPolygon(const float* vertices, int vertexCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 	void drawTriangleFan(const float* vertices, int vertexCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
@@ -110,9 +110,9 @@ private:
 	void bindProgram();
 	void bindState();
 	void unbindState();
-	void pushQuad(const Vertex &v0, const Vertex &v1, const Vertex &v2, const Vertex &v3);
+	void pushQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2, const Vertex& v3);
 	void ensureQuadIndices(size_t quadCount);
-	void drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor &color);
+	void drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor& color);
 };
 
 #endif

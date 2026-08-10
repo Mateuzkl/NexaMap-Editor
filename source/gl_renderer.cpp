@@ -102,7 +102,7 @@ void GLRenderer::init() {
 		return;
 	}
 
-	GLuint const vs = glCreateShader(GL_VERTEX_SHADER);
+	const GLuint vs = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vs, 1, &vertSrc, nullptr);
 	glCompileShader(vs);
 	{
@@ -117,7 +117,7 @@ void GLRenderer::init() {
 		}
 	}
 
-	GLuint const fs = glCreateShader(GL_FRAGMENT_SHADER);
+	const GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fs, 1, &fragSrc, nullptr);
 	glCompileShader(fs);
 	{
@@ -254,13 +254,13 @@ void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
 }
 
 void GLRenderer::ensureQuadIndices(size_t quadCount) {
-	size_t const haveQuads = indexScratch.size() / 6;
+	const size_t haveQuads = indexScratch.size() / 6;
 	if (haveQuads >= quadCount) {
 		return;
 	}
 	indexScratch.reserve(quadCount * 6);
 	for (size_t q = haveQuads; q < quadCount; ++q) {
-		auto const base = static_cast<GLuint>(q * 4);
+		const auto base = static_cast<GLuint>(q * 4);
 		indexScratch.push_back(base + 0);
 		indexScratch.push_back(base + 1);
 		indexScratch.push_back(base + 2);
@@ -340,7 +340,7 @@ void GLRenderer::flushBatch() {
 	batch.clear();
 }
 
-void GLRenderer::pushQuad(const Vertex &v0, const Vertex &v1, const Vertex &v2, const Vertex &v3) {
+void GLRenderer::pushQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2, const Vertex& v3) {
 	if (batch.size() + 4 > STREAM_VBO_CAPACITY) {
 		flushBatch();
 	}
@@ -350,95 +350,95 @@ void GLRenderer::pushQuad(const Vertex &v0, const Vertex &v1, const Vertex &v2, 
 	batch.push_back(v3);
 }
 
-void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor &color, float u0, float v0_, float u1, float v1_) {
+void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor& color, float u0, float v0_, float u1, float v1_) {
 	if (current_texture != textureId && !batch.empty()) {
 		flushBatch();
 	}
 	current_texture = textureId;
 
-	Vertex const v0 = { x, y, u0, v0_, color.r, color.g, color.b, color.a };
-	Vertex const v1 = { x + w, y, u1, v0_, color.r, color.g, color.b, color.a };
-	Vertex const v2 = { x + w, y + h, u1, v1_, color.r, color.g, color.b, color.a };
-	Vertex const v3 = { x, y + h, u0, v1_, color.r, color.g, color.b, color.a };
+	const Vertex v0 = { x, y, u0, v0_, color.r, color.g, color.b, color.a };
+	const Vertex v1 = { x + w, y, u1, v0_, color.r, color.g, color.b, color.a };
+	const Vertex v2 = { x + w, y + h, u1, v1_, color.r, color.g, color.b, color.a };
+	const Vertex v3 = { x, y + h, u0, v1_, color.r, color.g, color.b, color.a };
 
 	pushQuad(v0, v1, v2, v3);
 }
 
-void GLRenderer::drawColoredQuad(float x, float y, float w, float h, const GLColor &color) {
+void GLRenderer::drawColoredQuad(float x, float y, float w, float h, const GLColor& color) {
 	if (current_texture != 0 && !batch.empty()) {
 		flushBatch();
 	}
 	current_texture = 0;
 
-	Vertex const v0 = { x, y, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex const v1 = { x + w, y, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex const v2 = { x + w, y + h, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex const v3 = { x, y + h, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v0 = { x, y, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v1 = { x + w, y, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v2 = { x + w, y + h, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v3 = { x, y + h, 0, 0, color.r, color.g, color.b, color.a };
 
 	pushQuad(v0, v1, v2, v3);
 }
 
-void GLRenderer::drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor &color) {
-	float const dx = x2 - x1;
-	float const dy = y2 - y1;
-	float const len = sqrtf(dx * dx + dy * dy);
+void GLRenderer::drawThickLineSegment(float x1, float y1, float x2, float y2, float width, const GLColor& color) {
+	const float dx = x2 - x1;
+	const float dy = y2 - y1;
+	const float len = sqrtf(dx * dx + dy * dy);
 	if (len < 1e-6f) {
 		return;
 	}
-	float const nx = (-dy / len) * (width * 0.5f);
-	float const ny = (dx / len) * (width * 0.5f);
+	const float nx = (-dy / len) * (width * 0.5f);
+	const float ny = (dx / len) * (width * 0.5f);
 
 	if (current_texture != 0 && !batch.empty()) {
 		flushBatch();
 	}
 	current_texture = 0;
 
-	Vertex const v0 = { x1 + nx, y1 + ny, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex const v1 = { x1 - nx, y1 - ny, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex const v2 = { x2 - nx, y2 - ny, 0, 0, color.r, color.g, color.b, color.a };
-	Vertex const v3 = { x2 + nx, y2 + ny, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v0 = { x1 + nx, y1 + ny, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v1 = { x1 - nx, y1 - ny, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v2 = { x2 - nx, y2 - ny, 0, 0, color.r, color.g, color.b, color.a };
+	const Vertex v3 = { x2 + nx, y2 + ny, 0, 0, color.r, color.g, color.b, color.a };
 
 	pushQuad(v0, v1, v2, v3);
 }
 
-void GLRenderer::drawRect(float x, float y, float w, float h, const GLColor &color, float lineWidth) {
+void GLRenderer::drawRect(float x, float y, float w, float h, const GLColor& color, float lineWidth) {
 	drawThickLineSegment(x, y, x + w, y, lineWidth, color);
 	drawThickLineSegment(x + w, y, x + w, y + h, lineWidth, color);
 	drawThickLineSegment(x + w, y + h, x, y + h, lineWidth, color);
 	drawThickLineSegment(x, y + h, x, y, lineWidth, color);
 }
 
-void GLRenderer::drawLine(float x1, float y1, float x2, float y2, const GLColor &color, float width) {
+void GLRenderer::drawLine(float x1, float y1, float x2, float y2, const GLColor& color, float width) {
 	drawThickLineSegment(x1, y1, x2, y2, width, color);
 }
 
 void GLRenderer::drawLines(const float* vertices, int pairCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a, float width) {
-	GLColor const c = { r, g, b, a };
+	const GLColor c = { r, g, b, a };
 	for (int i = 0; i < pairCount; ++i) {
-		float const x1 = vertices[i * 4];
-		float const y1 = vertices[i * 4 + 1];
-		float const x2 = vertices[i * 4 + 2];
-		float const y2 = vertices[i * 4 + 3];
+		const float x1 = vertices[i * 4];
+		const float y1 = vertices[i * 4 + 1];
+		const float x2 = vertices[i * 4 + 2];
+		const float y2 = vertices[i * 4 + 3];
 		drawThickLineSegment(x1, y1, x2, y2, width, c);
 	}
 }
 
-void GLRenderer::drawStippledLines(const float* vertices, int pairCount, const GLColor &color, float width, int factor, uint16_t pattern) {
+void GLRenderer::drawStippledLines(const float* vertices, int pairCount, const GLColor& color, float width, int factor, uint16_t pattern) {
 	for (int i = 0; i < pairCount; ++i) {
-		float const x1 = vertices[i * 4];
-		float const y1 = vertices[i * 4 + 1];
-		float const x2 = vertices[i * 4 + 2];
-		float const y2 = vertices[i * 4 + 3];
+		const float x1 = vertices[i * 4];
+		const float y1 = vertices[i * 4 + 1];
+		const float x2 = vertices[i * 4 + 2];
+		const float y2 = vertices[i * 4 + 3];
 
-		float const dx = x2 - x1;
-		float const dy = y2 - y1;
-		float const len = sqrtf(dx * dx + dy * dy);
+		const float dx = x2 - x1;
+		const float dy = y2 - y1;
+		const float len = sqrtf(dx * dx + dy * dy);
 		if (len < 1e-6f) {
 			continue;
 		}
 
-		float const dirX = dx / len;
-		float const dirY = dy / len;
+		const float dirX = dx / len;
+		const float dirY = dy / len;
 		auto step = static_cast<float>(factor);
 		int bit = 0;
 		float pos = 0.0f;
@@ -450,10 +450,10 @@ void GLRenderer::drawStippledLines(const float* vertices, int pairCount, const G
 			}
 
 			if (pattern & (1 << (bit & 15))) {
-				float const sx = x1 + dirX * pos;
-				float const sy = y1 + dirY * pos;
-				float const ex = x1 + dirX * segEnd;
-				float const ey = y1 + dirY * segEnd;
+				const float sx = x1 + dirX * pos;
+				const float sy = y1 + dirY * pos;
+				const float ex = x1 + dirX * segEnd;
+				const float ey = y1 + dirY * segEnd;
 				drawThickLineSegment(sx, sy, ex, ey, width, color);
 			}
 

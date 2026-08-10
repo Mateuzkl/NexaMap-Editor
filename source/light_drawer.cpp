@@ -35,8 +35,8 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 		createGLTexture();
 	}
 
-	int const w = end_x - map_x;
-	int const h = end_y - map_y;
+	const int w = end_x - map_x;
+	const int h = end_y - map_y;
 	if (w <= 0 || h <= 0) {
 		return;
 	}
@@ -50,10 +50,10 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 
 	for (int y = 0; y < h; ++y) {
 		for (int x = 0; x < w; ++x) {
-			int const mx = (map_x + x);
-			int const my = (map_y + y);
-			int const index = (y * w + x);
-			int const color_index = index * PixelFormatRGBA;
+			const int mx = (map_x + x);
+			const int my = (map_y + y);
+			const int index = (y * w + x);
+			const int color_index = index * PixelFormatRGBA;
 
 			buffer[color_index] = global_color.Red();
 			buffer[color_index + 1] = global_color.Green();
@@ -63,14 +63,14 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 			const auto& nearby = light_grid.getCell(mx, my);
 			for (std::size_t li : nearby) {
 				const Light& light = lights[li];
-				float const intensity = calculateIntensity(mx, my, light);
+				const float intensity = calculateIntensity(mx, my, light);
 				if (intensity == 0.f) {
 					continue;
 				}
-				wxColor const light_color = colorFromEightBit(light.color);
-				auto const red = static_cast<uint8_t>(light_color.Red() * intensity);
-				auto const green = static_cast<uint8_t>(light_color.Green() * intensity);
-				auto const blue = static_cast<uint8_t>(light_color.Blue() * intensity);
+				const wxColor light_color = colorFromEightBit(light.color);
+				const auto red = static_cast<uint8_t>(light_color.Red() * intensity);
+				const auto green = static_cast<uint8_t>(light_color.Green() * intensity);
+				const auto blue = static_cast<uint8_t>(light_color.Blue() * intensity);
 				buffer[color_index] = std::max(buffer[color_index], red);
 				buffer[color_index + 1] = std::max(buffer[color_index + 1], green);
 				buffer[color_index + 2] = std::max(buffer[color_index + 2], blue);
@@ -80,8 +80,8 @@ void LightDrawer::draw(int map_x, int map_y, int end_x, int end_y, int scroll_x,
 
 	const int draw_x = map_x * TileSize - scroll_x;
 	const int draw_y = map_y * TileSize - scroll_y;
-	int const draw_width = w * TileSize;
-	int const draw_height = h * TileSize;
+	const int draw_width = w * TileSize;
+	const int draw_height = h * TileSize;
 
 	glBindTexture(GL_TEXTURE_2D, texture);
 
@@ -128,7 +128,7 @@ void LightDrawer::addLight(int map_x, int map_y, int map_z, const SpriteLight& l
 		return;
 	}
 
-	uint8_t const intensity = std::min(light.intensity, static_cast<uint8_t>(MaxLightIntensity));
+	const uint8_t intensity = std::min(light.intensity, static_cast<uint8_t>(MaxLightIntensity));
 
 	if (!lights.empty()) {
 		Light& previous = lights.back();

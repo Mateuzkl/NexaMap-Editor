@@ -316,7 +316,9 @@ public:
 	void OnShowHotkeys(wxCommandEvent& event);
 
 	// Access actions map for hotkey discovery
-	const std::map<std::string, MenuBar::Action*>& GetActions() const { return actions; }
+	const std::map<std::string, MenuBar::Action*>& GetActions() const {
+		return actions;
+	}
 	// Update menu item labels to match current HotkeyManager effective keys
 	void UpdateLabelHotkeys();
 
