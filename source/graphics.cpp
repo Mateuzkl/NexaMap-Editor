@@ -26,6 +26,7 @@
 #include "gui.h"
 #include "otml.h"
 #include "sprite_appearances.h"
+#include "sprite_preloader.h"
 
 #include <appearances.pb.h>
 #include <iterator>
@@ -435,6 +436,8 @@ void GraphicManager::markTextureMissing() noexcept {
 }
 
 void GraphicManager::clear() {
+	g_spritePreloader.clear();
+
 	SpriteMap new_sprite_space;
 	for (auto iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
 		if (iter->first >= 0) { // Don't clean internal sprites
@@ -1275,6 +1278,7 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 			sprite_offsets.clear();
 			return false;
 		}
+		g_spritePreloader.configure(spritefile, sprite_offsets, has_transparency);
 		unloaded = false;
 		return true;
 	}
@@ -1832,6 +1836,26 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 			return nullptr;
 		}
 
+		if (id != 0 && g_gui.gfx.isMapRenderTextureBudgetActive()) {
+			std::vector<uint8_t> pixels;
+			const SpritePreloadStatus status = g_spritePreloader.getOrRequest(static_cast<uint32_t>(id), pixels);
+			if (status == SpritePreloadStatus::Ready) {
+				const int pixelsDataSize = SPRITE_PIXELS_SIZE * 3;
+				auto* data = newd uint8_t[pixelsDataSize];
+				for (int pixel = 0; pixel < SPRITE_PIXELS_SIZE; ++pixel) {
+					const uint8_t alpha = pixels[static_cast<size_t>(pixel) * 4 + 3];
+					data[pixel * 3 + 0] = alpha == 0 ? 0xFF : pixels[static_cast<size_t>(pixel) * 4 + 0];
+					data[pixel * 3 + 1] = alpha == 0 ? 0x00 : pixels[static_cast<size_t>(pixel) * 4 + 1];
+					data[pixel * 3 + 2] = alpha == 0 ? 0xFF : pixels[static_cast<size_t>(pixel) * 4 + 2];
+				}
+				return data;
+			}
+			if (status == SpritePreloadStatus::Pending) {
+				g_gui.gfx.deferTextureUpload();
+				return nullptr;
+			}
+		}
+
 		if (!g_gui.gfx.loadSpriteDump(dump, size, id)) {
 			return nullptr;
 		}
@@ -1926,6 +1950,20 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 	if (!dump) {
 		if (g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
 			return nullptr;
+		}
+
+		if (id != 0 && g_gui.gfx.isMapRenderTextureBudgetActive()) {
+			std::vector<uint8_t> pixels;
+			const SpritePreloadStatus status = g_spritePreloader.getOrRequest(static_cast<uint32_t>(id), pixels);
+			if (status == SpritePreloadStatus::Ready) {
+				auto* data = newd uint8_t[pixels.size()];
+				std::memcpy(data, pixels.data(), pixels.size());
+				return data;
+			}
+			if (status == SpritePreloadStatus::Pending) {
+				g_gui.gfx.deferTextureUpload();
+				return nullptr;
+			}
 		}
 
 		if (!g_gui.gfx.loadSpriteDump(dump, size, id)) {

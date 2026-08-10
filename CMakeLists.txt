@@ -90,6 +90,20 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+	add_executable(sprite_preloader_tests
+		tests/sprite_preloader_tests.cpp
+		source/sprite_preloader.cpp
+	)
+	target_include_directories(sprite_preloader_tests PRIVATE source)
+	target_link_libraries(sprite_preloader_tests PRIVATE Threads::Threads)
+	set_target_properties(sprite_preloader_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/sprite_preloader_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/sprite_preloader_tests"
+	)
+	add_test(NAME sprite_preloader_tests COMMAND sprite_preloader_tests)
+
 	add_executable(client_assets_manifest_tests
 		tests/client_assets_manifest_tests.cpp
 		source/client_assets_manifest.cpp

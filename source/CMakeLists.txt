@@ -120,6 +120,7 @@ ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/sprites.h
 ${CMAKE_CURRENT_LIST_DIR}/sprite_appearances.h
+${CMAKE_CURRENT_LIST_DIR}/sprite_preloader.h
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/templates.h
 ${CMAKE_CURRENT_LIST_DIR}/threads.h
@@ -253,6 +254,7 @@ ${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/sprite_appearances.cpp
+${CMAKE_CURRENT_LIST_DIR}/sprite_preloader.cpp
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap76-74.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap81.cpp
