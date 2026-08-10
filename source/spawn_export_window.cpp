@@ -69,7 +69,6 @@ SpawnExportWindow::SpawnExportWindow(wxWindow* parent, Map& map, const wxString&
 
 	topSizer->Add(form, 0, wxEXPAND | wxALL, 14);
 	previewLabel = newd wxStaticText(this, wxID_ANY, wxEmptyString);
-	previewLabel->Wrap(580);
 	topSizer->Add(previewLabel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 14);
 
 	wxSizer* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
@@ -79,13 +78,13 @@ SpawnExportWindow::SpawnExportWindow(wxWindow* parent, Map& map, const wxString&
 		}
 		topSizer->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 14);
 	}
+	UpdatePreview();
 	SetSizerAndFit(topSizer);
 	SetMinSize(wxSize(660, GetSize().GetHeight()));
 	CentreOnParent();
 
 	formatChoice->Bind(wxEVT_CHOICE, &SpawnExportWindow::OnFormatChanged, this);
 	Bind(wxEVT_BUTTON, &SpawnExportWindow::OnConfirm, this, wxID_OK);
-	UpdatePreview();
 }
 
 SpawnExportOptions SpawnExportWindow::GetOptions() const {
@@ -143,11 +142,13 @@ void SpawnExportWindow::UpdatePreview() {
 	}
 	preview << "\nThe generated XML is reopened and compared before the operation is accepted.";
 	previewLabel->SetLabel(preview);
+	previewLabel->Wrap(580);
 	Layout();
 }
 
 void SpawnExportWindow::OnFormatChanged(wxCommandEvent& WXUNUSED(event)) {
 	UpdatePreview();
+	Fit();
 }
 
 bool SpawnExportWindow::ValidateFilename(const wxString& filename, const wxString& label) const {
