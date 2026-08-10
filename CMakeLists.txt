@@ -91,6 +91,23 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+	add_executable(border_topology_tests
+		tests/border_topology_tests.cpp
+		source/brush_tables.cpp
+	)
+	target_include_directories(border_topology_tests PRIVATE source)
+	target_link_libraries(border_topology_tests PRIVATE ${wxWidgets_LIBRARIES})
+	if(MSVC)
+		target_compile_options(border_topology_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(border_topology_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/border_topology_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/border_topology_tests"
+	)
+	add_test(NAME border_topology_tests COMMAND border_topology_tests)
+
 	add_executable(sprite_preloader_tests
 		tests/sprite_preloader_tests.cpp
 		source/sprite_preloader.cpp

@@ -20,6 +20,8 @@
 
 #include "brush.h"
 
+#include <array>
+
 //=============================================================================
 
 class GroundBrush : public TerrainBrush {
@@ -46,6 +48,15 @@ public:
 	void draw(BaseMap* map, Tile* tile, void* parameter) override;
 	void undraw(BaseMap* map, Tile* tile) override;
 	static void doBorders(BaseMap* map, Tile* tile);
+	static std::array<BorderType, 4> classifyBorderMask(uint8_t mask) noexcept {
+		const uint32_t packedTypes = border_types[mask];
+		return {
+			static_cast<BorderType>((packedTypes & 0x000000FF) >> 0),
+			static_cast<BorderType>((packedTypes & 0x0000FF00) >> 8),
+			static_cast<BorderType>((packedTypes & 0x00FF0000) >> 16),
+			static_cast<BorderType>((packedTypes & 0xFF000000) >> 24),
+		};
+	}
 	static const BorderBlock* getBrushTo(GroundBrush* first, GroundBrush* second);
 
 	int32_t getZ() const override {
