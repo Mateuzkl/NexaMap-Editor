@@ -18,11 +18,21 @@ struct GLColor {
 	uint8_t a;
 };
 
+struct GLRenderBatchStats {
+	size_t drawCalls = 0;
+	size_t textureBindings = 0;
+	size_t quads = 0;
+	size_t streamBytes = 0;
+	size_t bufferOrphans = 0;
+	size_t mappingFallbacks = 0;
+};
+
 class GLRenderer {
 public:
 	~GLRenderer();
 
 	void init();
+	void beginFrame() noexcept;
 
 	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor& color, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);
 	void drawColoredQuad(float x, float y, float w, float h, const GLColor& color);
@@ -61,6 +71,9 @@ public:
 	bool hasFBO() const {
 		return fboData.fbo != 0;
 	}
+	const GLRenderBatchStats& getFrameStats() const noexcept {
+		return frameStats;
+	}
 
 private:
 	static std::vector<GLRenderer*> s_instances;
@@ -74,15 +87,16 @@ private:
 	GLint loc_texture = -1;
 	GLint loc_stipple = -1;
 
-	// Persistent ring-buffered, indexed quad stream (4 verts + 6 indices per quad).
+	// Orphaned ring-buffered vertex stream with a static quad index buffer.
 	static constexpr size_t STREAM_VBO_CAPACITY = 64 * 1024; // vertices
 	static constexpr size_t STREAM_EBO_CAPACITY = 96 * 1024; // indices
 	GLuint streamVAO = 0;
 	GLuint streamVBO = 0;
 	GLuint streamEBO = 0;
 	size_t vboOffset = 0; // in vertices
-	size_t eboOffset = 0; // in indices
 	std::vector<GLuint> indexScratch; // reusable local index pattern
+	GLRenderBatchStats frameStats;
+	bool mappingFallbackLogged = false;
 
 	struct Vertex {
 		float x;

@@ -305,6 +305,7 @@ void MapDrawer::SetupGL() {
 	glTranslatef(0.375f, 0.375f, 0.0f);
 
 	renderer->init();
+	renderer->beginFrame();
 	renderer->setOrtho(0.0f, static_cast<float>(vPort[2]) * zoom, static_cast<float>(vPort[3]) * zoom, 0.0f);
 }
 
@@ -2549,7 +2550,7 @@ void MapDrawer::DrawPerformanceStats() {
 	glLoadIdentity();
 
 	int width = 240;
-	int height = 200;
+	int height = 232;
 	int margin = 10;
 	int x = std::max(margin, screensize_x - width - margin);
 	int y = margin;
@@ -2637,6 +2638,11 @@ void MapDrawer::DrawPerformanceStats() {
 	drawText(text_x, text_y + 160, 0.7f, 0.7f, 0.7f, buf);
 	snprintf(buf, sizeof(buf), "Minimap: %zu pages / %zu KB", minimap_page_cache.getPageCount(), minimap_page_cache.getMemoryBytes() / 1024);
 	drawText(text_x, text_y + 176, 0.7f, 0.7f, 0.7f, buf);
+	const GLRenderBatchStats& batchStats = renderer->getFrameStats();
+	snprintf(buf, sizeof(buf), "Batch C/B/Q: %zu/%zu/%zu", batchStats.drawCalls, batchStats.textureBindings, batchStats.quads);
+	drawText(text_x, text_y + 192, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Stream: %zu KB O/F:%zu/%zu", batchStats.streamBytes / 1024, batchStats.bufferOrphans, batchStats.mappingFallbacks);
+	drawText(text_x, text_y + 208, 0.7f, 0.7f, 0.7f, buf);
 
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);

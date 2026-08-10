@@ -213,7 +213,7 @@ void GLRenderer::init() {
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-	// Persistent ring-buffered, indexed stream for the quad batch path.
+	// Ring-buffered vertices and immutable indices for the quad batch path.
 	glGenVertexArrays(1, &streamVAO);
 	glGenBuffers(1, &streamVBO);
 	glGenBuffers(1, &streamEBO);
@@ -222,7 +222,8 @@ void GLRenderer::init() {
 	glBindBuffer(GL_ARRAY_BUFFER, streamVBO);
 	glBufferData(GL_ARRAY_BUFFER, STREAM_VBO_CAPACITY * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, streamEBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, STREAM_EBO_CAPACITY * sizeof(GLuint), nullptr, GL_DYNAMIC_DRAW);
+	ensureQuadIndices(STREAM_EBO_CAPACITY / 6);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexScratch.size() * sizeof(GLuint), indexScratch.data(), GL_STATIC_DRAW);
 
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, x)));
@@ -237,8 +238,15 @@ void GLRenderer::init() {
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	batch.reserve(STREAM_VBO_CAPACITY);
+	indexScratch.clear();
+	indexScratch.shrink_to_fit();
 
 	initialized = true;
+}
+
+void GLRenderer::beginFrame() noexcept {
+	frameStats = {};
 }
 
 void GLRenderer::bindProgram() {
@@ -326,6 +334,7 @@ void GLRenderer::flushBatch() {
 		glBindTexture(GL_TEXTURE_2D, current_texture);
 		glUniform1i(loc_useTexture, 1);
 		glUniform1i(loc_texture, 0);
+		++frameStats.textureBindings;
 	} else {
 		glUniform1i(loc_useTexture, 0);
 	}
@@ -339,36 +348,35 @@ void GLRenderer::flushBatch() {
 		const size_t chunkVerts = chunkQuads * 4;
 		const size_t chunkIdx = chunkQuads * 6;
 		const size_t vtxBytes = chunkVerts * sizeof(Vertex);
-		const size_t idxBytes = chunkIdx * sizeof(GLuint);
 
-		ensureQuadIndices(chunkQuads);
-
-		if (vboOffset + chunkVerts > STREAM_VBO_CAPACITY || eboOffset + chunkIdx > STREAM_EBO_CAPACITY) {
-			// Orphan both buffers and restart the ring from the beginning.
+		if (vboOffset + chunkVerts > STREAM_VBO_CAPACITY) {
+			// Orphan the dynamic vertex stream and restart the ring. Quad indices are static.
 			glBufferData(GL_ARRAY_BUFFER, STREAM_VBO_CAPACITY * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, STREAM_EBO_CAPACITY * sizeof(GLuint), nullptr, GL_DYNAMIC_DRAW);
 			vboOffset = 0;
-			eboOffset = 0;
+			++frameStats.bufferOrphans;
 		}
 
 		void* vboPtr = glMapBufferRange(GL_ARRAY_BUFFER, vboOffset * sizeof(Vertex), vtxBytes, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
 		if (!vboPtr) {
-			break;
+			if (!mappingFallbackLogged) {
+				wxLogWarning("GLRenderer::flushBatch - stream mapping failed; using glBufferSubData fallback.");
+				mappingFallbackLogged = true;
+			}
+			glBufferData(GL_ARRAY_BUFFER, STREAM_VBO_CAPACITY * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
+			vboOffset = 0;
+			glBufferSubData(GL_ARRAY_BUFFER, 0, vtxBytes, batch.data() + quadStart * 4);
+			++frameStats.bufferOrphans;
+			++frameStats.mappingFallbacks;
+		} else {
+			std::memcpy(vboPtr, batch.data() + quadStart * 4, vtxBytes);
+			glUnmapBuffer(GL_ARRAY_BUFFER);
 		}
-		std::memcpy(vboPtr, batch.data() + quadStart * 4, vtxBytes);
-		glUnmapBuffer(GL_ARRAY_BUFFER);
 
-		void* eboPtr = glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, eboOffset * sizeof(GLuint), idxBytes, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
-		if (!eboPtr) {
-			break;
-		}
-		std::memcpy(eboPtr, indexScratch.data(), idxBytes);
-		glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-
-		glDrawElementsBaseVertex(GL_TRIANGLES, static_cast<GLsizei>(chunkIdx), GL_UNSIGNED_INT, reinterpret_cast<void*>(eboOffset * sizeof(GLuint)), static_cast<GLint>(vboOffset));
+		glDrawElementsBaseVertex(GL_TRIANGLES, static_cast<GLsizei>(chunkIdx), GL_UNSIGNED_INT, nullptr, static_cast<GLint>(vboOffset));
+		++frameStats.drawCalls;
+		frameStats.streamBytes += vtxBytes;
 
 		vboOffset += chunkVerts;
-		eboOffset += chunkIdx;
 		quadStart += chunkQuads;
 	}
 
@@ -383,6 +391,7 @@ void GLRenderer::pushQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2, 
 	batch.push_back(v1);
 	batch.push_back(v2);
 	batch.push_back(v3);
+	++frameStats.quads;
 }
 
 void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor& color, float u0, float v0_, float u1, float v1_) {
@@ -512,6 +521,7 @@ void GLRenderer::drawPolygon(const float* vertices, int vertexCount, uint8_t r, 
 	glUniform1i(loc_useTexture, 0);
 	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(Vertex), verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_TRIANGLE_FAN, 0, static_cast<GLsizei>(verts.size()));
+	++frameStats.drawCalls;
 }
 
 void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -528,6 +538,7 @@ void GLRenderer::drawTriangleFan(const float* vertices, int vertexCount, uint8_t
 	glUniform1i(loc_useTexture, 0);
 	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(Vertex), verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_TRIANGLE_FAN, 0, static_cast<GLsizei>(verts.size()));
+	++frameStats.drawCalls;
 }
 
 void GLRenderer::flush() {
