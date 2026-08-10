@@ -158,6 +158,19 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME replace_rule_manager_tests COMMAND replace_rule_manager_tests)
 
+	add_executable(replace_library_catalog_tests
+		tests/replace_library_catalog_tests.cpp
+		source/replace_tool/replace_library_catalog.cpp
+	)
+	target_include_directories(replace_library_catalog_tests PRIVATE source)
+	set_target_properties(replace_library_catalog_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_library_catalog_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_library_catalog_tests"
+	)
+	add_test(NAME replace_library_catalog_tests COMMAND replace_library_catalog_tests)
+
 	add_executable(depot_conversion_validation_tests
 		tests/depot_conversion_validation_tests.cpp
 		source/depot_conversion_validation.cpp
