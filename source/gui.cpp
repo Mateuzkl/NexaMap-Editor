@@ -1257,8 +1257,8 @@ void GUI::CreateIngamePreview() {
 				.Right()
 				.Dockable(true)
 				.CloseButton(true)
-				.BestSize(FROM_DIP(root, wxSize(500, 410)))
-				.MinSize(FROM_DIP(root, wxSize(500, 410)))
+				.BestSize(FROM_DIP(root, wxSize(500, 430)))
+				.MinSize(FROM_DIP(root, wxSize(500, 430)))
 		);
 	}
 	aui_manager->Update();

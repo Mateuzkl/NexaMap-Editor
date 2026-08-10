@@ -236,6 +236,11 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool in
 	popup_menu = newd MapPopupMenu(editor);
 	animation_timer = newd AnimationTimer(this);
 	drawer = new MapDrawer(this);
+	ingamePreviewPlayerOutfit.lookType = 128;
+	ingamePreviewPlayerOutfit.lookHead = 78;
+	ingamePreviewPlayerOutfit.lookBody = 69;
+	ingamePreviewPlayerOutfit.lookLegs = 58;
+	ingamePreviewPlayerOutfit.lookFeet = 76;
 	keyCode = WXK_NONE;
 }
 
@@ -294,6 +299,26 @@ void MapCanvas::SetZoom(double value) {
 	}
 }
 
+void MapCanvas::SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame) {
+	if (!ingamePreview) {
+		return;
+	}
+	ingamePreviewPlayerPosition = position;
+	ingamePreviewPlayerDirection = direction;
+	ingamePreviewWalkOffsetX = walkOffsetX;
+	ingamePreviewWalkOffsetY = walkOffsetY;
+	ingamePreviewAnimationFrame = animationFrame;
+	Refresh();
+}
+
+void MapCanvas::SetIngamePreviewLighting(bool enabled) {
+	if (!ingamePreview || ingamePreviewLighting == enabled) {
+		return;
+	}
+	ingamePreviewLighting = enabled;
+	Refresh();
+}
+
 void MapCanvas::GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const {
 	static_cast<MapWindow*>(GetParent())->GetViewSize(screensize_x, screensize_y);
 	static_cast<MapWindow*>(GetParent())->GetViewStart(view_scroll_x, view_scroll_y);
@@ -306,6 +331,8 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		DrawingOptions& options = drawer->getOptions();
 		if (screenshot_buffer || ingamePreview) {
 			options.SetIngame();
+			options.show_lights = ingamePreview && ingamePreviewLighting;
+			options.show_shade = ingamePreview && ingamePreviewLighting;
 			options.use_fbo_scene_cache = false;
 		} else {
 			options.transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
@@ -753,6 +780,7 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent& event) {
 	if (ingamePreview) {
+		SetFocus();
 		return;
 	}
 	OnMouseActionClick(event);
@@ -1733,6 +1761,7 @@ void MapCanvas::OnGainMouse(wxMouseEvent& event) {
 
 void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 	if (ingamePreview) {
+		event.Skip();
 		return;
 	}
 	if (event.GetKeyCode() == WXK_ALT) {

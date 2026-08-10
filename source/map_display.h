@@ -128,6 +128,8 @@ public:
 		return ingamePreview;
 	}
 	void SetZoom(double value);
+	void SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame);
+	void SetIngamePreviewLighting(bool enabled);
 	void GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const;
 
 	Position GetCursorPosition() const;
@@ -155,6 +157,13 @@ private:
 	Editor& editor;
 	MapDrawer* drawer;
 	bool ingamePreview;
+	bool ingamePreviewLighting = false;
+	Position ingamePreviewPlayerPosition { -1, -1, -1 };
+	Outfit ingamePreviewPlayerOutfit;
+	Direction ingamePreviewPlayerDirection = SOUTH;
+	int ingamePreviewWalkOffsetX = 0;
+	int ingamePreviewWalkOffsetY = 0;
+	int ingamePreviewAnimationFrame = 0;
 	int keyCode;
 	int countMaxFills = 0;
 

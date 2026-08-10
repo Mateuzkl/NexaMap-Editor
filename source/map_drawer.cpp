@@ -327,6 +327,9 @@ void MapDrawer::DrawScene() {
 	const auto started = std::chrono::steady_clock::now();
 	DrawBackground();
 	DrawMap();
+	if (canvas->IsIngamePreview()) {
+		DrawIngamePreviewPlayer();
+	}
 	if (options.isDrawLight() && !far_zoom_mode) {
 		DrawLight();
 	}
@@ -1468,7 +1471,7 @@ void MapDrawer::BlitSpriteType(int screenx, int screeny, GameSprite* spr, int re
 	}
 }
 
-void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red, int green, int blue, int alpha) {
+void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red, int green, int blue, int alpha, int animationFrame) {
 	if (outfit.lookItem != 0) {
 		ItemType& it = g_items[outfit.lookItem];
 		BlitSpriteType(screenx, screeny, it.sprite, red, green, blue, alpha);
@@ -1479,7 +1482,7 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 			return;
 		}
 
-		const int frame = 0; // GetTime() % itype->FPA;
+		const int frame = spr->frames == 0 ? 0 : animationFrame % spr->frames;
 		std::vector<PreparedSpritePart> parts;
 		bool complete = true;
 
@@ -1503,7 +1506,8 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 							   mountSpr->height,
 							   1,
 							   [&](int cx, int cy, int) {
-								   return mountSpr->getSpriteTex(cx, cy, static_cast<int>(dir), 0, 0, mountOutfit, frame);
+								   const int mountFrame = mountSpr->frames == 0 ? 0 : animationFrame % mountSpr->frames;
+								   return mountSpr->getSpriteTex(cx, cy, static_cast<int>(dir), 0, 0, mountOutfit, mountFrame);
 							   },
 							   parts
 						   )
@@ -1543,6 +1547,36 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 			glBlitTexture(part.screen_x, part.screen_y, st.texture, red, green, blue, alpha, false, st.u0, st.v0, st.u1, st.v1);
 		}
 	}
+}
+
+void MapDrawer::DrawIngamePreviewPlayer() {
+	const Position& position = canvas->ingamePreviewPlayerPosition;
+	if (!position.isValid() || position.z != floor) {
+		return;
+	}
+
+	const int floorOffset = position.z <= GROUND_LAYER ? (GROUND_LAYER - position.z) * TileSize : TileSize * (floor - position.z);
+	const int drawX = position.x * TileSize - view_scroll_x - floorOffset + canvas->ingamePreviewWalkOffsetX;
+	const int drawY = position.y * TileSize - view_scroll_y - floorOffset + canvas->ingamePreviewWalkOffsetY;
+
+	drawRect(drawX + 2, drawY + 2, TileSize - 4, TileSize - 4, wxColour(70, 210, 255, 190), 1);
+	BlitCreature(drawX, drawY, canvas->ingamePreviewPlayerOutfit, canvas->ingamePreviewPlayerDirection, 255, 255, 255, 255, canvas->ingamePreviewAnimationFrame);
+
+	const int centerX = drawX + TileSize / 2;
+	const int centerY = drawY + TileSize / 2;
+	int tipX = centerX;
+	int tipY = centerY;
+	switch (canvas->ingamePreviewPlayerDirection) {
+		case NORTH: tipY -= 12; break;
+		case EAST: tipX += 12; break;
+		case SOUTH: tipY += 12; break;
+		case WEST: tipX -= 12; break;
+		default: break;
+	}
+	const float directionLine[] = {
+		static_cast<float>(centerX), static_cast<float>(centerY), static_cast<float>(tipX), static_cast<float>(tipY)
+	};
+	renderer->drawLines(directionLine, 1, 70, 210, 255, 230, 2.0f);
 }
 
 void MapDrawer::BlitCreature(int screenx, int screeny, const Creature* c, int red, int green, int blue, int alpha) {

@@ -192,6 +192,21 @@ void MapWindow::SetScreenCenterPosition(const Position& position, bool showIndic
 	}
 }
 
+void MapWindow::SetScreenCenterPositionInterpolated(const Position& position, int pixelOffsetX, int pixelOffsetY) {
+	if (!position.isValid()) {
+		return;
+	}
+
+	int x = position.x * TileSize + pixelOffsetX;
+	int y = position.y * TileSize + pixelOffsetY;
+	if (position.z <= GROUND_LAYER) {
+		x -= (GROUND_LAYER - position.z) * TileSize;
+		y -= (GROUND_LAYER - position.z) * TileSize;
+	}
+	Scroll(x, y, true);
+	canvas->ChangeFloor(position.z);
+}
+
 void MapWindow::GoToPreviousCenterPosition() {
 	SetScreenCenterPosition(previous_position, true);
 }

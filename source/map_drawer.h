@@ -312,6 +312,7 @@ public:
 	void DrawTooltips();
 	void DrawPerformanceStats();
 	void DrawLight();
+	void DrawIngamePreviewPlayer();
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);
 
@@ -334,7 +335,7 @@ protected:
 	void BlitSpriteType(int screenx, int screeny, uint32_t spriteid, int red = 255, int green = 255, int blue = 255, int alpha = 255);
 	void BlitSpriteType(int screenx, int screeny, GameSprite* spr, int red = 255, int green = 255, int blue = 255, int alpha = 255);
 	void BlitCreature(int screenx, int screeny, const Creature* c, int red = 255, int green = 255, int blue = 255, int alpha = 255);
-	void BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red = 255, int green = 255, int blue = 255, int alpha = 255);
+	void BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red = 255, int green = 255, int blue = 255, int alpha = 255, int animationFrame = 0);
 	void BlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size = 0);
 	void DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha);
 	void DrawTile(TileLocation* tile);
