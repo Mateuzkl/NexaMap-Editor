@@ -50,6 +50,7 @@ if(ENABLE_UNITY_BUILD)
 	else()
 		set_source_files_properties(
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/gl_renderer.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/post_process_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"

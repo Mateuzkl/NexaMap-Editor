@@ -370,6 +370,10 @@
     <ClCompile Include="..\..\source\gl_renderer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClInclude Include="..\..\source\post_process_renderer.h" />
+    <ClCompile Include="..\..\source\post_process_renderer.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClInclude Include="..\..\source\pngfiles.h" />
     <ClInclude Include="..\..\source\sprites.h" />
     <ClInclude Include="..\..\source\application.h" />

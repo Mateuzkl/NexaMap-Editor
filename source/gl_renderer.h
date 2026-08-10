@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <array>
 
+#include "post_process_renderer.h"
+
 // Minimal GL type forward declarations — full GL comes from glad in gl_renderer.cpp
 using GLuint = unsigned int;
 using GLint = int;
@@ -121,17 +123,9 @@ private:
 	};
 	FBOData fboData;
 	bool fbo_failure_logged = false;
-	GLuint postProcessVAO = 0;
-	GLuint postProcessVBO = 0;
-	GLuint postProcessProgram = 0;
-	GLint postProcessEffectLocation = -1;
-	GLint postProcessTexelSizeLocation = -1;
-	bool post_process_failure_logged = false;
+	PostProcessRenderer postProcessRenderer;
 
 	void flushBatch();
-	bool ensurePostProcess();
-	void destroyPostProcess();
-	void drawPostProcessedFBO(int srcX0, int srcY0, int srcX1, int srcY1, int dstX0, int dstY0, int dstX1, int dstY1, unsigned int filter, int effect);
 	void bindProgram();
 	void bindState();
 	void unbindState();
