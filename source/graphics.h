@@ -366,6 +366,7 @@ public:
 	bool endMapRenderTextureBudget();
 	bool canPrepareTextureUpload();
 	void recordTextureUploadAttempt() noexcept;
+	void cancelTextureUploadAttempt() noexcept;
 	void recordTextureUpload() noexcept;
 	void deferTextureUpload() noexcept;
 	void markTextureMissing() noexcept;
@@ -383,6 +384,9 @@ public:
 	}
 	int getLastFrameTextureAttempts() const noexcept {
 		return last_frame_texture_attempts;
+	}
+	double getLastFrameTextureUploadTimeMs() const noexcept {
+		return last_frame_texture_upload_time_ms;
 	}
 
 	// Sprite atlas: packs 32x32 sprites into large pages so they can be batched.
@@ -450,7 +454,10 @@ private:
 	int frame_texture_uploads = 0;
 	int last_frame_texture_attempts = 0;
 	int last_frame_texture_uploads = 0;
-	std::chrono::steady_clock::time_point texture_upload_budget_started;
+	std::chrono::steady_clock::time_point texture_upload_attempt_started;
+	std::chrono::steady_clock::duration frame_texture_upload_time {};
+	double last_frame_texture_upload_time_ms = 0.0;
+	bool texture_upload_attempt_active = false;
 
 	std::vector<GLuint> atlas_textures;
 	std::vector<uint64_t> atlas_page_last_use;

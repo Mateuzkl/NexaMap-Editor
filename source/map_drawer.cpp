@@ -2598,7 +2598,14 @@ void MapDrawer::DrawPerformanceStats() {
 	drawText(text_x, text_y + 96, 0.7f, 0.7f, 0.7f, buf);
 	const char* render_mode = isViewportInteractionActive() ? "Scene: cached" : (far_zoom_mode ? "LOD: minimap" : (medium_zoom_mode ? "LOD: medium" : "Scene: exact"));
 	drawText(text_x, text_y + 112, 0.55f, 0.75f, 1.0f, render_mode);
-	snprintf(buf, sizeof(buf), "Texture up/try: %d/%d", g_gui.gfx.getLastFrameTextureUploads(), g_gui.gfx.getLastFrameTextureAttempts());
+	snprintf(
+		buf,
+		sizeof(buf),
+		"GPU upload: %d/%d %.2fms",
+		g_gui.gfx.getLastFrameTextureUploads(),
+		g_gui.gfx.getLastFrameTextureAttempts(),
+		g_gui.gfx.getLastFrameTextureUploadTimeMs()
+	);
 	drawText(text_x, text_y + 128, 0.7f, 0.7f, 0.7f, buf);
 	snprintf(buf, sizeof(buf), "Sheets Q/R: %zu/%zu", g_spriteAppearances.getPendingSheetCount(), g_spriteAppearances.getReadySheetCount());
 	drawText(text_x, text_y + 144, 0.7f, 0.7f, 0.7f, buf);

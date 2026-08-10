@@ -381,7 +381,8 @@ void GraphicManager::beginMapRenderTextureBudget(GLRenderer* activeRenderer, boo
 	frame_had_missing_texture = false;
 	frame_texture_attempts = 0;
 	frame_texture_uploads = 0;
-	texture_upload_budget_started = std::chrono::steady_clock::now();
+	frame_texture_upload_time = std::chrono::steady_clock::duration::zero();
+	texture_upload_attempt_active = false;
 	atlas_frame_active = true;
 	++atlas_frame_counter;
 	active_map_renderer = activeRenderer;
@@ -390,6 +391,8 @@ void GraphicManager::beginMapRenderTextureBudget(GLRenderer* activeRenderer, boo
 bool GraphicManager::endMapRenderTextureBudget() {
 	last_frame_texture_attempts = frame_texture_attempts;
 	last_frame_texture_uploads = frame_texture_uploads;
+	last_frame_texture_upload_time_ms = std::chrono::duration<double, std::milli>(frame_texture_upload_time).count();
+	texture_upload_attempt_active = false;
 	texture_upload_budget_active = false;
 	atlas_frame_active = false;
 	active_map_renderer = nullptr;
@@ -403,18 +406,28 @@ bool GraphicManager::canPrepareTextureUpload() {
 
 	constexpr int MAX_UPLOADS_PER_FRAME = 32;
 	constexpr auto MAX_UPLOAD_TIME = std::chrono::milliseconds(3);
-	if (frame_texture_attempts >= MAX_UPLOADS_PER_FRAME || std::chrono::steady_clock::now() - texture_upload_budget_started >= MAX_UPLOAD_TIME) {
+	if (frame_texture_attempts >= MAX_UPLOADS_PER_FRAME || frame_texture_upload_time >= MAX_UPLOAD_TIME) {
 		texture_upload_deferred = true;
 		return false;
 	}
 
+	texture_upload_attempt_started = std::chrono::steady_clock::now();
+	texture_upload_attempt_active = true;
 	return true;
 }
 
 void GraphicManager::recordTextureUploadAttempt() noexcept {
 	if (texture_upload_budget_active) {
+		if (texture_upload_attempt_active) {
+			frame_texture_upload_time += std::chrono::steady_clock::now() - texture_upload_attempt_started;
+			texture_upload_attempt_active = false;
+		}
 		++frame_texture_attempts;
 	}
+}
+
+void GraphicManager::cancelTextureUploadAttempt() noexcept {
+	texture_upload_attempt_active = false;
 }
 
 void GraphicManager::recordTextureUpload() noexcept {
@@ -2026,6 +2039,7 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 		}
 		uint8_t* rgba = getRGBAData();
 		if (!rgba) {
+			g_gui.gfx.cancelTextureUploadAttempt();
 			return 0;
 		}
 
@@ -2064,11 +2078,11 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 			atlas_loaded = true;
 			isGLLoaded = true;
 			g_gui.gfx.loaded_textures += 1;
-			g_gui.gfx.recordTextureUploadAttempt();
 			g_gui.gfx.recordTextureUpload();
 		}
 
 		delete[] rgba;
+		g_gui.gfx.recordTextureUploadAttempt();
 	}
 	visit();
 	if (atlas_loaded) {
@@ -2305,6 +2319,7 @@ GLuint GameSprite::TemplateImage::getHardwareID() {
 		}
 		createGLTexture(gl_tid);
 		if (!isGLLoaded) {
+			g_gui.gfx.cancelTextureUploadAttempt();
 			return 0;
 		}
 		g_gui.gfx.recordTextureUploadAttempt();
