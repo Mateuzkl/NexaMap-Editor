@@ -371,7 +371,8 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 			options.experimental_fog = g_settings.getBoolean(Config::EXPERIMENTAL_FOG);
 
-			options.use_fbo_scene_cache = g_settings.getBoolean(Config::USE_FBO_SCENE_CACHE);
+			options.post_process_effect = std::clamp(g_settings.getInteger(Config::POST_PROCESS_EFFECT), 0, 2);
+			options.use_fbo_scene_cache = g_settings.getBoolean(Config::USE_FBO_SCENE_CACHE) || options.post_process_effect != 0;
 		}
 
 		options.dragging = boundbox_selection;

@@ -234,6 +234,7 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_ZONE_AREAS, 1);
 	Int(USE_FBO_SCENE_CACHE, 1);
 	Int(ANIMATION_FPS, 10);
+	Int(POST_PROCESS_EFFECT, 0);
 	Int(SHOW_SPAWNS, 1);
 	Int(SHOW_ITEMS, 1);
 	Int(HIGHLIGHT_ITEMS, 0);

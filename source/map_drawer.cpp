@@ -179,6 +179,7 @@ void DrawingOptions::SetDefault() {
 	show_preview = false;
 	show_hooks = false;
 	hide_items_when_zoomed = true;
+	post_process_effect = 0;
 }
 
 void DrawingOptions::SetIngame() {
@@ -214,6 +215,7 @@ void DrawingOptions::SetIngame() {
 	show_preview = false;
 	show_hooks = false;
 	hide_items_when_zoomed = false;
+	post_process_effect = 0;
 }
 
 bool DrawingOptions::isDrawLight() const noexcept {
@@ -466,7 +468,8 @@ void MapDrawer::Draw() {
 		screensize_y - dst_bottom,
 		dst_right,
 		screensize_y - dst_top,
-		(scale == 1.0 ? GL_NEAREST : GL_LINEAR)
+		(scale == 1.0 ? GL_NEAREST : GL_LINEAR),
+		options.post_process_effect
 	);
 	DrawOverlays();
 }

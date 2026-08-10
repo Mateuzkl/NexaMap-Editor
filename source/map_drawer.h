@@ -103,6 +103,7 @@ struct DrawingOptions {
 	bool experimental_fog;
 
 	bool use_fbo_scene_cache = false;
+	int post_process_effect = 0;
 };
 
 class MapCanvas;

@@ -250,6 +250,15 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage() {
 	subsizer->Add(icon_background_choice, 0);
 	SetWindowToolTip(icon_background_choice, tmp, "This will change the background color on icons in all windows.");
 
+	post_process_choice = newd wxChoice(graphics_page, wxID_ANY);
+	post_process_choice->Append("Off");
+	post_process_choice->Append("Sharpen");
+	post_process_choice->Append("Retro scanlines");
+	post_process_choice->SetSelection(std::clamp(g_settings.getInteger(Config::POST_PROCESS_EFFECT), 0, 2));
+	subsizer->Add(tmp = newd wxStaticText(graphics_page, wxID_ANY, "Post-process effect: "), 0);
+	subsizer->Add(post_process_choice, 0);
+	SetWindowToolTip(post_process_choice, tmp, "Optional full-scene shader. Off preserves the original rendering path and has no shader overhead.");
+
 	// Animation framerate
 	subsizer->Add(tmp = newd wxStaticText(graphics_page, wxID_ANY, "Animation FPS: "), 0);
 	animation_fps_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::ANIMATION_FPS)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 60);
@@ -711,6 +720,7 @@ bool PreferencesWindow::Apply() {
 	// Graphics
 	g_settings.setInteger(Config::USE_GUI_SELECTION_SHADOW, icon_selection_shadow_chkbox->GetValue());
 	g_settings.setInteger(Config::USE_FBO_SCENE_CACHE, fbo_scene_cache_chkbox->GetValue());
+	g_settings.setInteger(Config::POST_PROCESS_EFFECT, std::max(0, post_process_choice->GetSelection()));
 	g_settings.setInteger(Config::ANIMATION_FPS, animation_fps_spin->GetValue());
 	if (g_settings.getBoolean(Config::USE_MEMCACHED_SPRITES) != use_memcached_chkbox->GetValue()) {
 		must_restart = true;
@@ -844,5 +854,6 @@ bool PreferencesWindow::Apply() {
 		g_gui.PopupDialog("Error", error, wxOK);
 		g_gui.ListDialog("Warnings", warnings);
 	}
+	g_gui.RefreshView();
 	return true;
 }
