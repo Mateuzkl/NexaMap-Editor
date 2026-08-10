@@ -360,6 +360,7 @@ bool MapDrawer::isSceneDirty() {
 		|| cached_screensize_x != screensize_x
 		|| cached_screensize_y != screensize_y;
 	if (hard_invalidation) {
+		viewport_settle_pending = false;
 		return true;
 	}
 
@@ -419,7 +420,6 @@ void MapDrawer::Draw() {
 	const int dst_right = static_cast<int>(std::lround(translated_x + screensize_x * scale));
 	const int dst_bottom = static_cast<int>(std::lround(translated_y + screensize_y * scale));
 
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	renderer->blitFBO(
@@ -2461,9 +2461,9 @@ void MapDrawer::DrawPerformanceStats() {
 	drawText(text_x, text_y + 64, 0.8f, 0.8f, 0.8f, buf);
 
 	// Last exact scene rebuild and scene complexity
-	snprintf(buf, sizeof(buf), "Scene: %.1fms", last_scene_ms);
+	snprintf(buf, sizeof(buf), "Last exact: %.1fms", last_scene_ms);
 	drawText(text_x, text_y + 80, 0.7f, 0.7f, 0.7f, buf);
-	snprintf(buf, sizeof(buf), "Tiles: %zu  Items: %zu", visible_tile_count, visible_item_count);
+	snprintf(buf, sizeof(buf), "Last exact T/I: %zu/%zu", visible_tile_count, visible_item_count);
 	drawText(text_x, text_y + 96, 0.7f, 0.7f, 0.7f, buf);
 	const char* render_mode = isViewportInteractionActive() ? "Scene: cached" : (far_zoom_mode ? "LOD: minimap" : (medium_zoom_mode ? "LOD: medium" : "Scene: exact"));
 	drawText(text_x, text_y + 112, 0.55f, 0.75f, 1.0f, render_mode);

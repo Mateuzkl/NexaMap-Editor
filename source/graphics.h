@@ -438,10 +438,12 @@ private:
 	std::chrono::steady_clock::time_point texture_upload_budget_started;
 
 	std::vector<GLuint> atlas_textures;
+	std::vector<uint64_t> atlas_page_last_use;
+	uint64_t atlas_access_counter = 0;
 	int atlas_size = 0;
 	int atlas_count = 0;
-	bool atlas_reset_pending = false;
-	void resetAtlas();
+	bool recycleAtlasPage();
+	void touchAtlasPage(GLuint texture) noexcept;
 
 	wxStopWatch* animation_timer;
 

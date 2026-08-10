@@ -28,6 +28,7 @@
 #include "sprite_appearances.h"
 
 #include <appearances.pb.h>
+#include <iterator>
 #include <wx/mstream.h>
 #include <wx/stopwatch.h>
 #include <wx/dir.h>
@@ -245,39 +246,50 @@ bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
 	if (atlas_textures.empty() || atlas_count >= perPage) {
 		constexpr size_t MAX_ATLAS_PAGES = 4;
 		if (atlas_textures.size() >= MAX_ATLAS_PAGES) {
-			atlas_reset_pending = true;
-			deferTextureUpload();
-			return false;
+			if (!recycleAtlasPage()) {
+				deferTextureUpload();
+				return false;
+			}
+		} else {
+			GLuint tex = 0;
+			glGenTextures(1, &tex);
+			if (tex == 0) {
+				return false;
+			}
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			atlas_textures.push_back(tex);
+			atlas_page_last_use.push_back(++atlas_access_counter);
+			atlas_count = 0;
 		}
-		GLuint tex = 0;
-		glGenTextures(1, &tex);
-		if (tex == 0) {
-			return false;
-		}
-		glBindTexture(GL_TEXTURE_2D, tex);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-		atlas_textures.push_back(tex);
-		atlas_count = 0;
 	}
 
 	const int slot = atlas_count++;
 	const int col = slot % perRow;
 	const int row = slot / perRow;
 	outTex = atlas_textures.back();
+	touchAtlasPage(outTex);
 	outX = col * CELL;
 	outY = row * CELL;
 	return true;
 }
 
-void GraphicManager::resetAtlas() {
+bool GraphicManager::recycleAtlasPage() {
+	if (atlas_textures.empty() || atlas_textures.size() != atlas_page_last_use.size()) {
+		return false;
+	}
+
+	const auto oldest = std::min_element(atlas_page_last_use.begin(), atlas_page_last_use.end());
+	const size_t victimIndex = static_cast<size_t>(std::distance(atlas_page_last_use.begin(), oldest));
+	const GLuint victimTexture = atlas_textures[victimIndex];
 	int invalidated = 0;
 	for (const auto& entry : image_space) {
 		auto* image = dynamic_cast<GameSprite::NormalImage*>(entry.second);
-		if (!image || !image->atlas_loaded) {
+		if (!image || !image->atlas_loaded || image->atlas_tex != victimTexture) {
 			continue;
 		}
 		image->atlas_loaded = false;
@@ -287,22 +299,32 @@ void GraphicManager::resetAtlas() {
 	}
 	loaded_textures = std::max(0, loaded_textures - invalidated);
 
-	for (GLuint texture : atlas_textures) {
-		if (texture != 0) {
-			GLRenderer::invalidateTexture(texture);
-			glDeleteTextures(1, &texture);
-		}
+	GLRenderer::invalidateTexture(victimTexture);
+	glBindTexture(GL_TEXTURE_2D, victimTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+	if (victimIndex + 1 != atlas_textures.size()) {
+		atlas_textures.erase(atlas_textures.begin() + victimIndex);
+		atlas_textures.push_back(victimTexture);
+		atlas_page_last_use.erase(atlas_page_last_use.begin() + victimIndex);
+		atlas_page_last_use.push_back(++atlas_access_counter);
+	} else {
+		atlas_page_last_use.back() = ++atlas_access_counter;
 	}
-	atlas_textures.clear();
-	atlas_size = 0;
 	atlas_count = 0;
-	atlas_reset_pending = false;
+	return true;
+}
+
+void GraphicManager::touchAtlasPage(GLuint texture) noexcept {
+	const auto page = std::find(atlas_textures.begin(), atlas_textures.end(), texture);
+	if (page == atlas_textures.end()) {
+		return;
+	}
+	const size_t pageIndex = static_cast<size_t>(std::distance(atlas_textures.begin(), page));
+	atlas_page_last_use[pageIndex] = ++atlas_access_counter;
 }
 
 void GraphicManager::beginMapRenderTextureBudget() {
-	if (atlas_reset_pending) {
-		resetAtlas();
-	}
 	texture_upload_budget_active = true;
 	texture_upload_deferred = false;
 	frame_texture_attempts = 0;
@@ -372,13 +394,15 @@ void GraphicManager::clear() {
 
 	for (GLuint tex : atlas_textures) {
 		if (tex) {
+			GLRenderer::invalidateTexture(tex);
 			glDeleteTextures(1, &tex);
 		}
 	}
 	atlas_textures.clear();
+	atlas_page_last_use.clear();
 	atlas_size = 0;
 	atlas_count = 0;
-	atlas_reset_pending = false;
+	atlas_access_counter = 0;
 
 	unloaded = true;
 }
@@ -1630,6 +1654,8 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 			loaded = g_spriteAppearances.getSpritePixelsIfLoaded(id, pixels, sourceSize, pending);
 			if (pending) {
 				g_gui.gfx.deferTextureUpload();
+			} else if (!loaded) {
+				loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
 			}
 		} else if (id != 0) {
 			loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
@@ -1723,6 +1749,8 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 			loaded = g_spriteAppearances.getSpritePixelsIfLoaded(id, pixels, sourceSize, pending);
 			if (pending) {
 				g_gui.gfx.deferTextureUpload();
+			} else if (!loaded) {
+				loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
 			}
 		} else if (id != 0) {
 			loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
@@ -1864,6 +1892,9 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 		delete[] rgba;
 	}
 	visit();
+	if (atlas_loaded) {
+		g_gui.gfx.touchAtlasPage(atlas_tex);
+	}
 	return atlas_tex;
 }
 

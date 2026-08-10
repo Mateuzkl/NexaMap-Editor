@@ -240,7 +240,10 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 MapCanvas::~MapCanvas() {
 	delete popup_menu;
 	delete animation_timer;
-	delete drawer;
+	if (drawer) {
+		SetCurrent(*g_gui.GetGLContext(this));
+		delete drawer;
+	}
 	std::free(screenshot_buffer);
 }
 
@@ -248,22 +251,18 @@ void MapCanvas::Refresh() {
 	if (drawer) {
 		drawer->markDirty();
 	}
-	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
-		refresh_watch.Start();
-		wxGLCanvas::Update();
-	}
-	wxGLCanvas::Refresh();
+	RefreshWithoutDirty();
 }
 
 void MapCanvas::RefreshAnimation() {
-	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
-		refresh_watch.Start();
-		wxGLCanvas::Update();
-	}
-	wxGLCanvas::Refresh();
+	RefreshWithoutDirty();
 }
 
 void MapCanvas::RefreshViewport() {
+	RefreshWithoutDirty();
+}
+
+void MapCanvas::RefreshWithoutDirty() {
 	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
 		refresh_watch.Start();
 		wxGLCanvas::Update();
@@ -350,12 +349,6 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		const bool animate_position_indicator = drawer->GetPositionIndicatorTime() != 0;
 		const bool animate_preview = options.show_preview && zoom <= 2.0;
 		if (animate_preview && !drawer->isViewportInteractionActive()) {
-			int animation_fps = g_settings.getInteger(Config::ANIMATION_FPS);
-			if (animation_fps < 1) {
-				animation_fps = 1;
-			} else if (animation_fps > 60) {
-				animation_fps = 60;
-			}
 			// Mark dirty so the FBO cache is refreshed for the new animation frame
 			drawer->markDirty();
 		}

@@ -136,6 +136,8 @@ protected:
 	bool floodFill(Map* map, const Position& center, int x, int y, GroundBrush* brush, PositionVector* positions);
 
 private:
+	void RefreshWithoutDirty();
+
 	enum {
 		BLOCK_SIZE = 100
 	};

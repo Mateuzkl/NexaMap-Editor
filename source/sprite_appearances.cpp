@@ -220,10 +220,22 @@ bool SpriteAppearances::decodeSpriteSheet(const ClientSpriteSheetPtr& sheet, std
 }
 
 bool SpriteAppearances::loadSpriteSheet(const ClientSpriteSheetPtr& sheet, wxString& error) {
-	processReadySheets();
 	if (!sheet) {
 		error = "Cannot load a null Canary/Crystal sprite sheet.";
 		return false;
+	}
+	processReadySheets();
+	if (!sheet->pixels) {
+		{
+			std::unique_lock<std::mutex> lock(workerMutex);
+			const auto pendingEnd = std::remove(pendingSheets.begin(), pendingSheets.end(), sheet);
+			if (pendingEnd != pendingSheets.end()) {
+				pendingSheets.erase(pendingEnd, pendingSheets.end());
+				queuedSheetIds.erase(sheet->firstSpriteId);
+			}
+			workerCondition.wait(lock, [&]() { return activeSheet != sheet; });
+		}
+		processReadySheets();
 	}
 	if (!sheet->pixels) {
 		std::unique_ptr<uint8_t[]> decoded;
@@ -284,7 +296,9 @@ void SpriteAppearances::stopWorker() {
 		std::lock_guard<std::mutex> lock(workerMutex);
 		pendingSheets.clear();
 		readySheets.clear();
+		readyCount.store(0, std::memory_order_release);
 		queuedSheetIds.clear();
+		activeSheet.reset();
 		workerStopping = false;
 	}
 }
@@ -300,18 +314,27 @@ void SpriteAppearances::workerLoop() {
 			}
 			sheet = pendingSheets.front();
 			pendingSheets.pop_front();
+			activeSheet = sheet;
 		}
 
 		DecodedSheet decoded;
 		decoded.sheet = sheet;
 		decodeSpriteSheet(sheet, decoded.pixels, decoded.error);
 
+		bool stop = false;
 		{
 			std::lock_guard<std::mutex> lock(workerMutex);
+			activeSheet.reset();
 			if (workerStopping) {
-				return;
+				stop = true;
+			} else {
+				readySheets.push_back(std::move(decoded));
+				readyCount.fetch_add(1, std::memory_order_release);
 			}
-			readySheets.push_back(std::move(decoded));
+		}
+		workerCondition.notify_all();
+		if (stop) {
+			return;
 		}
 	}
 }
@@ -332,10 +355,15 @@ void SpriteAppearances::requestSpriteSheet(const ClientSpriteSheetPtr& sheet) {
 }
 
 void SpriteAppearances::processReadySheets() {
+	if (readyCount.load(std::memory_order_acquire) == 0) {
+		return;
+	}
+
 	std::deque<DecodedSheet> ready;
 	{
 		std::lock_guard<std::mutex> lock(workerMutex);
 		ready.swap(readySheets);
+		readyCount.store(0, std::memory_order_release);
 		for (const DecodedSheet& decoded : ready) {
 			queuedSheetIds.erase(decoded.sheet->firstSpriteId);
 		}
@@ -391,7 +419,6 @@ bool SpriteAppearances::copySpritePixels(const ClientSpriteSheetPtr& sheet, uint
 }
 
 bool SpriteAppearances::getSpritePixels(uint32_t spriteId, std::vector<uint8_t>& output, ClientSpriteSize& size, wxString& error) {
-	processReadySheets();
 	const ClientSpriteSheetPtr sheet = getSheetBySpriteId(spriteId);
 	if (!sheet) {
 		error = wxString::Format("Sprite ID %u is not present in assets/catalog-content.json.", spriteId);

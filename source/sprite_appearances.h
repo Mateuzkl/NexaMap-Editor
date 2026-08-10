@@ -3,6 +3,7 @@
 
 #include "client_assets_manifest.h"
 
+#include <atomic>
 #include <cstdint>
 #include <condition_variable>
 #include <deque>
@@ -84,7 +85,9 @@ private:
 	std::condition_variable workerCondition;
 	std::deque<ClientSpriteSheetPtr> pendingSheets;
 	std::deque<DecodedSheet> readySheets;
+	std::atomic_size_t readyCount { 0 };
 	std::unordered_set<uint32_t> queuedSheetIds;
+	ClientSpriteSheetPtr activeSheet;
 	std::thread worker;
 	bool workerStopping = false;
 };

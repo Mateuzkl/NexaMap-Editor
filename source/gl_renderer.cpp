@@ -51,6 +51,41 @@ static void* rmeGetGLProc(const char* name) {
 std::vector<GLRenderer*> GLRenderer::s_instances;
 
 GLRenderer::~GLRenderer() {
+	destroyFBO();
+
+	if (m_programBound) {
+		glUseProgram(0);
+		m_programBound = false;
+	}
+	if (vao != 0) {
+		glDeleteVertexArrays(1, &vao);
+		vao = 0;
+	}
+	if (vbo != 0) {
+		glDeleteBuffers(1, &vbo);
+		vbo = 0;
+	}
+	if (streamVAO != 0) {
+		glDeleteVertexArrays(1, &streamVAO);
+		streamVAO = 0;
+	}
+	if (streamVBO != 0) {
+		glDeleteBuffers(1, &streamVBO);
+		streamVBO = 0;
+	}
+	if (streamEBO != 0) {
+		glDeleteBuffers(1, &streamEBO);
+		streamEBO = 0;
+	}
+	if (program != 0) {
+		glDeleteProgram(program);
+		program = 0;
+	}
+	initialized = false;
+	current_texture = 0;
+	batch.clear();
+	indexScratch.clear();
+
 	s_instances.erase(std::remove(s_instances.begin(), s_instances.end(), this), s_instances.end());
 }
 
