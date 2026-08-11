@@ -104,6 +104,20 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME border_learning_tests COMMAND border_learning_tests)
 
+	add_executable(minimap_import_tests
+		tests/minimap_import_tests.cpp
+		source/minimap_import.cpp
+	)
+	target_include_directories(minimap_import_tests PRIVATE source)
+	target_link_libraries(minimap_import_tests PRIVATE ZLIB::ZLIB)
+	set_target_properties(minimap_import_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/minimap_import_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/minimap_import_tests"
+	)
+	add_test(NAME minimap_import_tests COMMAND minimap_import_tests)
+
 	add_executable(border_topology_tests
 		tests/border_topology_tests.cpp
 		source/brush_tables.cpp
