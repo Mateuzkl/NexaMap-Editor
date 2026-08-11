@@ -21,6 +21,8 @@ public:
 
 	void bindMap(Map* map);
 	void invalidateAll() noexcept;
+	void beginVisibleFrame() noexcept;
+	void endVisibleFrame(GLRenderer& renderer);
 	bool drawVisible(
 		GLRenderer& renderer,
 		int floor,
@@ -50,6 +52,7 @@ private:
 		int pageX = 0;
 		int pageY = 0;
 		uint64_t lastUse = 0;
+		uint64_t lastVisibleFrame = 0;
 		bool dirty = true;
 	};
 
@@ -63,6 +66,8 @@ private:
 	int mapHeight = 0;
 	uint64_t activeStyleKey = 0;
 	uint64_t useCounter = 0;
+	uint64_t visibleFrameCounter = 0;
+	bool visibleFrameActive = false;
 	bool allocationFailureLogged = false;
 	std::unordered_map<uint64_t, Page> pages;
 	std::vector<uint8_t> uploadPixels;

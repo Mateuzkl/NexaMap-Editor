@@ -33,6 +33,43 @@ void MinimapPageCache::invalidateAll() noexcept {
 	}
 }
 
+void MinimapPageCache::beginVisibleFrame() noexcept {
+	visibleFrameActive = true;
+	++visibleFrameCounter;
+}
+
+void MinimapPageCache::endVisibleFrame(GLRenderer& renderer) {
+	visibleFrameActive = false;
+	size_t visiblePageCount = 0;
+	for (const auto& [key, page] : pages) {
+		if (page.lastVisibleFrame == visibleFrameCounter) {
+			++visiblePageCount;
+		}
+	}
+
+	const size_t retainedPageCount = std::max(MaximumPages, visiblePageCount);
+	while (pages.size() > retainedPageCount) {
+		auto victim = pages.end();
+		uint64_t oldestUse = std::numeric_limits<uint64_t>::max();
+		for (auto candidate = pages.begin(); candidate != pages.end(); ++candidate) {
+			if (candidate->second.lastVisibleFrame == visibleFrameCounter) {
+				continue;
+			}
+			if (candidate->second.lastUse < oldestUse) {
+				oldestUse = candidate->second.lastUse;
+				victim = candidate;
+			}
+		}
+		if (victim == pages.end()) {
+			break;
+		}
+
+		renderer.flush();
+		deletePageTexture(victim->second);
+		pages.erase(victim);
+	}
+}
+
 bool MinimapPageCache::drawVisible(
 	GLRenderer& renderer,
 	int floor,
@@ -74,6 +111,7 @@ bool MinimapPageCache::drawVisible(
 		for (int pageX = startPageX; pageX <= endPageX; ++pageX) {
 			Page& page = getOrCreatePage(renderer, floor, pageX, pageY);
 			page.lastUse = ++useCounter;
+			page.lastVisibleFrame = visibleFrameCounter;
 			if (page.dirty && !uploadPage(page, resolvePixel)) {
 				complete = false;
 				g_gui.gfx.markTextureMissing();
@@ -99,6 +137,8 @@ void MinimapPageCache::releaseGL() {
 	uploadPixels.clear();
 	activeStyleKey = 0;
 	useCounter = 0;
+	visibleFrameCounter = 0;
+	visibleFrameActive = false;
 	allocationFailureLogged = false;
 }
 
@@ -115,7 +155,7 @@ MinimapPageCache::Page& MinimapPageCache::getOrCreatePage(GLRenderer& renderer, 
 		return existing->second;
 	}
 
-	if (pages.size() >= MaximumPages) {
+	if (!visibleFrameActive && pages.size() >= MaximumPages) {
 		auto victim = pages.end();
 		uint64_t oldestUse = std::numeric_limits<uint64_t>::max();
 		for (auto candidate = pages.begin(); candidate != pages.end(); ++candidate) {

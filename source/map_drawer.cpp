@@ -713,6 +713,7 @@ void MapDrawer::DrawMap() {
 
 void MapDrawer::DrawMapMinimapPages() {
 	minimap_page_cache.bindMap(&editor.map);
+	minimap_page_cache.beginVisibleFrame();
 	const uint64_t styleKey = static_cast<uint64_t>(options.show_only_modified)
 		| (static_cast<uint64_t>(options.show_zone_areas) << 1)
 		| (static_cast<uint64_t>(options.show_houses) << 2)
@@ -770,6 +771,7 @@ void MapDrawer::DrawMapMinimapPages() {
 		++end_x;
 		++end_y;
 	}
+	minimap_page_cache.endVisibleFrame(*renderer);
 }
 
 void MapDrawer::DrawIngameBox() {
