@@ -91,6 +91,19 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+	add_executable(border_learning_tests
+		tests/border_learning_tests.cpp
+		source/border_learning.cpp
+	)
+	target_include_directories(border_learning_tests PRIVATE source)
+	set_target_properties(border_learning_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/border_learning_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/border_learning_tests"
+	)
+	add_test(NAME border_learning_tests COMMAND border_learning_tests)
+
 	add_executable(border_topology_tests
 		tests/border_topology_tests.cpp
 		source/brush_tables.cpp

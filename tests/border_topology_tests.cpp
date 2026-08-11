@@ -5,9 +5,9 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <stdexcept>
 
 uint32_t GroundBrush::border_types[256];
 uint32_t WallBrush::full_border_types[16];
@@ -19,6 +19,12 @@ namespace {
 
 	bool contains(const std::array<BorderType, 4>& directions, BorderType expected) {
 		return std::find(directions.begin(), directions.end(), expected) != directions.end();
+	}
+
+	void require(bool condition, const char* message) {
+		if (!condition) {
+			throw std::runtime_error(message);
+		}
 	}
 
 } // namespace
@@ -46,14 +52,14 @@ int main() {
 	};
 
 	for (const auto& canonicalCase : canonicalCases) {
-		assert(contains(GroundBrush::classifyBorderMask(canonicalCase.mask), canonicalCase.expected));
+		require(contains(GroundBrush::classifyBorderMask(canonicalCase.mask), canonicalCase.expected), "canonical border mask mismatch");
 	}
 
 	const auto compound = GroundBrush::classifyBorderMask(TILE_NORTH | TILE_EAST | TILE_WEST);
-	assert(compound[0] == NORTH_HORIZONTAL);
-	assert(compound[1] == WEST_HORIZONTAL);
-	assert(compound[2] == EAST_HORIZONTAL);
-	assert(compound[3] == BORDER_NONE);
+	require(compound[0] == NORTH_HORIZONTAL, "compound north mismatch");
+	require(compound[1] == WEST_HORIZONTAL, "compound west mismatch");
+	require(compound[2] == EAST_HORIZONTAL, "compound east mismatch");
+	require(compound[3] == BORDER_NONE, "compound terminator mismatch");
 
 	std::cout << "border_topology_tests passed\n";
 	return 0;
