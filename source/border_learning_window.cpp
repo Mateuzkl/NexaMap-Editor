@@ -25,6 +25,11 @@
 
 namespace {
 
+	BorderLearningWindow*& BorderLearningWindowInstance() {
+		static BorderLearningWindow* instance = nullptr;
+		return instance;
+	}
+
 	constexpr std::array<BorderType, 12> displayEdges = {
 		NORTHWEST_CORNER,
 		NORTH_HORIZONTAL,
@@ -91,6 +96,11 @@ namespace {
 } // namespace
 
 void BorderLearningWindow::Open(wxWindow* parent, Editor& editor, int floor) {
+	if (BorderLearningWindowInstance()) {
+		BorderLearningWindowInstance()->Raise();
+		BorderLearningWindowInstance()->SetFocus();
+		return;
+	}
 	if (!editor.hasSelection()) {
 		wxMessageBox("No map tiles are selected. Select an area containing a ground transition and try again.", "Border Learning", wxOK | wxICON_INFORMATION, parent);
 		return;
@@ -109,18 +119,24 @@ void BorderLearningWindow::Open(wxWindow* parent, Editor& editor, int floor) {
 		return;
 	}
 
-	BorderLearningWindow dialog(parent, editor, std::move(snapshot));
-	dialog.ShowModal();
+	BorderLearningWindowInstance() = newd BorderLearningWindow(parent, editor, std::move(snapshot));
+	BorderLearningWindowInstance()->Show();
 }
 
 BorderLearningWindow::BorderLearningWindow(wxWindow* parent, Editor& editor, BorderLearningSnapshot snapshot) :
 	wxDialog(parent, wxID_ANY, "Border Learning", wxDefaultPosition, wxSize(920, 700), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
-	editor_(editor),
+	editor_(&editor),
 	snapshot_(std::move(snapshot)) {
 	BuildLayout();
 	BindEvents();
 	PopulateTransitions();
 	CentreOnParent();
+}
+
+BorderLearningWindow::~BorderLearningWindow() {
+	if (BorderLearningWindowInstance() == this) {
+		BorderLearningWindowInstance() = nullptr;
+	}
 }
 
 void BorderLearningWindow::BuildLayout() {
@@ -136,6 +152,12 @@ void BorderLearningWindow::BuildLayout() {
 	transitionRow->Add(analyzeButton, 0);
 	summaryBox->Add(selectionLabel_, 0, wxEXPAND | wxALL, FromDIP(6));
 	summaryBox->Add(transitionRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+	auto* evidenceActions = newd wxBoxSizer(wxHORIZONTAL);
+	addEvidenceButton_ = newd wxButton(summaryBox->GetStaticBox(), wxID_ADD, "Add Current Selection to Evidence");
+	resetEvidenceButton_ = newd wxButton(summaryBox->GetStaticBox(), wxID_CLEAR, "Reset Evidence");
+	evidenceActions->Add(addEvidenceButton_, 0, wxRIGHT, FromDIP(6));
+	evidenceActions->Add(resetEvidenceButton_, 0);
+	summaryBox->Add(evidenceActions, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
 	summaryBox->Add(qualityLabel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
 	rootSizer->Add(summaryBox, 0, wxEXPAND | wxALL, FromDIP(8));
 
@@ -183,6 +205,8 @@ void BorderLearningWindow::BuildLayout() {
 
 void BorderLearningWindow::BindEvents() {
 	FindWindow(wxID_REFRESH)->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ReanalyzeSelection(); });
+	addEvidenceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AddSelectionEvidence(); });
+	resetEvidenceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ResetEvidence(); });
 	transitionChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { AnalyzeSelectedTransition(); });
 	slotList_->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent& event) {
 		selectedEdge_ = static_cast<BorderType>(slotList_->GetItemData(event.GetIndex()));
@@ -192,16 +216,53 @@ void BorderLearningWindow::BindEvents() {
 	useCandidateButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { UseSelectedAlternative(); });
 	goToEvidenceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { GoToSelectedEvidence(); });
 	openWorkspaceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenInBorderWorkspace(); });
-	FindWindow(wxID_CLOSE)->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { EndModal(wxID_CLOSE); });
+	FindWindow(wxID_CLOSE)->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Close(); });
+	Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent&) { Destroy(); });
 }
 
 void BorderLearningWindow::ReanalyzeSelection() {
-	snapshot_ = BorderLearningScanner::capture(editor_.selection, editor_.map, g_gui.GetCurrentFloor());
+	if (!editor_ || g_gui.GetCurrentEditor() != editor_) {
+		wxMessageBox("Return to the map that started this learning session before analyzing its selection.", "Border Learning", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+	snapshot_ = BorderLearningScanner::capture(editor_->selection, editor_->map, g_gui.GetCurrentFloor());
 	if (snapshot_.selectedTileCount == 0) {
 		wxMessageBox("The selection has no tiles on the current floor.", "Border Learning", wxOK | wxICON_INFORMATION, this);
 		return;
 	}
 	PopulateTransitions();
+}
+
+void BorderLearningWindow::AddSelectionEvidence() {
+	if (!editor_ || g_gui.GetCurrentEditor() != editor_) {
+		wxMessageBox("Return to the map that started this learning session before adding evidence.", "Border Learning", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+	const BorderLearningSnapshot additional = BorderLearningScanner::capture(editor_->selection, editor_->map, g_gui.GetCurrentFloor());
+	if (additional.selectedTileCount == 0) {
+		wxMessageBox("The current selection has no tiles on this learning session's floor.", "Border Learning", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	std::string error = "The current selection does not contain the terrain transition used by this learning session.";
+	bool added = false;
+	for (const auto& transition : BorderLearningAnalyzer::detectTransitions(additional)) {
+		if (session_.addSnapshot(additional, transition, &error)) {
+			added = true;
+			break;
+		}
+	}
+	if (!added) {
+		wxMessageBox(wxString::FromUTF8(error.c_str()), "Border Learning", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	result_ = session_.infer(GroundBrush::classifyBorderMask);
+	RefreshResult();
+}
+
+void BorderLearningWindow::ResetEvidence() {
+	AnalyzeSelectedTransition();
 }
 
 void BorderLearningWindow::PopulateTransitions() {
@@ -215,6 +276,7 @@ void BorderLearningWindow::PopulateTransitions() {
 	}
 	if (transitions_.empty()) {
 		qualityLabel_->SetLabel("No terrain transition was found in the current selection.");
+		session_.clear();
 		result_ = LearnedBorderResult {};
 		RefreshResult();
 		return;
@@ -228,7 +290,13 @@ void BorderLearningWindow::AnalyzeSelectedTransition() {
 	if (selection == wxNOT_FOUND || static_cast<size_t>(selection) >= transitions_.size()) {
 		return;
 	}
-	result_ = BorderLearningAnalyzer::inferBorder(snapshot_, transitions_[selection], GroundBrush::classifyBorderMask);
+	session_.clear();
+	std::string error;
+	if (!session_.addSnapshot(snapshot_, transitions_[selection], &error)) {
+		wxMessageBox(wxString::FromUTF8(error.c_str()), "Border Learning", wxOK | wxICON_ERROR, this);
+		return;
+	}
+	result_ = session_.infer(GroundBrush::classifyBorderMask);
 	selectedEdge_ = BORDER_NONE;
 	RefreshResult();
 }
@@ -252,8 +320,10 @@ void BorderLearningWindow::RefreshResult() {
 		slotList_->SetItem(index, 4, slot.alternatives.empty() ? wxString("Missing") : ConfidenceLabel(slot.confidence, slot.ambiguous));
 	}
 
-	qualityLabel_->SetLabel(wxString::Format("Evidence quality: %.0f%%   Assigned: %zu/12   Boundary samples: %zu   Unclassified items: %zu", result_.overallConfidence * 100.0, result_.assignedSlotCount, result_.boundaryObservations.size(), result_.unclassifiedItemIds.size()));
+	qualityLabel_->SetLabel(wxString::Format("Evidence quality: %.0f%%   Assigned: %zu/12   Boundary samples: %zu   Selections: %zu   Unique tiles: %zu   Unclassified items: %zu", result_.overallConfidence * 100.0, result_.assignedSlotCount, result_.boundaryObservations.size(), session_.getSelectionCount(), session_.getSnapshot().selectedTileCount, result_.unclassifiedItemIds.size()));
 	openWorkspaceButton_->Enable(result_.assignedSlotCount != 0);
+	addEvidenceButton_->Enable(!session_.empty());
+	resetEvidenceButton_->Enable(session_.getSelectionCount() > 1);
 	RefreshSlotInspector();
 }
 
@@ -418,10 +488,11 @@ void BorderLearningWindow::OpenInBorderWorkspace() {
 	}
 	draft.optional = assignedItems != 0 && optionalItems * 2 >= assignedItems;
 
-	const auto& familyA = snapshot_.groundFamilies[result_.transition.familyA];
-	const auto& familyB = snapshot_.groundFamilies[result_.transition.familyB];
+	const auto& analyzedSnapshot = session_.getSnapshot();
+	const auto& familyA = analyzedSnapshot.groundFamilies[result_.transition.familyA];
+	const auto& familyB = analyzedSnapshot.groundFamilies[result_.transition.familyB];
 	draft.description = wxString::Format("learned %s / %s border", wxString::FromUTF8(familyA.name.c_str()), wxString::FromUTF8(familyB.name.c_str()));
 	if (BorderWorkspaceWindow::OpenDraft(GetParent(), draft)) {
-		EndModal(wxID_FORWARD);
+		Close();
 	}
 }

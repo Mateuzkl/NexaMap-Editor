@@ -102,6 +102,46 @@ int main() {
 	require(inference.unclassifiedItemIds.size() == 1 && inference.unclassifiedItemIds.front() == 600, "unclassified candidate mismatch");
 	require(inference.boundaryObservations.size() == 6, "boundary evidence count mismatch");
 
+	auto makeSessionSample = [](int originX, bool reverseFamilies) {
+		BorderLearningSnapshot sample;
+		sample.floor = 7;
+		sample.groundFamilies.resize(2);
+		sample.groundFamilies[reverseFamilies ? 1 : 0].key = 10;
+		sample.groundFamilies[reverseFamilies ? 0 : 1].key = 20;
+		const BorderGroundFamilyIndex borderSide = reverseFamilies ? 1 : 0;
+		const BorderGroundFamilyIndex otherSide = reverseFamilies ? 0 : 1;
+		for (int y = 0; y < 3; ++y) {
+			auto borderTile = makeTile(originX, 300 + y, borderSide);
+			borderTile.neighbourFamilies[4] = otherSide;
+			borderTile.items.push_back(makeItem(700, true));
+			sample.tiles.push_back(std::move(borderTile));
+			auto otherTile = makeTile(originX + 1, 300 + y, otherSide);
+			otherTile.neighbourFamilies[3] = borderSide;
+			sample.tiles.push_back(std::move(otherTile));
+		}
+		sample.selectedTileCount = sample.tiles.size();
+		return sample;
+	};
+
+	BorderLearningSession session;
+	const auto firstSample = makeSessionSample(300, false);
+	const auto secondSample = makeSessionSample(400, true);
+	std::string sessionError;
+	require(session.addSnapshot(firstSample, { 0, 1, 3 }, &sessionError), "first session sample was rejected");
+	require(session.addSnapshot(secondSample, { 0, 1, 3 }, &sessionError), "remapped session sample was rejected");
+	require(session.getSelectionCount() == 2, "session selection count mismatch");
+	require(session.getSnapshot().tiles.size() == 12, "session tile merge mismatch");
+	require(session.getTransition().contacts == 6, "session transition contacts mismatch");
+	require(!session.addSnapshot(secondSample, { 0, 1, 3 }, &sessionError), "duplicate session evidence was accepted");
+	const auto accumulated = session.infer(classifyTestMask);
+	require(accumulated.slots[EAST_HORIZONTAL].itemId == 700, "accumulated candidate mismatch");
+	require(accumulated.slots[EAST_HORIZONTAL].observations == 6, "accumulated observation count mismatch");
+
+	BorderLearningSnapshot wrongFloor = firstSample;
+	wrongFloor.floor = 8;
+	require(!session.addSnapshot(wrongFloor, { 0, 1, 3 }, &sessionError), "cross-floor evidence was accepted");
+	require(session.getSelectionCount() == 2, "rejected evidence changed the session");
+
 	std::cout << "border_learning_tests passed\n";
 	return 0;
 }

@@ -129,6 +129,37 @@ public:
 	);
 };
 
+class BorderLearningSession {
+public:
+	void clear() noexcept;
+	bool addSnapshot(
+		const BorderLearningSnapshot& snapshot,
+		const BorderLearningTransition& transition,
+		std::string* error = nullptr
+	);
+	LearnedBorderResult infer(BorderMaskClassifier classifier) const;
+
+	bool empty() const noexcept {
+		return selectionCount_ == 0;
+	}
+	size_t getSelectionCount() const noexcept {
+		return selectionCount_;
+	}
+	const BorderLearningSnapshot& getSnapshot() const noexcept {
+		return snapshot_;
+	}
+	const BorderLearningTransition& getTransition() const noexcept {
+		return transition_;
+	}
+
+private:
+	BorderLearningSnapshot snapshot_;
+	BorderLearningTransition transition_;
+	uint64_t firstFamilyKey_ = 0;
+	uint64_t secondFamilyKey_ = 0;
+	size_t selectionCount_ = 0;
+};
+
 class BorderLearningScanner {
 public:
 	static BorderLearningSnapshot capture(const Selection& selection, const BaseMap& map, int floor);

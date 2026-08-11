@@ -288,3 +288,128 @@ LearnedBorderResult BorderLearningAnalyzer::inferBorder(
 	result.overallConfidence = result.assignedSlotCount == 0 ? 0.0 : assignedConfidenceTotal / result.assignedSlotCount;
 	return result;
 }
+
+void BorderLearningSession::clear() noexcept {
+	snapshot_ = BorderLearningSnapshot {};
+	transition_ = BorderLearningTransition {};
+	firstFamilyKey_ = 0;
+	secondFamilyKey_ = 0;
+	selectionCount_ = 0;
+}
+
+bool BorderLearningSession::addSnapshot(
+	const BorderLearningSnapshot& snapshot,
+	const BorderLearningTransition& transition,
+	std::string* error
+) {
+	if (transition.familyA >= snapshot.groundFamilies.size() || transition.familyB >= snapshot.groundFamilies.size()) {
+		if (error) {
+			*error = "The selected transition is not valid for this map snapshot.";
+		}
+		return false;
+	}
+	if (!empty() && snapshot.floor != snapshot_.floor) {
+		if (error) {
+			*error = "Evidence from different floors cannot be combined in one learning session.";
+		}
+		return false;
+	}
+
+	uint64_t familyKeyA = snapshot.groundFamilies[transition.familyA].key;
+	uint64_t familyKeyB = snapshot.groundFamilies[transition.familyB].key;
+	if (familyKeyB < familyKeyA) {
+		std::swap(familyKeyA, familyKeyB);
+	}
+	if (!empty() && (familyKeyA != firstFamilyKey_ || familyKeyB != secondFamilyKey_)) {
+		if (error) {
+			*error = "The selection does not contain the same terrain transition as the current learning session.";
+		}
+		return false;
+	}
+	if (!empty()) {
+		std::set<Position> existingPositions;
+		for (const auto& tile : snapshot_.tiles) {
+			existingPositions.insert(tile.position);
+		}
+		const bool hasNewTile = std::any_of(snapshot.tiles.begin(), snapshot.tiles.end(), [&existingPositions](const BorderLearningTile& tile) {
+			return !existingPositions.contains(tile.position);
+		});
+		if (!hasNewTile) {
+			if (error) {
+				*error = "This selection does not add any new tile evidence to the learning session.";
+			}
+			return false;
+		}
+	}
+
+	if (empty()) {
+		snapshot_.floor = snapshot.floor;
+		firstFamilyKey_ = familyKeyA;
+		secondFamilyKey_ = familyKeyB;
+	}
+
+	std::map<uint64_t, BorderGroundFamilyIndex> familyIndices;
+	for (BorderGroundFamilyIndex index = 0; index < snapshot_.groundFamilies.size(); ++index) {
+		familyIndices.emplace(snapshot_.groundFamilies[index].key, index);
+	}
+	std::vector<BorderGroundFamilyIndex> remappedFamilies(snapshot.groundFamilies.size(), BORDER_GROUND_FAMILY_NONE);
+	for (size_t sourceIndex = 0; sourceIndex < snapshot.groundFamilies.size(); ++sourceIndex) {
+		const auto& sourceFamily = snapshot.groundFamilies[sourceIndex];
+		auto found = familyIndices.find(sourceFamily.key);
+		if (found == familyIndices.end()) {
+			snapshot_.groundFamilies.push_back(sourceFamily);
+			const auto targetIndex = static_cast<BorderGroundFamilyIndex>(snapshot_.groundFamilies.size() - 1);
+			found = familyIndices.emplace(sourceFamily.key, targetIndex).first;
+		} else {
+			auto& targetFamily = snapshot_.groundFamilies[found->second];
+			targetFamily.itemIds.insert(targetFamily.itemIds.end(), sourceFamily.itemIds.begin(), sourceFamily.itemIds.end());
+			std::sort(targetFamily.itemIds.begin(), targetFamily.itemIds.end());
+			targetFamily.itemIds.erase(std::unique(targetFamily.itemIds.begin(), targetFamily.itemIds.end()), targetFamily.itemIds.end());
+		}
+		remappedFamilies[sourceIndex] = found->second;
+	}
+
+	std::set<Position> capturedPositions;
+	for (const auto& tile : snapshot_.tiles) {
+		capturedPositions.insert(tile.position);
+	}
+	for (const auto& sourceTile : snapshot.tiles) {
+		if (!capturedPositions.insert(sourceTile.position).second) {
+			continue;
+		}
+		BorderLearningTile tile = sourceTile;
+		tile.groundFamily = sourceTile.groundFamily < remappedFamilies.size() ? remappedFamilies[sourceTile.groundFamily] : BORDER_GROUND_FAMILY_NONE;
+		for (size_t neighbourIndex = 0; neighbourIndex < sourceTile.neighbourFamilies.size(); ++neighbourIndex) {
+			const auto sourceFamily = sourceTile.neighbourFamilies[neighbourIndex];
+			tile.neighbourFamilies[neighbourIndex] = sourceFamily < remappedFamilies.size() ? remappedFamilies[sourceFamily] : BORDER_GROUND_FAMILY_NONE;
+		}
+		snapshot_.tiles.push_back(std::move(tile));
+	}
+	std::sort(snapshot_.tiles.begin(), snapshot_.tiles.end(), [](const BorderLearningTile& left, const BorderLearningTile& right) {
+		return left.position < right.position;
+	});
+	snapshot_.selectedTileCount = snapshot_.tiles.size();
+	snapshot_.ignoredOtherFloorTiles += snapshot.ignoredOtherFloorTiles;
+	++selectionCount_;
+
+	transition_.familyA = familyIndices[firstFamilyKey_];
+	transition_.familyB = familyIndices[secondFamilyKey_];
+	transition_.contacts = 0;
+	for (const auto& detected : BorderLearningAnalyzer::detectTransitions(snapshot_)) {
+		const uint64_t detectedA = snapshot_.groundFamilies[detected.familyA].key;
+		const uint64_t detectedB = snapshot_.groundFamilies[detected.familyB].key;
+		if ((detectedA == firstFamilyKey_ && detectedB == secondFamilyKey_)
+			|| (detectedA == secondFamilyKey_ && detectedB == firstFamilyKey_)) {
+			transition_.contacts = detected.contacts;
+			break;
+		}
+	}
+	return true;
+}
+
+LearnedBorderResult BorderLearningSession::infer(BorderMaskClassifier classifier) const {
+	if (empty()) {
+		return LearnedBorderResult {};
+	}
+	return BorderLearningAnalyzer::inferBorder(snapshot_, transition_, classifier);
+}

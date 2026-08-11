@@ -19,10 +19,13 @@ public:
 
 private:
 	BorderLearningWindow(wxWindow* parent, Editor& editor, BorderLearningSnapshot snapshot);
+	~BorderLearningWindow() override;
 
 	void BuildLayout();
 	void BindEvents();
 	void ReanalyzeSelection();
+	void AddSelectionEvidence();
+	void ResetEvidence();
 	void PopulateTransitions();
 	void AnalyzeSelectedTransition();
 	void RefreshResult();
@@ -35,8 +38,9 @@ private:
 	const LearnedBorderSlot* CurrentSlot() const;
 	const BorderLearningCandidate* CurrentCandidate() const;
 
-	Editor& editor_;
+	Editor* editor_ = nullptr;
 	BorderLearningSnapshot snapshot_;
+	BorderLearningSession session_;
 	std::vector<BorderLearningTransition> transitions_;
 	LearnedBorderResult result_;
 	BorderType selectedEdge_ = BORDER_NONE;
@@ -52,6 +56,8 @@ private:
 	wxButton* useCandidateButton_ = nullptr;
 	wxButton* goToEvidenceButton_ = nullptr;
 	wxButton* openWorkspaceButton_ = nullptr;
+	wxButton* addEvidenceButton_ = nullptr;
+	wxButton* resetEvidenceButton_ = nullptr;
 };
 
 #endif
