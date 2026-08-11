@@ -69,6 +69,7 @@ private:
 	bool OpenItems(const std::vector<ItemCount>& items);
 	bool LoadDraft(const Draft& draft);
 	bool FocusBorder(int recordIndex, int slot);
+	[[nodiscard]] int FindRecord(int id, const wxString& sourcePath) const;
 	void RebuildItemIndex();
 	void PopulateBorderList();
 	bool ResolvePendingChanges(const wxString& action);

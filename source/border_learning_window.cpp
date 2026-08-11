@@ -672,8 +672,13 @@ void BorderLearningWindow::OpenInBorderWorkspace() {
 	draft.optional = assignedItems != 0 && optionalItems * 2 >= assignedItems;
 
 	const auto& analyzedSnapshot = session_.getSnapshot();
-	const auto& familyA = analyzedSnapshot.groundFamilies[result_.transition.familyA];
-	const auto& familyB = analyzedSnapshot.groundFamilies[result_.transition.familyB];
+	const BorderGroundFamilyIndex familyAIndex = result_.transition.familyA;
+	const BorderGroundFamilyIndex familyBIndex = result_.transition.familyB;
+	if (familyAIndex == BORDER_GROUND_FAMILY_NONE || familyBIndex == BORDER_GROUND_FAMILY_NONE || familyAIndex >= analyzedSnapshot.groundFamilies.size() || familyBIndex >= analyzedSnapshot.groundFamilies.size()) {
+		return;
+	}
+	const auto& familyA = analyzedSnapshot.groundFamilies[familyAIndex];
+	const auto& familyB = analyzedSnapshot.groundFamilies[familyBIndex];
 	draft.description = wxString::Format("learned %s / %s border", wxString::FromUTF8(familyA.name.c_str()), wxString::FromUTF8(familyB.name.c_str()));
 	if (BorderWorkspaceWindow::OpenDraft(GetParent(), draft)) {
 		Close();

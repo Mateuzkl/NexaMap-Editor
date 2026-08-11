@@ -14,6 +14,7 @@ class Selection;
 class Tile;
 
 struct ReplaceViewportBounds {
+	bool valid = false;
 	int minX = 0;
 	int minY = 0;
 	int maxX = -1;

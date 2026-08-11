@@ -49,6 +49,7 @@ public:
 
 private:
 	void Rebuild();
+	void ScheduleRebuild();
 	void NotifyChanged();
 	void UpdateValidationStatus();
 	wxWindow* CreateDropSlot(wxWindow* parent, const wxString& label, std::function<void(ServerItemId)> handler);
@@ -59,6 +60,7 @@ private:
 	wxBoxSizer* rulesSizer = nullptr;
 	wxStaticText* validationLabel = nullptr;
 	wxButton* saveButton = nullptr;
+	bool rebuildScheduled = false;
 };
 
 #endif

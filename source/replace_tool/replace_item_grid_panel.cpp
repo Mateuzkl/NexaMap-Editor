@@ -28,6 +28,7 @@
 #include <wx/dataobj.h>
 #include <wx/dcbuffer.h>
 #include <wx/dnd.h>
+#include <wx/weakref.h>
 
 ReplaceItemGridPanel::ReplaceItemGridPanel(wxWindow* parent, SelectionHandler selectionHandler) :
 	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxBORDER_SIMPLE),
@@ -148,6 +149,9 @@ void ReplaceItemGridPanel::OnMotion(wxMouseEvent& event) {
 	wxTextDataObject data(wxString::Format("NEXAMAP_SERVER_ITEM_ID:%u", selected->serverId.value));
 	wxDropSource source(this);
 	source.SetData(data);
+	wxWeakRef<ReplaceItemGridPanel> panel(this);
 	source.DoDragDrop(wxDrag_CopyOnly);
-	dragInProgress = false;
+	if (panel) {
+		panel->dragInProgress = false;
+	}
 }

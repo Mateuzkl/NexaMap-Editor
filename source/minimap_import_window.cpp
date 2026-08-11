@@ -61,6 +61,7 @@ namespace {
 			});
 			Bind(wxEVT_LEFT_DOWN, &MinimapPreviewPanel::OnLeftDown, this);
 			Bind(wxEVT_LEFT_UP, &MinimapPreviewPanel::OnLeftUp, this);
+			Bind(wxEVT_MOUSE_CAPTURE_LOST, &MinimapPreviewPanel::OnMouseCaptureLost, this);
 			Bind(wxEVT_MOTION, &MinimapPreviewPanel::OnMotion, this);
 			Bind(wxEVT_MOUSEWHEEL, &MinimapPreviewPanel::OnWheel, this);
 		}
@@ -190,6 +191,10 @@ namespace {
 			if (HasCapture()) {
 				ReleaseMouse();
 			}
+		}
+
+		void OnMouseCaptureLost(wxMouseCaptureLostEvent&) {
+			dragging_ = false;
 		}
 
 		void OnMotion(wxMouseEvent& event) {
@@ -627,8 +632,8 @@ namespace {
 			}
 			progress.Update(100);
 			const auto& bounds = document_->getBounds();
-			editor->map.setWidth(bounds.maxX + 1);
-			editor->map.setHeight(bounds.maxY + 1);
+			editor->map.setWidth(std::min(MAP_MAX_WIDTH, bounds.maxX + 1));
+			editor->map.setHeight(std::min(MAP_MAX_HEIGHT, bounds.maxY + 1));
 			editor->map.setName("Imported Minimap Skeleton");
 			editor->map.setMapDescription("Editable skeleton generated from " + document_->getSourcePath());
 			editor->map.doChange();
@@ -688,8 +693,8 @@ namespace {
 			}
 			progress.Update(100);
 			const auto& bounds = document_->getBounds();
-			editor->map.setWidth(std::max(editor->map.getWidth(), bounds.maxX + 1));
-			editor->map.setHeight(std::max(editor->map.getHeight(), bounds.maxY + 1));
+			editor->map.setWidth(std::min(MAP_MAX_WIDTH, std::max(editor->map.getWidth(), bounds.maxX + 1)));
+			editor->map.setHeight(std::min(MAP_MAX_HEIGHT, std::max(editor->map.getHeight(), bounds.maxY + 1)));
 			editor->map.doChange();
 			FinishApplyView();
 			wxMessageBox(wxString::Format("Applied %llu ground tiles. The operation can be undone.", static_cast<unsigned long long>(changed)), "Minimap Import Complete", wxOK | wxICON_INFORMATION, this);

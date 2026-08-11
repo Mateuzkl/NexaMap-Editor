@@ -13,7 +13,7 @@
 #include <set>
 
 bool ReplaceViewportBounds::IsValid() const {
-	return minX <= maxX && minY <= maxY && floor >= 0 && floor <= MAP_MAX_LAYER;
+	return valid && minX <= maxX && minY <= maxY && floor >= 0 && floor <= MAP_MAX_LAYER;
 }
 
 bool ReplaceViewportBounds::Contains(const Tile& tile) const {
@@ -35,6 +35,7 @@ ReplaceViewportBounds CalculateReplaceViewportBounds(int scrollX, int scrollY, i
 	}
 
 	return {
+		true,
 		minX,
 		minY,
 		minX + screenWidth / renderedTileSize + 2,

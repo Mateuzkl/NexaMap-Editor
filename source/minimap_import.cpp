@@ -154,6 +154,7 @@ bool MinimapImportDocument::loadFromBytes(const std::vector<uint8_t>& bytes, std
 	}
 
 	bool foundTerminator = false;
+	size_t processedBlockCount = 0;
 	std::vector<uint8_t> compressed;
 	std::array<MinimapTile, MMBLOCK_SIZE * MMBLOCK_SIZE> decoded {};
 	for (size_t blockNumber = 0; reader.remaining() != 0; ++blockNumber) {
@@ -176,7 +177,7 @@ bool MinimapImportDocument::loadFromBytes(const std::vector<uint8_t>& bytes, std
 			error = blockError(blockNumber, "origin is not aligned to 64 tiles.");
 			return false;
 		}
-		if (parsed->blockCount_ >= maximumImportBlocks) {
+		if (processedBlockCount >= maximumImportBlocks) {
 			error = "The minimap contains too many blocks to import safely.";
 			return false;
 		}
@@ -186,6 +187,7 @@ bool MinimapImportDocument::loadFromBytes(const std::vector<uint8_t>& bytes, std
 			error = blockError(blockNumber, "compressed payload is truncated.");
 			return false;
 		}
+		++processedBlockCount;
 		uLongf decodedSize = minimapBlockByteSize;
 		const int result = uncompress(reinterpret_cast<Bytef*>(decoded.data()), &decodedSize, compressed.data(), static_cast<uLong>(compressed.size()));
 		if (result != Z_OK || decodedSize != minimapBlockByteSize) {

@@ -224,6 +224,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool in
 	last_cursor_map_x(-1),
 	last_cursor_map_y(-1),
 	last_cursor_map_z(-1),
+	last_alt_down(false),
 
 	last_click_map_x(-1),
 	last_click_map_y(-1),
@@ -700,7 +701,11 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 		}
 	} else { // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
-		UpdateAutoborderPreview(event.AltDown());
+		const bool altDown = event.AltDown();
+		if (map_update || altDown != last_alt_down) {
+			UpdateAutoborderPreview(altDown);
+		}
+		last_alt_down = altDown;
 		if (map_update && drawing && brush) {
 			if (brush->isDoodad()) {
 				if (event.ControlDown()) {

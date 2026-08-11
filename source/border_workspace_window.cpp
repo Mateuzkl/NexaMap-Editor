@@ -458,11 +458,18 @@ void BorderWorkspaceWindow::BindEvents() {
 		if (record == currentRecord_) {
 			return;
 		}
+		const int targetId = records_[record].id;
+		const wxString targetSourcePath = records_[record].sourcePath;
 		if (!ResolvePendingChanges("switch borders")) {
 			PopulateBorderList();
 			return;
 		}
-		LoadSelection(record);
+		const int resolvedRecord = FindRecord(targetId, targetSourcePath);
+		if (resolvedRecord >= 0) {
+			LoadSelection(resolvedRecord);
+		} else {
+			PopulateBorderList();
+		}
 	});
 	for (int i = 0; i < 12; ++i) {
 		slotButtons_[i]->Bind(wxEVT_TOGGLEBUTTON, [this, i](wxCommandEvent&) { SelectSlot(i); });
@@ -684,8 +691,16 @@ bool BorderWorkspaceWindow::FocusBorder(int recordIndex, int slot) {
 	if (recordIndex < 0 || recordIndex >= static_cast<int>(records_.size()) || slot < 0 || slot >= 12) {
 		return false;
 	}
-	if (recordIndex != currentRecord_ && !ResolvePendingChanges(wxString::Format("open Border %d", records_[recordIndex].id))) {
-		return false;
+	const int targetId = records_[recordIndex].id;
+	const wxString targetSourcePath = records_[recordIndex].sourcePath;
+	if (recordIndex != currentRecord_) {
+		if (!ResolvePendingChanges(wxString::Format("open Border %d", targetId))) {
+			return false;
+		}
+		recordIndex = FindRecord(targetId, targetSourcePath);
+		if (recordIndex < 0) {
+			return false;
+		}
 	}
 	filterCtrl_->ChangeValue(wxEmptyString);
 	if (recordIndex != currentRecord_) {
@@ -695,6 +710,15 @@ bool BorderWorkspaceWindow::FocusBorder(int recordIndex, int slot) {
 	}
 	SelectSlot(slot);
 	return true;
+}
+
+int BorderWorkspaceWindow::FindRecord(int id, const wxString& sourcePath) const {
+	for (int index = 0; index < static_cast<int>(records_.size()); ++index) {
+		if (records_[index].id == id && records_[index].sourcePath == sourcePath) {
+			return index;
+		}
+	}
+	return -1;
 }
 
 void BorderWorkspaceWindow::RebuildItemIndex() {

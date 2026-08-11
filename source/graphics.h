@@ -180,6 +180,7 @@ protected:
 		GLuint getHardwareID() override;
 		uint8_t* getRGBData() override;
 		uint8_t* getRGBAData() override;
+		uint8_t* getRGBAData(bool* pending);
 		void getUV(float& u0, float& v0, float& u1, float& v1) override;
 
 		// Sprite atlas state (only used for atlased NormalImage sprites)

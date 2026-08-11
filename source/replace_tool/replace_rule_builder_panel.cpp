@@ -103,7 +103,7 @@ ReplaceRuleBuilderPanel::ReplaceRuleBuilderPanel(wxWindow* parent, Listener* lis
 		}
 		editor.Clear();
 		NotifyChanged();
-		Rebuild();
+		ScheduleRebuild();
 		if (this->listener) {
 			this->listener->OnReplaceRulesCleared();
 		}
@@ -152,7 +152,7 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 		sourceRow->Add(CreateDropSlot(cardParent, wxString::Format("IF FOUND\nSID %u", rule.sourceServerId.value), [this, ruleIndex](ServerItemId serverId) {
 						   if (editor.SetSource(ruleIndex, serverId)) {
 							   NotifyChanged();
-							   Rebuild();
+							   ScheduleRebuild();
 						   }
 					   }),
 					   1, wxEXPAND | wxRIGHT, 6);
@@ -160,7 +160,7 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 		deleteRuleButton->Bind(wxEVT_BUTTON, [this, ruleIndex](wxCommandEvent&) {
 			editor.RemoveRule(ruleIndex);
 			NotifyChanged();
-			Rebuild();
+			ScheduleRebuild();
 		});
 		sourceRow->Add(deleteRuleButton, 0, wxALIGN_CENTER_VERTICAL);
 		card->Add(sourceRow, 0, wxEXPAND | wxALL, 6);
@@ -176,7 +176,7 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 				targetSizer->Add(CreateDropSlot(targetPanel, wxString::Format("REPLACE WITH SID %u", target.serverId.value), [this, ruleIndex, targetIndex](ServerItemId serverId) {
 									 if (editor.ReplaceItemTarget(ruleIndex, targetIndex, serverId)) {
 										 NotifyChanged();
-										 Rebuild();
+										 ScheduleRebuild();
 									 }
 								 }),
 								 0, wxEXPAND | wxALL, 3);
@@ -195,7 +195,7 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 			removeButton->Bind(wxEVT_BUTTON, [this, ruleIndex, targetIndex](wxCommandEvent&) {
 				editor.RemoveTarget(ruleIndex, targetIndex);
 				NotifyChanged();
-				Rebuild();
+				ScheduleRebuild();
 			});
 			controls->Add(removeButton, 0);
 			targetSizer->Add(controls, 0, wxALIGN_CENTER | wxALL, 3);
@@ -210,7 +210,7 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 			targets->Add(CreateDropSlot(cardParent, "Drop target item here", [this, ruleIndex](ServerItemId serverId) {
 							 if (editor.AddItemTarget(ruleIndex, serverId)) {
 								 NotifyChanged();
-								 Rebuild();
+								 ScheduleRebuild();
 							 }
 						 }),
 						 0, wxRIGHT | wxBOTTOM, 6);
@@ -219,7 +219,7 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 			trashButton->Bind(wxEVT_BUTTON, [this, ruleIndex](wxCommandEvent&) {
 				if (editor.AddTrashTarget(ruleIndex)) {
 					NotifyChanged();
-					Rebuild();
+					ScheduleRebuild();
 				}
 			});
 			targets->Add(trashButton, 0, wxRIGHT | wxBOTTOM, 6);
@@ -232,7 +232,7 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 	rulesSizer->Add(CreateDropSlot(this, "Drop a source item here to create a rule", [this](ServerItemId serverId) {
 						if (editor.AddRule(serverId)) {
 							NotifyChanged();
-							Rebuild();
+							ScheduleRebuild();
 						}
 					}),
 					0, wxEXPAND | wxTOP, 4);
@@ -240,6 +240,17 @@ void ReplaceRuleBuilderPanel::Rebuild() {
 	Layout();
 	FitInside();
 	Thaw();
+}
+
+void ReplaceRuleBuilderPanel::ScheduleRebuild() {
+	if (rebuildScheduled) {
+		return;
+	}
+	rebuildScheduled = true;
+	CallAfter([this]() {
+		rebuildScheduled = false;
+		Rebuild();
+	});
 }
 
 void ReplaceRuleBuilderPanel::NotifyChanged() {

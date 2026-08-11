@@ -10,9 +10,7 @@
 #include <algorithm>
 #include <limits>
 
-MinimapPageCache::~MinimapPageCache() {
-	releaseGL();
-}
+MinimapPageCache::~MinimapPageCache() = default;
 
 void MinimapPageCache::bindMap(Map* newMap) {
 	const int newWidth = newMap ? newMap->getWidth() : 0;

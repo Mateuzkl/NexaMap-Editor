@@ -427,6 +427,13 @@ void GraphicManager::recordTextureUploadAttempt() noexcept {
 }
 
 void GraphicManager::cancelTextureUploadAttempt() noexcept {
+	if (!texture_upload_attempt_active) {
+		return;
+	}
+	if (texture_upload_budget_active) {
+		frame_texture_upload_time += std::chrono::steady_clock::now() - texture_upload_attempt_started;
+		++frame_texture_attempts;
+	}
 	texture_upload_attempt_active = false;
 }
 
@@ -1528,8 +1535,10 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 						}
 					}
 				} else {
-					uint8_t* rgba = image->getRGBAData();
+					bool imagePending = false;
+					uint8_t* rgba = image->getRGBAData(&imagePending);
 					if (!rgba) {
+						pending = pending || imagePending;
 						pixels.clear();
 						return false;
 					}
@@ -1916,6 +1925,13 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 }
 
 uint8_t* GameSprite::NormalImage::getRGBAData() {
+	return getRGBAData(nullptr);
+}
+
+uint8_t* GameSprite::NormalImage::getRGBAData(bool* pending) {
+	if (pending) {
+		*pending = false;
+	}
 	if (fromAssets) {
 		std::vector<uint8_t> pixels;
 		ClientSpriteSize sourceSize;
@@ -1965,7 +1981,7 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 			return nullptr;
 		}
 
-		if (id != 0 && g_gui.gfx.isMapRenderTextureBudgetActive()) {
+		if (id != 0 && (pending || g_gui.gfx.isMapRenderTextureBudgetActive())) {
 			std::vector<uint8_t> pixels;
 			const SpritePreloadStatus status = g_spritePreloader.getOrRequest(static_cast<uint32_t>(id), pixels);
 			if (status == SpritePreloadStatus::Ready) {
@@ -1974,7 +1990,12 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 				return data;
 			}
 			if (status == SpritePreloadStatus::Pending) {
-				g_gui.gfx.deferTextureUpload();
+				if (pending) {
+					*pending = true;
+				}
+				if (g_gui.gfx.isMapRenderTextureBudgetActive()) {
+					g_gui.gfx.deferTextureUpload();
+				}
 				return nullptr;
 			}
 		}

@@ -201,6 +201,7 @@ private:
 	int last_cursor_map_x;
 	int last_cursor_map_y;
 	int last_cursor_map_z;
+	bool last_alt_down;
 
 	int last_click_map_x;
 	int last_click_map_y;
