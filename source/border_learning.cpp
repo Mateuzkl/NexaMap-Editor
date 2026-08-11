@@ -8,7 +8,7 @@
 
 namespace {
 
-	const std::array<Position, 8> neighbourOffsets = {
+	const std::array<Position, 8> analysisNeighbourOffsets = {
 		Position(-1, -1, 0),
 		Position(0, -1, 0),
 		Position(1, -1, 0),
@@ -64,7 +64,7 @@ std::vector<BorderLearningTransition> BorderLearningAnalyzer::detectTransitions(
 				continue;
 			}
 
-			const Position neighbourPosition = tile.position + neighbourOffsets[neighbourIndex];
+			const Position neighbourPosition = tile.position + analysisNeighbourOffsets[neighbourIndex];
 			if (!selectedPositions.contains(neighbourPosition)) {
 				continue;
 			}

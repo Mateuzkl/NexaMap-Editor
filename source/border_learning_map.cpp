@@ -14,7 +14,7 @@
 namespace {
 
 	constexpr uint64_t unknownGroundKeyFlag = uint64_t { 1 } << 63;
-	const std::array<Position, 8> neighbourOffsets = {
+	const std::array<Position, 8> snapshotNeighbourOffsets = {
 		Position(-1, -1, 0),
 		Position(0, -1, 0),
 		Position(1, -1, 0),
@@ -104,8 +104,8 @@ BorderLearningSnapshot BorderLearningScanner::capture(const Selection& selection
 			});
 		}
 
-		for (size_t neighbourIndex = 0; neighbourIndex < neighbourOffsets.size(); ++neighbourIndex) {
-			const Position neighbourPosition = captured.position + neighbourOffsets[neighbourIndex];
+		for (size_t neighbourIndex = 0; neighbourIndex < snapshotNeighbourOffsets.size(); ++neighbourIndex) {
+			const Position neighbourPosition = captured.position + snapshotNeighbourOffsets[neighbourIndex];
 			const Tile* neighbour = neighbourPosition.isValid() ? map.getTile(neighbourPosition) : nullptr;
 			captured.neighbourFamilies[neighbourIndex] = captureGroundFamily(neighbour ? neighbour->ground : nullptr, snapshot.groundFamilies, familyIndices);
 		}
