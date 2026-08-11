@@ -23,6 +23,7 @@
 #include <utility>
 
 #include "gui.h"
+#include "autoborder_preview.h"
 #include "main_menubar.h"
 
 #include "editor.h"
@@ -39,6 +40,7 @@
 #include "common_windows.h"
 #include "result_window.h"
 #include "minimap_window.h"
+#include "ingame_preview/ingame_preview_window.h"
 #include "palette_window.h"
 #include "map_display.h"
 #include "application.h"
@@ -79,6 +81,7 @@ GUI::GUI() :
 	aui_manager(nullptr),
 	root(nullptr),
 	minimap(nullptr),
+	ingame_preview(nullptr),
 	gem(nullptr),
 	search_result_window(nullptr),
 	secondary_map(nullptr),
@@ -281,6 +284,7 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 		UnnamedRenderingLock();
 		DestroyPalettes();
 		DestroyMinimap();
+		DestroyIngamePreview();
 
 		// Destroy the previous version
 		UnloadVersion();
@@ -326,6 +330,7 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 	UnnamedRenderingLock();
 	DestroyPalettes();
 	DestroyMinimap();
+	DestroyIngamePreview();
 	UnloadVersion();
 
 	// Assets provide their own appearances and sprites. The latest configured
@@ -542,6 +547,7 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 
 void GUI::UnloadVersion() {
 	UnnamedRenderingLock();
+	DestroyIngamePreview();
 	gfx.clear();
 	current_brush = nullptr;
 	previous_brush = nullptr;
@@ -1023,6 +1029,16 @@ void GUI::LoadPerspective() {
 			}
 		}
 
+		if (g_settings.getInteger(Config::INGAME_PREVIEW_VISIBLE)) {
+			CreateIngamePreview();
+			const std::string savedLayout = g_settings.getString(Config::INGAME_PREVIEW_LAYOUT);
+			if (ingame_preview && !savedLayout.empty()) {
+				wxAuiPaneInfo& info = aui_manager->GetPane(ingame_preview);
+				aui_manager->LoadPaneInfo(wxstr(savedLayout), info);
+				info.Show(true);
+			}
+		}
+
 		aui_manager->Update();
 		root->UpdateMenubar();
 	}
@@ -1036,6 +1052,7 @@ void GUI::SavePerspective() {
 	g_settings.setInteger(Config::WINDOW_HEIGHT, root->GetSize().GetHeight());
 
 	g_settings.setInteger(Config::MINIMAP_VISIBLE, minimap ? 1 : 0);
+	g_settings.setInteger(Config::INGAME_PREVIEW_VISIBLE, IsIngamePreviewVisible() ? 1 : 0);
 
 	wxString pinfo;
 	for (auto& palette : palettes) {
@@ -1048,6 +1065,10 @@ void GUI::SavePerspective() {
 	if (minimap) {
 		wxString s = aui_manager->SavePaneInfo(aui_manager->GetPane(minimap));
 		g_settings.setString(Config::MINIMAP_LAYOUT, nstr(s));
+	}
+	if (ingame_preview) {
+		const wxString layout = aui_manager->SavePaneInfo(aui_manager->GetPane(ingame_preview));
+		g_settings.setString(Config::INGAME_PREVIEW_LAYOUT, nstr(layout));
 	}
 
 	root->GetAuiToolBar()->SavePerspective();
@@ -1215,6 +1236,62 @@ bool GUI::IsMinimapVisible() const {
 		}
 	}
 	return false;
+}
+
+//=============================================================================
+
+void GUI::CreateIngamePreview() {
+	if (!IsVersionLoaded() || !aui_manager) {
+		return;
+	}
+
+	if (ingame_preview) {
+		aui_manager->GetPane(ingame_preview).Show(true);
+	} else {
+		ingame_preview = newd IngamePreviewWindow(root);
+		aui_manager->AddPane(
+			ingame_preview,
+			wxAuiPaneInfo()
+				.Name("IngamePreview")
+				.Caption("In-game Preview")
+				.Right()
+				.Dockable(true)
+				.CloseButton(true)
+				.BestSize(FROM_DIP(root, wxSize(500, 430)))
+				.MinSize(FROM_DIP(root, wxSize(500, 430)))
+		);
+	}
+	aui_manager->Update();
+	UpdateIngamePreview();
+}
+
+void GUI::DestroyIngamePreview() {
+	if (!ingame_preview) {
+		return;
+	}
+	if (aui_manager) {
+		aui_manager->DetachPane(ingame_preview);
+		aui_manager->Update();
+	}
+	IngamePreviewWindow* window = ingame_preview;
+	ingame_preview = nullptr;
+	window->Destroy();
+}
+
+void GUI::UpdateIngamePreview() {
+	if (IsIngamePreviewVisible()) {
+		ingame_preview->UpdateState();
+	}
+}
+
+void GUI::ReleaseIngamePreviewEditor(Editor* editor) {
+	if (ingame_preview) {
+		ingame_preview->ReleaseEditor(editor);
+	}
+}
+
+bool GUI::IsIngamePreviewVisible() const {
+	return ingame_preview && aui_manager && aui_manager->GetPane(ingame_preview).IsShown();
 }
 
 //=============================================================================
@@ -1443,6 +1520,7 @@ bool GUI::DoUndo() {
 	if (editor && editor->actionQueue->canUndo()) {
 		const bool refreshZonePalettes = editor->actionQueue->getUndoType() == ACTION_ZONE_EDIT;
 		editor->actionQueue->undo();
+		InvalidateAutoborderPreview();
 		if (refreshZonePalettes) {
 			RefreshPalettes(nullptr, true, false);
 		}
@@ -1463,6 +1541,7 @@ bool GUI::DoRedo() {
 	if (editor && editor->actionQueue->canRedo()) {
 		const bool refreshZonePalettes = editor->actionQueue->getRedoType() == ACTION_ZONE_EDIT;
 		editor->actionQueue->redo();
+		InvalidateAutoborderPreview();
 		if (refreshZonePalettes) {
 			RefreshPalettes(nullptr, true, false);
 		}
@@ -1572,7 +1651,10 @@ void GUI::SetSelectionMode() {
 		return;
 	}
 
-	if (current_brush && current_brush->isDoodad()) {
+	if (g_autoborder_preview.Owns(secondary_map)) {
+		g_autoborder_preview.Clear();
+		secondary_map = nullptr;
+	} else if (current_brush && current_brush->isDoodad()) {
 		secondary_map = nullptr;
 	}
 
@@ -1631,6 +1713,7 @@ void GUI::SetBrushSize(int nz) {
 	}
 
 	root->GetAuiToolBar()->UpdateBrushSize(brush_shape, brush_size);
+	RefreshAutoborderPreview();
 }
 
 void GUI::SetBrushVariation(int nz) {
@@ -1656,6 +1739,7 @@ void GUI::SetBrushShape(BrushShape bs) {
 	}
 
 	root->GetAuiToolBar()->UpdateBrushSize(brush_shape, brush_size);
+	RefreshAutoborderPreview();
 }
 
 void GUI::SetBrushThickness(bool on, int x, int y) {
@@ -1841,7 +1925,20 @@ void GUI::SelectBrushInternal(Brush* brush) {
 	}
 
 	SetDrawingMode(current_brush->isZone());
+	InvalidateAutoborderPreview();
 	RefreshView();
+}
+
+void GUI::RefreshAutoborderPreview() {
+	MapTab* mapTab = GetCurrentMapTab();
+	if (mapTab && mapTab->GetView() && mapTab->GetView()->GetCanvas()) {
+		mapTab->GetView()->GetCanvas()->UpdateAutoborderPreview(wxGetKeyState(WXK_ALT));
+	}
+}
+
+void GUI::InvalidateAutoborderPreview() {
+	g_autoborder_preview.Invalidate();
+	RefreshAutoborderPreview();
 }
 
 void GUI::SelectPreviousBrush() {

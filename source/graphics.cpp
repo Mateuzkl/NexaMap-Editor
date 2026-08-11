@@ -26,6 +26,7 @@
 #include "gui.h"
 #include "otml.h"
 #include "sprite_appearances.h"
+#include "sprite_preloader.h"
 
 #include <appearances.pb.h>
 #include <iterator>
@@ -380,7 +381,8 @@ void GraphicManager::beginMapRenderTextureBudget(GLRenderer* activeRenderer, boo
 	frame_had_missing_texture = false;
 	frame_texture_attempts = 0;
 	frame_texture_uploads = 0;
-	texture_upload_budget_started = std::chrono::steady_clock::now();
+	frame_texture_upload_time = std::chrono::steady_clock::duration::zero();
+	texture_upload_attempt_active = false;
 	atlas_frame_active = true;
 	++atlas_frame_counter;
 	active_map_renderer = activeRenderer;
@@ -389,6 +391,8 @@ void GraphicManager::beginMapRenderTextureBudget(GLRenderer* activeRenderer, boo
 bool GraphicManager::endMapRenderTextureBudget() {
 	last_frame_texture_attempts = frame_texture_attempts;
 	last_frame_texture_uploads = frame_texture_uploads;
+	last_frame_texture_upload_time_ms = std::chrono::duration<double, std::milli>(frame_texture_upload_time).count();
+	texture_upload_attempt_active = false;
 	texture_upload_budget_active = false;
 	atlas_frame_active = false;
 	active_map_renderer = nullptr;
@@ -402,18 +406,35 @@ bool GraphicManager::canPrepareTextureUpload() {
 
 	constexpr int MAX_UPLOADS_PER_FRAME = 32;
 	constexpr auto MAX_UPLOAD_TIME = std::chrono::milliseconds(3);
-	if (frame_texture_attempts >= MAX_UPLOADS_PER_FRAME || std::chrono::steady_clock::now() - texture_upload_budget_started >= MAX_UPLOAD_TIME) {
+	if (frame_texture_attempts >= MAX_UPLOADS_PER_FRAME || frame_texture_upload_time >= MAX_UPLOAD_TIME) {
 		texture_upload_deferred = true;
 		return false;
 	}
 
+	texture_upload_attempt_started = std::chrono::steady_clock::now();
+	texture_upload_attempt_active = true;
 	return true;
 }
 
 void GraphicManager::recordTextureUploadAttempt() noexcept {
 	if (texture_upload_budget_active) {
+		if (texture_upload_attempt_active) {
+			frame_texture_upload_time += std::chrono::steady_clock::now() - texture_upload_attempt_started;
+			texture_upload_attempt_active = false;
+		}
 		++frame_texture_attempts;
 	}
+}
+
+void GraphicManager::cancelTextureUploadAttempt() noexcept {
+	if (!texture_upload_attempt_active) {
+		return;
+	}
+	if (texture_upload_budget_active) {
+		frame_texture_upload_time += std::chrono::steady_clock::now() - texture_upload_attempt_started;
+		++frame_texture_attempts;
+	}
+	texture_upload_attempt_active = false;
 }
 
 void GraphicManager::recordTextureUpload() noexcept {
@@ -435,6 +456,8 @@ void GraphicManager::markTextureMissing() noexcept {
 }
 
 void GraphicManager::clear() {
+	g_spritePreloader.clear();
+
 	SpriteMap new_sprite_space;
 	for (auto iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
 		if (iter->first >= 0) { // Don't clean internal sprites
@@ -936,32 +959,19 @@ bool GraphicManager::loadAppearanceSprite(
 
 	const uint64_t expectedSourceCount = sourceSpritesPerFrame * sprite->frames;
 	if (expectedSourceCount != static_cast<uint64_t>(spriteInfo.sprite_id_size())) {
-		warnings.push_back(wxString::Format(
-			"Appearance %u declares %llu logical sprites but contains %d sprite IDs; available IDs will be reused safely.",
-			appearance.id(),
-			static_cast<unsigned long long>(expectedSourceCount),
-			spriteInfo.sprite_id_size()
-		));
+		warnings.push_back(wxString::Format("Appearance %u declares %llu logical sprites but contains %d sprite IDs; available IDs will be reused safely.", appearance.id(), static_cast<unsigned long long>(expectedSourceCount), spriteInfo.sprite_id_size()));
 	}
 
 	const auto appendSourceSprite = [&](uint32_t spriteId) {
 		const ClientSpriteSheetPtr sheet = g_spriteAppearances.getSheetBySpriteId(spriteId);
 		ClientSpriteSize actualSize = sourceSize;
 		if (!sheet) {
-			warnings.push_back(wxString::Format(
-				"Appearance %u references missing sprite ID %u; an empty sprite will be used.",
-				appearance.id(),
-				spriteId
-			));
+			warnings.push_back(wxString::Format("Appearance %u references missing sprite ID %u; an empty sprite will be used.", appearance.id(), spriteId));
 			spriteId = 0;
 		} else {
 			actualSize = sheet->getSpriteSize();
 			if (actualSize.width != sourceSize.width || actualSize.height != sourceSize.height) {
-				warnings.push_back(wxString::Format(
-					"Appearance %u mixes sprite layouts; sprite %u will be cropped to the first layout.",
-					appearance.id(),
-					spriteId
-				));
+				warnings.push_back(wxString::Format("Appearance %u mixes sprite layouts; sprite %u will be cropped to the first layout.", appearance.id(), spriteId));
 			}
 		}
 
@@ -1288,6 +1298,7 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 			sprite_offsets.clear();
 			return false;
 		}
+		g_spritePreloader.configure(spritefile, sprite_offsets, has_transparency);
 		unloaded = false;
 		return true;
 	}
@@ -1476,6 +1487,81 @@ void GameSprite::unloadDC() {
 	delete dc[SPRITE_SIZE_32x32];
 	dc[SPRITE_SIZE_16x16] = nullptr;
 	dc[SPRITE_SIZE_32x32] = nullptr;
+}
+
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending) {
+	pending = false;
+	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
+	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
+	if (pixelWidth <= 0 || pixelHeight <= 0 || layers == 0) {
+		pixels.clear();
+		return false;
+	}
+
+	pixels.assign(static_cast<size_t>(pixelWidth) * pixelHeight * 4, 0);
+	std::vector<uint8_t> tilePixels(SPRITE_PIXELS_SIZE * 4);
+	for (uint8_t layer = 0; layer < layers; ++layer) {
+		for (uint8_t tileX = 0; tileX < width; ++tileX) {
+			for (uint8_t tileY = 0; tileY < height; ++tileY) {
+				const int index = getIndex(tileX, tileY, layer, 0, 0, 0, 0);
+				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
+					continue;
+				}
+
+				NormalImage* image = spriteList[index];
+				if (image->fromAssets) {
+					std::vector<uint8_t> sourcePixels;
+					ClientSpriteSize sourceSize;
+					bool imagePending = false;
+					if (!g_spriteAppearances.getSpritePixelsIfLoaded(image->id, sourcePixels, sourceSize, imagePending)) {
+						pending = pending || imagePending;
+						pixels.clear();
+						return false;
+					}
+					const int originX = image->assetCropX * SPRITE_PIXELS;
+					const int originY = image->assetCropY * SPRITE_PIXELS;
+					for (int y = 0; y < SPRITE_PIXELS; ++y) {
+						for (int x = 0; x < SPRITE_PIXELS; ++x) {
+							const size_t destination = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 4;
+							if (originX + x >= sourceSize.width || originY + y >= sourceSize.height) {
+								std::fill_n(tilePixels.data() + destination, 4, 0);
+								continue;
+							}
+							const size_t source = (static_cast<size_t>(originY + y) * sourceSize.width + originX + x) * 4;
+							tilePixels[destination + 0] = sourcePixels[source + 2];
+							tilePixels[destination + 1] = sourcePixels[source + 1];
+							tilePixels[destination + 2] = sourcePixels[source + 0];
+							tilePixels[destination + 3] = sourcePixels[source + 3];
+						}
+					}
+				} else {
+					bool imagePending = false;
+					uint8_t* rgba = image->getRGBAData(&imagePending);
+					if (!rgba) {
+						pending = pending || imagePending;
+						pixels.clear();
+						return false;
+					}
+					std::copy_n(rgba, tilePixels.size(), tilePixels.begin());
+					delete[] rgba;
+				}
+
+				const int destinationX = (static_cast<int>(width) - tileX - 1) * SPRITE_PIXELS;
+				const int destinationY = (static_cast<int>(height) - tileY - 1) * SPRITE_PIXELS;
+				for (int y = 0; y < SPRITE_PIXELS; ++y) {
+					for (int x = 0; x < SPRITE_PIXELS; ++x) {
+						const size_t source = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 4;
+						if (tilePixels[source + 3] == 0) {
+							continue;
+						}
+						const size_t destination = (static_cast<size_t>(destinationY + y) * pixelWidth + destinationX + x) * 4;
+						std::copy_n(tilePixels.data() + source, 4, pixels.data() + destination);
+					}
+				}
+			}
+		}
+	}
+	return true;
 }
 
 int GameSprite::getDrawHeight() const {
@@ -1772,6 +1858,26 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 			return nullptr;
 		}
 
+		if (id != 0 && g_gui.gfx.isMapRenderTextureBudgetActive()) {
+			std::vector<uint8_t> pixels;
+			const SpritePreloadStatus status = g_spritePreloader.getOrRequest(static_cast<uint32_t>(id), pixels);
+			if (status == SpritePreloadStatus::Ready) {
+				const int pixelsDataSize = SPRITE_PIXELS_SIZE * 3;
+				auto* data = newd uint8_t[pixelsDataSize];
+				for (int pixel = 0; pixel < SPRITE_PIXELS_SIZE; ++pixel) {
+					const uint8_t alpha = pixels[static_cast<size_t>(pixel) * 4 + 3];
+					data[pixel * 3 + 0] = alpha == 0 ? 0xFF : pixels[static_cast<size_t>(pixel) * 4 + 0];
+					data[pixel * 3 + 1] = alpha == 0 ? 0x00 : pixels[static_cast<size_t>(pixel) * 4 + 1];
+					data[pixel * 3 + 2] = alpha == 0 ? 0xFF : pixels[static_cast<size_t>(pixel) * 4 + 2];
+				}
+				return data;
+			}
+			if (status == SpritePreloadStatus::Pending) {
+				g_gui.gfx.deferTextureUpload();
+				return nullptr;
+			}
+		}
+
 		if (!g_gui.gfx.loadSpriteDump(dump, size, id)) {
 			return nullptr;
 		}
@@ -1819,6 +1925,13 @@ uint8_t* GameSprite::NormalImage::getRGBData() {
 }
 
 uint8_t* GameSprite::NormalImage::getRGBAData() {
+	return getRGBAData(nullptr);
+}
+
+uint8_t* GameSprite::NormalImage::getRGBAData(bool* pending) {
+	if (pending) {
+		*pending = false;
+	}
 	if (fromAssets) {
 		std::vector<uint8_t> pixels;
 		ClientSpriteSize sourceSize;
@@ -1866,6 +1979,25 @@ uint8_t* GameSprite::NormalImage::getRGBAData() {
 	if (!dump) {
 		if (g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
 			return nullptr;
+		}
+
+		if (id != 0 && (pending || g_gui.gfx.isMapRenderTextureBudgetActive())) {
+			std::vector<uint8_t> pixels;
+			const SpritePreloadStatus status = g_spritePreloader.getOrRequest(static_cast<uint32_t>(id), pixels);
+			if (status == SpritePreloadStatus::Ready) {
+				auto* data = newd uint8_t[pixels.size()];
+				std::memcpy(data, pixels.data(), pixels.size());
+				return data;
+			}
+			if (status == SpritePreloadStatus::Pending) {
+				if (pending) {
+					*pending = true;
+				}
+				if (g_gui.gfx.isMapRenderTextureBudgetActive()) {
+					g_gui.gfx.deferTextureUpload();
+				}
+				return nullptr;
+			}
 		}
 
 		if (!g_gui.gfx.loadSpriteDump(dump, size, id)) {
@@ -1928,6 +2060,7 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 		}
 		uint8_t* rgba = getRGBAData();
 		if (!rgba) {
+			g_gui.gfx.cancelTextureUploadAttempt();
 			return 0;
 		}
 
@@ -1966,11 +2099,11 @@ GLuint GameSprite::NormalImage::getHardwareID() {
 			atlas_loaded = true;
 			isGLLoaded = true;
 			g_gui.gfx.loaded_textures += 1;
-			g_gui.gfx.recordTextureUploadAttempt();
 			g_gui.gfx.recordTextureUpload();
 		}
 
 		delete[] rgba;
+		g_gui.gfx.recordTextureUploadAttempt();
 	}
 	visit();
 	if (atlas_loaded) {
@@ -2207,6 +2340,7 @@ GLuint GameSprite::TemplateImage::getHardwareID() {
 		}
 		createGLTexture(gl_tid);
 		if (!isGLLoaded) {
+			g_gui.gfx.cancelTextureUploadAttempt();
 			return 0;
 		}
 		g_gui.gfx.recordTextureUploadAttempt();

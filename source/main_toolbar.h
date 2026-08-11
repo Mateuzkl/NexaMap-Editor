@@ -24,6 +24,11 @@
 
 #include "gui_ids.h"
 #include "numbertextctrl.h"
+#include "position.h"
+
+#include <vector>
+
+class Editor;
 
 class MainToolBar : public wxEvtHandler {
 public:
@@ -42,11 +47,15 @@ public:
 	void OnStandardButtonClick(wxCommandEvent& event);
 	void OnBrushesButtonClick(wxCommandEvent& event);
 	void OnPositionButtonClick(wxCommandEvent& event);
+	void OnCitySelected(wxCommandEvent& event);
 	void OnPositionKeyUp(wxKeyEvent& event);
 	void OnPastePositionText(wxClipboardTextEvent& event);
 	void OnSizesButtonClick(wxCommandEvent& event);
 
 private:
+	void RefreshCityChoices(Editor* editor);
+	void NavigateToCurrentPosition();
+
 	static const wxString STANDARD_BAR_NAME;
 	static const wxString BRUSHES_BAR_NAME;
 	static const wxString POSITION_BAR_NAME;
@@ -55,6 +64,9 @@ private:
 	wxAuiToolBar* standard_toolbar;
 	wxAuiToolBar* brushes_toolbar;
 	wxAuiToolBar* position_toolbar;
+	wxChoice* city_control;
+	std::vector<uint32_t> city_ids;
+	std::vector<Position> city_positions;
 	NumberTextCtrl* x_control;
 	NumberTextCtrl* y_control;
 	NumberTextCtrl* z_control;

@@ -19,7 +19,8 @@
 #define RME_IOMINIMAP_H_
 
 #include "definitions.h" // MAP_LAYERS, MAP_MAX_LAYER, GROUND_LAYER
-#include "tile.h" // Position, INVALID_MINIMAP_COLOR
+#include "minimap_format.h"
+#include "tile.h" // Position
 
 #include <array>
 #include <string>
@@ -41,42 +42,6 @@ enum class MinimapExportMode {
 	SpecificFloor,
 	SelectedArea
 };
-
-// OTMM (otclient minimap) on-disk constants.
-enum {
-	MMBLOCK_SIZE = 64,
-	OTMM_SIGNATURE = 0x4D4d544F,
-	OTMM_VERSION = 1
-};
-
-// otclient-compatible per-tile flags.
-enum MinimapTileFlags {
-	MinimapTileWasSeen = 1,
-	MinimapTileNotWalkable = 4
-};
-
-#pragma pack(push, 1) // disable memory alignment
-struct MinimapTile {
-	uint8_t flags = 0;
-	uint8_t color = INVALID_MINIMAP_COLOR;
-	uint8_t speed = 10;
-};
-static_assert(sizeof(MinimapTile) == 3, "MinimapTile must be exactly 3 bytes");
-
-class MinimapBlock {
-public:
-	void updateTile(int x, int y, const MinimapTile& tile);
-	inline uint32_t getTileIndex(int x, int y) const noexcept {
-		return ((y % MMBLOCK_SIZE) * MMBLOCK_SIZE) + (x % MMBLOCK_SIZE);
-	}
-	const std::array<MinimapTile, MMBLOCK_SIZE * MMBLOCK_SIZE>& getTiles() const noexcept {
-		return m_tiles;
-	}
-
-private:
-	std::array<MinimapTile, MMBLOCK_SIZE * MMBLOCK_SIZE> m_tiles;
-};
-#pragma pack(pop)
 
 // Exports the current editor map as an .otmm (otclient) minimap or as .png/.bmp images.
 class IOMinimap {

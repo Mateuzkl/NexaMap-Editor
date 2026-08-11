@@ -118,6 +118,15 @@
     <ClInclude Include="..\..\source\gl_renderer.h">
       <Filter>gui\graphics</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\border_learning.h">
+      <Filter>editor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\border_learning_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\post_process_renderer.h">
+      <Filter>gui\graphics</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\gui.h">
       <Filter>gui</Filter>
     </ClInclude>
@@ -138,6 +147,21 @@
     </ClInclude>
     <ClInclude Include="..\..\source\iominimap.h">
       <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\minimap_format.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\minimap_import.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\minimap_import_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\png_map_import.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\png_map_import_window.h">
+      <Filter>gui\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\iomap_otbm.h">
       <Filter>editor\io</Filter>
@@ -367,6 +391,11 @@
     <ClInclude Include="..\..\source\artprovider.h">
       <Filter>gui</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\minimap_page_cache.h">
+      <Filter>Others</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\autoborder_preview.h"><Filter>gui\map window</Filter></ClInclude>
+    <ClInclude Include="..\..\source\ingame_preview\ingame_preview_window.h"><Filter>gui\map window</Filter></ClInclude>
     <ClInclude Include="..\..\source\welcome_dialog.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -376,6 +405,19 @@
     <ClInclude Include="..\..\source\replace_items_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\advanced_replace_window.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_engine.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_execution_plan.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_item_grid_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_library_catalog.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_library_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_builder_panel.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_editor.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_manager.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_scope.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\replace_visual_similarity_service.h"><Filter>gui\dialogs</Filter></ClInclude>
+    <ClInclude Include="..\..\source\replace_tool\visual_similarity_index.h"><Filter>gui\dialogs</Filter></ClInclude>
     <ClInclude Include="..\..\source\tileset_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -432,6 +474,18 @@
       <Filter>gui\graphics</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\gl_renderer.cpp">
+      <Filter>gui\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\border_learning.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\border_learning_map.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\border_learning_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\post_process_renderer.cpp">
       <Filter>gui\graphics</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\editor_tabs.cpp">
@@ -620,6 +674,18 @@
     <ClCompile Include="..\..\source\iominimap.cpp">
       <Filter>editor\io</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\minimap_import.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\minimap_import_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\png_map_import.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\png_map_import_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\iomap_otbm.cpp">
       <Filter>editor\io</Filter>
     </ClCompile>
@@ -692,12 +758,30 @@
     <ClCompile Include="..\..\source\artprovider.cpp">
       <Filter>gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\minimap_page_cache.cpp">
+      <Filter>Others</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\autoborder_preview.cpp"><Filter>gui\map window</Filter></ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\ingame_preview_window.cpp"><Filter>gui\map window</Filter></ClCompile>
     <ClCompile Include="..\..\source\welcome_dialog.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\replace_items_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\advanced_replace_window.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_engine.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_execution_plan.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_item_grid_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_library_catalog.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_library_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_builder_panel.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_editor.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_manager.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_scope.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\replace_visual_similarity_service.cpp"><Filter>gui\dialogs</Filter></ClCompile>
+    <ClCompile Include="..\..\source\replace_tool\visual_similarity_index.cpp"><Filter>gui\dialogs</Filter></ClCompile>
     <ClCompile Include="..\..\source\tileset_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
@@ -740,6 +824,9 @@
     <ClInclude Include="..\..\source\sprite_appearances.h">
       <Filter>gui\graphics</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\sprite_preloader.h">
+      <Filter>Others</Filter>
+    </ClInclude>
     <ClCompile Include="..\..\source\client_assets.cpp">
       <Filter>managers</Filter>
     </ClCompile>
@@ -754,6 +841,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\sprite_appearances.cpp">
       <Filter>gui\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\sprite_preloader.cpp">
+      <Filter>Others</Filter>
     </ClCompile>
     <None Include="..\..\source\protobuf\appearances.proto">
       <Filter>protobuf</Filter>

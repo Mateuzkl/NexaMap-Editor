@@ -38,6 +38,9 @@
 		<separator/>
 		<menu name="Import">
 			<item name="Import Map..." action="IMPORT_MAP" help="Import map data from another map file."/>
+			<item name="Import Minimap / OTMM..." action="IMPORT_MINIMAP" help="Preview an .otmm or .otbmm minimap and import it as an overlay or editable ground map."/>
+			<item name="Import PNG as OTBM Map..." action="IMPORT_PNG_MAP" help="Map PNG colors to real client grounds and generate an editable OTBM map."/>
+			<item name="Clear Minimap Overlay" action="CLEAR_MINIMAP_OVERLAY" help="Remove the active imported minimap reference overlay."/>
 			<item name="Import Monsters/NPC..." action="IMPORT_MONSTERS" help="Import either a monsters.xml file or a specific monster/NPC."/>
 		</menu>
 		<item name="Convert OTBM Item IDs..." action="MAP_ITEM_ID_CONVERTER" help="Convert all item IDs with the embedded native Server ID / Client ID mapping."/>
@@ -56,6 +59,8 @@
 	</menu>
 	<menu name="Tools">
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
+		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>
+		<item name="Learn Border from Selection..." action="LEARN_BORDER_SELECTION" help="Analyze selected map tiles and infer an autoborder draft without changing the map."/>
 	</menu>
 	<menu name="Edit">
 		<item name="Undo" hotkey="Ctrl+Z" action="UNDO" help="Undo last action."/>
@@ -169,6 +174,7 @@
 		<!-- item/zone filters -->
 		<item name="Show Performance Stats" hotkey="" action="SHOW_PERFORMANCE_STATS" help="Show FPS, CPU, and RAM usage on the screen."/>
 		<item name="Show Animation" hotkey="L" action="SHOW_PREVIEW" help="Show item animations."/>
+		<item name="Show Autoborder Preview" hotkey="" action="SHOW_AUTOBORDER_PREVIEW" help="Preview terrain, wall, door, table, carpet, and eraser autoborders before drawing."/>
 		<item name="Show Light" hotkey="Shift+L" action="SHOW_LIGHTS" help="Show lights."/>
 		<item name="Show Light Strength" hotkey="Shift+K" action="SHOW_LIGHT_STR" help="Show indicators of light strength."/>
 		<item name="Show Technical Items" hotkey="Shift+T" action="SHOW_TECHNICAL_ITEMS" help="Shows some of special items that are not visible in game."/>
@@ -213,6 +219,7 @@
 	</menu>
 	<menu name="Window">
 		<item name="Minimap" hotkey="M" action="WIN_MINIMAP" help="Displays the minimap window."/>
+		<item name="In-game Preview" action="WIN_INGAME_PREVIEW" help="Open a dockable 15 x 11 in-game view that follows the current selection."/>
 		<item name="New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
 		<item name="Materials Workbench..." action="MATERIALS_WORKBENCH" help="Visually edit XML ground, wall, doodad, carpet, and table brushes."/>
 		<item name="Border Workspace..." action="BORDER_WORKSPACE" help="Visually edit XML autoborder sets and item slots."/>

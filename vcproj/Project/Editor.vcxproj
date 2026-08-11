@@ -234,16 +234,33 @@
     <ClCompile Include="..\..\source\add_item_window.cpp" />
     <ClCompile Include="..\..\source\add_tileset_window.cpp" />
     <ClCompile Include="..\..\source\artprovider.cpp" />
+    <ClCompile Include="..\..\source\autoborder_preview.cpp" />
+    <ClCompile Include="..\..\source\ingame_preview\ingame_preview_window.cpp" />
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
     <ClCompile Include="..\..\source\find_item_window.cpp" />
     <ClCompile Include="..\..\source\light_drawer.cpp" />
     <ClCompile Include="..\..\source\replace_items_window.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\advanced_replace_window.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_engine.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_execution_plan.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_item_grid_panel.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_library_catalog.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_library_panel.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_rule.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_builder_panel.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_editor.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_rule_manager.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_scope.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\replace_visual_similarity_service.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\visual_similarity_index.cpp" />
     <ClCompile Include="..\..\source\tileset_window.cpp" />
     <ClCompile Include="..\..\source\welcome_dialog.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
     <ClInclude Include="..\..\source\add_tileset_window.h" />
     <ClInclude Include="..\..\source\artprovider.h" />
+    <ClInclude Include="..\..\source\autoborder_preview.h" />
+    <ClInclude Include="..\..\source\ingame_preview\ingame_preview_window.h" />
     <ClInclude Include="..\..\source\light_drawer.h" />
     <ClInclude Include="..\..\source\main_toolbar.h" />
     <ClInclude Include="..\..\source\otml.h" />
@@ -251,6 +268,8 @@
     <ClCompile Include="..\..\source\browse_tile_window.cpp" />
     <ClInclude Include="..\..\source\border_workspace_window.h" />
     <ClCompile Include="..\..\source\border_workspace_window.cpp" />
+    <ClInclude Include="..\..\source\border_learning_window.h" />
+    <ClCompile Include="..\..\source\border_learning_window.cpp" />
     <ClInclude Include="..\..\source\materials_workbench_window.h" />
     <ClCompile Include="..\..\source\materials_workbench_window.cpp">
       <IncludeInUnityFile>false</IncludeInUnityFile>
@@ -301,10 +320,25 @@
     <ClInclude Include="..\..\source\file_transaction.h" />
     <ClInclude Include="..\..\source\filehandle.h" />
     <ClInclude Include="..\..\source\iominimap.h" />
+    <ClInclude Include="..\..\source\minimap_format.h" />
+    <ClInclude Include="..\..\source\minimap_import.h" />
+    <ClInclude Include="..\..\source\minimap_import_window.h" />
+    <ClInclude Include="..\..\source\png_map_import.h" />
+    <ClInclude Include="..\..\source\png_map_import_window.h" />
     <ClCompile Include="..\..\source\extension.cpp" />
     <ClCompile Include="..\..\source\extension_window.cpp" />
     <ClCompile Include="..\..\source\filehandle.cpp" />
     <ClCompile Include="..\..\source\iominimap.cpp" />
+    <ClCompile Include="..\..\source\minimap_import.cpp" />
+    <ClCompile Include="..\..\source\minimap_import_window.cpp" />
+    <ClCompile Include="..\..\source\png_map_import.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\png_map_import_window.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
     <ClInclude Include="..\..\source\ground_brush.h" />
     <ClCompile Include="..\..\source\ground_brush.cpp" />
     <ClInclude Include="..\..\source\house_brush.h" />
@@ -325,6 +359,19 @@
     <ClCompile Include="..\..\source\properties_window.cpp" />
     <ClCompile Include="..\..\source\raw_brush.cpp" />
     <ClInclude Include="..\..\source\replace_items_window.h" />
+    <ClInclude Include="..\..\source\replace_tool\advanced_replace_window.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_engine.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_execution_plan.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_item_grid_panel.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_library_catalog.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_library_panel.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_rule.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_builder_panel.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_editor.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_rule_manager.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_scope.h" />
+    <ClInclude Include="..\..\source\replace_tool\replace_visual_similarity_service.h" />
+    <ClInclude Include="..\..\source\replace_tool\visual_similarity_index.h" />
     <ClInclude Include="..\..\source\rme_forward_declarations.h" />
     <ClInclude Include="..\..\source\settings.h" />
     <ClCompile Include="..\..\source\settings.cpp" />
@@ -338,6 +385,13 @@
     <ClCompile Include="..\..\source\graphics.cpp" />
     <ClInclude Include="..\..\source\gl_renderer.h" />
     <ClCompile Include="..\..\source\gl_renderer.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClInclude Include="..\..\source\border_learning.h" />
+    <ClCompile Include="..\..\source\border_learning.cpp" />
+    <ClCompile Include="..\..\source\border_learning_map.cpp" />
+    <ClInclude Include="..\..\source\post_process_renderer.h" />
+    <ClCompile Include="..\..\source\post_process_renderer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClInclude Include="..\..\source\pngfiles.h" />
@@ -360,7 +414,9 @@
     <ClInclude Include="..\..\source\map_tab.h" />
     <ClCompile Include="..\..\source\map_tab.cpp" />
     <ClInclude Include="..\..\source\minimap_window.h" />
+    <ClInclude Include="..\..\source\minimap_page_cache.h" />
     <ClCompile Include="..\..\source\minimap_window.cpp" />
+    <ClCompile Include="..\..\source\minimap_page_cache.cpp" />
     <ClInclude Include="..\..\source\process_com.h" />
     <ClCompile Include="..\..\source\process_com.cpp" />
     <ClInclude Include="..\..\source\palette_brushlist.h" />
@@ -447,7 +503,9 @@
     <ClInclude Include="..\..\source\spawn.h" />
     <ClCompile Include="..\..\source\spawn.cpp" />
     <ClInclude Include="..\..\source\sprite_appearances.h" />
+    <ClInclude Include="..\..\source\sprite_preloader.h" />
     <ClCompile Include="..\..\source\sprite_appearances.cpp" />
+    <ClCompile Include="..\..\source\sprite_preloader.cpp" />
     <ClInclude Include="..\..\source\spawn_format.h" />
     <ClCompile Include="..\..\source\spawn_format.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>

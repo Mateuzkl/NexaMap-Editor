@@ -21,21 +21,38 @@
 #include "gui.h"
 #include "sprites.h"
 #include "editor.h"
+#include "replace_tool/advanced_replace_window.h"
 
-MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
+MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 	wxPanel(parent, PANE_MAIN),
 	editor(editor),
-	replaceItemsDialog(nullptr) {
+	ingamePreview(ingamePreview),
+	replaceItemsDialog(nullptr),
+	advancedReplaceWindow(nullptr) {
 	int GL_settings[3];
 	GL_settings[0] = WX_GL_RGBA;
 	GL_settings[1] = WX_GL_DOUBLEBUFFER;
 	GL_settings[2] = 0;
-	canvas = newd MapCanvas(this, editor, GL_settings);
+	canvas = newd MapCanvas(this, editor, GL_settings, ingamePreview);
 
 	vScroll = newd MapScrollBar(this, MAP_WINDOW_VSCROLL, wxVERTICAL, canvas);
 	hScroll = newd MapScrollBar(this, MAP_WINDOW_HSCROLL, wxHORIZONTAL, canvas);
 
 	gem = newd DCButton(this, MAP_WINDOW_GEM, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_16x16, EDITOR_SPRITE_SELECTION_GEM);
+
+	if (ingamePreview) {
+		const wxSize viewportSize = FROM_DIP(this, wxSize(15 * TileSize, 11 * TileSize));
+		canvas->SetMinSize(viewportSize);
+		canvas->SetMaxSize(viewportSize);
+		vScroll->Hide();
+		hScroll->Hide();
+		gem->Hide();
+
+		auto* previewSizer = newd wxBoxSizer(wxVERTICAL);
+		previewSizer->Add(canvas, 0, wxALIGN_CENTER);
+		SetSizerAndFit(previewSizer);
+		return;
+	}
 
 	auto* topsizer = newd wxFlexGridSizer(2, 0, 0);
 
@@ -72,6 +89,27 @@ void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent& event) {
 	}
 }
 
+void MapWindow::ShowAdvancedReplaceWindow() {
+	if (advancedReplaceWindow) {
+		advancedReplaceWindow->Raise();
+		advancedReplaceWindow->SetFocus();
+		return;
+	}
+
+	advancedReplaceWindow = new AdvancedReplaceWindow(this, editor, *canvas);
+	advancedReplaceWindow->Bind(wxEVT_CLOSE_WINDOW, &MapWindow::OnAdvancedReplaceWindowClose, this);
+	advancedReplaceWindow->Show();
+}
+
+void MapWindow::OnAdvancedReplaceWindowClose(wxCloseEvent&) {
+	if (!advancedReplaceWindow) {
+		return;
+	}
+	advancedReplaceWindow->Unbind(wxEVT_CLOSE_WINDOW, &MapWindow::OnAdvancedReplaceWindowClose, this);
+	advancedReplaceWindow->Destroy();
+	advancedReplaceWindow = nullptr;
+}
+
 void MapWindow::SetSize(int x, int y, bool center) {
 	if (x == 0 || y == 0) {
 		return;
@@ -96,6 +134,9 @@ void MapWindow::UpdateScrollbars(int nx, int ny) {
 void MapWindow::UpdateDialogs(bool show) {
 	if (replaceItemsDialog) {
 		replaceItemsDialog->Show(show);
+	}
+	if (advancedReplaceWindow) {
+		advancedReplaceWindow->Show(show);
 	}
 }
 
@@ -151,6 +192,21 @@ void MapWindow::SetScreenCenterPosition(const Position& position, bool showIndic
 	}
 }
 
+void MapWindow::SetScreenCenterPositionInterpolated(const Position& position, int pixelOffsetX, int pixelOffsetY) {
+	if (!position.isValid()) {
+		return;
+	}
+
+	int x = position.x * TileSize + pixelOffsetX;
+	int y = position.y * TileSize + pixelOffsetY;
+	if (position.z <= GROUND_LAYER) {
+		x -= (GROUND_LAYER - position.z) * TileSize;
+		y -= (GROUND_LAYER - position.z) * TileSize;
+	}
+	Scroll(x, y, true);
+	canvas->ChangeFloor(position.z);
+}
+
 void MapWindow::GoToPreviousCenterPosition() {
 	SetScreenCenterPosition(previous_position, true);
 }
@@ -166,13 +222,17 @@ void MapWindow::Scroll(int x, int y, bool center) {
 
 	hScroll->SetThumbPosition(x);
 	vScroll->SetThumbPosition(y);
-	g_gui.UpdateMinimap();
+	if (!ingamePreview) {
+		g_gui.UpdateMinimap();
+	}
 }
 
 void MapWindow::ScrollRelative(int x, int y) {
 	hScroll->SetThumbPosition(hScroll->GetThumbPosition() + x);
 	vScroll->SetThumbPosition(vScroll->GetThumbPosition() + y);
-	g_gui.UpdateMinimap();
+	if (!ingamePreview) {
+		g_gui.UpdateMinimap();
+	}
 }
 
 void MapWindow::OnGem(wxCommandEvent& WXUNUSED(event)) {

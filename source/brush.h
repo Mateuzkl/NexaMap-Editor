@@ -60,6 +60,8 @@ typedef std::multimap<std::string, Brush*> BrushMap;
 
 class Brushes {
 public:
+	using BorderMap = std::map<uint32_t, AutoBorder*>;
+
 	Brushes();
 	~Brushes();
 
@@ -76,9 +78,11 @@ public:
 	const BrushMap& getMap() const {
 		return brushes;
 	}
+	const BorderMap& getBorders() const {
+		return borders;
+	}
 
 protected:
-	typedef std::map<uint32_t, AutoBorder*> BorderMap;
 	BrushMap brushes;
 	BorderMap borders;
 

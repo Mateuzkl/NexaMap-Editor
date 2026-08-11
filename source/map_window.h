@@ -23,6 +23,7 @@
 
 class MapCanvas;
 class DCButton;
+class AdvancedReplaceWindow;
 
 // Map window, a window displaying a map, complete with scrollbars
 // and everything. This is the window that's inside each tab in the
@@ -30,7 +31,7 @@ class DCButton;
 // MapCanvas does that. (mapdisplay.h)
 class MapWindow : public wxPanel {
 public:
-	MapWindow(wxWindow* parent, Editor& editor);
+	MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview = false);
 	~MapWindow() override;
 
 	// Event handlers
@@ -67,6 +68,7 @@ public:
 	// Screen position.
 	Position GetScreenCenterPosition();
 	void SetScreenCenterPosition(const Position& position, bool showIndicator = false);
+	void SetScreenCenterPositionInterpolated(const Position& position, int pixelOffsetX, int pixelOffsetY);
 	void GoToPreviousCenterPosition();
 
 	// Return the containing canvas
@@ -76,6 +78,8 @@ public:
 
 	void ShowReplaceItemsDialog(bool selectionOnly);
 	void OnReplaceItemsDialogClose(wxCloseEvent& event);
+	void ShowAdvancedReplaceWindow();
+	void OnAdvancedReplaceWindowClose(wxCloseEvent& event);
 
 protected:
 	// For internal use, call to resize the scrollbars with
@@ -85,6 +89,7 @@ protected:
 
 protected:
 	Editor& editor;
+	bool ingamePreview;
 	DCButton* gem;
 	MapCanvas* canvas;
 	wxScrollBar* hScroll;
@@ -92,6 +97,7 @@ protected:
 
 private:
 	ReplaceItemsDialog* replaceItemsDialog;
+	AdvancedReplaceWindow* advancedReplaceWindow;
 	Position previous_position;
 
 	friend class MainFrame;

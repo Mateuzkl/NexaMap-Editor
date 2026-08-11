@@ -50,6 +50,7 @@ protected:
 	wxCheckBox* only_one_instance_chkbox;
 	wxCheckBox* show_welcome_dialog_chkbox;
 	wxCheckBox* enable_tileset_editing_chkbox;
+	wxCheckBox* diagnostic_log_chkbox;
 	wxSpinCtrl* undo_size_spin;
 	wxSpinCtrl* undo_mem_size_spin;
 	wxSpinCtrl* worker_threads_spin;
@@ -77,6 +78,7 @@ protected:
 	wxCheckBox* hide_items_when_zoomed_chkbox;
 	wxCheckBox* show_performance_stats_chkbox;
 	wxCheckBox* fbo_scene_cache_chkbox;
+	wxChoice* post_process_choice;
 	wxSpinCtrl* animation_fps_spin;
 	wxColourPickerCtrl* cursor_color_pick;
 	wxColourPickerCtrl* cursor_alt_color_pick;

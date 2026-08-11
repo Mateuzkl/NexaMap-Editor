@@ -53,6 +53,7 @@ class MapCanvas;
 
 class SearchResultWindow;
 class MinimapWindow;
+class IngamePreviewWindow;
 class PaletteWindow;
 class OldPropertiesWindow;
 class TilesetWindow;
@@ -217,6 +218,13 @@ public:
 	void UpdateMinimap(bool immediate = false);
 	bool IsMinimapVisible() const;
 
+	// In-game preview
+	void CreateIngamePreview();
+	void DestroyIngamePreview();
+	void UpdateIngamePreview();
+	void ReleaseIngamePreviewEditor(Editor* editor);
+	bool IsIngamePreviewVisible() const;
+
 	int GetCurrentFloor();
 	void ChangeFloor(int newfloor);
 
@@ -240,6 +248,8 @@ public:
 
 	// Brushes
 	void FillDoodadPreviewBuffer();
+	void RefreshAutoborderPreview();
+	void InvalidateAutoborderPreview();
 	// Selects the currently seleceted brush in the active palette
 	void SelectBrush();
 	// Updates the palette AND selects the brush, second parameter is first palette to look in
@@ -406,6 +416,7 @@ public:
 	CopyBuffer copybuffer;
 
 	MinimapWindow* minimap;
+	IngamePreviewWindow* ingame_preview;
 	DCButton* gem; // The small gem in the lower-right corner
 	SearchResultWindow* search_result_window;
 	GraphicManager gfx;

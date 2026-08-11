@@ -110,6 +110,10 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 
 	position_toolbar = newd wxAuiToolBar(parent, TOOLBAR_POSITION, wxDefaultPosition, wxDefaultSize, wxAUI_TB_DEFAULT_STYLE | wxAUI_TB_HORZ_TEXT);
 	position_toolbar->SetToolBitmapSize(icon_size);
+	city_control = newd wxChoice(position_toolbar, wxID_ANY, wxDefaultPosition, FROM_DIP(parent, wxSize(130, 20)));
+	city_control->Append("City");
+	city_control->SetSelection(0);
+	city_control->SetToolTip("Go To Town Temple Position");
 	x_control = newd NumberTextCtrl(position_toolbar, wxID_ANY, 0, 0, MAP_MAX_WIDTH, wxTE_PROCESS_ENTER, "X", wxDefaultPosition, FROM_DIP(parent, wxSize(60, 20)));
 	x_control->SetToolTip("X Coordinate");
 	y_control = newd NumberTextCtrl(position_toolbar, wxID_ANY, 0, 0, MAP_MAX_HEIGHT, wxTE_PROCESS_ENTER, "Y", wxDefaultPosition, FROM_DIP(parent, wxSize(60, 20)));
@@ -119,6 +123,7 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 	go_button = newd wxButton(position_toolbar, TOOLBAR_POSITION_GO, wxEmptyString, wxDefaultPosition, parent->FromDIP(wxSize(22, 20)));
 	go_button->SetBitmap(go_bitmap);
 	go_button->SetToolTip("Go To Position");
+	position_toolbar->AddControl(city_control);
 	position_toolbar->AddControl(x_control);
 	position_toolbar->AddControl(y_control);
 	position_toolbar->AddControl(z_control);
@@ -158,6 +163,7 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 
 	standard_toolbar->Bind(wxEVT_COMMAND_MENU_SELECTED, &MainToolBar::OnStandardButtonClick, this);
 	brushes_toolbar->Bind(wxEVT_COMMAND_MENU_SELECTED, &MainToolBar::OnBrushesButtonClick, this);
+	city_control->Bind(wxEVT_CHOICE, &MainToolBar::OnCitySelected, this);
 	x_control->Bind(wxEVT_TEXT_PASTE, &MainToolBar::OnPastePositionText, this);
 	x_control->Bind(wxEVT_KEY_UP, &MainToolBar::OnPositionKeyUp, this);
 	y_control->Bind(wxEVT_TEXT_PASTE, &MainToolBar::OnPastePositionText, this);
@@ -173,6 +179,7 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 MainToolBar::~MainToolBar() {
 	standard_toolbar->Unbind(wxEVT_COMMAND_MENU_SELECTED, &MainToolBar::OnStandardButtonClick, this);
 	brushes_toolbar->Unbind(wxEVT_COMMAND_MENU_SELECTED, &MainToolBar::OnBrushesButtonClick, this);
+	city_control->Unbind(wxEVT_CHOICE, &MainToolBar::OnCitySelected, this);
 	x_control->Unbind(wxEVT_TEXT_PASTE, &MainToolBar::OnPastePositionText, this);
 	x_control->Unbind(wxEVT_KEY_UP, &MainToolBar::OnPositionKeyUp, this);
 	y_control->Unbind(wxEVT_TEXT_PASTE, &MainToolBar::OnPastePositionText, this);
@@ -218,6 +225,7 @@ void MainToolBar::UpdateButtons() {
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_WINDOW_DOOR, has_map);
 
 	position_toolbar->EnableTool(TOOLBAR_POSITION_GO, has_map);
+	RefreshCityChoices(editor);
 	x_control->Enable(has_map);
 	y_control->Enable(has_map);
 	z_control->Enable(has_map);
@@ -247,7 +255,7 @@ void MainToolBar::UpdateBrushButtons() {
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOPVP_TOOL, brush == g_gui.rook_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, brush == g_gui.nolog_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PVPZONE_TOOL, brush == g_gui.pvp_brush);
-	brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NORMAL_DOOR, brush == g_gui.normal_door_brush);
+		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NORMAL_DOOR, brush == g_gui.normal_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_LOCKED_DOOR, brush == g_gui.locked_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_MAGIC_DOOR, brush == g_gui.magic_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_QUEST_DOOR, brush == g_gui.quest_door_brush);
@@ -510,11 +518,21 @@ void MainToolBar::OnPositionButtonClick(wxCommandEvent& event) {
 	}
 
 	if (event.GetId() == TOOLBAR_POSITION_GO) {
-		Position pos(x_control->GetIntValue(), y_control->GetIntValue(), z_control->GetIntValue());
-		if (pos.isValid()) {
-			g_gui.SetScreenCenterPosition(pos);
-		}
+		NavigateToCurrentPosition();
 	}
+}
+
+void MainToolBar::OnCitySelected(wxCommandEvent&) {
+	const int selection = city_control->GetSelection();
+	if (selection <= 0 || selection > static_cast<int>(city_positions.size())) {
+		return;
+	}
+
+	const Position& position = city_positions[selection - 1];
+	x_control->SetIntValue(position.x);
+	y_control->SetIntValue(position.y);
+	z_control->SetIntValue(position.z);
+	NavigateToCurrentPosition();
 }
 
 void MainToolBar::OnPositionKeyUp(wxKeyEvent& event) {
@@ -529,12 +547,75 @@ void MainToolBar::OnPositionKeyUp(wxKeyEvent& event) {
 			go_button->SetFocus();
 		}
 	} else if (event.GetKeyCode() == WXK_NUMPAD_ENTER || event.GetKeyCode() == WXK_RETURN) {
-		Position pos(x_control->GetIntValue(), y_control->GetIntValue(), z_control->GetIntValue());
-		if (pos.isValid()) {
-			g_gui.SetScreenCenterPosition(pos);
-		}
+		NavigateToCurrentPosition();
 	}
 	event.Skip();
+}
+
+void MainToolBar::RefreshCityChoices(Editor* editor) {
+	struct CityEntry {
+		std::string name;
+		Position position;
+		uint32_t id;
+	};
+
+	std::vector<CityEntry> cities;
+	if (editor) {
+		const Map& map = editor->map;
+		cities.reserve(map.towns.count());
+		for (const auto& [id, town] : map.towns) {
+			if (!town || town->getName().empty()) {
+				continue;
+			}
+			const Position& position = town->getTemplePosition();
+			const bool hasPosition = position != Position(0, 0, 0);
+			if (!hasPosition || !position.isValid() || position.x > map.getWidth() || position.y > map.getHeight()) {
+				continue;
+			}
+			cities.push_back({ town->getName(), position, id });
+		}
+	}
+	std::sort(cities.begin(), cities.end(), [](const CityEntry& left, const CityEntry& right) {
+		const int nameOrder = wxstr(left.name).CmpNoCase(wxstr(right.name));
+		if (nameOrder != 0) {
+			return nameOrder < 0;
+		}
+		return left.id < right.id;
+	});
+
+	uint32_t selectedCityId = 0;
+	const int previousSelection = city_control->GetSelection();
+	if (previousSelection > 0 && previousSelection <= static_cast<int>(city_ids.size())) {
+		selectedCityId = city_ids[previousSelection - 1];
+	}
+
+	city_control->Freeze();
+	city_control->Clear();
+	city_ids.clear();
+	city_positions.clear();
+	city_control->Append("City");
+	int restoredSelection = 0;
+	for (const CityEntry& city : cities) {
+		city_control->Append(wxstr(city.name));
+		city_ids.push_back(city.id);
+		city_positions.push_back(city.position);
+		if (city.id == selectedCityId) {
+			restoredSelection = static_cast<int>(city_ids.size());
+		}
+	}
+	city_control->SetSelection(restoredSelection);
+	city_control->Enable(editor != nullptr && !city_positions.empty());
+	city_control->Thaw();
+}
+
+void MainToolBar::NavigateToCurrentPosition() {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+	const Position position(x_control->GetIntValue(), y_control->GetIntValue(), z_control->GetIntValue());
+	if (position.isValid()) {
+		g_gui.SetScreenCenterPosition(position);
+	}
 }
 
 void MainToolBar::OnPastePositionText(wxClipboardTextEvent& event) {

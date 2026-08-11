@@ -90,6 +90,12 @@ public:
 	TileSet::iterator end() {
 		return tiles.end();
 	}
+	TileSet::const_iterator begin() const {
+		return tiles.begin();
+	}
+	TileSet::const_iterator end() const {
+		return tiles.end();
+	}
 	TileSet& getTiles() {
 		return tiles;
 	}

@@ -32,10 +32,6 @@
 #include <cstring>
 #include <vector>
 
-void MinimapBlock::updateTile(int x, int y, const MinimapTile& tile) {
-	m_tiles[getTileIndex(x, y)] = tile;
-}
-
 IOMinimap::IOMinimap(Editor* editor, MinimapExportFormat format, MinimapExportMode mode, bool updateLoadbar) :
 	m_editor(editor),
 	m_format(format),
@@ -127,9 +123,9 @@ bool IOMinimap::saveOtmm(const std::string& path) {
 
 		writer.close();
 
-	if (m_updateLoadbar) {
-		g_gui.SetLoadDone(100);
-	}
+		if (m_updateLoadbar) {
+			g_gui.SetLoadDone(100);
+		}
 	} catch (std::exception& e) {
 		m_error = std::string("Failed to save OTMM minimap: ") + e.what();
 		return false;
@@ -221,7 +217,7 @@ bool IOMinimap::exportMinimap(const std::string& directory, const std::string& n
 	const int max_z = m_floor == -1 ? MAP_MAX_LAYER : m_floor;
 
 	// Per-floor bounding box of all drawable tiles.
-	int min_x[MAP_LAYERS]{}, min_y[MAP_LAYERS]{}, max_x[MAP_LAYERS]{}, max_y[MAP_LAYERS]{};
+	int min_x[MAP_LAYERS] {}, min_y[MAP_LAYERS] {}, max_x[MAP_LAYERS] {}, max_y[MAP_LAYERS] {};
 	for (int z = min_z; z <= max_z; ++z) {
 		min_x[z] = MAP_MAX_WIDTH + 1;
 		min_y[z] = MAP_MAX_HEIGHT + 1;
@@ -286,9 +282,9 @@ bool IOMinimap::exportMinimap(const std::string& directory, const std::string& n
 			}
 			const uint8_t color = tile->getMiniMapColor();
 			const size_t index = (static_cast<size_t>(tile->getY() - min_y[z]) * width + (tile->getX() - min_x[z])) * 3;
-			pixels[index]     = (uint8_t)(static_cast<int>(color / 36) % 6 * 51); // red
-			pixels[index + 1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51);  // green
-			pixels[index + 2] = (uint8_t)(color % 6 * 51);                        // blue
+			pixels[index] = (uint8_t)(static_cast<int>(color / 36) % 6 * 51); // red
+			pixels[index + 1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51); // green
+			pixels[index + 2] = (uint8_t)(color % 6 * 51); // blue
 		}
 
 		wxImage image(width, height, pixels.data(), true);
@@ -375,9 +371,9 @@ bool IOMinimap::exportSelection(const std::string& directory, const std::string&
 
 			const uint8_t color = tile->getMiniMapColor();
 			const uint32_t index = ((tile->getY() - min_y) * image_width + (tile->getX() - min_x)) * 3;
-			pixels[index]     = (uint8_t)(static_cast<int>(color / 36) % 6 * 51); // red
-			pixels[index + 1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51);  // green
-			pixels[index + 2] = (uint8_t)(color % 6 * 51);                        // blue
+			pixels[index] = (uint8_t)(static_cast<int>(color / 36) % 6 * 51); // red
+			pixels[index + 1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51); // green
+			pixels[index + 2] = (uint8_t)(color % 6 * 51); // blue
 			empty = false;
 		}
 

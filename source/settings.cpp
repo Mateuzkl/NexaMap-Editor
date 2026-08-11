@@ -234,6 +234,7 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_ZONE_AREAS, 1);
 	Int(USE_FBO_SCENE_CACHE, 1);
 	Int(ANIMATION_FPS, 10);
+	Int(POST_PROCESS_EFFECT, 0);
 	Int(SHOW_SPAWNS, 1);
 	Int(SHOW_ITEMS, 1);
 	Int(HIGHLIGHT_ITEMS, 0);
@@ -246,6 +247,7 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_ONLY_TILEFLAGS, 0);
 	Int(SHOW_ONLY_MODIFIED_TILES, 0);
 	Int(SHOW_PREVIEW, 1);
+	Int(SHOW_AUTOBORDER_PREVIEW, 1);
 	Int(SHOW_WALL_HOOKS, 0);
 	Int(SHOW_TOWNS, 0);
 	Int(ALWAYS_SHOW_ZONES, 1);
@@ -303,6 +305,7 @@ void Settings::IO(IOMode mode) {
 	Int(SAVE_WITH_OTB_MAGIC_NUMBER, 0);
 	Int(REPLACE_SIZE, 500);
 	Int(COPY_POSITION_FORMAT, 0);
+	Int(ENABLE_DIAGNOSTIC_LOG, 0);
 
 	section("Graphics");
 	Int(TEXTURE_MANAGEMENT, 1);
@@ -356,6 +359,8 @@ void Settings::IO(IOMode mode) {
 	String(PALETTE_LAYOUT, "name=02c30f6048629894000011bc00000002;caption=Palette;state=2099148;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=245;besth=100;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=-1;floath=-1");
 	Int(MINIMAP_VISIBLE, 0);
 	String(MINIMAP_LAYOUT, "name=066e2bc8486298990000259a00000003;caption=Minimap;state=2099151;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=170;besth=130;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=221;floath=164");
+	Int(INGAME_PREVIEW_VISIBLE, 0);
+	String(INGAME_PREVIEW_LAYOUT, "");
 	Int(WINDOW_HEIGHT, 500);
 	Int(WINDOW_WIDTH, 700);
 	Int(WINDOW_MAXIMIZED, 0);

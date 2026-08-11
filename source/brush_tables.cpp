@@ -539,6 +539,31 @@ void GroundBrush::init() {
 		= SOUTH_HORIZONTAL | EAST_HORIZONTAL << 8 | NORTH_HORIZONTAL << 16 | WEST_HORIZONTAL << 24;
 	GroundBrush::border_types[TILE_SOUTHEAST | TILE_SOUTH | TILE_SOUTHWEST | TILE_EAST | TILE_WEST | TILE_NORTHEAST | TILE_NORTH | TILE_NORTHWEST] // 1111111
 		= SOUTH_HORIZONTAL | EAST_HORIZONTAL << 8 | NORTH_HORIZONTAL << 16 | WEST_HORIZONTAL << 24;
+
+#ifndef NDEBUG
+	struct CanonicalBorderCase {
+		uint8_t mask;
+		BorderType expected;
+	};
+	const CanonicalBorderCase canonicalCases[] = {
+		{ TILE_NORTH, NORTH_HORIZONTAL },
+		{ TILE_EAST, EAST_HORIZONTAL },
+		{ TILE_SOUTH, SOUTH_HORIZONTAL },
+		{ TILE_WEST, WEST_HORIZONTAL },
+		{ TILE_NORTHWEST, NORTHWEST_CORNER },
+		{ TILE_NORTHEAST, NORTHEAST_CORNER },
+		{ TILE_SOUTHWEST, SOUTHWEST_CORNER },
+		{ TILE_SOUTHEAST, SOUTHEAST_CORNER },
+		{ TILE_NORTH | TILE_WEST, NORTHWEST_DIAGONAL },
+		{ TILE_NORTH | TILE_EAST, NORTHEAST_DIAGONAL },
+		{ TILE_SOUTH | TILE_WEST, SOUTHWEST_DIAGONAL },
+		{ TILE_SOUTH | TILE_EAST, SOUTHEAST_DIAGONAL },
+	};
+	for (const auto& canonicalCase : canonicalCases) {
+		const auto directions = classifyBorderMask(canonicalCase.mask);
+		ASSERT(directions[0] == canonicalCase.expected);
+	}
+#endif
 }
 
 void WallBrush::init() {

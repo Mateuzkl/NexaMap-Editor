@@ -50,9 +50,13 @@ if(ENABLE_UNITY_BUILD)
 	else()
 		set_source_files_properties(
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/gl_renderer.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/post_process_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/minimap_import_window.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/png_map_import.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/png_map_import_window.cpp"
 			PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 		)
 		set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -90,6 +94,77 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+	add_executable(border_learning_tests
+		tests/border_learning_tests.cpp
+		source/border_learning.cpp
+	)
+	target_include_directories(border_learning_tests PRIVATE source)
+	set_target_properties(border_learning_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/border_learning_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/border_learning_tests"
+	)
+	add_test(NAME border_learning_tests COMMAND border_learning_tests)
+
+	add_executable(minimap_import_tests
+		tests/minimap_import_tests.cpp
+		source/minimap_import.cpp
+	)
+	target_include_directories(minimap_import_tests PRIVATE source)
+	target_link_libraries(minimap_import_tests PRIVATE ZLIB::ZLIB)
+	set_target_properties(minimap_import_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/minimap_import_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/minimap_import_tests"
+	)
+	add_test(NAME minimap_import_tests COMMAND minimap_import_tests)
+
+	add_executable(png_map_import_tests
+		tests/png_map_import_tests.cpp
+		source/png_map_import.cpp
+	)
+	target_include_directories(png_map_import_tests PRIVATE source)
+	set_target_properties(png_map_import_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/png_map_import_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/png_map_import_tests"
+	)
+	add_test(NAME png_map_import_tests COMMAND png_map_import_tests)
+
+	add_executable(border_topology_tests
+		tests/border_topology_tests.cpp
+		source/brush_tables.cpp
+	)
+	target_include_directories(border_topology_tests PRIVATE source)
+	target_link_libraries(border_topology_tests PRIVATE ${wxWidgets_LIBRARIES})
+	if(MSVC)
+		target_compile_options(border_topology_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(border_topology_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/border_topology_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/border_topology_tests"
+	)
+	add_test(NAME border_topology_tests COMMAND border_topology_tests)
+
+	add_executable(sprite_preloader_tests
+		tests/sprite_preloader_tests.cpp
+		source/sprite_preloader.cpp
+	)
+	target_include_directories(sprite_preloader_tests PRIVATE source)
+	target_link_libraries(sprite_preloader_tests PRIVATE Threads::Threads)
+	set_target_properties(sprite_preloader_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/sprite_preloader_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/sprite_preloader_tests"
+	)
+	add_test(NAME sprite_preloader_tests COMMAND sprite_preloader_tests)
+
 	add_executable(client_assets_manifest_tests
 		tests/client_assets_manifest_tests.cpp
 		source/client_assets_manifest.cpp
@@ -129,6 +204,89 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/item_id_mapping_tests"
 	)
 	add_test(NAME item_id_mapping_tests COMMAND item_id_mapping_tests)
+
+	add_executable(replace_rule_tests
+		tests/replace_rule_tests.cpp
+		source/replace_tool/replace_rule.cpp
+	)
+	target_include_directories(replace_rule_tests PRIVATE source)
+	set_target_properties(replace_rule_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_rule_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_rule_tests"
+	)
+	add_test(NAME replace_rule_tests COMMAND replace_rule_tests)
+
+	add_executable(replace_rule_manager_tests
+		tests/replace_rule_manager_tests.cpp
+		source/replace_tool/replace_rule.cpp
+		source/replace_tool/replace_rule_manager.cpp
+	)
+	target_include_directories(replace_rule_manager_tests PRIVATE source)
+	target_link_libraries(replace_rule_manager_tests PRIVATE nlohmann_json::nlohmann_json)
+	set_target_properties(replace_rule_manager_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_rule_manager_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_rule_manager_tests"
+	)
+	add_test(NAME replace_rule_manager_tests COMMAND replace_rule_manager_tests)
+
+	add_executable(replace_library_catalog_tests
+		tests/replace_library_catalog_tests.cpp
+		source/replace_tool/replace_library_catalog.cpp
+	)
+	target_include_directories(replace_library_catalog_tests PRIVATE source)
+	set_target_properties(replace_library_catalog_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_library_catalog_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_library_catalog_tests"
+	)
+	add_test(NAME replace_library_catalog_tests COMMAND replace_library_catalog_tests)
+
+	add_executable(replace_rule_editor_tests
+		tests/replace_rule_editor_tests.cpp
+		source/replace_tool/replace_rule.cpp
+		source/replace_tool/replace_rule_editor.cpp
+	)
+	target_include_directories(replace_rule_editor_tests PRIVATE source)
+	set_target_properties(replace_rule_editor_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_rule_editor_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_rule_editor_tests"
+	)
+	add_test(NAME replace_rule_editor_tests COMMAND replace_rule_editor_tests)
+
+	add_executable(visual_similarity_index_tests
+		tests/visual_similarity_index_tests.cpp
+		source/replace_tool/visual_similarity_index.cpp
+	)
+	target_include_directories(visual_similarity_index_tests PRIVATE source)
+	target_link_libraries(visual_similarity_index_tests PRIVATE Threads::Threads)
+	set_target_properties(visual_similarity_index_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/visual_similarity_index_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/visual_similarity_index_tests"
+	)
+	add_test(NAME visual_similarity_index_tests COMMAND visual_similarity_index_tests)
+
+	add_executable(replace_execution_plan_tests
+		tests/replace_execution_plan_tests.cpp
+		source/replace_tool/replace_rule.cpp
+		source/replace_tool/replace_execution_plan.cpp
+	)
+	target_include_directories(replace_execution_plan_tests PRIVATE source)
+	set_target_properties(replace_execution_plan_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/replace_execution_plan_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/replace_execution_plan_tests"
+	)
+	add_test(NAME replace_execution_plan_tests COMMAND replace_execution_plan_tests)
 
 	add_executable(depot_conversion_validation_tests
 		tests/depot_conversion_validation_tests.cpp
@@ -187,6 +345,10 @@ if(BUILD_TESTING)
 		source/zones.cpp
 	)
 	target_include_directories(zones_tests PRIVATE source)
+	target_link_libraries(zones_tests PRIVATE ${wxWidgets_LIBRARIES})
+	if(MSVC)
+		target_compile_options(zones_tests PRIVATE /utf-8)
+	endif()
 	set_target_properties(zones_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON

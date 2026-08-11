@@ -22,16 +22,19 @@
 #include "tile.h"
 #include "creature.h"
 
+#include <memory>
+
 class Item;
 class Creature;
 class MapWindow;
 class MapPopupMenu;
 class AnimationTimer;
 class MapDrawer;
+class MinimapImportDocument;
 
 class MapCanvas : public wxGLCanvas {
 public:
-	MapCanvas(MapWindow* parent, Editor& editor, int* attriblist);
+	MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool ingamePreview = false);
 	~MapCanvas() override;
 	void Reset();
 
@@ -84,6 +87,7 @@ public:
 	void OnSelectRAWBrush(wxCommandEvent& event);
 	void OnSelectGroundBrush(wxCommandEvent& event);
 	void OnOpenBorderWorkspace(wxCommandEvent& event);
+	void OnLearnBorderSelection(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSelectDoodadBrush(wxCommandEvent& event);
 	void OnSelectDoorBrush(wxCommandEvent& event);
@@ -101,6 +105,12 @@ public:
 	void Refresh();
 	void RefreshAnimation();
 	void RefreshViewport();
+	void UpdateAutoborderPreview(bool altPressed);
+	void SetMinimapImportOverlay(std::shared_ptr<const MinimapImportDocument> document, uint8_t opacity);
+	void ClearMinimapImportOverlay();
+	bool HasMinimapImportOverlay() const noexcept {
+		return minimap_import_overlay != nullptr;
+	}
 
 	void ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y);
 	void MouseToMap(int* map_x, int* map_y) {
@@ -123,7 +133,12 @@ public:
 	double GetZoom() const {
 		return zoom;
 	}
+	bool IsIngamePreview() const {
+		return ingamePreview;
+	}
 	void SetZoom(double value);
+	void SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame);
+	void SetIngamePreviewLighting(bool enabled);
 	void GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const;
 
 	Position GetCursorPosition() const;
@@ -150,6 +165,16 @@ private:
 
 	Editor& editor;
 	MapDrawer* drawer;
+	std::shared_ptr<const MinimapImportDocument> minimap_import_overlay;
+	uint8_t minimap_import_overlay_opacity = 128;
+	bool ingamePreview;
+	bool ingamePreviewLighting = false;
+	Position ingamePreviewPlayerPosition { -1, -1, -1 };
+	Outfit ingamePreviewPlayerOutfit;
+	Direction ingamePreviewPlayerDirection = SOUTH;
+	int ingamePreviewWalkOffsetX = 0;
+	int ingamePreviewWalkOffsetY = 0;
+	int ingamePreviewAnimationFrame = 0;
 	int keyCode;
 	int countMaxFills = 0;
 
@@ -176,6 +201,7 @@ private:
 	int last_cursor_map_x;
 	int last_cursor_map_y;
 	int last_cursor_map_z;
+	bool last_alt_down;
 
 	int last_click_map_x;
 	int last_click_map_y;

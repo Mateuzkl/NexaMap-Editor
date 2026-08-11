@@ -899,12 +899,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 			continue;
 		}
 
-		const BorderType directions[4] = {
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x000000FF) >> 0),
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x0000FF00) >> 8),
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x00FF0000) >> 16),
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0xFF000000) >> 24)
-		};
+		const auto directions = classifyBorderMask(static_cast<uint8_t>(borderCluster.alignment));
 
 		for (int32_t i = 0; i < 4; ++i) {
 			const BorderType direction = directions[i];
