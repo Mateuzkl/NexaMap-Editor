@@ -86,6 +86,11 @@ wxNotebookPage* PreferencesWindow::CreateGeneralPage() {
 	only_one_instance_chkbox->SetToolTip("When checked, maps opened using the shell will all be opened in the same instance.");
 	sizer->Add(only_one_instance_chkbox, 0, wxLEFT | wxTOP, 5);
 
+	diagnostic_log_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Write diagnostic log (rme.log)");
+	diagnostic_log_chkbox->SetValue(g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG));
+	diagnostic_log_chkbox->SetToolTip("Record diagnostic and crash information in rme.log next to the executable. Restart required.");
+	sizer->Add(diagnostic_log_chkbox, 0, wxLEFT | wxTOP, 5);
+
 	enable_tileset_editing_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Enable tileset editing");
 	enable_tileset_editing_chkbox->SetValue(g_settings.getInteger(Config::SHOW_TILESET_EDITOR) == 1);
 	enable_tileset_editing_chkbox->SetToolTip("Show tileset editing options.");
@@ -694,6 +699,10 @@ bool PreferencesWindow::Apply() {
 	g_settings.setInteger(Config::WELCOME_DIALOG, show_welcome_dialog_chkbox->GetValue());
 	g_settings.setInteger(Config::ALWAYS_MAKE_BACKUP, always_make_backup_chkbox->GetValue());
 	g_settings.setInteger(Config::ONLY_ONE_INSTANCE, only_one_instance_chkbox->GetValue());
+	if (g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG) != diagnostic_log_chkbox->GetValue()) {
+		must_restart = true;
+	}
+	g_settings.setInteger(Config::ENABLE_DIAGNOSTIC_LOG, diagnostic_log_chkbox->GetValue());
 	g_settings.setInteger(Config::UNDO_SIZE, undo_size_spin->GetValue());
 	g_settings.setInteger(Config::UNDO_MEM_SIZE, undo_mem_size_spin->GetValue());
 	g_settings.setInteger(Config::WORKER_THREADS, worker_threads_spin->GetValue());

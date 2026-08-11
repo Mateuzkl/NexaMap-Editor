@@ -33,6 +33,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <set>
 #include <streambuf>
 #include <utility>
@@ -130,6 +131,47 @@ namespace {
 		}
 	};
 
+	std::ofstream diagnosticLogFile;
+	std::unique_ptr<TeeStreamBuffer> diagnosticOutputBuffer;
+	std::unique_ptr<TeeStreamBuffer> diagnosticErrorBuffer;
+	std::streambuf* originalOutputBuffer = nullptr;
+	std::streambuf* originalErrorBuffer = nullptr;
+
+	bool StartDiagnostics(const std::filesystem::path& executablePath) {
+		const std::filesystem::path logPath = executablePath.parent_path() / "rme.log";
+		diagnosticLogFile.open(logPath, std::ios::out | std::ios::app);
+		if (!diagnosticLogFile) {
+			std::cerr << "[warning] Could not open diagnostic log: " << logPath.string() << std::endl;
+			return false;
+		}
+
+		diagnosticOutputBuffer = std::make_unique<TeeStreamBuffer>(std::cout.rdbuf(), diagnosticLogFile.rdbuf());
+		diagnosticErrorBuffer = std::make_unique<TeeStreamBuffer>(std::cerr.rdbuf(), diagnosticLogFile.rdbuf());
+		originalOutputBuffer = std::cout.rdbuf(diagnosticOutputBuffer.get());
+		originalErrorBuffer = std::cerr.rdbuf(diagnosticErrorBuffer.get());
+		std::cout << std::unitbuf;
+		std::cerr << std::unitbuf;
+
+		std::cerr << std::endl
+				  << "=== RME diagnostic session ===" << std::endl;
+		std::cerr << "[info] Diagnostic log: " << logPath.string() << std::endl;
+		std::cerr << "[info] RME starting" << std::endl;
+		return true;
+	}
+
+	void StopDiagnostics() {
+		if (!diagnosticLogFile.is_open()) {
+			return;
+		}
+		std::cout.rdbuf(originalOutputBuffer);
+		std::cerr.rdbuf(originalErrorBuffer);
+		diagnosticOutputBuffer.reset();
+		diagnosticErrorBuffer.reset();
+		diagnosticLogFile.close();
+		originalOutputBuffer = nullptr;
+		originalErrorBuffer = nullptr;
+	}
+
 #if wxUSE_STACKWALKER && wxUSE_ON_FATAL_EXCEPTION
 	class DiagnosticStackWalker final : public wxStackWalker {
 	protected:
@@ -150,9 +192,11 @@ namespace {
 	template <typename EntryPoint>
 	int RunApplication(EntryPoint&& entryPoint) {
 		try {
-			std::cerr << "[info] RME starting" << std::endl;
 			const int exitCode = std::forward<EntryPoint>(entryPoint)();
-			std::cerr << "[info] RME stopped with code " << exitCode << std::endl;
+			if (diagnosticLogFile.is_open()) {
+				std::cerr << "[info] RME stopped with code " << exitCode << std::endl;
+			}
+			StopDiagnostics();
 			return exitCode;
 		} catch (const std::exception& exception) {
 			std::cerr << "[critical] Unhandled startup/shutdown exception: "
@@ -160,54 +204,20 @@ namespace {
 		} catch (...) {
 			std::cerr << "[critical] Unknown startup/shutdown exception" << std::endl;
 		}
+		StopDiagnostics();
 		return EXIT_FAILURE;
-	}
-
-	template <typename EntryPoint>
-	int RunWithDiagnostics(const std::filesystem::path& executablePath, EntryPoint&& entryPoint) {
-		const std::filesystem::path logPath = executablePath.parent_path() / "rme.log";
-		std::ofstream logFile(logPath, std::ios::out | std::ios::app);
-		if (!logFile) {
-			std::cerr << "[warning] Could not open diagnostic log: " << logPath.string() << std::endl;
-			return RunApplication(std::forward<EntryPoint>(entryPoint));
-		}
-
-		TeeStreamBuffer outputBuffer(std::cout.rdbuf(), logFile.rdbuf());
-		TeeStreamBuffer errorBuffer(std::cerr.rdbuf(), logFile.rdbuf());
-		std::streambuf* const originalOutputBuffer = std::cout.rdbuf(&outputBuffer);
-		std::streambuf* const originalErrorBuffer = std::cerr.rdbuf(&errorBuffer);
-		std::cout << std::unitbuf;
-		std::cerr << std::unitbuf;
-
-		std::cerr << std::endl
-				  << "=== RME diagnostic session ===" << std::endl;
-		std::cerr << "[info] Diagnostic log: " << logPath.string() << std::endl;
-		const int exitCode = RunApplication(std::forward<EntryPoint>(entryPoint));
-
-		std::cout.rdbuf(originalOutputBuffer);
-		std::cerr.rdbuf(originalErrorBuffer);
-		return exitCode;
 	}
 
 } // namespace
 
 int main(int argc, char** argv) {
-	return RunWithDiagnostics(
-		std::filesystem::absolute(argv[0]),
-		[&] { return wxEntry(argc, argv); }
-	);
+	return RunApplication([&] { return wxEntry(argc, argv); });
 }
 
 #ifdef __WINDOWS__
 extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wxCmdLineArgType commandLine, int showCommand) {
 	wxDISABLE_DEBUG_SUPPORT();
-	std::array<wchar_t, 32768> executablePath {};
-	const DWORD pathLength = GetModuleFileNameW(nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
-	const std::filesystem::path path = pathLength > 0 ? std::filesystem::path(executablePath.data()) : std::filesystem::path("rme.exe");
-	return RunWithDiagnostics(
-		path,
-		[&] { return wxEntry(hInstance, hPrevInstance, commandLine, showCommand); }
-	);
+	return RunApplication([&] { return wxEntry(hInstance, hPrevInstance, commandLine, showCommand); });
 }
 #endif
 
@@ -221,6 +231,15 @@ bool Application::OnInit() {
 #endif
 	// Load the persisted theme before creating any windows.
 	g_settings.load();
+	if (g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG)) {
+		const std::filesystem::path executablePath(nstr(wxStandardPaths::Get().GetExecutablePath()));
+		if (StartDiagnostics(executablePath)) {
+			// Keep the normal wxWidgets UI logger and mirror all messages to the
+			// diagnostic console/file stream.
+			wxLog::GetActiveTarget();
+			new wxLogChain(new ConsoleLogTarget());
+		}
+	}
 	const int rawTheme = g_settings.getInteger(Config::THEME);
 	const int theme = rawTheme >= 0 && rawTheme <= 2 ? rawTheme : 0;
 	Theme::SetType(static_cast<Theme::Type>(theme));
@@ -248,10 +267,6 @@ bool Application::OnInit() {
 	}
 	#endif
 #endif
-	// Keep the normal wxWidgets UI logger and mirror all messages to the
-	// diagnostic console/file stream.
-	wxLog::GetActiveTarget();
-	new wxLogChain(new ConsoleLogTarget());
 
 	std::cout << "This is free software: you are free to change and redistribute it." << '\n';
 	std::cout << "There is NO WARRANTY, to the extent permitted by law." << '\n';
