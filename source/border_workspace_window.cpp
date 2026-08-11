@@ -159,6 +159,58 @@ void BorderWorkspaceWindow::OpenForItems(wxWindow* parent, const std::vector<Ite
 	window->SetFocus();
 }
 
+bool BorderWorkspaceWindow::OpenBorder(wxWindow* parent, int borderId) {
+	if (!g_gui.IsVersionLoaded() || !IsAvailableForCurrentClient()) {
+		wxMessageBox("Load a client version with a valid materials.xml before opening Border Workspace.", "Border Workspace", wxOK | wxICON_INFORMATION, parent);
+		return false;
+	}
+
+	bool created = false;
+	if (!WindowInstance()) {
+		WindowInstance() = newd BorderWorkspaceWindow(parent);
+		created = true;
+	}
+	BorderWorkspaceWindow* window = WindowInstance();
+	if (!window->EnsureCurrentClientCatalog()) {
+		if (created) {
+			WindowInstance() = nullptr;
+			window->Destroy();
+		}
+		return false;
+	}
+
+	int recordIndex = -1;
+	int slot = 0;
+	for (int index = 0; index < static_cast<int>(window->records_.size()); ++index) {
+		if (window->records_[index].id != borderId) {
+			continue;
+		}
+		recordIndex = index;
+		for (int candidateSlot = 0; candidateSlot < 12; ++candidateSlot) {
+			if (window->records_[index].items[candidateSlot] != 0) {
+				slot = candidateSlot;
+				break;
+			}
+		}
+		break;
+	}
+	if (recordIndex < 0 || !window->FocusBorder(recordIndex, slot)) {
+		if (recordIndex < 0) {
+			wxMessageBox(wxString::Format("Border %d was not found in the current materials catalog.", borderId), "Border Workspace", wxOK | wxICON_INFORMATION, parent);
+		}
+		if (created) {
+			WindowInstance() = nullptr;
+			window->Destroy();
+		}
+		return false;
+	}
+
+	window->Show();
+	window->Raise();
+	window->SetFocus();
+	return true;
+}
+
 bool BorderWorkspaceWindow::OpenDraft(wxWindow* parent, const Draft& draft) {
 	if (!g_gui.IsVersionLoaded()) {
 		wxMessageBox("Load a client version before opening Border Workspace.", "Border Workspace", wxOK | wxICON_INFORMATION, parent);

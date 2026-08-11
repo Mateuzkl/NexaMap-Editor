@@ -137,6 +137,48 @@ int main() {
 	require(accumulated.slots[EAST_HORIZONTAL].itemId == 700, "accumulated candidate mismatch");
 	require(accumulated.slots[EAST_HORIZONTAL].observations == 6, "accumulated observation count mismatch");
 
+	LearnedBorderResult matchResult;
+	matchResult.slots[NORTH_HORIZONTAL].itemId = 701;
+	matchResult.slots[EAST_HORIZONTAL].itemId = 702;
+	matchResult.slots[SOUTH_HORIZONTAL].itemId = 703;
+	std::vector<BorderLearningBorderDefinition> definitions(3);
+	definitions[0].borderId = 50;
+	definitions[0].items[NORTH_HORIZONTAL] = 701;
+	definitions[0].items[EAST_HORIZONTAL] = 702;
+	definitions[0].items[SOUTH_HORIZONTAL] = 703;
+	definitions[1].borderId = 51;
+	definitions[1].items[NORTH_HORIZONTAL] = 701;
+	definitions[1].items[EAST_HORIZONTAL] = 702;
+	definitions[1].items[SOUTH_HORIZONTAL] = 999;
+	definitions[2].borderId = 52;
+	definitions[2].items[WEST_HORIZONTAL] = 800;
+	const auto existingMatches = BorderLearningAnalyzer::matchExistingBorders(matchResult, definitions);
+	require(existingMatches.size() == 2, "existing border match count mismatch");
+	require(existingMatches[0].borderId == 50 && existingMatches[0].exact, "exact existing border was not ranked first");
+	require(existingMatches[1].borderId == 51 && !existingMatches[1].exact, "near existing border mismatch");
+	require(existingMatches[1].matchingSlots == 2 && existingMatches[1].conflictingSlots == 1, "near border slot counts mismatch");
+
+	BorderLearningBoundaryObservation matchingObservation;
+	matchingObservation.position = Position(500, 500, 7);
+	matchingObservation.expectedEdges = { NORTH_HORIZONTAL };
+	matchingObservation.candidateItemIds = { 701 };
+	matchResult.boundaryObservations.push_back(matchingObservation);
+	BorderLearningBoundaryObservation mismatchingObservation;
+	mismatchingObservation.position = Position(501, 500, 7);
+	mismatchingObservation.expectedEdges = { SOUTH_HORIZONTAL };
+	mismatchingObservation.candidateItemIds = { 999 };
+	matchResult.boundaryObservations.push_back(mismatchingObservation);
+	BorderLearningBoundaryObservation unresolvedObservation;
+	unresolvedObservation.position = Position(502, 500, 7);
+	unresolvedObservation.expectedEdges = { WEST_HORIZONTAL };
+	matchResult.boundaryObservations.push_back(unresolvedObservation);
+	const auto validation = BorderLearningAnalyzer::validateLearnedBorder(matchResult);
+	require(validation.matchedRoles == 1, "learned border validation match count mismatch");
+	require(validation.mismatchedRoles == 1, "learned border validation mismatch count mismatch");
+	require(validation.unresolvedRoles == 1, "learned border validation unresolved count mismatch");
+	require(validation.matchRate == 0.5, "learned border validation rate mismatch");
+	require(validation.mismatchPositions.size() == 1 && validation.mismatchPositions.front() == Position(501, 500, 7), "learned border mismatch position missing");
+
 	BorderLearningSnapshot wrongFloor = firstSample;
 	wrongFloor.floor = 8;
 	require(!session.addSnapshot(wrongFloor, { 0, 1, 3 }, &sessionError), "cross-floor evidence was accepted");

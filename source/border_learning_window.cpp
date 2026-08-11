@@ -3,6 +3,7 @@
 #include "border_learning_window.h"
 
 #include "border_workspace_window.h"
+#include "brush.h"
 #include "dcbutton.h"
 #include "editor.h"
 #include "ground_brush.h"
@@ -144,6 +145,8 @@ void BorderLearningWindow::BuildLayout() {
 	auto* summaryBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Selection and transition");
 	selectionLabel_ = newd wxStaticText(summaryBox->GetStaticBox(), wxID_ANY, wxEmptyString);
 	qualityLabel_ = newd wxStaticText(summaryBox->GetStaticBox(), wxID_ANY, "Evidence quality: -");
+	existingMatchLabel_ = newd wxStaticText(summaryBox->GetStaticBox(), wxID_ANY, "Existing border match: -");
+	validationLabel_ = newd wxStaticText(summaryBox->GetStaticBox(), wxID_ANY, "Observed validation: -");
 	auto* transitionRow = newd wxBoxSizer(wxHORIZONTAL);
 	transitionChoice_ = newd wxChoice(summaryBox->GetStaticBox(), wxID_ANY);
 	auto* analyzeButton = newd wxButton(summaryBox->GetStaticBox(), wxID_REFRESH, "Analyze Selection");
@@ -159,6 +162,14 @@ void BorderLearningWindow::BuildLayout() {
 	evidenceActions->Add(resetEvidenceButton_, 0);
 	summaryBox->Add(evidenceActions, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
 	summaryBox->Add(qualityLabel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+	summaryBox->Add(existingMatchLabel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+	summaryBox->Add(validationLabel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+	auto* diagnosticActions = newd wxBoxSizer(wxHORIZONTAL);
+	openExistingButton_ = newd wxButton(summaryBox->GetStaticBox(), wxID_OPEN, "Open Existing Border");
+	goToMismatchButton_ = newd wxButton(summaryBox->GetStaticBox(), wxID_ANY, "Go to First Mismatch");
+	diagnosticActions->Add(openExistingButton_, 0, wxRIGHT, FromDIP(6));
+	diagnosticActions->Add(goToMismatchButton_, 0);
+	summaryBox->Add(diagnosticActions, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
 	rootSizer->Add(summaryBox, 0, wxEXPAND | wxALL, FromDIP(8));
 
 	auto* contentSizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -215,6 +226,8 @@ void BorderLearningWindow::BindEvents() {
 	alternativeChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { RefreshCandidateInspector(); });
 	useCandidateButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { UseSelectedAlternative(); });
 	goToEvidenceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { GoToSelectedEvidence(); });
+	openExistingButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenExistingBorder(); });
+	goToMismatchButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { GoToFirstMismatch(); });
 	openWorkspaceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenInBorderWorkspace(); });
 	FindWindow(wxID_CLOSE)->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Close(); });
 	Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent&) { Destroy(); });
@@ -324,7 +337,45 @@ void BorderLearningWindow::RefreshResult() {
 	openWorkspaceButton_->Enable(result_.assignedSlotCount != 0);
 	addEvidenceButton_->Enable(!session_.empty());
 	resetEvidenceButton_->Enable(session_.getSelectionCount() > 1);
+	RefreshDiagnostics();
 	RefreshSlotInspector();
+}
+
+void BorderLearningWindow::RefreshDiagnostics() {
+	std::vector<BorderLearningBorderDefinition> definitions;
+	definitions.reserve(g_brushes.getBorders().size());
+	for (const auto& [borderId, border] : g_brushes.getBorders()) {
+		if (!border || border->ground) {
+			continue;
+		}
+		BorderLearningBorderDefinition definition;
+		definition.borderId = borderId;
+		for (size_t edgeIndex = NORTH_HORIZONTAL; edgeIndex <= SOUTHWEST_DIAGONAL; ++edgeIndex) {
+			definition.items[edgeIndex] = static_cast<uint16_t>(border->tiles[edgeIndex]);
+		}
+		definitions.push_back(definition);
+	}
+
+	matchedBorderId_ = 0;
+	exactBorderMatch_ = false;
+	const auto matches = BorderLearningAnalyzer::matchExistingBorders(result_, definitions);
+	if (!matches.empty() && (matches.front().exact || (matches.front().matchingSlots >= 3 && matches.front().similarity >= 0.60))) {
+		const auto& best = matches.front();
+		matchedBorderId_ = best.borderId;
+		exactBorderMatch_ = best.exact;
+		if (best.exact) {
+			existingMatchLabel_->SetLabel(wxString::Format("Existing border match: Border %u is an exact duplicate (%zu slots).", best.borderId, best.matchingSlots));
+		} else {
+			existingMatchLabel_->SetLabel(wxString::Format("Existing border match: Border %u is close — %zu/%zu learned slots match (%.0f%%), %zu conflict.", best.borderId, best.matchingSlots, best.learnedSlots, best.similarity * 100.0, best.conflictingSlots));
+		}
+	} else {
+		existingMatchLabel_->SetLabel("Existing border match: no exact or close loaded border found.");
+	}
+	openExistingButton_->Enable(matchedBorderId_ != 0);
+
+	validation_ = BorderLearningAnalyzer::validateLearnedBorder(result_);
+	validationLabel_->SetLabel(wxString::Format("Observed validation: %zu match, %zu mismatch, %zu unresolved (%.0f%% comparable agreement).", validation_.matchedRoles, validation_.mismatchedRoles, validation_.unresolvedRoles, validation_.matchRate * 100.0));
+	goToMismatchButton_->Enable(!validation_.mismatchPositions.empty());
 }
 
 const LearnedBorderSlot* BorderLearningWindow::CurrentSlot() const {
@@ -454,7 +505,39 @@ void BorderLearningWindow::GoToSelectedEvidence() {
 	g_gui.SetScreenCenterPosition(position, true);
 }
 
+void BorderLearningWindow::GoToFirstMismatch() {
+	if (validation_.mismatchPositions.empty()) {
+		return;
+	}
+	const Position position = validation_.mismatchPositions.front();
+	g_gui.ChangeFloor(position.z);
+	g_gui.SetScreenCenterPosition(position, true);
+}
+
+void BorderLearningWindow::OpenExistingBorder() {
+	if (matchedBorderId_ != 0 && BorderWorkspaceWindow::OpenBorder(GetParent(), static_cast<int>(matchedBorderId_))) {
+		Close();
+	}
+}
+
 void BorderLearningWindow::OpenInBorderWorkspace() {
+	if (exactBorderMatch_ && matchedBorderId_ != 0) {
+		wxMessageDialog duplicateDialog(
+			this,
+			wxString::Format("Loaded Border %u already has the same learned slots. Open the existing border instead of creating a duplicate?", matchedBorderId_),
+			"Existing border detected", wxYES_NO | wxCANCEL | wxICON_INFORMATION
+		);
+		duplicateDialog.SetYesNoCancelLabels("Open Existing", "Create New Draft", "Cancel");
+		const int choice = duplicateDialog.ShowModal();
+		if (choice == wxCANCEL) {
+			return;
+		}
+		if (choice == wxYES) {
+			OpenExistingBorder();
+			return;
+		}
+	}
+
 	BorderWorkspaceWindow::Draft draft;
 	for (size_t slotIndex = 0; slotIndex < displayEdges.size(); ++slotIndex) {
 		draft.items[slotIndex] = result_.slots[displayEdges[slotIndex]].itemId;

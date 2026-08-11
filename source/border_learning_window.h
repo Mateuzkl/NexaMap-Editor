@@ -29,10 +29,13 @@ private:
 	void PopulateTransitions();
 	void AnalyzeSelectedTransition();
 	void RefreshResult();
+	void RefreshDiagnostics();
 	void RefreshSlotInspector();
 	void RefreshCandidateInspector();
 	void UseSelectedAlternative();
 	void GoToSelectedEvidence();
+	void GoToFirstMismatch();
+	void OpenExistingBorder();
 	void OpenInBorderWorkspace();
 
 	const LearnedBorderSlot* CurrentSlot() const;
@@ -43,10 +46,15 @@ private:
 	BorderLearningSession session_;
 	std::vector<BorderLearningTransition> transitions_;
 	LearnedBorderResult result_;
+	BorderLearningValidation validation_;
 	BorderType selectedEdge_ = BORDER_NONE;
+	uint32_t matchedBorderId_ = 0;
+	bool exactBorderMatch_ = false;
 
 	wxStaticText* selectionLabel_ = nullptr;
 	wxStaticText* qualityLabel_ = nullptr;
+	wxStaticText* existingMatchLabel_ = nullptr;
+	wxStaticText* validationLabel_ = nullptr;
 	wxChoice* transitionChoice_ = nullptr;
 	wxListCtrl* slotList_ = nullptr;
 	DCButton* itemPreview_ = nullptr;
@@ -58,6 +66,8 @@ private:
 	wxButton* openWorkspaceButton_ = nullptr;
 	wxButton* addEvidenceButton_ = nullptr;
 	wxButton* resetEvidenceButton_ = nullptr;
+	wxButton* openExistingButton_ = nullptr;
+	wxButton* goToMismatchButton_ = nullptr;
 };
 
 #endif

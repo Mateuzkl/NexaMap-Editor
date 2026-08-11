@@ -289,6 +289,75 @@ LearnedBorderResult BorderLearningAnalyzer::inferBorder(
 	return result;
 }
 
+std::vector<BorderLearningExistingMatch> BorderLearningAnalyzer::matchExistingBorders(
+	const LearnedBorderResult& result,
+	const std::vector<BorderLearningBorderDefinition>& definitions
+) {
+	std::vector<BorderLearningExistingMatch> matches;
+	for (const auto& definition : definitions) {
+		BorderLearningExistingMatch match;
+		match.borderId = definition.borderId;
+		for (size_t edgeIndex = NORTH_HORIZONTAL; edgeIndex <= SOUTHWEST_DIAGONAL; ++edgeIndex) {
+			const uint16_t learnedItem = result.slots[edgeIndex].itemId;
+			const uint16_t existingItem = definition.items[edgeIndex];
+			match.learnedSlots += learnedItem != 0 ? 1 : 0;
+			match.existingSlots += existingItem != 0 ? 1 : 0;
+			if (learnedItem == 0) {
+				continue;
+			}
+			if (learnedItem == existingItem) {
+				++match.matchingSlots;
+			} else {
+				++match.conflictingSlots;
+			}
+		}
+		if (match.learnedSlots == 0 || match.matchingSlots == 0) {
+			continue;
+		}
+		match.similarity = static_cast<double>(match.matchingSlots) / match.learnedSlots;
+		match.exact = match.conflictingSlots == 0 && match.learnedSlots == match.existingSlots;
+		matches.push_back(match);
+	}
+
+	std::sort(matches.begin(), matches.end(), [](const BorderLearningExistingMatch& left, const BorderLearningExistingMatch& right) {
+		if (left.exact != right.exact) {
+			return left.exact;
+		}
+		if (std::abs(left.similarity - right.similarity) > 0.000001) {
+			return left.similarity > right.similarity;
+		}
+		if (left.matchingSlots != right.matchingSlots) {
+			return left.matchingSlots > right.matchingSlots;
+		}
+		return left.borderId < right.borderId;
+	});
+	return matches;
+}
+
+BorderLearningValidation BorderLearningAnalyzer::validateLearnedBorder(const LearnedBorderResult& result) {
+	BorderLearningValidation validation;
+	std::set<Position> mismatchPositions;
+	for (const auto& observation : result.boundaryObservations) {
+		for (const BorderType edge : observation.expectedEdges) {
+			if (!isCanonicalBorderType(edge) || result.slots[edge].itemId == 0 || observation.candidateItemIds.empty()) {
+				++validation.unresolvedRoles;
+				continue;
+			}
+			const uint16_t learnedItem = result.slots[edge].itemId;
+			if (std::find(observation.candidateItemIds.begin(), observation.candidateItemIds.end(), learnedItem) != observation.candidateItemIds.end()) {
+				++validation.matchedRoles;
+			} else {
+				++validation.mismatchedRoles;
+				mismatchPositions.insert(observation.position);
+			}
+		}
+	}
+	const size_t comparableRoles = validation.matchedRoles + validation.mismatchedRoles;
+	validation.matchRate = comparableRoles == 0 ? 0.0 : static_cast<double>(validation.matchedRoles) / comparableRoles;
+	validation.mismatchPositions.assign(mismatchPositions.begin(), mismatchPositions.end());
+	return validation;
+}
+
 void BorderLearningSession::clear() noexcept {
 	snapshot_ = BorderLearningSnapshot {};
 	transition_ = BorderLearningTransition {};

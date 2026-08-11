@@ -36,6 +36,7 @@ public:
 
 	static void Open(wxWindow* parent);
 	static void OpenForItems(wxWindow* parent, const std::vector<ItemCount>& items);
+	static bool OpenBorder(wxWindow* parent, int borderId);
 	static bool OpenDraft(wxWindow* parent, const Draft& draft);
 	static bool IsAvailableForCurrentClient();
 

@@ -117,6 +117,29 @@ struct LearnedBorderResult {
 	size_t assignedSlotCount = 0;
 };
 
+struct BorderLearningBorderDefinition {
+	uint32_t borderId = 0;
+	std::array<uint16_t, 13> items {};
+};
+
+struct BorderLearningExistingMatch {
+	uint32_t borderId = 0;
+	size_t matchingSlots = 0;
+	size_t conflictingSlots = 0;
+	size_t learnedSlots = 0;
+	size_t existingSlots = 0;
+	double similarity = 0.0;
+	bool exact = false;
+};
+
+struct BorderLearningValidation {
+	size_t matchedRoles = 0;
+	size_t mismatchedRoles = 0;
+	size_t unresolvedRoles = 0;
+	double matchRate = 0.0;
+	std::vector<Position> mismatchPositions;
+};
+
 using BorderMaskClassifier = std::array<BorderType, 4> (*)(uint8_t);
 
 class BorderLearningAnalyzer {
@@ -127,6 +150,11 @@ public:
 		const BorderLearningTransition& transition,
 		BorderMaskClassifier classifier
 	);
+	static std::vector<BorderLearningExistingMatch> matchExistingBorders(
+		const LearnedBorderResult& result,
+		const std::vector<BorderLearningBorderDefinition>& definitions
+	);
+	static BorderLearningValidation validateLearnedBorder(const LearnedBorderResult& result);
 };
 
 class BorderLearningSession {
