@@ -315,6 +315,10 @@ if(BUILD_TESTING)
 		source/zones.cpp
 	)
 	target_include_directories(zones_tests PRIVATE source)
+	target_link_libraries(zones_tests PRIVATE ${wxWidgets_LIBRARIES})
+	if(MSVC)
+		target_compile_options(zones_tests PRIVATE /utf-8)
+	endif()
 	set_target_properties(zones_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON
