@@ -1818,8 +1818,11 @@ void MainMenuBar::OnMapCleanHouseItems(wxCommandEvent& WXUNUSED(event)) {
 void MainMenuBar::OnMapEditTowns(wxCommandEvent& WXUNUSED(event)) {
 	if (g_gui.GetCurrentEditor()) {
 		wxDialog* town_dialog = newd EditTownsDialog(frame, *g_gui.GetCurrentEditor());
-		town_dialog->ShowModal();
+		const int result = town_dialog->ShowModal();
 		town_dialog->Destroy();
+		if (result != 0) {
+			g_gui.UpdateMenubar();
+		}
 	}
 }
 
