@@ -55,6 +55,8 @@ if(ENABLE_UNITY_BUILD)
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/minimap_import_window.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/png_map_import.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/png_map_import_window.cpp"
 			PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 		)
 		set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -118,6 +120,19 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/minimap_import_tests"
 	)
 	add_test(NAME minimap_import_tests COMMAND minimap_import_tests)
+
+	add_executable(png_map_import_tests
+		tests/png_map_import_tests.cpp
+		source/png_map_import.cpp
+	)
+	target_include_directories(png_map_import_tests PRIVATE source)
+	set_target_properties(png_map_import_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/png_map_import_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/png_map_import_tests"
+	)
+	add_test(NAME png_map_import_tests COMMAND png_map_import_tests)
 
 	add_executable(border_topology_tests
 		tests/border_topology_tests.cpp

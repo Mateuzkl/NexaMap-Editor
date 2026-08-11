@@ -323,12 +323,22 @@
     <ClInclude Include="..\..\source\minimap_format.h" />
     <ClInclude Include="..\..\source\minimap_import.h" />
     <ClInclude Include="..\..\source\minimap_import_window.h" />
+    <ClInclude Include="..\..\source\png_map_import.h" />
+    <ClInclude Include="..\..\source\png_map_import_window.h" />
     <ClCompile Include="..\..\source\extension.cpp" />
     <ClCompile Include="..\..\source\extension_window.cpp" />
     <ClCompile Include="..\..\source\filehandle.cpp" />
     <ClCompile Include="..\..\source\iominimap.cpp" />
     <ClCompile Include="..\..\source\minimap_import.cpp" />
     <ClCompile Include="..\..\source\minimap_import_window.cpp" />
+    <ClCompile Include="..\..\source\png_map_import.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\png_map_import_window.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
     <ClInclude Include="..\..\source\ground_brush.h" />
     <ClCompile Include="..\..\source\ground_brush.cpp" />
     <ClInclude Include="..\..\source\house_brush.h" />

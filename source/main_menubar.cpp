@@ -30,6 +30,7 @@
 #include "materials_workbench_window.h"
 #include "map_item_id_converter_window.h"
 #include "minimap_import_window.h"
+#include "png_map_import_window.h"
 #include "map_display.h"
 #include "map_tab.h"
 #include "procedural_map_generator_window.h"
@@ -65,6 +66,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 
 	MAKE_ACTION(IMPORT_MAP, wxITEM_NORMAL, OnImportMap);
 	MAKE_ACTION(IMPORT_MINIMAP, wxITEM_NORMAL, OnImportMinimap);
+	MAKE_ACTION(IMPORT_PNG_MAP, wxITEM_NORMAL, OnImportPngMap);
 	MAKE_ACTION(CLEAR_MINIMAP_OVERLAY, wxITEM_NORMAL, OnClearMinimapOverlay);
 	MAKE_ACTION(MAP_ITEM_ID_CONVERTER, wxITEM_NORMAL, OnMapItemIdConverter);
 	MAKE_ACTION(PROCEDURAL_MAP_GENERATOR, wxITEM_NORMAL, OnProceduralMapGenerator);
@@ -355,6 +357,7 @@ void MainMenuBar::Update() {
 
 	EnableItem(IMPORT_MAP, is_local);
 	EnableItem(IMPORT_MINIMAP, loaded);
+	EnableItem(IMPORT_PNG_MAP, loaded);
 	EnableItem(CLEAR_MINIMAP_OVERLAY, has_map && g_gui.GetCurrentMapTab()->GetCanvas()->HasMinimapImportOverlay());
 	EnableItem(MAP_ITEM_ID_CONVERTER, loaded);
 	EnableItem(PROCEDURAL_MAP_GENERATOR, loaded && has_map);
@@ -800,6 +803,10 @@ void MainMenuBar::OnImportMap(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnImportMinimap(wxCommandEvent& WXUNUSED(event)) {
 	RunMinimapImport(frame);
+}
+
+void MainMenuBar::OnImportPngMap(wxCommandEvent& WXUNUSED(event)) {
+	RunPngMapImport(frame);
 }
 
 void MainMenuBar::OnClearMinimapOverlay(wxCommandEvent& WXUNUSED(event)) {
