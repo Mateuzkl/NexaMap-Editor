@@ -96,6 +96,11 @@ BorderLearningSnapshot BorderLearningScanner::capture(const Selection& selection
 				itemType.isBorder,
 				itemType.alwaysOnBottom,
 				itemType.isWall,
+				itemType.doodad_brush != nullptr,
+				itemType.isMetaItem() || itemType.isTeleport() || itemType.isDoor(),
+				itemType.isOptionalBorder,
+				itemType.border_alignment,
+				itemType.border_group,
 			});
 		}
 
