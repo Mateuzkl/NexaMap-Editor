@@ -7,10 +7,12 @@
 
 class DCButton;
 class Editor;
+class wxBoxSizer;
 class wxButton;
 class wxChoice;
 class wxListBox;
 class wxListCtrl;
+class wxScrolledWindow;
 class wxStaticText;
 
 class BorderLearningWindow final : public wxDialog {
@@ -29,9 +31,12 @@ private:
 	void PopulateTransitions();
 	void AnalyzeSelectedTransition();
 	void RefreshResult();
+	void RefreshSpritePreviews();
+	void RefreshObservedSprites();
 	void RefreshDiagnostics();
 	void RefreshSlotInspector();
 	void RefreshCandidateInspector();
+	void SelectEdge(BorderType edge);
 	void UseSelectedAlternative();
 	void GoToSelectedEvidence();
 	void GoToFirstMismatch();
@@ -57,6 +62,10 @@ private:
 	wxStaticText* validationLabel_ = nullptr;
 	wxChoice* transitionChoice_ = nullptr;
 	wxListCtrl* slotList_ = nullptr;
+	std::array<DCButton*, 12> slotPreviewButtons_ {};
+	std::array<wxStaticText*, 12> slotPreviewLabels_ {};
+	wxScrolledWindow* observedSpritesPanel_ = nullptr;
+	wxBoxSizer* observedSpritesSizer_ = nullptr;
 	DCButton* itemPreview_ = nullptr;
 	wxStaticText* itemLabel_ = nullptr;
 	wxChoice* alternativeChoice_ = nullptr;

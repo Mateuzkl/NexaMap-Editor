@@ -27,7 +27,7 @@ namespace {
 	}
 
 	bool isCandidateItem(const BorderLearningItem& item) {
-		return !item.wall && !item.technical && (!item.doodad || item.knownBorder);
+		return !item.wall && !item.technical;
 	}
 
 	struct CandidateStats {

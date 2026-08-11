@@ -28,10 +28,11 @@ namespace {
 		return { BORDER_NONE, BORDER_NONE, BORDER_NONE, BORDER_NONE };
 	}
 
-	BorderLearningItem makeItem(uint16_t itemId, bool alwaysOnBottom = false) {
+	BorderLearningItem makeItem(uint16_t itemId, bool alwaysOnBottom = false, bool doodad = false) {
 		BorderLearningItem item;
 		item.itemId = itemId;
 		item.alwaysOnBottom = alwaysOnBottom;
+		item.doodad = doodad;
 		return item;
 	}
 
@@ -82,7 +83,7 @@ int main() {
 	for (int index = 0; index < 5; ++index) {
 		auto tile = makeTile(200, 200 + index, 0);
 		tile.neighbourFamilies[4] = 1;
-		tile.items.push_back(makeItem(500, true));
+		tile.items.push_back(makeItem(500, true, true));
 		inferenceSnapshot.tiles.push_back(std::move(tile));
 	}
 	auto weakTile = makeTile(210, 210, 0);

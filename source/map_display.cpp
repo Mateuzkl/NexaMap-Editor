@@ -37,6 +37,7 @@
 #include "map_drawer.h"
 #include "application.h"
 #include "border_workspace_window.h"
+#include "border_learning_window.h"
 #include "procedural_map_generator_window.h"
 #include "browse_tile_window.h"
 #include "theme.h"
@@ -179,6 +180,7 @@ EVT_MENU(MAP_POPUP_MENU_SWITCH_DOOR, MapCanvas::OnSwitchDoor)
 EVT_MENU(MAP_POPUP_MENU_SELECT_RAW_BRUSH, MapCanvas::OnSelectRAWBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_GROUND_BRUSH, MapCanvas::OnSelectGroundBrush)
 EVT_MENU(MAP_POPUP_MENU_OPEN_BORDER_WORKSPACE, MapCanvas::OnOpenBorderWorkspace)
+EVT_MENU(MAP_POPUP_MENU_LEARN_BORDER_SELECTION, MapCanvas::OnLearnBorderSelection)
 EVT_MENU(MAP_POPUP_MENU_PROCEDURAL_GENERATOR, MapCanvas::OnProceduralMapGenerator)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOODAD_BRUSH, MapCanvas::OnSelectDoodadBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_COLLECTION_BRUSH, MapCanvas::OnSelectCollectionBrush)
@@ -2398,6 +2400,10 @@ void MapCanvas::OnOpenBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {
 	BorderWorkspaceWindow::OpenForItems(this, items);
 }
 
+void MapCanvas::OnLearnBorderSelection(wxCommandEvent& WXUNUSED(event)) {
+	BorderLearningWindow::Open(this, editor, GetFloor());
+}
+
 void MapCanvas::OnProceduralMapGenerator(wxCommandEvent& WXUNUSED(event)) {
 	static_cast<void>(RunProceduralMapGenerator(g_gui.root, editor, GetFloor()));
 }
@@ -2936,6 +2942,11 @@ void MapPopupMenu::Update() {
 			"Locate selected border items in Border Workspace"
 		);
 		borderWorkspace->Enable(SelectionHasItems(editor) && BorderWorkspaceWindow::IsAvailableForCurrentClient());
+		Append(
+			MAP_POPUP_MENU_LEARN_BORDER_SELECTION,
+			"Learn Border from Selection...",
+			"Analyze selected terrain and collect border sprite candidates"
+		);
 	}
 	AppendSeparator();
 	Append(

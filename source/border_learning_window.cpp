@@ -14,12 +14,15 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <set>
+#include <utility>
 
 #include <wx/button.h>
 #include <wx/choice.h>
 #include <wx/listbox.h>
 #include <wx/listctrl.h>
 #include <wx/msgdlg.h>
+#include <wx/scrolwin.h>
 #include <wx/sizer.h>
 #include <wx/statbox.h>
 #include <wx/stattext.h>
@@ -45,6 +48,7 @@ namespace {
 		SOUTH_HORIZONTAL,
 		SOUTHEAST_CORNER,
 	};
+	constexpr std::array<std::pair<int, int>, 12> displayGridPositions = { { { 4, 4 }, { 4, 2 }, { 4, 0 }, { 3, 3 }, { 3, 1 }, { 2, 4 }, { 2, 0 }, { 1, 3 }, { 1, 1 }, { 0, 4 }, { 0, 2 }, { 0, 0 } } };
 
 	const char* EdgeName(BorderType edge) {
 		switch (edge) {
@@ -125,7 +129,7 @@ void BorderLearningWindow::Open(wxWindow* parent, Editor& editor, int floor) {
 }
 
 BorderLearningWindow::BorderLearningWindow(wxWindow* parent, Editor& editor, BorderLearningSnapshot snapshot) :
-	wxDialog(parent, wxID_ANY, "Border Learning", wxDefaultPosition, wxSize(920, 700), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+	wxDialog(parent, wxID_ANY, "Border Learning", wxDefaultPosition, wxSize(1180, 780), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	editor_(&editor),
 	snapshot_(std::move(snapshot)) {
 	BuildLayout();
@@ -181,9 +185,39 @@ void BorderLearningWindow::BuildLayout() {
 	slotList_->AppendColumn("Status", wxLIST_FORMAT_LEFT, FromDIP(115));
 	contentSizer->Add(slotList_, 1, wxEXPAND | wxRIGHT, FromDIP(8));
 
+	auto* previewBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Learned border sprites");
+	auto* previewGrid = newd wxGridSizer(5, 5, FromDIP(3), FromDIP(3));
+	for (int row = 0; row < 5; ++row) {
+		for (int col = 0; col < 5; ++col) {
+			int slotIndex = -1;
+			for (int index = 0; index < static_cast<int>(displayGridPositions.size()); ++index) {
+				if (displayGridPositions[index] == std::make_pair(row, col)) {
+					slotIndex = index;
+					break;
+				}
+			}
+			auto* cell = newd wxPanel(previewBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, FromDIP(wxSize(60, 55)));
+			auto* cellSizer = newd wxBoxSizer(wxVERTICAL);
+			if (slotIndex >= 0) {
+				slotPreviewButtons_[slotIndex] = newd DCButton(cell, wxID_ANY, wxDefaultPosition, DC_BTN_TOGGLE, RENDER_SIZE_32x32, 0);
+				slotPreviewLabels_[slotIndex] = newd wxStaticText(cell, wxID_ANY, "empty", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
+				cellSizer->Add(slotPreviewButtons_[slotIndex], 0, wxALIGN_CENTER);
+				cellSizer->Add(slotPreviewLabels_[slotIndex], 0, wxALIGN_CENTER | wxTOP, FromDIP(1));
+			} else if (row == 2 && col == 2) {
+				cellSizer->AddStretchSpacer();
+				cellSizer->Add(newd wxStaticText(cell, wxID_ANY, "GROUND", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL), 0, wxALIGN_CENTER);
+				cellSizer->AddStretchSpacer();
+			}
+			cell->SetSizer(cellSizer);
+			previewGrid->Add(cell, 0, wxEXPAND);
+		}
+	}
+	previewBox->Add(previewGrid, 0, wxALL, FromDIP(5));
+	contentSizer->Add(previewBox, 0, wxEXPAND | wxRIGHT, FromDIP(8));
+
 	auto* inspectorBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Selected slot evidence");
 	auto* itemRow = newd wxBoxSizer(wxHORIZONTAL);
-	itemPreview_ = newd DCButton(inspectorBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_64x64, 0);
+	itemPreview_ = newd DCButton(inspectorBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_32x32, 0);
 	itemLabel_ = newd wxStaticText(inspectorBox->GetStaticBox(), wxID_ANY, "Select a slot.");
 	itemLabel_->Wrap(FromDIP(220));
 	itemRow->Add(itemPreview_, 0, wxRIGHT, FromDIP(8));
@@ -202,6 +236,14 @@ void BorderLearningWindow::BuildLayout() {
 	contentSizer->Add(inspectorBox, 0, wxEXPAND);
 	rootSizer->Add(contentSizer, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 
+	auto* observedBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Observed boundary item sprites");
+	observedSpritesPanel_ = newd wxScrolledWindow(observedBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, wxSize(-1, FromDIP(82)), wxHSCROLL | wxBORDER_NONE);
+	observedSpritesPanel_->SetScrollRate(FromDIP(8), FromDIP(8));
+	observedSpritesSizer_ = newd wxBoxSizer(wxHORIZONTAL);
+	observedSpritesPanel_->SetSizer(observedSpritesSizer_);
+	observedBox->Add(observedSpritesPanel_, 1, wxEXPAND | wxALL, FromDIP(5));
+	rootSizer->Add(observedBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+
 	auto* buttons = newd wxBoxSizer(wxHORIZONTAL);
 	openWorkspaceButton_ = newd wxButton(this, wxID_FORWARD, "Open in Border Workspace");
 	buttons->Add(openWorkspaceButton_, 0);
@@ -210,7 +252,7 @@ void BorderLearningWindow::BuildLayout() {
 	rootSizer->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 
 	SetSizer(rootSizer);
-	SetMinSize(FromDIP(wxSize(760, 560)));
+	SetMinSize(FromDIP(wxSize(980, 640)));
 	Layout();
 }
 
@@ -220,9 +262,11 @@ void BorderLearningWindow::BindEvents() {
 	resetEvidenceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ResetEvidence(); });
 	transitionChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { AnalyzeSelectedTransition(); });
 	slotList_->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent& event) {
-		selectedEdge_ = static_cast<BorderType>(slotList_->GetItemData(event.GetIndex()));
-		RefreshSlotInspector();
+		SelectEdge(static_cast<BorderType>(slotList_->GetItemData(event.GetIndex())));
 	});
+	for (size_t index = 0; index < slotPreviewButtons_.size(); ++index) {
+		slotPreviewButtons_[index]->Bind(wxEVT_TOGGLEBUTTON, [this, index](wxCommandEvent&) { SelectEdge(displayEdges[index]); });
+	}
 	alternativeChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { RefreshCandidateInspector(); });
 	useCandidateButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { UseSelectedAlternative(); });
 	goToEvidenceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { GoToSelectedEvidence(); });
@@ -337,7 +381,68 @@ void BorderLearningWindow::RefreshResult() {
 	openWorkspaceButton_->Enable(result_.assignedSlotCount != 0);
 	addEvidenceButton_->Enable(!session_.empty());
 	resetEvidenceButton_->Enable(session_.getSelectionCount() > 1);
+	RefreshSpritePreviews();
+	RefreshObservedSprites();
 	RefreshDiagnostics();
+	RefreshSlotInspector();
+}
+
+void BorderLearningWindow::RefreshSpritePreviews() {
+	for (size_t index = 0; index < displayEdges.size(); ++index) {
+		const BorderType edge = displayEdges[index];
+		const auto& slot = result_.slots[edge];
+		const uint16_t itemId = slot.itemId != 0 ? slot.itemId : (!slot.alternatives.empty() ? slot.alternatives.front().itemId : 0);
+		const bool suggested = slot.itemId == 0 && itemId != 0;
+		slotPreviewButtons_[index]->SetSprite(ItemSpriteId(itemId));
+		slotPreviewButtons_[index]->SetValue(edge == selectedEdge_);
+		slotPreviewLabels_[index]->SetLabel(itemId == 0 ? wxString("empty") : wxString::Format(suggested ? "%u ?" : "%u", itemId));
+		slotPreviewButtons_[index]->SetToolTip(itemId == 0 ? wxString::Format("Slot %s: no candidate", EdgeName(edge)) : wxString::Format("Slot %s: Server ID %u%s", EdgeName(edge), itemId, suggested ? " (candidate)" : ""));
+	}
+}
+
+void BorderLearningWindow::RefreshObservedSprites() {
+	std::set<uint16_t> observedItemIds(result_.unclassifiedItemIds.begin(), result_.unclassifiedItemIds.end());
+	for (const auto& slot : result_.slots) {
+		for (const auto& candidate : slot.alternatives) {
+			observedItemIds.insert(candidate.itemId);
+		}
+	}
+
+	observedSpritesPanel_->Freeze();
+	observedSpritesSizer_->Clear(true);
+	if (observedItemIds.empty()) {
+		observedSpritesSizer_->Add(newd wxStaticText(observedSpritesPanel_, wxID_ANY, "No candidate items were observed on this transition boundary."), 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(8));
+	} else {
+		for (const uint16_t itemId : observedItemIds) {
+			auto* cell = newd wxPanel(observedSpritesPanel_, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(62, 62)));
+			auto* cellSizer = newd wxBoxSizer(wxVERTICAL);
+			auto* sprite = newd DCButton(cell, wxID_ANY, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_32x32, ItemSpriteId(itemId));
+			auto* label = newd wxStaticText(cell, wxID_ANY, wxString::Format("%u", itemId), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
+			const uint16_t clientId = g_items.typeExists(itemId) ? g_items[itemId].clientID : 0;
+			const wxString tooltip = wxString::Format("Server ID %u, Client ID %u", itemId, clientId);
+			sprite->SetToolTip(tooltip);
+			label->SetToolTip(tooltip);
+			cellSizer->Add(sprite, 0, wxALIGN_CENTER);
+			cellSizer->Add(label, 0, wxALIGN_CENTER | wxTOP, FromDIP(1));
+			cell->SetSizer(cellSizer);
+			observedSpritesSizer_->Add(cell, 0, wxRIGHT, FromDIP(5));
+		}
+	}
+	observedSpritesPanel_->Layout();
+	observedSpritesPanel_->FitInside();
+	observedSpritesPanel_->Thaw();
+}
+
+void BorderLearningWindow::SelectEdge(BorderType edge) {
+	if (edge < NORTH_HORIZONTAL || edge > SOUTHWEST_DIAGONAL) {
+		return;
+	}
+	selectedEdge_ = edge;
+	for (long row = 0; row < slotList_->GetItemCount(); ++row) {
+		const bool selected = slotList_->GetItemData(row) == edge;
+		slotList_->SetItemState(row, selected ? wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED : 0, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
+	}
+	RefreshSpritePreviews();
 	RefreshSlotInspector();
 }
 
@@ -482,12 +587,7 @@ void BorderLearningWindow::UseSelectedAlternative() {
 		result_.unclassifiedItemIds.end()
 	);
 	RefreshResult();
-	for (long row = 0; row < slotList_->GetItemCount(); ++row) {
-		if (slotList_->GetItemData(row) == selectedEdge_) {
-			slotList_->SetItemState(row, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
-			break;
-		}
-	}
+	SelectEdge(selectedEdge_);
 }
 
 void BorderLearningWindow::GoToSelectedEvidence() {
