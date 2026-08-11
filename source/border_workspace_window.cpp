@@ -419,16 +419,34 @@ void BorderWorkspaceWindow::BuildLayout() {
 }
 
 void BorderWorkspaceWindow::BindEvents() {
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenMaterialsFile(); }, wxID_OPEN);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { if (!rootMaterialsPath_.IsEmpty() && ResolvePendingChanges("reload")){ LoadCatalog(rootMaterialsPath_);
-} }, wxID_REFRESH);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CreateBorder(); }, wxID_NEW);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { DeleteCurrentBorder(); }, wxID_DELETE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { PickSelectedItem(); }, wxID_FIND);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ApplySelectedItem(); }, wxID_APPLY);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { selectedItemCtrl_->SetValue(0); ApplySelectedItem(); }, wxID_CLEAR);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SaveCurrentBorder(); }, wxID_SAVE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RevertCurrentBorder(); }, wxID_REVERT);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { OpenMaterialsFile(); }, wxID_OPEN
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { if (!rootMaterialsPath_.IsEmpty() && ResolvePendingChanges("reload")){ LoadCatalog(rootMaterialsPath_);
+} }, wxID_REFRESH
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { CreateBorder(); }, wxID_NEW
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { DeleteCurrentBorder(); }, wxID_DELETE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { PickSelectedItem(); }, wxID_FIND
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ApplySelectedItem(); }, wxID_APPLY
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { selectedItemCtrl_->SetValue(0); ApplySelectedItem(); }, wxID_CLEAR
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { SaveCurrentBorder(); }, wxID_SAVE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { RevertCurrentBorder(); }, wxID_REVERT
+	);
 	Bind(wxEVT_CLOSE_WINDOW, &BorderWorkspaceWindow::OnClose, this);
 	filterCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { PopulateBorderList(); });
 	borderList_->Bind(wxEVT_LISTBOX, [this](wxCommandEvent&) {
@@ -602,8 +620,7 @@ bool BorderWorkspaceWindow::OpenItems(const std::vector<ItemCount>& items) {
 			if (!record.description.IsEmpty()) {
 				label << " - " << record.description;
 			}
-			label << wxString::Format(" | %s | %s | %llu match%s", EdgeLabel(choice.slot), record.sourceName,
-				static_cast<unsigned long long>(choice.count), choice.count == 1 ? "" : "es");
+			label << wxString::Format(" | %s | %s | %llu match%s", EdgeLabel(choice.slot), record.sourceName, static_cast<unsigned long long>(choice.count), choice.count == 1 ? "" : "es");
 			labels.Add(label);
 		}
 		const wxString prompt = totalItems == 1
@@ -850,9 +867,7 @@ void BorderWorkspaceWindow::RefreshWorkspace() {
 	}
 	const BorderRecord& record = records_[currentRecord_];
 	headingLabel_->SetLabel(wxString::Format("Border Workspace — Border %d%s", record.id, dirty_ ? " *" : ""));
-	sourceLabel_->SetLabel(record.sourceIndex < 0
-		? wxString::Format("Unsaved learned draft; target XML: %s", record.sourcePath)
-		: wxString::Format("Editing XML directly: %s", record.sourcePath));
+	sourceLabel_->SetLabel(record.sourceIndex < 0 ? wxString::Format("Unsaved learned draft; target XML: %s", record.sourcePath) : wxString::Format("Editing XML directly: %s", record.sourcePath));
 	sourceLabel_->SetToolTip(record.sourcePath);
 	for (int i = 0; i < 12; ++i) {
 		RefreshSlot(i);

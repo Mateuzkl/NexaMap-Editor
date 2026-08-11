@@ -1639,11 +1639,20 @@ void MapDrawer::DrawIngamePreviewPlayer() {
 	int tipX = centerX;
 	int tipY = centerY;
 	switch (canvas->ingamePreviewPlayerDirection) {
-		case NORTH: tipY -= 12; break;
-		case EAST: tipX += 12; break;
-		case SOUTH: tipY += 12; break;
-		case WEST: tipX -= 12; break;
-		default: break;
+		case NORTH:
+			tipY -= 12;
+			break;
+		case EAST:
+			tipX += 12;
+			break;
+		case SOUTH:
+			tipY += 12;
+			break;
+		case WEST:
+			tipX -= 12;
+			break;
+		default:
+			break;
 	}
 	const float directionLine[] = {
 		static_cast<float>(centerX), static_cast<float>(centerY), static_cast<float>(tipX), static_cast<float>(tipY)
