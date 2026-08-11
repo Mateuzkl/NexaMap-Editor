@@ -109,17 +109,15 @@ std::pair<int, int> PngMapImportDocument::getOutputSize(const PngImportOptions& 
 	return { scaledWidth, scaledHeight };
 }
 
-uint64_t PngMapImportDocument::countMappedTiles(const ColorMapping& mappings, const PngImportOptions& options) const {
-	uint64_t count = 0;
-	std::string error;
-	forEachMappedTile(
+bool PngMapImportDocument::countMappedTiles(const ColorMapping& mappings, const PngImportOptions& options, uint64_t& count, std::string& error) const {
+	count = 0;
+	return forEachMappedTile(
 		mappings, options, [&count](const PngImportTile&, uint64_t, uint64_t) {
 			++count;
 			return true;
 		},
 		error
 	);
-	return count;
 }
 
 bool PngMapImportDocument::forEachMappedTile(const ColorMapping& mappings, const PngImportOptions& options, const TileCallback& callback, std::string& error) const {

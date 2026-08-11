@@ -62,7 +62,7 @@ public:
 	const std::vector<PngImportColor>& getColors() const;
 
 	std::pair<int, int> getOutputSize(const PngImportOptions& options) const;
-	uint64_t countMappedTiles(const ColorMapping& mappings, const PngImportOptions& options) const;
+	bool countMappedTiles(const ColorMapping& mappings, const PngImportOptions& options, uint64_t& count, std::string& error) const;
 	bool forEachMappedTile(const ColorMapping& mappings, const PngImportOptions& options, const TileCallback& callback, std::string& error) const;
 
 private:

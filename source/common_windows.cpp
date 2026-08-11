@@ -1594,14 +1594,14 @@ void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		town_list.clear();
 		editor.map.doChange();
 
-		EndModal(1);
+		EndModal(wxID_OK);
 		g_gui.RefreshPalettes();
 	}
 }
 
 void EditTownsDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
 	// Just close this window
-	EndModal(0);
+	EndModal(wxID_CANCEL);
 }
 
 // ============================================================================

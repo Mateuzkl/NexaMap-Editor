@@ -105,8 +105,9 @@ namespace {
 		}
 		const int result = wxMessageBox(
 			wxString::Format(
-				"This PNG contains %llu opaque colors. Mapping every shade would create an impractical list.\n\nSimplify it to at most 216 colors now?",
-				static_cast<unsigned long long>(document.getColors().size())
+				"This PNG contains %llu opaque colors, but exact mode supports at most %llu.\n\nSimplify the colors now?",
+				static_cast<unsigned long long>(document.getColors().size()),
+				static_cast<unsigned long long>(maximumExactColors)
 			),
 			"Simplify PNG Colors", wxYES_NO | wxYES_DEFAULT | wxICON_QUESTION, parent
 		);
@@ -367,7 +368,7 @@ namespace {
 			if (selection == 0) {
 				document_->restoreOriginalColors();
 				if (document_->getColors().size() > maximumExactColors) {
-					wxMessageBox("Exact mode exceeds 256 colors. The palette was kept at 216 colors so every color remains editable.", "PNG Color Palette", wxOK | wxICON_INFORMATION, this);
+					wxMessageBox(wxString::Format("Exact mode supports at most %llu colors. The palette was simplified so every color remains editable.", static_cast<unsigned long long>(maximumExactColors)), "PNG Color Palette", wxOK | wxICON_INFORMATION, this);
 					std::string error;
 					document_->quantizeColors(6, error);
 					palette_->SetSelection(1);
@@ -568,13 +569,7 @@ namespace {
 			}
 			std::string error;
 			uint64_t mappedTiles = 0;
-			if (!document_->forEachMappedTile(
-					mappings_, options, [&mappedTiles](const PngImportTile&, uint64_t, uint64_t) {
-						++mappedTiles;
-						return true;
-					},
-					error
-				)) {
+			if (!document_->countMappedTiles(mappings_, options, mappedTiles, error)) {
 				wxMessageBox(wxstr(error), "Import PNG", wxOK | wxICON_ERROR, this);
 				return;
 			}
@@ -599,6 +594,7 @@ namespace {
 			uint64_t changed = 0;
 			std::string error;
 			bool success = false;
+			bool cancelledByUser = false;
 			try {
 				success = document_->forEachMappedTile(
 					mappings_, options, [&](const PngImportTile& imported, uint64_t, uint64_t) {
@@ -607,7 +603,10 @@ namespace {
 						tile->update();
 						++changed;
 						if ((changed & 4095) == 0 || changed == mappedTiles) {
-							return progress.Update(static_cast<int>(changed * 100 / std::max<uint64_t>(1, mappedTiles)));
+							if (!progress.Update(static_cast<int>(changed * 100 / std::max<uint64_t>(1, mappedTiles)))) {
+								cancelledByUser = true;
+								return false;
+							}
 						}
 						return true;
 					},
@@ -621,9 +620,8 @@ namespace {
 			if (!success) {
 				editor.map.clear(true);
 				editor.map.clearChanges();
-				const bool cancelled = error == "PNG import was cancelled.";
-				const wxString message = cancelled ? wxString("PNG import cancelled. The incomplete new map was cleared.") : wxstr(error);
-				wxMessageBox(message, "Import PNG", wxOK | (cancelled ? wxICON_INFORMATION : wxICON_ERROR), this);
+				const wxString message = cancelledByUser ? wxString("PNG import cancelled. The incomplete new map was cleared.") : wxstr(error);
+				wxMessageBox(message, "Import PNG", wxOK | (cancelledByUser ? wxICON_INFORMATION : wxICON_ERROR), this);
 				return false;
 			}
 			progress.Update(100);
@@ -662,6 +660,7 @@ namespace {
 			uint64_t visited = 0;
 			std::string error;
 			bool success = false;
+			bool cancelledByUser = false;
 			try {
 				success = document_->forEachMappedTile(
 					mappings_, options, [&](const PngImportTile& imported, uint64_t, uint64_t) {
@@ -681,7 +680,10 @@ namespace {
 							}
 						}
 						if ((visited & 4095) == 0 || visited == mappedTiles) {
-							return progress.Update(static_cast<int>(visited * 100 / std::max<uint64_t>(1, mappedTiles)));
+							if (!progress.Update(static_cast<int>(visited * 100 / std::max<uint64_t>(1, mappedTiles)))) {
+								cancelledByUser = true;
+								return false;
+							}
 						}
 						return true;
 					},
@@ -694,9 +696,8 @@ namespace {
 			}
 			if (!success) {
 				batch->rollback();
-				const bool cancelled = error == "PNG import was cancelled.";
-				const wxString message = cancelled ? wxString("PNG import cancelled. All committed chunks were rolled back.") : wxstr(error);
-				wxMessageBox(message, "Import PNG", wxOK | (cancelled ? wxICON_INFORMATION : wxICON_ERROR), this);
+				const wxString message = cancelledByUser ? wxString("PNG import cancelled. All committed chunks were rolled back.") : wxstr(error);
+				wxMessageBox(message, "Import PNG", wxOK | (cancelledByUser ? wxICON_INFORMATION : wxICON_ERROR), this);
 				return;
 			}
 			batch->addAndCommitAction(action.release());

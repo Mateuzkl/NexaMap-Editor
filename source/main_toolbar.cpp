@@ -583,15 +583,27 @@ void MainToolBar::RefreshCityChoices(Editor* editor) {
 		return left.id < right.id;
 	});
 
+	uint32_t selectedCityId = 0;
+	const int previousSelection = city_control->GetSelection();
+	if (previousSelection > 0 && previousSelection <= static_cast<int>(city_ids.size())) {
+		selectedCityId = city_ids[previousSelection - 1];
+	}
+
 	city_control->Freeze();
 	city_control->Clear();
+	city_ids.clear();
 	city_positions.clear();
 	city_control->Append("City");
+	int restoredSelection = 0;
 	for (const CityEntry& city : cities) {
 		city_control->Append(wxstr(city.name));
+		city_ids.push_back(city.id);
 		city_positions.push_back(city.position);
+		if (city.id == selectedCityId) {
+			restoredSelection = static_cast<int>(city_ids.size());
+		}
 	}
-	city_control->SetSelection(0);
+	city_control->SetSelection(restoredSelection);
 	city_control->Enable(editor != nullptr && !city_positions.empty());
 	city_control->Thaw();
 }

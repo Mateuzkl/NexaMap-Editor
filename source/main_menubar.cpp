@@ -1827,7 +1827,7 @@ void MainMenuBar::OnMapEditTowns(wxCommandEvent& WXUNUSED(event)) {
 		wxDialog* town_dialog = newd EditTownsDialog(frame, *g_gui.GetCurrentEditor());
 		const int result = town_dialog->ShowModal();
 		town_dialog->Destroy();
-		if (result != 0) {
+		if (result == wxID_OK) {
 			g_gui.UpdateMenubar();
 		}
 	}

@@ -65,6 +65,7 @@ private:
 	wxAuiToolBar* brushes_toolbar;
 	wxAuiToolBar* position_toolbar;
 	wxChoice* city_control;
+	std::vector<uint32_t> city_ids;
 	std::vector<Position> city_positions;
 	NumberTextCtrl* x_control;
 	NumberTextCtrl* y_control;

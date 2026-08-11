@@ -13,6 +13,7 @@
 #include "../item.h"
 #include "../tile.h"
 
+#include <cassert>
 #include <memory>
 #include <random>
 #include <typeinfo>
@@ -132,6 +133,7 @@ namespace {
 		}
 
 		void ApplyItems(ItemVector& items, const std::vector<PlannedItem>& plans) const {
+			assert(items.size() == plans.size());
 			ItemVector promotedContents;
 			auto iterator = items.begin();
 			for (const PlannedItem& plan : plans) {
