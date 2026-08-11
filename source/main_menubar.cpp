@@ -25,6 +25,7 @@
 #include "result_window.h"
 #include "extension_window.h"
 #include "find_item_window.h"
+#include "border_learning_window.h"
 #include "border_workspace_window.h"
 #include "materials_workbench_window.h"
 #include "map_item_id_converter_window.h"
@@ -185,6 +186,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
 	MAKE_ACTION(MATERIALS_WORKBENCH, wxITEM_NORMAL, OnMaterialsWorkbench);
 	MAKE_ACTION(BORDER_WORKSPACE, wxITEM_NORMAL, OnBorderWorkspace);
+	MAKE_ACTION(LEARN_BORDER_SELECTION, wxITEM_NORMAL, OnLearnBorderSelection);
 
 	MAKE_ACTION(SELECT_TERRAIN, wxITEM_NORMAL, OnSelectTerrainPalette);
 	MAKE_ACTION(SELECT_DOODAD, wxITEM_NORMAL, OnSelectDoodadPalette);
@@ -421,6 +423,7 @@ void MainMenuBar::Update() {
 	EnableItem(NEW_PALETTE, loaded);
 	EnableItem(MATERIALS_WORKBENCH, loaded);
 	EnableItem(BORDER_WORKSPACE, loaded);
+	EnableItem(LEARN_BORDER_SELECTION, loaded && has_map && has_selection);
 	EnableItem(SELECT_TERRAIN, loaded);
 	EnableItem(SELECT_DOODAD, loaded);
 	EnableItem(SELECT_ITEM, loaded);
@@ -2201,6 +2204,14 @@ void MainMenuBar::OnMaterialsWorkbench(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {
 	BorderWorkspaceWindow::Open(frame);
+}
+
+void MainMenuBar::OnLearnBorderSelection(wxCommandEvent& WXUNUSED(event)) {
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) {
+		return;
+	}
+	BorderLearningWindow::Open(frame, *editor, g_gui.GetCurrentFloor());
 }
 
 void MainMenuBar::OnSelectTerrainPalette(wxCommandEvent& WXUNUSED(event)) {

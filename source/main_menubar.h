@@ -138,6 +138,7 @@ namespace MenuBar {
 		TAKE_SCREENSHOT,
 		MATERIALS_WORKBENCH,
 		BORDER_WORKSPACE,
+		LEARN_BORDER_SELECTION,
 		SELECT_TERRAIN,
 		SELECT_DOODAD,
 		SELECT_ITEM,
@@ -300,6 +301,7 @@ public:
 	void OnTakeScreenshot(wxCommandEvent& event);
 	void OnMaterialsWorkbench(wxCommandEvent& event);
 	void OnBorderWorkspace(wxCommandEvent& event);
+	void OnLearnBorderSelection(wxCommandEvent& event);
 	void OnSelectTerrainPalette(wxCommandEvent& event);
 	void OnSelectDoodadPalette(wxCommandEvent& event);
 	void OnSelectItemPalette(wxCommandEvent& event);

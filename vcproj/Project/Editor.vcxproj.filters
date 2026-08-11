@@ -121,6 +121,9 @@
     <ClInclude Include="..\..\source\border_learning.h">
       <Filter>editor</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\border_learning_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\post_process_renderer.h">
       <Filter>gui\graphics</Filter>
     </ClInclude>
@@ -463,6 +466,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\border_learning_map.cpp">
       <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\border_learning_window.cpp">
+      <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\post_process_renderer.cpp">
       <Filter>gui\graphics</Filter>

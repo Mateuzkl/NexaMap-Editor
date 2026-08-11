@@ -268,6 +268,8 @@
     <ClCompile Include="..\..\source\browse_tile_window.cpp" />
     <ClInclude Include="..\..\source\border_workspace_window.h" />
     <ClCompile Include="..\..\source\border_workspace_window.cpp" />
+    <ClInclude Include="..\..\source\border_learning_window.h" />
+    <ClCompile Include="..\..\source\border_learning_window.cpp" />
     <ClInclude Include="..\..\source\materials_workbench_window.h" />
     <ClCompile Include="..\..\source\materials_workbench_window.cpp">
       <IncludeInUnityFile>false</IncludeInUnityFile>

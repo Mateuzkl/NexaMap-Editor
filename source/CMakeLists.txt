@@ -7,6 +7,7 @@ ${CMAKE_CURRENT_LIST_DIR}/autoborder_preview.h
 ${CMAKE_CURRENT_LIST_DIR}/basemap.h
 ${CMAKE_CURRENT_LIST_DIR}/bitmap_font.h
 ${CMAKE_CURRENT_LIST_DIR}/border_learning.h
+${CMAKE_CURRENT_LIST_DIR}/border_learning_window.h
 ${CMAKE_CURRENT_LIST_DIR}/border_workspace_window.h
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush.h
@@ -153,6 +154,7 @@ ${CMAKE_CURRENT_LIST_DIR}/basemap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/bitmap_font.cpp
 ${CMAKE_CURRENT_LIST_DIR}/border_learning.cpp
 ${CMAKE_CURRENT_LIST_DIR}/border_learning_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/border_learning_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/border_workspace_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tables.cpp
