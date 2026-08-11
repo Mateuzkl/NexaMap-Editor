@@ -159,6 +159,39 @@ void BorderWorkspaceWindow::OpenForItems(wxWindow* parent, const std::vector<Ite
 	window->SetFocus();
 }
 
+bool BorderWorkspaceWindow::OpenDraft(wxWindow* parent, const Draft& draft) {
+	if (!g_gui.IsVersionLoaded()) {
+		wxMessageBox("Load a client version before opening Border Workspace.", "Border Workspace", wxOK | wxICON_INFORMATION, parent);
+		return false;
+	}
+	if (!IsAvailableForCurrentClient()) {
+		wxMessageBox(
+			wxString::Format("The current client's materials.xml was not found:\n%s", CurrentMaterialsPath()),
+			"Border Workspace", wxOK | wxICON_ERROR, parent
+		);
+		return false;
+	}
+
+	bool created = false;
+	if (!WindowInstance()) {
+		WindowInstance() = newd BorderWorkspaceWindow(parent);
+		created = true;
+	}
+	BorderWorkspaceWindow* window = WindowInstance();
+	if (!window->EnsureCurrentClientCatalog() || !window->LoadDraft(draft)) {
+		if (created) {
+			WindowInstance() = nullptr;
+			window->Destroy();
+		}
+		return false;
+	}
+
+	window->Show();
+	window->Raise();
+	window->SetFocus();
+	return true;
+}
+
 bool BorderWorkspaceWindow::IsAvailableForCurrentClient() {
 	const wxString path = CurrentMaterialsPath();
 	return !path.IsEmpty() && wxFileExists(path);
@@ -534,6 +567,50 @@ bool BorderWorkspaceWindow::OpenItems(const std::vector<ItemCount>& items) {
 	return FocusBorder(selected.recordIndex, selected.slot);
 }
 
+bool BorderWorkspaceWindow::LoadDraft(const Draft& draft) {
+	if (!ResolvePendingChanges("open a learned border draft")) {
+		return false;
+	}
+
+	const wxString targetPath = currentRecord_ >= 0 && currentRecord_ < static_cast<int>(records_.size())
+		? records_[currentRecord_].sourcePath
+		: rootMaterialsPath_;
+	if (targetPath.IsEmpty()) {
+		return false;
+	}
+
+	int nextId = 1;
+	while (std::any_of(records_.begin(), records_.end(), [nextId](const BorderRecord& record) { return record.id == nextId; })) {
+		++nextId;
+	}
+
+	BorderRecord record;
+	record.sourcePath = targetPath;
+	record.sourceName = wxFileName(targetPath).GetFullName();
+	record.description = draft.description;
+	record.id = nextId;
+	record.group = draft.group;
+	record.optional = draft.optional;
+	record.items = draft.items;
+	record.sourceIndex = -1;
+	records_.push_back(std::move(record));
+	currentRecord_ = static_cast<int>(records_.size() - 1);
+	hasOriginalRecord_ = false;
+	dirty_ = true;
+	loading_ = true;
+	idCtrl_->SetValue(nextId);
+	groupCtrl_->SetValue(draft.group);
+	typeChoice_->SetSelection(draft.optional ? 1 : 0);
+	loading_ = false;
+	selectedSlot_ = 0;
+	filterCtrl_->ChangeValue(wxEmptyString);
+	RebuildItemIndex();
+	RefreshWorkspace();
+	PopulateBorderList();
+	SetStatusText("Learned draft loaded. Review every slot; XML is unchanged until Save Border Set is pressed.");
+	return true;
+}
+
 bool BorderWorkspaceWindow::FocusBorder(int recordIndex, int slot) {
 	if (recordIndex < 0 || recordIndex >= static_cast<int>(records_.size()) || slot < 0 || slot >= 12) {
 		return false;
@@ -629,7 +706,7 @@ void BorderWorkspaceWindow::PopulateBorderList() {
 		if (!record.description.IsEmpty()) {
 			label << " - " << record.description;
 		}
-		label << "  [" << record.sourceName << "]";
+		label << "  [" << record.sourceName << (record.sourceIndex < 0 ? " - draft" : "") << "]";
 		if (!query.IsEmpty() && !label.Lower().Contains(query)) {
 			continue;
 		}
@@ -671,6 +748,13 @@ bool BorderWorkspaceWindow::ResolvePendingChanges(const wxString& action) {
 		records_[currentRecord_] = originalRecord_;
 		RebuildItemIndex();
 		LoadSelection(currentRecord_);
+	} else if (currentRecord_ >= 0 && currentRecord_ < static_cast<int>(records_.size()) && records_[currentRecord_].sourceIndex < 0) {
+		records_.erase(records_.begin() + currentRecord_);
+		currentRecord_ = -1;
+		hasOriginalRecord_ = false;
+		RebuildItemIndex();
+		PopulateBorderList();
+		RefreshWorkspace();
 	}
 	return true;
 }
@@ -714,7 +798,9 @@ void BorderWorkspaceWindow::RefreshWorkspace() {
 	}
 	const BorderRecord& record = records_[currentRecord_];
 	headingLabel_->SetLabel(wxString::Format("Border Workspace — Border %d%s", record.id, dirty_ ? " *" : ""));
-	sourceLabel_->SetLabel(wxString::Format("Editing XML directly: %s", record.sourcePath));
+	sourceLabel_->SetLabel(record.sourceIndex < 0
+		? wxString::Format("Unsaved learned draft; target XML: %s", record.sourcePath)
+		: wxString::Format("Editing XML directly: %s", record.sourcePath));
 	sourceLabel_->SetToolTip(record.sourcePath);
 	for (int i = 0; i < 12; ++i) {
 		RefreshSlot(i);
@@ -813,12 +899,33 @@ bool BorderWorkspaceWindow::SaveCurrentBorder() {
 		wxMessageBox("Could not reopen the source XML file.", "Border Workspace", wxOK | wxICON_ERROR, this);
 		return false;
 	}
-	pugi::xml_node border = BorderAt(MaterialsRoot(document), record.sourceIndex);
+	pugi::xml_node root = MaterialsRoot(document);
+	pugi::xml_node border;
+	int savedSourceIndex = record.sourceIndex;
+	if (record.sourceIndex < 0) {
+		savedSourceIndex = 0;
+		for (pugi::xml_node child = root.first_child(); child; child = child.next_sibling()) {
+			if (as_lower_str(child.name()) == "border") {
+				++savedSourceIndex;
+			}
+		}
+		border = root.append_child("border");
+		if (!record.description.IsEmpty()) {
+			const wxString description = " -- " + record.description + " --\n";
+			border.append_child(pugi::node_pcdata).set_value(description.utf8_str());
+		}
+	} else {
+		border = BorderAt(root, record.sourceIndex);
+	}
 	if (!border) {
 		wxMessageBox("The border moved or was removed on disk. Reload the catalog and try again.", "Border Workspace", wxOK | wxICON_ERROR, this);
 		return false;
 	}
-	border.attribute("id").set_value(newId);
+	pugi::xml_attribute idAttribute = border.attribute("id");
+	if (!idAttribute) {
+		idAttribute = border.append_attribute("id");
+	}
+	idAttribute.set_value(newId);
 	const int group = groupCtrl_->GetValue();
 	if (group > 0) {
 		pugi::xml_attribute attr = border.attribute("group");
@@ -865,6 +972,7 @@ bool BorderWorkspaceWindow::SaveCurrentBorder() {
 	record.id = newId;
 	record.group = group;
 	record.optional = optional;
+	record.sourceIndex = savedSourceIndex;
 	originalRecord_ = record;
 	hasOriginalRecord_ = true;
 	dirty_ = false;
@@ -930,6 +1038,9 @@ void BorderWorkspaceWindow::CreateBorder() {
 
 void BorderWorkspaceWindow::DeleteCurrentBorder() {
 	if (currentRecord_ < 0 || !ResolvePendingChanges("delete this border")) {
+		return;
+	}
+	if (currentRecord_ < 0) {
 		return;
 	}
 	const BorderRecord record = records_[currentRecord_];

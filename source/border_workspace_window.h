@@ -27,9 +27,16 @@ public:
 		int itemId = 0;
 		size_t count = 0;
 	};
+	struct Draft {
+		wxString description;
+		int group = 0;
+		bool optional = false;
+		std::array<int, 12> items {};
+	};
 
 	static void Open(wxWindow* parent);
 	static void OpenForItems(wxWindow* parent, const std::vector<ItemCount>& items);
+	static bool OpenDraft(wxWindow* parent, const Draft& draft);
 	static bool IsAvailableForCurrentClient();
 
 private:
@@ -59,6 +66,7 @@ private:
 	bool ScanMaterialsFile(const wxString& path, std::set<wxString>& visited, wxString& error);
 	bool EnsureCurrentClientCatalog();
 	bool OpenItems(const std::vector<ItemCount>& items);
+	bool LoadDraft(const Draft& draft);
 	bool FocusBorder(int recordIndex, int slot);
 	void RebuildItemIndex();
 	void PopulateBorderList();

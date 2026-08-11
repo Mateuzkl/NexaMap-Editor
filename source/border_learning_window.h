@@ -30,6 +30,7 @@ private:
 	void RefreshCandidateInspector();
 	void UseSelectedAlternative();
 	void GoToSelectedEvidence();
+	void OpenInBorderWorkspace();
 
 	const LearnedBorderSlot* CurrentSlot() const;
 	const BorderLearningCandidate* CurrentCandidate() const;
@@ -50,6 +51,7 @@ private:
 	wxListBox* evidenceList_ = nullptr;
 	wxButton* useCandidateButton_ = nullptr;
 	wxButton* goToEvidenceButton_ = nullptr;
+	wxButton* openWorkspaceButton_ = nullptr;
 };
 
 #endif

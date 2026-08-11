@@ -2,6 +2,7 @@
 
 #include "border_learning_window.h"
 
+#include "border_workspace_window.h"
 #include "dcbutton.h"
 #include "editor.h"
 #include "ground_brush.h"
@@ -168,9 +169,11 @@ void BorderLearningWindow::BuildLayout() {
 	contentSizer->Add(inspectorBox, 0, wxEXPAND);
 	rootSizer->Add(contentSizer, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 
-	auto* buttons = newd wxStdDialogButtonSizer();
-	buttons->AddButton(newd wxButton(this, wxID_CLOSE));
-	buttons->Realize();
+	auto* buttons = newd wxBoxSizer(wxHORIZONTAL);
+	openWorkspaceButton_ = newd wxButton(this, wxID_FORWARD, "Open in Border Workspace");
+	buttons->Add(openWorkspaceButton_, 0);
+	buttons->AddStretchSpacer();
+	buttons->Add(newd wxButton(this, wxID_CLOSE), 0);
 	rootSizer->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 
 	SetSizer(rootSizer);
@@ -188,6 +191,7 @@ void BorderLearningWindow::BindEvents() {
 	alternativeChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { RefreshCandidateInspector(); });
 	useCandidateButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { UseSelectedAlternative(); });
 	goToEvidenceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { GoToSelectedEvidence(); });
+	openWorkspaceButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenInBorderWorkspace(); });
 	FindWindow(wxID_CLOSE)->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { EndModal(wxID_CLOSE); });
 }
 
@@ -249,6 +253,7 @@ void BorderLearningWindow::RefreshResult() {
 	}
 
 	qualityLabel_->SetLabel(wxString::Format("Evidence quality: %.0f%%   Assigned: %zu/12   Boundary samples: %zu   Unclassified items: %zu", result_.overallConfidence * 100.0, result_.assignedSlotCount, result_.boundaryObservations.size(), result_.unclassifiedItemIds.size()));
+	openWorkspaceButton_->Enable(result_.assignedSlotCount != 0);
 	RefreshSlotInspector();
 }
 
@@ -377,4 +382,46 @@ void BorderLearningWindow::GoToSelectedEvidence() {
 	const Position position = candidate->evidence[index];
 	g_gui.ChangeFloor(position.z);
 	g_gui.SetScreenCenterPosition(position, true);
+}
+
+void BorderLearningWindow::OpenInBorderWorkspace() {
+	BorderWorkspaceWindow::Draft draft;
+	for (size_t slotIndex = 0; slotIndex < displayEdges.size(); ++slotIndex) {
+		draft.items[slotIndex] = result_.slots[displayEdges[slotIndex]].itemId;
+	}
+
+	std::vector<uint32_t> suggestedGroups;
+	size_t optionalItems = 0;
+	size_t assignedItems = 0;
+	for (const BorderType edge : displayEdges) {
+		const auto& slot = result_.slots[edge];
+		if (slot.itemId == 0) {
+			continue;
+		}
+		++assignedItems;
+		const auto candidate = std::find_if(slot.alternatives.begin(), slot.alternatives.end(), [&slot](const BorderLearningCandidate& alternative) {
+			return alternative.itemId == slot.itemId;
+		});
+		if (candidate == slot.alternatives.end()) {
+			continue;
+		}
+		if (candidate->borderGroup != 0) {
+			suggestedGroups.push_back(candidate->borderGroup);
+		}
+		optionalItems += candidate->optionalBorder ? 1 : 0;
+	}
+	if (!suggestedGroups.empty()) {
+		std::sort(suggestedGroups.begin(), suggestedGroups.end());
+		draft.group = static_cast<int>(*std::max_element(suggestedGroups.begin(), suggestedGroups.end(), [&suggestedGroups](uint32_t left, uint32_t right) {
+			return std::count(suggestedGroups.begin(), suggestedGroups.end(), left) < std::count(suggestedGroups.begin(), suggestedGroups.end(), right);
+		}));
+	}
+	draft.optional = assignedItems != 0 && optionalItems * 2 >= assignedItems;
+
+	const auto& familyA = snapshot_.groundFamilies[result_.transition.familyA];
+	const auto& familyB = snapshot_.groundFamilies[result_.transition.familyB];
+	draft.description = wxString::Format("learned %s / %s border", wxString::FromUTF8(familyA.name.c_str()), wxString::FromUTF8(familyB.name.c_str()));
+	if (BorderWorkspaceWindow::OpenDraft(GetParent(), draft)) {
+		EndModal(wxID_FORWARD);
+	}
 }
