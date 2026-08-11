@@ -54,6 +54,7 @@ if(ENABLE_UNITY_BUILD)
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/minimap_import_window.cpp"
 			PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 		)
 		set_target_properties(${PROJECT_NAME} PROPERTIES

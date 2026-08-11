@@ -53,6 +53,7 @@ ${CMAKE_CURRENT_LIST_DIR}/iomap.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.h
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_import.h
+${CMAKE_CURRENT_LIST_DIR}/minimap_import_window.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_format.h
 ${CMAKE_CURRENT_LIST_DIR}/item.h
 ${CMAKE_CURRENT_LIST_DIR}/item_id_codec.h
@@ -202,6 +203,7 @@ ${CMAKE_CURRENT_LIST_DIR}/iomap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_import.cpp
+${CMAKE_CURRENT_LIST_DIR}/minimap_import_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item_attributes.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item_id_codec.cpp

@@ -301,6 +301,7 @@ public:
 	void Draw();
 	void DrawScene();
 	void DrawOverlays();
+	void DrawMinimapImportOverlay();
 	void markDirty();
 	void invalidateMinimapPages();
 	bool isSceneDirty();

@@ -29,6 +29,9 @@
 #include "border_workspace_window.h"
 #include "materials_workbench_window.h"
 #include "map_item_id_converter_window.h"
+#include "minimap_import_window.h"
+#include "map_display.h"
+#include "map_tab.h"
 #include "procedural_map_generator_window.h"
 #include "settings.h"
 #include "spawn_export_window.h"
@@ -61,6 +64,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(CLOSE, wxITEM_NORMAL, OnClose);
 
 	MAKE_ACTION(IMPORT_MAP, wxITEM_NORMAL, OnImportMap);
+	MAKE_ACTION(IMPORT_MINIMAP, wxITEM_NORMAL, OnImportMinimap);
+	MAKE_ACTION(CLEAR_MINIMAP_OVERLAY, wxITEM_NORMAL, OnClearMinimapOverlay);
 	MAKE_ACTION(MAP_ITEM_ID_CONVERTER, wxITEM_NORMAL, OnMapItemIdConverter);
 	MAKE_ACTION(PROCEDURAL_MAP_GENERATOR, wxITEM_NORMAL, OnProceduralMapGenerator);
 	MAKE_ACTION(SPAWN_NPC_CONVERTER, wxITEM_NORMAL, OnSpawnNpcConverter);
@@ -349,6 +354,8 @@ void MainMenuBar::Update() {
 	EnableItem(SAVE_AS, is_host);
 
 	EnableItem(IMPORT_MAP, is_local);
+	EnableItem(IMPORT_MINIMAP, loaded);
+	EnableItem(CLEAR_MINIMAP_OVERLAY, has_map && g_gui.GetCurrentMapTab()->GetCanvas()->HasMinimapImportOverlay());
 	EnableItem(MAP_ITEM_ID_CONVERTER, loaded);
 	EnableItem(PROCEDURAL_MAP_GENERATOR, loaded && has_map);
 	EnableItem(SPAWN_NPC_CONVERTER, true);
@@ -789,6 +796,18 @@ void MainMenuBar::OnImportMap(wxCommandEvent& WXUNUSED(event)) {
 	ASSERT(g_gui.GetCurrentEditor());
 	wxDialog* importmap = newd ImportMapWindow(frame, *g_gui.GetCurrentEditor());
 	importmap->ShowModal();
+}
+
+void MainMenuBar::OnImportMinimap(wxCommandEvent& WXUNUSED(event)) {
+	RunMinimapImport(frame);
+}
+
+void MainMenuBar::OnClearMinimapOverlay(wxCommandEvent& WXUNUSED(event)) {
+	MapTab* tab = g_gui.GetCurrentMapTab();
+	if (tab && tab->GetCanvas()) {
+		tab->GetCanvas()->ClearMinimapImportOverlay();
+		g_gui.UpdateMenus();
+	}
 }
 
 void MainMenuBar::OnMapItemIdConverter(wxCommandEvent& WXUNUSED(event)) {

@@ -43,6 +43,7 @@
 #include "gui.h"
 #include "sprites.h"
 #include "map_drawer.h"
+#include "minimap_import.h"
 #include "map_display.h"
 #include "copybuffer.h"
 #include "graphics.h"
@@ -344,6 +345,7 @@ void MapDrawer::DrawScene() {
 }
 
 void MapDrawer::DrawOverlays() {
+	DrawMinimapImportOverlay();
 	if (!far_zoom_mode) {
 		DrawDraggingShadow();
 	}
@@ -365,6 +367,44 @@ void MapDrawer::DrawOverlays() {
 	}
 	if (options.show_performance_stats) {
 		DrawPerformanceStats();
+	}
+}
+
+void MapDrawer::DrawMinimapImportOverlay() {
+	if (!canvas->minimap_import_overlay) {
+		return;
+	}
+	const auto& document = *canvas->minimap_import_overlay;
+	const auto& bounds = document.getFloorInfo(floor).bounds;
+	if (!bounds.valid()) {
+		return;
+	}
+	const int firstY = std::max(start_y, bounds.minY);
+	const int lastY = std::min(end_y, bounds.maxY);
+	const int firstX = std::max(start_x, bounds.minX);
+	const int lastX = std::min(end_x, bounds.maxX);
+	for (int y = firstY; y <= lastY; ++y) {
+		for (int x = firstX; x <= lastX;) {
+			const MinimapTile* tile = document.getTile(x, y, floor);
+			if (!tile) {
+				++x;
+				continue;
+			}
+			const uint8_t color = tile->color;
+			int runEnd = x + 1;
+			while (runEnd <= lastX) {
+				const MinimapTile* next = document.getTile(runEnd, y, floor);
+				if (!next || next->color != color) {
+					break;
+				}
+				++runEnd;
+			}
+			const uint8_t red = static_cast<uint8_t>((color / 36) % 6 * 51);
+			const uint8_t green = static_cast<uint8_t>((color / 6) % 6 * 51);
+			const uint8_t blue = static_cast<uint8_t>(color % 6 * 51);
+			drawFilledRect(x * TileSize - view_scroll_x, y * TileSize - view_scroll_y, (runEnd - x) * TileSize, TileSize, wxColor(red, green, blue, canvas->minimap_import_overlay_opacity));
+			x = runEnd;
+		}
 	}
 }
 

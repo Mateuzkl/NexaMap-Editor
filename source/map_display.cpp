@@ -272,6 +272,17 @@ void MapCanvas::RefreshViewport() {
 	RefreshWithoutDirty();
 }
 
+void MapCanvas::SetMinimapImportOverlay(std::shared_ptr<const MinimapImportDocument> document, uint8_t opacity) {
+	minimap_import_overlay = std::move(document);
+	minimap_import_overlay_opacity = opacity;
+	RefreshWithoutDirty();
+}
+
+void MapCanvas::ClearMinimapImportOverlay() {
+	minimap_import_overlay.reset();
+	RefreshWithoutDirty();
+}
+
 void MapCanvas::RefreshWithoutDirty() {
 	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
 		refresh_watch.Start();
@@ -2705,6 +2716,7 @@ void MapCanvas::EndPasting() {
 }
 
 void MapCanvas::Reset() {
+	minimap_import_overlay.reset();
 	cursor_x = 0;
 	cursor_y = 0;
 

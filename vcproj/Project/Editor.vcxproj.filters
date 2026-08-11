@@ -148,6 +148,15 @@
     <ClInclude Include="..\..\source\iominimap.h">
       <Filter>editor\io</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\minimap_format.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\minimap_import.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\minimap_import_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\iomap_otbm.h">
       <Filter>editor\io</Filter>
     </ClInclude>
@@ -658,6 +667,12 @@
     </ClCompile>
     <ClCompile Include="..\..\source\iominimap.cpp">
       <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\minimap_import.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\minimap_import_window.cpp">
+      <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\iomap_otbm.cpp">
       <Filter>editor\io</Filter>

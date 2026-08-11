@@ -38,6 +38,8 @@
 		<separator/>
 		<menu name="Import">
 			<item name="Import Map..." action="IMPORT_MAP" help="Import map data from another map file."/>
+			<item name="Import Minimap / OTMM..." action="IMPORT_MINIMAP" help="Preview an .otmm or .otbmm minimap and import it as an overlay or editable ground map."/>
+			<item name="Clear Minimap Overlay" action="CLEAR_MINIMAP_OVERLAY" help="Remove the active imported minimap reference overlay."/>
 			<item name="Import Monsters/NPC..." action="IMPORT_MONSTERS" help="Import either a monsters.xml file or a specific monster/NPC."/>
 		</menu>
 		<item name="Convert OTBM Item IDs..." action="MAP_ITEM_ID_CONVERTER" help="Convert all item IDs with the embedded native Server ID / Client ID mapping."/>

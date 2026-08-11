@@ -7,6 +7,7 @@
 
 #include "basemap.h"
 #include "brush_enums.h"
+#include "gui_ids.h"
 #include "position.h"
 
 #include <cstdint>

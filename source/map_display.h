@@ -22,12 +22,15 @@
 #include "tile.h"
 #include "creature.h"
 
+#include <memory>
+
 class Item;
 class Creature;
 class MapWindow;
 class MapPopupMenu;
 class AnimationTimer;
 class MapDrawer;
+class MinimapImportDocument;
 
 class MapCanvas : public wxGLCanvas {
 public:
@@ -103,6 +106,11 @@ public:
 	void RefreshAnimation();
 	void RefreshViewport();
 	void UpdateAutoborderPreview(bool altPressed);
+	void SetMinimapImportOverlay(std::shared_ptr<const MinimapImportDocument> document, uint8_t opacity);
+	void ClearMinimapImportOverlay();
+	bool HasMinimapImportOverlay() const noexcept {
+		return minimap_import_overlay != nullptr;
+	}
 
 	void ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y);
 	void MouseToMap(int* map_x, int* map_y) {
@@ -157,6 +165,8 @@ private:
 
 	Editor& editor;
 	MapDrawer* drawer;
+	std::shared_ptr<const MinimapImportDocument> minimap_import_overlay;
+	uint8_t minimap_import_overlay_opacity = 128;
 	bool ingamePreview;
 	bool ingamePreviewLighting = false;
 	Position ingamePreviewPlayerPosition { -1, -1, -1 };
