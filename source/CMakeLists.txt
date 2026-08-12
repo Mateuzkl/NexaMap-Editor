@@ -144,6 +144,9 @@ ${CMAKE_CURRENT_LIST_DIR}/version_info.h
 ${CMAKE_CURRENT_LIST_DIR}/zones.h
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_zones.h
+${CMAKE_CURRENT_LIST_DIR}/palette_saved_terrain.h
+${CMAKE_CURRENT_LIST_DIR}/terrain_stamp/terrain_stamp.h
+${CMAKE_CURRENT_LIST_DIR}/terrain_stamp/terrain_stamp_library.h
 ${CMAKE_CURRENT_LIST_DIR}/tileset_window.h
 ${CMAKE_CURRENT_LIST_DIR}/add_tileset_window.h
 ${CMAKE_CURRENT_LIST_DIR}/add_item_window.h
@@ -287,6 +290,9 @@ ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zones.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_zones.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_saved_terrain.cpp
+${CMAKE_CURRENT_LIST_DIR}/terrain_stamp/terrain_stamp.cpp
+${CMAKE_CURRENT_LIST_DIR}/terrain_stamp/terrain_stamp_library.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tileset_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/add_tileset_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/add_item_window.cpp

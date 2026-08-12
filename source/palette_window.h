@@ -25,6 +25,7 @@ class CreaturePalettePanel;
 class HousePalettePanel;
 class WaypointPalettePanel;
 class ZonesPalettePanel;
+class SavedTerrainPalettePanel;
 
 class PaletteWindow : public wxPanel {
 public:
@@ -72,6 +73,7 @@ protected:
 	static PalettePanel* CreateHousePalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateWaypointPalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateZonesPalette(wxWindow* parent, const TilesetContainer& tilesets);
+	static PalettePanel* CreateSavedTerrainPalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateRAWPalette(wxWindow* parent, const TilesetContainer& tilesets);
 
 	wxChoicebook* choicebook;
@@ -84,6 +86,7 @@ protected:
 	HousePalettePanel* house_palette;
 	WaypointPalettePanel* waypoint_palette;
 	ZonesPalettePanel* zones_palette;
+	SavedTerrainPalettePanel* saved_terrain_palette;
 	BrushPalettePanel* raw_palette;
 
 	DECLARE_EVENT_TABLE()

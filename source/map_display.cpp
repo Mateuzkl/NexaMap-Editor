@@ -39,6 +39,7 @@
 #include "border_workspace_window.h"
 #include "border_learning_window.h"
 #include "procedural_map_generator_window.h"
+#include "palette_saved_terrain.h"
 #include "browse_tile_window.h"
 #include "theme.h"
 
@@ -181,6 +182,7 @@ EVT_MENU(MAP_POPUP_MENU_SELECT_RAW_BRUSH, MapCanvas::OnSelectRAWBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_GROUND_BRUSH, MapCanvas::OnSelectGroundBrush)
 EVT_MENU(MAP_POPUP_MENU_OPEN_BORDER_WORKSPACE, MapCanvas::OnOpenBorderWorkspace)
 EVT_MENU(MAP_POPUP_MENU_LEARN_BORDER_SELECTION, MapCanvas::OnLearnBorderSelection)
+EVT_MENU(MAP_POPUP_MENU_SAVE_TERRAIN, MapCanvas::OnSaveTerrain)
 EVT_MENU(MAP_POPUP_MENU_PROCEDURAL_GENERATOR, MapCanvas::OnProceduralMapGenerator)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOODAD_BRUSH, MapCanvas::OnSelectDoodadBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_COLLECTION_BRUSH, MapCanvas::OnSelectCollectionBrush)
@@ -2420,6 +2422,10 @@ void MapCanvas::OnLearnBorderSelection(wxCommandEvent& WXUNUSED(event)) {
 	BorderLearningWindow::Open(this, editor, GetFloor());
 }
 
+void MapCanvas::OnSaveTerrain(wxCommandEvent& WXUNUSED(event)) {
+	PromptAndSaveTerrainFromSelection(this);
+}
+
 void MapCanvas::OnProceduralMapGenerator(wxCommandEvent& WXUNUSED(event)) {
 	static_cast<void>(RunProceduralMapGenerator(g_gui.root, editor, GetFloor()));
 }
@@ -2964,6 +2970,12 @@ void MapPopupMenu::Update() {
 			"Learn Border from Selection...",
 			"Analyze selected terrain and collect border sprite candidates"
 		);
+		wxMenuItem* saveTerrain = Append(
+			MAP_POPUP_MENU_SAVE_TERRAIN,
+			"Save Terrain...",
+			"Save the selected tiles as a reusable terrain stamp"
+		);
+		saveTerrain->Enable(anything_selected);
 	}
 	AppendSeparator();
 	Append(

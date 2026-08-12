@@ -28,6 +28,7 @@
 #include "palette_creature.h"
 #include "palette_waypoints.h"
 #include "palette_zones.h"
+#include "palette_saved_terrain.h"
 
 #include "map.h"
 
@@ -53,6 +54,7 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	house_palette(nullptr),
 	waypoint_palette(nullptr),
 	zones_palette(nullptr),
+	saved_terrain_palette(nullptr),
 	raw_palette(nullptr) {
 	SetMinSize(wxSize(225, 250));
 
@@ -79,6 +81,9 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 	zones_palette = static_cast<ZonesPalettePanel*>(CreateZonesPalette(choicebook, tilesets));
 	choicebook->AddPage(zones_palette, zones_palette->GetName());
+
+	saved_terrain_palette = static_cast<SavedTerrainPalettePanel*>(CreateSavedTerrainPalette(choicebook, tilesets));
+	choicebook->AddPage(saved_terrain_palette, saved_terrain_palette->GetName());
 
 	creature_palette = static_cast<CreaturePalettePanel*>(CreateCreaturePalette(choicebook, tilesets));
 	choicebook->AddPage(creature_palette, creature_palette->GetName());
@@ -179,6 +184,10 @@ PalettePanel* PaletteWindow::CreateZonesPalette(wxWindow* parent, const TilesetC
 	return panel;
 }
 
+PalettePanel* PaletteWindow::CreateSavedTerrainPalette(wxWindow* parent, const TilesetContainer&) {
+	return newd SavedTerrainPalettePanel(parent);
+}
+
 PalettePanel* PaletteWindow::CreateCreaturePalette(wxWindow* parent, const TilesetContainer& tilesets) {
 	auto* panel = newd CreaturePalettePanel(parent);
 	return panel;
@@ -213,6 +222,9 @@ void PaletteWindow::ReloadSettings(Map* map) {
 	}
 	if (zones_palette) {
 		zones_palette->SetMap(map);
+	}
+	if (saved_terrain_palette) {
+		saved_terrain_palette->ReloadList();
 	}
 	if (item_palette) {
 		item_palette->SetListType(wxstr(g_settings.getString(Config::PALETTE_ITEM_STYLE)));
@@ -260,6 +272,9 @@ void PaletteWindow::InvalidateContents() {
 	}
 	if (zones_palette) {
 		zones_palette->OnUpdate();
+	}
+	if (saved_terrain_palette) {
+		saved_terrain_palette->OnUpdate();
 	}
 }
 
@@ -456,6 +471,9 @@ void PaletteWindow::OnUpdate(Map* map) {
 	if (zones_palette) {
 		zones_palette->SetMap(map);
 		zones_palette->OnUpdate();
+	}
+	if (saved_terrain_palette) {
+		saved_terrain_palette->OnUpdate();
 	}
 }
 

@@ -433,6 +433,12 @@
     <ClCompile Include="..\..\source\palette_waypoints.cpp" />
     <ClInclude Include="..\..\source\palette_zones.h" />
     <ClCompile Include="..\..\source\palette_zones.cpp" />
+    <ClInclude Include="..\..\source\palette_saved_terrain.h" />
+    <ClCompile Include="..\..\source\palette_saved_terrain.cpp" />
+    <ClInclude Include="..\..\source\terrain_stamp\terrain_stamp.h" />
+    <ClCompile Include="..\..\source\terrain_stamp\terrain_stamp.cpp" />
+    <ClInclude Include="..\..\source\terrain_stamp\terrain_stamp_library.h" />
+    <ClCompile Include="..\..\source\terrain_stamp\terrain_stamp_library.cpp" />
     <ClInclude Include="..\..\source\palette_window.h" />
     <ClCompile Include="..\..\source\palette_window.cpp" />
     <ClInclude Include="..\..\source\about_window.h" />

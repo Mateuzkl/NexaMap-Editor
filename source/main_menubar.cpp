@@ -203,6 +203,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SELECT_HOUSE, wxITEM_NORMAL, OnSelectHousePalette);
 	MAKE_ACTION(SELECT_WAYPOINT, wxITEM_NORMAL, OnSelectWaypointPalette);
 	MAKE_ACTION(SELECT_ZONES, wxITEM_NORMAL, OnSelectZonesPalette);
+	MAKE_ACTION(SELECT_SAVED_TERRAIN, wxITEM_NORMAL, OnSelectSavedTerrainPalette);
 	MAKE_ACTION(SELECT_RAW, wxITEM_NORMAL, OnSelectRawPalette);
 
 	MAKE_ACTION(FLOOR_0, wxITEM_RADIO, OnChangeFloor);
@@ -442,6 +443,7 @@ void MainMenuBar::Update() {
 	EnableItem(SELECT_CREATURE, loaded);
 	EnableItem(SELECT_WAYPOINT, loaded);
 	EnableItem(SELECT_ZONES, loaded);
+	EnableItem(SELECT_SAVED_TERRAIN, loaded);
 	EnableItem(SELECT_RAW, loaded);
 
 	EnableItem(DEBUG_VIEW_DAT, loaded);
@@ -2273,6 +2275,10 @@ void MainMenuBar::OnSelectWaypointPalette(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnSelectZonesPalette(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.SelectPalettePage(TILESET_ZONES);
+}
+
+void MainMenuBar::OnSelectSavedTerrainPalette(wxCommandEvent& WXUNUSED(event)) {
+	g_gui.SelectPalettePage(TILESET_SAVED_TERRAIN);
 }
 
 void MainMenuBar::OnSelectRawPalette(wxCommandEvent& WXUNUSED(event)) {

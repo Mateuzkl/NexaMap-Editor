@@ -88,6 +88,7 @@ public:
 	void OnSelectGroundBrush(wxCommandEvent& event);
 	void OnOpenBorderWorkspace(wxCommandEvent& event);
 	void OnLearnBorderSelection(wxCommandEvent& event);
+	void OnSaveTerrain(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSelectDoodadBrush(wxCommandEvent& event);
 	void OnSelectDoorBrush(wxCommandEvent& event);

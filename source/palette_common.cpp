@@ -152,6 +152,8 @@ wxString PalettePanel::GetName() const {
 			return "Waypoint Palette";
 		case TILESET_ZONES:
 			return "Zones Palette";
+		case TILESET_SAVED_TERRAIN:
+			return "Saved Terrains";
 		case TILESET_UNKNOWN:
 			return "Unknown";
 	}

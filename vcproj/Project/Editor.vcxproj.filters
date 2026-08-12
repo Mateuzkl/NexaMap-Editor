@@ -431,6 +431,9 @@
       <Filter>gui\map window</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\palette_zones.h" />
+    <ClInclude Include="..\..\source\palette_saved_terrain.h" />
+    <ClInclude Include="..\..\source\terrain_stamp\terrain_stamp.h" />
+    <ClInclude Include="..\..\source\terrain_stamp\terrain_stamp_library.h" />
     <ClInclude Include="..\..\source\zone_brush.h" />
     <ClInclude Include="..\..\source\zones.h" />
   </ItemGroup>
@@ -795,6 +798,9 @@
       <Filter>gui\map window</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\palette_zones.cpp" />
+    <ClCompile Include="..\..\source\palette_saved_terrain.cpp" />
+    <ClCompile Include="..\..\source\terrain_stamp\terrain_stamp.cpp" />
+    <ClCompile Include="..\..\source\terrain_stamp\terrain_stamp_library.cpp" />
     <ClCompile Include="..\..\source\zone_brush.cpp" />
     <ClCompile Include="..\..\source\zones.cpp" />
   </ItemGroup>

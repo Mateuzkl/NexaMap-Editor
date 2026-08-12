@@ -31,6 +31,7 @@ enum TilesetCategoryType {
 	TILESET_HOUSE,
 	TILESET_WAYPOINT,
 	TILESET_ZONES,
+	TILESET_SAVED_TERRAIN,
 };
 
 class TilesetCategory {

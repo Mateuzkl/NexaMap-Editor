@@ -233,6 +233,7 @@
 			<item name="Creature" hotkey="C" action="SELECT_CREATURE" help="Select the Creature palette."/>
 			<item name="Waypoint" hotkey="W" action="SELECT_WAYPOINT" help="Select the Waypoint palette."/>
 			<item name="Zones" hotkey="Z" action="SELECT_ZONES" help="Select the Zones palette."/>
+			<item name="Saved Terrains" action="SELECT_SAVED_TERRAIN" help="Browse and place saved terrain stamps."/>
 			<item name="RAW" hotkey="R" action="SELECT_RAW" help="Select the RAW palette."/>
 		</menu>
 		<menu name="Toolbars">
