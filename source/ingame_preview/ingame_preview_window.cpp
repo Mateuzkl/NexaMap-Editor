@@ -263,15 +263,18 @@ bool IngamePreviewWindow::ResolveTeleports() {
 			break;
 		}
 
-		Position destination;
+		// Position() is (0,0,0) and isValid(); only jump when a real teleport dest was found.
+		bool foundTeleport = false;
+		Position destination(-1, -1, -1);
 		for (const Item* item : tile->items) {
 			const auto* teleport = dynamic_cast<const Teleport*>(item);
 			if (teleport && teleport->hasDestination()) {
 				destination = teleport->getDestination();
+				foundTeleport = true;
 				break;
 			}
 		}
-		if (!destination.isValid()) {
+		if (!foundTeleport || !destination.isValid()) {
 			break;
 		}
 		playerPosition = destination;
