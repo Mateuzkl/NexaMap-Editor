@@ -788,12 +788,6 @@ void MainMenuBar::OnPreferences(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnQuit(wxCommandEvent& WXUNUSED(event)) {
-	/*
-	while(g_gui.IsEditorOpen())
-		if(!frame->DoQuerySave(true))
-			return;
-			*/
-	//((Application*)wxTheApp)->Unload();
 	g_gui.root->Close();
 }
 

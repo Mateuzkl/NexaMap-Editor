@@ -25,8 +25,6 @@ public:
 	void configure(const std::filesystem::path& file, const std::vector<uint32_t>& offsets, bool hasTransparency, size_t workerCount = 2);
 	void clear();
 	SpritePreloadStatus getOrRequest(uint32_t spriteId, std::vector<uint8_t>& pixels);
-	size_t getPendingCount() const;
-	size_t getReadyCount() const;
 
 private:
 	struct Task {

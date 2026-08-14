@@ -103,16 +103,6 @@ SpritePreloadStatus SpritePreloader::getOrRequest(uint32_t spriteId, std::vector
 	return SpritePreloadStatus::Pending;
 }
 
-size_t SpritePreloader::getPendingCount() const {
-	std::lock_guard lock(mutex);
-	return queuedSpriteIds.size();
-}
-
-size_t SpritePreloader::getReadyCount() const {
-	std::lock_guard lock(mutex);
-	return readySprites.size();
-}
-
 bool SpritePreloader::decode(const std::filesystem::path& file, uint32_t offset, bool hasTransparency, std::vector<uint8_t>& pixels) {
 	std::ifstream stream(file, std::ios::binary);
 	if (!stream.is_open()) {

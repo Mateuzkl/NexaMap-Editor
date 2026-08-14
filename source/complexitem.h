@@ -54,8 +54,6 @@ public:
 
 	bool unserializeItemNode_OTBM(const IOMap& maphandle, BinaryNode* node) override;
 	bool serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const override;
-	// virtual bool unserializeItemNode_OTMM(const IOMap& maphandle, BinaryNode* node);
-	// virtual bool serializeItemNode_OTMM(const IOMap& maphandle, NodeFileWriteHandle& f) const;
 
 protected:
 	ItemVector contents;

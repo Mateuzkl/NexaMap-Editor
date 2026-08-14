@@ -471,62 +471,58 @@ void MapCanvas::TakeScreenshot(wxFileName path, const wxString& format) {
 	Refresh();
 	wxGLCanvas::Update(); // Forces immediate redraws the window.
 
-	// screenshot_buffer should now contain the screenbuffer
-	if (screenshot_buffer == nullptr) {
-		g_gui.PopupDialog("Capture failed", "Image capture failed. Old Video Driver?", wxOK);
+	// The paint pass above fills screenshot_buffer in place; the pointer itself
+	// is still the one malloc'd here, so there is nothing left to test for.
+	// wxImage takes ownership of buffers allocated with malloc.
+	wxImage screenshot(screensize_x, screensize_y, screenshot_buffer);
+
+	time_t t = time(nullptr);
+	struct tm* current_time = localtime(&t);
+	ASSERT(current_time);
+
+	wxString date;
+	date << "screenshot_" << (1900 + current_time->tm_year);
+	if (current_time->tm_mon < 9) {
+		date << "-"
+			 << "0" << current_time->tm_mon + 1;
 	} else {
-		// wxImage takes ownership of buffers allocated with malloc.
-		wxImage screenshot(screensize_x, screensize_y, screenshot_buffer);
+		date << "-" << current_time->tm_mon + 1;
+	}
+	date << "-" << current_time->tm_mday;
+	date << "-" << current_time->tm_hour;
+	date << "-" << current_time->tm_min;
+	date << "-" << current_time->tm_sec;
 
-		time_t t = time(nullptr);
-		struct tm* current_time = localtime(&t);
-		ASSERT(current_time);
+	int type = 0;
+	path.SetName(date);
+	if (format == "bmp") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_BMP;
+	} else if (format == "png") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_PNG;
+	} else if (format == "jpg" || format == "jpeg") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_JPEG;
+	} else if (format == "tga") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_TGA;
+	} else {
+		g_gui.SetStatusText("Unknown screenshot format \'" + format + "\", switching to default (png)");
+		path.SetExt("png");
+		type = wxBITMAP_TYPE_PNG;
+	}
 
-		wxString date;
-		date << "screenshot_" << (1900 + current_time->tm_year);
-		if (current_time->tm_mon < 9) {
-			date << "-"
-				 << "0" << current_time->tm_mon + 1;
+	path.Mkdir(0755, wxPATH_MKDIR_FULL);
+	wxFileOutputStream of(path.GetFullPath());
+	if (of.IsOk()) {
+		if (screenshot.SaveFile(of, static_cast<wxBitmapType>(type))) {
+			g_gui.SetStatusText("Took screenshot and saved as " + path.GetFullName());
 		} else {
-			date << "-" << current_time->tm_mon + 1;
+			g_gui.PopupDialog("File error", "Couldn't save image file correctly.", wxOK);
 		}
-		date << "-" << current_time->tm_mday;
-		date << "-" << current_time->tm_hour;
-		date << "-" << current_time->tm_min;
-		date << "-" << current_time->tm_sec;
-
-		int type = 0;
-		path.SetName(date);
-		if (format == "bmp") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_BMP;
-		} else if (format == "png") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_PNG;
-		} else if (format == "jpg" || format == "jpeg") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_JPEG;
-		} else if (format == "tga") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_TGA;
-		} else {
-			g_gui.SetStatusText("Unknown screenshot format \'" + format + "\", switching to default (png)");
-			path.SetExt("png");
-			;
-			type = wxBITMAP_TYPE_PNG;
-		}
-
-		path.Mkdir(0755, wxPATH_MKDIR_FULL);
-		wxFileOutputStream of(path.GetFullPath());
-		if (of.IsOk()) {
-			if (screenshot.SaveFile(of, static_cast<wxBitmapType>(type))) {
-				g_gui.SetStatusText("Took screenshot and saved as " + path.GetFullName());
-			} else {
-				g_gui.PopupDialog("File error", "Couldn't save image file correctly.", wxOK);
-			}
-		} else {
-			g_gui.PopupDialog("File error", "Couldn't open file " + path.GetFullPath() + " for writing.", wxOK);
-		}
+	} else {
+		g_gui.PopupDialog("File error", "Couldn't open file " + path.GetFullPath() + " for writing.", wxOK);
 	}
 
 	Refresh();

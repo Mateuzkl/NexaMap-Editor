@@ -330,8 +330,6 @@ public:
 		return pasting;
 	}
 
-	bool CanUndo();
-	bool CanRedo();
 	bool DoUndo();
 	bool DoRedo();
 
@@ -342,7 +340,6 @@ public:
 	EditorTab* GetCurrentTab();
 	EditorTab* GetTab(int idx);
 	int GetTabCount() const;
-	bool IsAnyEditorOpen() const;
 	bool IsEditorOpen() const;
 	void CloseCurrentEditor();
 	Editor* GetCurrentEditor();
@@ -396,8 +393,6 @@ public:
 
 	// Returns primary palette
 	PaletteWindow* GetPalette();
-	// Returns list of all palette, first in the list is primary
-	const std::list<PaletteWindow*>& GetPalettes();
 
 	void DestroyPalettes();
 	// Hidden from public view

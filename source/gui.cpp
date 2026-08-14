@@ -1505,16 +1505,6 @@ void GUI::EndPasting() {
 	}
 }
 
-bool GUI::CanUndo() {
-	Editor* editor = GetCurrentEditor();
-	return (editor && editor->actionQueue->canUndo());
-}
-
-bool GUI::CanRedo() {
-	Editor* editor = GetCurrentEditor();
-	return (editor && editor->actionQueue->canRedo());
-}
-
 bool GUI::DoUndo() {
 	Editor* editor = GetCurrentEditor();
 	if (editor && editor->actionQueue->canUndo()) {

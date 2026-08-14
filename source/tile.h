@@ -151,7 +151,7 @@ public: // Functions
 	// Fast item append for the OTBM load path: items already come in correct
 	// stacking order, so skip addItem's sorted-insertion scan.
 	void addLoadedItem(Item* item);
-	void addLoadedItem(Item* item, const ItemType &type);
+	void addLoadedItem(Item* item, const ItemType& type);
 
 	void select();
 	void deselect();
@@ -256,8 +256,6 @@ public: // Functions
 	uint16_t getMapFlags() const;
 
 	// Statflags (You really ought not to touch this)
-	void setStatFlags(uint16_t _flags);
-	void unsetStatFlags(uint16_t _flags);
 	uint16_t getStatFlags() const;
 
 	bool hasZone() const {
@@ -294,7 +292,7 @@ protected:
 
 private:
 	uint8_t minimapColor;
-	void updateStateForItem(const Item* item, const ItemType &type);
+	void updateStateForItem(const Item* item, const ItemType& type);
 
 	Tile(const Tile& tile); // No copy
 	Tile& operator=(const Tile& i); // Can't copy
@@ -355,14 +353,6 @@ inline void Tile::unsetMapFlags(uint16_t _flags) {
 
 inline uint16_t Tile::getMapFlags() const {
 	return mapflags;
-}
-
-inline void Tile::setStatFlags(uint16_t _flags) {
-	statflags = _flags | statflags;
-}
-
-inline void Tile::unsetStatFlags(uint16_t _flags) {
-	statflags &= ~_flags;
 }
 
 inline uint16_t Tile::getStatFlags() const {

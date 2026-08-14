@@ -553,7 +553,6 @@ void MapDrawer::DrawMap() {
 		}
 	}
 
-	bool only_colors = options.isOnlyColors();
 	bool show_zone_tooltips = options.isTooltips() && !far_zoom_mode;
 	if (far_zoom_mode) {
 		DrawMapMinimapPages();

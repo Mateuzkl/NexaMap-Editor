@@ -27,10 +27,6 @@ CopyBuffer::CopyBuffer() :
 	;
 }
 
-size_t CopyBuffer::GetTileCount() {
-	return tiles ? (size_t)tiles->size() : 0;
-}
-
 BaseMap& CopyBuffer::getBufferMap() {
 	ASSERT(tiles);
 	return *tiles;

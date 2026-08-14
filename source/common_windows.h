@@ -312,8 +312,6 @@ public:
 	);
 
 	Item* getItemBeingEdited();
-	Creature* getCreatureBeingEdited();
-	Spawn* getSpawnBeingEdited();
 
 protected:
 	const Map* edit_map;
