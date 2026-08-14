@@ -49,7 +49,6 @@ public:
 
 protected:
 	// Internal use
-	void SaveHouse();
 	void SelectTown(size_t index);
 	void SelectHouse(size_t index);
 

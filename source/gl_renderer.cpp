@@ -453,10 +453,6 @@ void GLRenderer::drawRect(float x, float y, float w, float h, const GLColor& col
 	drawThickLineSegment(x, y + h, x, y, lineWidth, color);
 }
 
-void GLRenderer::drawLine(float x1, float y1, float x2, float y2, const GLColor& color, float width) {
-	drawThickLineSegment(x1, y1, x2, y2, width, color);
-}
-
 void GLRenderer::drawLines(const float* vertices, int pairCount, uint8_t r, uint8_t g, uint8_t b, uint8_t a, float width) {
 	const GLColor c = { r, g, b, a };
 	for (int i = 0; i < pairCount; ++i) {

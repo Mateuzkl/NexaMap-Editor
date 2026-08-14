@@ -387,10 +387,9 @@ public:
 	} // If this item requires full save (not compact)
 
 	// Weight
-	bool hasWeight() {
+	bool hasWeight() const {
 		return isPickupable();
 	}
-	virtual double getWeight();
 
 	// Subtype (count, fluid, charges)
 	int getCount() const;

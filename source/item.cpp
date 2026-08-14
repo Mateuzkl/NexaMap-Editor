@@ -324,14 +324,6 @@ void Item::setTier(unsigned short n) {
 	setAttribute("tier", n);
 }
 
-double Item::getWeight() {
-	ItemType& it = g_items[id];
-	if (it.isStackable()) {
-		return it.weight * subtype;
-	}
-	return it.weight;
-}
-
 bool Item::canHoldText() const {
 	return isReadable() || canWriteText();
 }

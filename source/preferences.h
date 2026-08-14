@@ -26,11 +26,10 @@
 class PreferencesWindow : public wxDialog {
 public:
 	explicit PreferencesWindow(wxWindow* parent) :
-		PreferencesWindow(parent, false) {};
+		PreferencesWindow(parent, false) { }
 	PreferencesWindow(wxWindow* parent, bool clientVersionSelected);
 	~PreferencesWindow() override;
 
-	void OnClickDefaults(wxCommandEvent&);
 	void OnClickApply(wxCommandEvent&);
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
@@ -39,7 +38,6 @@ public:
 	void OnCollapsiblePane(wxCollapsiblePaneEvent&);
 
 protected:
-	void SetDefaults();
 	bool Apply();
 
 	wxBookCtrl* book;

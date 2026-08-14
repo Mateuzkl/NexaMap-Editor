@@ -44,8 +44,6 @@ public:
 	// Takes ownership of map and sets the paste anchor (used by terrain stamps).
 	void replace(BaseMap* map, const Position& position);
 
-	size_t GetTileCount();
-
 	BaseMap& getBufferMap();
 
 private:

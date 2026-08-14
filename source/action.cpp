@@ -206,7 +206,7 @@ size_t Action::memsize() const {
 	return mem;
 }
 
-void Action::commit(DirtyList* dirty_list) {
+void Action::commit() {
 	editor.selection.start(Selection::INTERNAL);
 	ChangeList::const_iterator it = changes.begin();
 	while (it != changes.end()) {
@@ -337,7 +337,7 @@ void Action::commit(DirtyList* dirty_list) {
 	commited = true;
 }
 
-void Action::undo(DirtyList* dirty_list) {
+void Action::undo() {
 	if (changes.empty()) {
 		return;
 	}
@@ -528,7 +528,7 @@ void BatchAction::addAndCommitAction(Action* action) {
 	}
 
 	// Add it!
-	action->commit(nullptr);
+	action->commit();
 	batch.push_back(action);
 	timestamp = time(nullptr);
 }
@@ -540,7 +540,7 @@ void BatchAction::rollback() {
 void BatchAction::commit() {
 	for (Action* action : batch) {
 		if (action && !action->isCommited()) {
-			action->commit(nullptr);
+			action->commit();
 		}
 	}
 }
@@ -548,7 +548,7 @@ void BatchAction::commit() {
 void BatchAction::undo() {
 	for (Action* action : std::views::reverse(batch)) {
 		if (action) {
-			action->undo(nullptr);
+			action->undo();
 		}
 	}
 }
@@ -556,7 +556,7 @@ void BatchAction::undo() {
 void BatchAction::redo() {
 	for (Action* action : batch) {
 		if (action) {
-			action->redo(nullptr);
+			action->redo();
 		}
 	}
 }
@@ -702,32 +702,4 @@ ActionIdentifier ActionQueue::getUndoType() const {
 
 ActionIdentifier ActionQueue::getRedoType() const {
 	return current < actions.size() ? actions[current]->getType() : ACTION_NONE;
-}
-
-DirtyList::DirtyList() :
-	owner(0) {
-	;
-}
-
-DirtyList::~DirtyList() {
-	;
-}
-
-void DirtyList::AddPosition(int x, int y, int z) {
-	uint32_t m = ((x >> 2) << 18) | ((y >> 2) << 4);
-	ValueType fi = { m, 0 };
-	auto s = iset.find(fi);
-	if (s != iset.end()) {
-		ValueType v = *s;
-		iset.erase(s);
-		v.floors = (1 << z) | v.floors;
-		iset.insert(v);
-	} else {
-		ValueType v = { m, (uint32_t)(1 << z) };
-		iset.insert(v);
-	}
-}
-
-void DirtyList::AddChange(Change* c) {
-	ichanges.push_back(c);
 }

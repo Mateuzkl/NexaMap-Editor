@@ -18,19 +18,4 @@
 #include "main.h"
 #include "gui.h"
 
-void IOMap::error(const wxString format, ...) {
-	va_list argp;
-	va_start(argp, format);
-	errorstr.PrintfV(format, argp);
-	va_end(argp);
-};
-
-void IOMap::warning(const wxString format, ...) {
-	wxString s;
-	va_list argp;
-	va_start(argp, format);
-	s.PrintfV(format, argp);
-	va_end(argp);
-	warnings.push_back(s);
-};
-
+// IOMap::error() and IOMap::warning() are defined inline in iomap.h.

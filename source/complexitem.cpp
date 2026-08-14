@@ -26,7 +26,7 @@ Container::Container(const uint16_t type) :
 }
 
 Container::~Container() {
-	for (Item const* item : contents) {
+	for (const Item* item : contents) {
 		delete item;
 	}
 }
@@ -36,7 +36,7 @@ Item* Container::deepCopy() const {
 	// container by the currently loaded item database.
 	auto* copy = newd Container(id);
 	copyBaseStateTo(*copy);
-	for (Item const* item : contents) {
+	for (const Item* item : contents) {
 		copy->contents.push_back(item->deepCopy());
 	}
 	return copy;
@@ -49,7 +49,7 @@ Item* Container::getItem(size_t index) const {
 	return nullptr;
 }
 
-double Container::getWeight() {
+double Container::getWeight() const {
 	return g_items[id].weight;
 }
 
@@ -103,7 +103,7 @@ Item* Depot::deepCopy() const {
 // Podium
 Podium::Podium(const uint16_t type) :
 	Item(type, 0),
-	outfit(Outfit()), showOutfit(true), showMount(true), showPlatform(true), direction(0) {
+	outfit(Outfit()), direction(0), showOutfit(true), showMount(true), showPlatform(true) {
 	////
 }
 

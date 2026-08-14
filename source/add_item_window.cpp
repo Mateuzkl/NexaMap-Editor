@@ -35,12 +35,12 @@ END_EVENT_TABLE()
 AddItemWindow::AddItemWindow(wxWindow* win_parent, TilesetCategoryType categoryType, Tileset* tilesetItem, wxPoint pos) :
 	ObjectPropertiesWindowBase(win_parent, "Add a Item", pos),
 	item_id(0),
-	tileset_item(tilesetItem),
-	category_type(categoryType),
 	item_id_field(nullptr),
 	item_id_label(nullptr),
 	item_name_label(nullptr),
-	item_button(nullptr) {
+	item_button(nullptr),
+	category_type(categoryType),
+	tileset_item(tilesetItem) {
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 	wxString description = "Add a Item";
 
