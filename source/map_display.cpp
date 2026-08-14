@@ -422,6 +422,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 		if (screenshot_buffer) {
 			drawer->TakeScreenshot(screenshot_buffer);
+			screenshot_captured = true;
 		}
 
 		drawer->Release();
@@ -449,6 +450,7 @@ void MapCanvas::TakeScreenshot(wxFileName path, const wxString& format) {
 
 	std::free(screenshot_buffer);
 	screenshot_buffer = nullptr;
+	screenshot_captured = false;
 	if (screensize_x <= 0 || screensize_y <= 0) {
 		g_gui.PopupDialog("Capture failed", "Image capture failed because the view has an invalid size.", wxOK);
 		return;
@@ -471,10 +473,16 @@ void MapCanvas::TakeScreenshot(wxFileName path, const wxString& format) {
 	Refresh();
 	wxGLCanvas::Update(); // Forces immediate redraws the window.
 
-	// The paint pass above fills screenshot_buffer in place; the pointer itself
-	// is still the one malloc'd here, so there is nothing left to test for.
+	if (!screenshot_captured) {
+		std::free(screenshot_buffer);
+		screenshot_buffer = nullptr;
+		g_gui.PopupDialog("Capture failed", "Image capture failed because the view could not be rendered.", wxOK);
+		return;
+	}
+
 	// wxImage takes ownership of buffers allocated with malloc.
 	wxImage screenshot(screensize_x, screensize_y, screenshot_buffer);
+	screenshot_buffer = nullptr;
 
 	time_t t = time(nullptr);
 	struct tm* current_time = localtime(&t);
@@ -527,7 +535,7 @@ void MapCanvas::TakeScreenshot(wxFileName path, const wxString& format) {
 
 	Refresh();
 
-	screenshot_buffer = nullptr;
+	screenshot_captured = false;
 }
 
 void MapCanvas::ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y) {

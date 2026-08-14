@@ -1471,7 +1471,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 	}
 
 	if (!f.isOk()) {
-		warning(wxstr(f.getErrorMessage()).wc_str());
+		warning("%s", wxstr(f.getErrorMessage()));
 	}
 	return true;
 }

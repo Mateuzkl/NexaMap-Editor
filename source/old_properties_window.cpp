@@ -48,7 +48,8 @@ namespace {
 
 	class FluidTypeClientData final : public wxClientData {
 	public:
-		explicit FluidTypeClientData(uint16_t value) : value(value) { }
+		explicit FluidTypeClientData(uint16_t value) :
+			value(value) { }
 
 		uint16_t value;
 	};
