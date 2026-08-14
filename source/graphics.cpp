@@ -1938,10 +1938,17 @@ uint8_t* GameSprite::NormalImage::getRGBAData(bool* pending) {
 		wxString error;
 		bool loaded = false;
 		if (id != 0 && g_gui.gfx.isMapRenderTextureBudgetActive()) {
-			bool pending = false;
-			loaded = g_spriteAppearances.getSpritePixelsIfLoaded(id, pixels, sourceSize, pending);
-			if (pending) {
+			// This local used to be called `pending` as well, shadowing the out
+			// parameter, so the "still loading" state never reached the caller:
+			// an unloaded sprite looked like a permanent failure and was never
+			// retried.
+			bool loadPending = false;
+			loaded = g_spriteAppearances.getSpritePixelsIfLoaded(id, pixels, sourceSize, loadPending);
+			if (loadPending) {
 				g_gui.gfx.deferTextureUpload();
+				if (pending) {
+					*pending = true;
+				}
 			} else if (!loaded) {
 				loaded = g_spriteAppearances.getSpritePixels(id, pixels, sourceSize, error);
 			}
