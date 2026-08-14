@@ -103,7 +103,7 @@ Item* Depot::deepCopy() const {
 // Podium
 Podium::Podium(const uint16_t type) :
 	Item(type, 0),
-	outfit(Outfit()), showOutfit(true), showMount(true), showPlatform(true), direction(0) {
+	outfit(Outfit()), direction(0), showOutfit(true), showMount(true), showPlatform(true) {
 	////
 }
 

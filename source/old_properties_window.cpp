@@ -46,77 +46,75 @@ static constexpr int OUTFIT_COLOR_MAX = 133;
 
 namespace {
 
-class FluidTypeClientData final : public wxClientData {
-public:
-	explicit FluidTypeClientData(uint16_t value) : value(value) { }
+	class FluidTypeClientData final : public wxClientData {
+	public:
+		explicit FluidTypeClientData(uint16_t value) : value(value) { }
 
-	uint16_t value;
-};
+		uint16_t value;
+	};
 
-struct FluidChoiceEntry {
-	uint16_t id;
-};
+	struct FluidChoiceEntry {
+		uint16_t id;
+	};
 
-static constexpr FluidChoiceEntry FLUID_CHOICES[] = {
-	{LIQUID_WATER},
-	{LIQUID_BLOOD},
-	{LIQUID_BEER},
-	{LIQUID_SLIME},
-	{LIQUID_LEMONADE},
-	{LIQUID_MILK},
-	{LIQUID_MANAFLUID},
-	{LIQUID_INK},
-	{LIQUID_WATER2},
-	{LIQUID_LIFEFLUID},
-	{LIQUID_OIL},
-	{LIQUID_SLIME2},
-	{LIQUID_URINE},
-	{LIQUID_COCONUT_MILK},
-	{LIQUID_WINE},
-	{LIQUID_MUD},
-	{LIQUID_FRUIT_JUICE},
-	{LIQUID_LAVA},
-	{LIQUID_RUM},
-	{LIQUID_SWAMP},
-	{LIQUID_TEA},
-	{LIQUID_MEAD},
-};
+	static constexpr FluidChoiceEntry FLUID_CHOICES[] = {
+		{ LIQUID_WATER },
+		{ LIQUID_BLOOD },
+		{ LIQUID_BEER },
+		{ LIQUID_SLIME },
+		{ LIQUID_LEMONADE },
+		{ LIQUID_MILK },
+		{ LIQUID_MANAFLUID },
+		{ LIQUID_INK },
+		{ LIQUID_WATER2 },
+		{ LIQUID_LIFEFLUID },
+		{ LIQUID_OIL },
+		{ LIQUID_SLIME2 },
+		{ LIQUID_URINE },
+		{ LIQUID_COCONUT_MILK },
+		{ LIQUID_WINE },
+		{ LIQUID_MUD },
+		{ LIQUID_FRUIT_JUICE },
+		{ LIQUID_LAVA },
+		{ LIQUID_RUM },
+		{ LIQUID_SWAMP },
+		{ LIQUID_TEA },
+		{ LIQUID_MEAD },
+	};
 
-wxString GetFluidTypeLabel(uint16_t fluidType) {
-	wxString label = wxstr(Item::LiquidID2Name(fluidType));
-	if (fluidType == LIQUID_WATER2 || fluidType == LIQUID_SLIME2) {
-		label << " (Legacy ID " << fluidType << ")";
-	} else {
-		label << " (ID " << fluidType << ")";
-	}
-	return label;
-}
-
-void AppendFluidType(wxChoice* choice, uint16_t fluidType, const wxString& label) {
-	choice->Append(label, static_cast<wxClientData*>(newd FluidTypeClientData(fluidType)));
-}
-
-void AppendFluidType(wxChoice* choice, uint16_t fluidType) {
-	AppendFluidType(choice, fluidType, GetFluidTypeLabel(fluidType));
-}
-
-int FindFluidTypeSelection(wxChoice* choice, uint16_t fluidType) {
-	for (unsigned int index = 0; index < choice->GetCount(); ++index) {
-		auto* data = dynamic_cast<FluidTypeClientData*>(choice->GetClientObject(index));
-		if (data && data->value == fluidType) {
-			return static_cast<int>(index);
+	wxString GetFluidTypeLabel(uint16_t fluidType) {
+		wxString label = wxstr(Item::LiquidID2Name(fluidType));
+		if (fluidType == LIQUID_WATER2 || fluidType == LIQUID_SLIME2) {
+			label << " (Legacy ID " << fluidType << ")";
+		} else {
+			label << " (ID " << fluidType << ")";
 		}
+		return label;
 	}
-	return wxNOT_FOUND;
-}
+
+	void AppendFluidType(wxChoice* choice, uint16_t fluidType, const wxString& label) {
+		choice->Append(label, static_cast<wxClientData*>(newd FluidTypeClientData(fluidType)));
+	}
+
+	void AppendFluidType(wxChoice* choice, uint16_t fluidType) {
+		AppendFluidType(choice, fluidType, GetFluidTypeLabel(fluidType));
+	}
+
+	int FindFluidTypeSelection(wxChoice* choice, uint16_t fluidType) {
+		for (unsigned int index = 0; index < choice->GetCount(); ++index) {
+			auto* data = dynamic_cast<FluidTypeClientData*>(choice->GetClientObject(index));
+			if (data && data->value == fluidType) {
+				return static_cast<int>(index);
+			}
+		}
+		return wxNOT_FOUND;
+	}
 
 } // namespace
 
 OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, const Tile* tile_parent, Item* item, wxPoint pos) :
 	ObjectPropertiesWindowBase(win_parent, "Item Properties", map, tile_parent, item, pos),
 	count_field(nullptr),
-	direction_field(nullptr),
-	creature_weight_field(nullptr),
 	action_id_field(nullptr),
 	unique_id_field(nullptr),
 	door_id_field(nullptr),
@@ -124,7 +122,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	depot_id_field(nullptr),
 	splash_type_field(nullptr),
 	text_field(nullptr),
-	description_field(nullptr) {
+	description_field(nullptr),
+	direction_field(nullptr),
+	creature_weight_field(nullptr) {
 	ASSERT(edit_item);
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
@@ -549,8 +549,6 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, const Tile* tile_parent, Creature* creature, wxPoint pos) :
 	ObjectPropertiesWindowBase(win_parent, "Creature Properties", map, tile_parent, creature, pos),
 	count_field(nullptr),
-	direction_field(nullptr),
-	creature_weight_field(nullptr),
 	action_id_field(nullptr),
 	unique_id_field(nullptr),
 	door_id_field(nullptr),
@@ -558,7 +556,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	depot_id_field(nullptr),
 	splash_type_field(nullptr),
 	text_field(nullptr),
-	description_field(nullptr) {
+	description_field(nullptr),
+	direction_field(nullptr),
+	creature_weight_field(nullptr) {
 	ASSERT(edit_creature);
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
@@ -606,8 +606,6 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, const Tile* tile_parent, Spawn* spawn, wxPoint pos) :
 	ObjectPropertiesWindowBase(win_parent, "Spawn Properties", map, tile_parent, spawn, pos),
 	count_field(nullptr),
-	direction_field(nullptr),
-	creature_weight_field(nullptr),
 	action_id_field(nullptr),
 	unique_id_field(nullptr),
 	door_id_field(nullptr),
@@ -615,7 +613,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	depot_id_field(nullptr),
 	splash_type_field(nullptr),
 	text_field(nullptr),
-	description_field(nullptr) {
+	description_field(nullptr),
+	direction_field(nullptr),
+	creature_weight_field(nullptr) {
 	ASSERT(edit_spawn);
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);

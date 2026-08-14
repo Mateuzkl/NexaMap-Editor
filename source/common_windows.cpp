@@ -884,7 +884,9 @@ void FindDialog::OnKeyDown(wxKeyEvent& event) {
 				ssize_t n = item_list->GetSelection();
 				if (n == wxNOT_FOUND) {
 					n = 0;
-				} else if (n != amount && n - amount < n) { // latter is needed for unsigned overflow
+				} else if (static_cast<size_t>(n) > amount) {
+					// n is non-negative here, so comparing as size_t is safe and
+					// says directly what the old mixed-sign underflow guard meant.
 					n -= static_cast<ssize_t>(amount);
 				} else {
 					n = 0;

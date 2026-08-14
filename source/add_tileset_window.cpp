@@ -36,11 +36,11 @@ static constexpr int ITEM_NAME_MAX_LENGTH = 35;
 
 AddTilesetWindow::AddTilesetWindow(wxWindow* win_parent, TilesetCategoryType categoryType, wxPoint pos) :
 	ObjectPropertiesWindowBase(win_parent, "Add a Tileset", pos),
-	category_type(categoryType),
-	item_id_label(nullptr),
-	item_name_label(nullptr),
 	tileset_name_field(nullptr),
 	item_id_field(nullptr),
+	item_id_label(nullptr),
+	item_name_label(nullptr),
+	category_type(categoryType),
 	item_button(nullptr) {
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 	wxString description = "Add a Tileset";
