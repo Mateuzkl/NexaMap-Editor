@@ -50,7 +50,7 @@ public:
 	ItemVector& getVector() {
 		return contents;
 	}
-	double getWeight() override;
+	double getWeight() const override;
 
 	bool unserializeItemNode_OTBM(const IOMap& maphandle, BinaryNode* node) override;
 	bool serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const override;

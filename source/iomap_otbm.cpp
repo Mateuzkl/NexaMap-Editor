@@ -957,7 +957,7 @@ bool IOMapOTBM::checkMemoryBudget(const char* phase, uint64_t pendingBytes) {
 	if (memoryBudgetCheck(phase, pendingBytes, budgetError)) {
 		return true;
 	}
-	error(wxstr(budgetError).wc_str());
+	error("%s", wxstr(budgetError));
 	return false;
 }
 
@@ -969,7 +969,7 @@ bool IOMapOTBM::loadMapData(Map& map, const FileName& filename) {
 	bool isGzip = false;
 	std::string readError;
 	if (!isGzipOtbmInput(filename, isGzip, readError)) {
-		error(wxstr(readError).wc_str());
+		error("%s", wxstr(readError));
 		return false;
 	}
 	if (!isGzip) {
@@ -994,7 +994,7 @@ bool IOMapOTBM::loadMapData(Map& map, const FileName& filename) {
 	// input still needs an in-memory decompression buffer.
 	std::vector<uint8_t> otbmBuffer;
 	if (!readOtbmBytes(filename, otbmBuffer, readError, memoryBudgetCheck)) {
-		error(wxstr(readError).wc_str());
+		error("%s", wxstr(readError));
 		return false;
 	}
 	const size_t otbmSize = otbmBuffer.size();

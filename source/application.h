@@ -62,8 +62,8 @@ private:
 	void OnFatalException() override;
 
 #ifdef _USE_PROCESS_COM
-	RMEProcessServer* m_proc_server;
-	wxSingleInstanceChecker* m_single_instance_checker;
+	RMEProcessServer* m_proc_server = nullptr;
+	wxSingleInstanceChecker* m_single_instance_checker = nullptr;
 #endif
 };
 

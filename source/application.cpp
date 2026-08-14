@@ -469,10 +469,7 @@ void Application::Unload() {
 }
 
 int Application::OnExit() {
-#ifdef _USE_PROCESS_COM
-	wxDELETE(m_proc_server);
-	wxDELETE(m_single_instance_checker);
-#endif
+	ShutdownServices();
 	if (m_restart_requested) {
 		std::vector<wxString> arguments;
 		arguments.push_back(wxStandardPaths::Get().GetExecutablePath());

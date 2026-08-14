@@ -21,6 +21,7 @@
 #include "client_version.h"
 
 #include <cstdint>
+#include <utility>
 
 enum ImportType {
 	IMPORT_DONT,
@@ -44,8 +45,19 @@ protected:
 	wxArrayString warnings;
 	wxString errorstr;
 
-	void warning(const wxString format, ...);
-	void error(const wxString format, ...);
+	// wxString is a class type, so it can never be the anchor argument of
+	// va_start() -- the previous vararg form was undefined behaviour. These
+	// forward to wxString::Format, which is type-safe and takes the existing
+	// call sites unchanged.
+	template <typename... Args>
+	void warning(const wxString& format, Args&&... args) {
+		warnings.push_back(wxString::Format(format, std::forward<Args>(args)...));
+	}
+
+	template <typename... Args>
+	void error(const wxString& format, Args&&... args) {
+		errorstr = wxString::Format(format, std::forward<Args>(args)...);
+	}
 
 public:
 	IOMap() {
