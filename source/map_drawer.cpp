@@ -430,11 +430,15 @@ bool MapDrawer::isSceneDirty() {
 		viewport_settle_pending = true;
 	}
 
+	const bool viewport_changed = cached_scene_zoom != zoom
+		|| cached_scroll_x != view_scroll_x
+		|| cached_scroll_y != view_scroll_y;
 	const bool hard_invalidation = !cached_scene_initialized
 		|| cached_floor != floor
 		|| cached_start_z != start_z
 		|| cached_screensize_x != screensize_x
-		|| cached_screensize_y != screensize_y;
+		|| cached_screensize_y != screensize_y
+		|| viewport_changed;
 	if (hard_invalidation) {
 		viewport_settle_pending = false;
 		return true;
