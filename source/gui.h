@@ -21,6 +21,8 @@
 #include "graphics.h"
 #include "position.h"
 
+#include <chrono>
+
 #include "copybuffer.h"
 #include "dcbutton.h"
 #include "brush_enums.h"
@@ -483,6 +485,10 @@ protected:
 	int32_t progressFrom;
 	int32_t progressTo;
 	int32_t currentProgress;
+	// Long loads (giant OTBM maps) can spend well over Windows' five-second
+	// unresponsive threshold inside a single integer percent. Update() is the only
+	// point that pumps the message queue, so it is also driven by elapsed time.
+	std::chrono::steady_clock::time_point lastProgressPump;
 
 	wxWindowDisabler* winDisabler;
 	int disabled_counter;

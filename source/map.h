@@ -245,7 +245,13 @@ public:
 	Zones zones;
 
 private:
-	std::vector<uint16_t> uniqueIds;
+	// Reference count per unique id, indexed directly by the id. A flat 64K table
+	// keeps insertion O(1) during a map load, where a linear scan degrades into
+	// O(n^2) once the id space fills up. Counting also fixes the previous
+	// behaviour, where two items sharing a uid produced a single entry and the
+	// first removal dropped it while the other item was still on the map.
+	// Allocated on first use, so an empty map costs nothing.
+	std::vector<uint32_t> uidRefCount;
 };
 
 template <typename ForeachType>

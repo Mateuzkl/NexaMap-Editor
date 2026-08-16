@@ -203,10 +203,17 @@ protected:
 
 private:
 	bool checkMemoryBudget(const char* phase, uint64_t pendingBytes = 0);
+	// Reports the read position as load progress. Returns false when the user
+	// cancelled. Also the only thing that pumps the message queue during a load,
+	// so it has to be reachable from the inner tile loop and not just once per
+	// batch of tile areas.
+	bool reportLoadProgress();
 	static bool prependXmlDeclaration(pugi::xml_document& doc);
 	uint32_t headerItemMajorVersion = 0;
 	uint32_t headerItemMinorVersion = 0;
 	OTBMMemoryBudgetCheck memoryBudgetCheck;
+	// Borrowed for the duration of loadMap() only; never owned.
+	NodeFileReadHandle* progressSource = nullptr;
 };
 
 #endif

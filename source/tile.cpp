@@ -204,8 +204,9 @@ bool Tile::hasProperty(enum ITEMPROPERTY prop) const {
 	}
 
 	return std::find_if(items.begin(), items.end(), [prop](Item* item) {
-		return item->hasProperty(prop);
-	}) != items.end();
+			   return item->hasProperty(prop);
+		   })
+		!= items.end();
 }
 
 int Tile::getIndexOf(Item* item) const {
@@ -337,7 +338,7 @@ void Tile::addLoadedItem(Item* item) {
 	}
 }
 
-void Tile::addLoadedItem(Item* item, const ItemType &type) {
+void Tile::addLoadedItem(Item* item, const ItemType& type) {
 	if (!item) {
 		return;
 	}
@@ -365,15 +366,15 @@ void Tile::addLoadedItem(Item* item, const ItemType &type) {
 	updateStateForItem(item, type);
 }
 
-void Tile::updateStateForItem(const Item* item, const ItemType &type) {
+void Tile::updateStateForItem(const Item* item, const ItemType& type) {
 	if (item->isSelected()) {
 		statflags |= TILESTATE_SELECTED;
 	}
 	if (item->getUniqueID() != 0) {
 		statflags |= TILESTATE_UNIQUE;
 	}
-	if (item->getMiniMapColor() != 0) {
-		minimapColor = item->getMiniMapColor();
+	if (const uint8_t color = item->getMiniMapColor(); color != 0) {
+		minimapColor = color;
 	}
 	if (type.unpassable) {
 		statflags |= TILESTATE_BLOCKING;
@@ -587,8 +588,8 @@ void Tile::update() {
 		if (ground->getUniqueID() != 0) {
 			statflags |= TILESTATE_UNIQUE;
 		}
-		if (ground->getMiniMapColor() != 0) {
-			minimapColor = ground->getMiniMapColor();
+		if (const uint8_t color = ground->getMiniMapColor(); color != 0) {
+			minimapColor = color;
 		}
 	}
 
@@ -601,8 +602,8 @@ void Tile::update() {
 		if (i->getUniqueID() != 0) {
 			statflags |= TILESTATE_UNIQUE;
 		}
-		if (i->getMiniMapColor() != 0) {
-			minimapColor = i->getMiniMapColor();
+		if (const uint8_t color = i->getMiniMapColor(); color != 0) {
+			minimapColor = color;
 		}
 
 		const auto& it = g_items[i->getID()];
