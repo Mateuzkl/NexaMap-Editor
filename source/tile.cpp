@@ -204,8 +204,9 @@ bool Tile::hasProperty(enum ITEMPROPERTY prop) const {
 	}
 
 	return std::find_if(items.begin(), items.end(), [prop](Item* item) {
-		return item->hasProperty(prop);
-	}) != items.end();
+			   return item->hasProperty(prop);
+		   })
+		!= items.end();
 }
 
 int Tile::getIndexOf(Item* item) const {
@@ -337,7 +338,7 @@ void Tile::addLoadedItem(Item* item) {
 	}
 }
 
-void Tile::addLoadedItem(Item* item, const ItemType &type) {
+void Tile::addLoadedItem(Item* item, const ItemType& type) {
 	if (!item) {
 		return;
 	}
@@ -365,7 +366,7 @@ void Tile::addLoadedItem(Item* item, const ItemType &type) {
 	updateStateForItem(item, type);
 }
 
-void Tile::updateStateForItem(const Item* item, const ItemType &type) {
+void Tile::updateStateForItem(const Item* item, const ItemType& type) {
 	if (item->isSelected()) {
 		statflags |= TILESTATE_SELECTED;
 	}
