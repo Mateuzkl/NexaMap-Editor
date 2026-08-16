@@ -22,6 +22,7 @@
 
 #include <zlib.h>
 
+#include <cstring>
 #include <limits>
 #include <new>
 #include <optional>
@@ -66,8 +67,8 @@ namespace {
 		}
 		switch (static_cast<ItemAttribute::Type>(type)) {
 			case ItemAttribute::STRING: {
-				std::string ignored;
-				return stream->getLongString(ignored);
+				uint32_t length = 0;
+				return stream->getU32(length) && stream->skip(length);
 			}
 			case ItemAttribute::INTEGER:
 			case ItemAttribute::FLOAT:
@@ -144,8 +145,10 @@ namespace {
 				case OTBM_ATTR_TEXT:
 				case OTBM_ATTR_DESC:
 				case OTBM_ATTR_WRITTENBY: {
-					std::string ignored;
-					valid = stream->getString(ignored);
+					// This pass only looks for the attributes that decide the item's
+					// dynamic type, so the text is skipped rather than materialised.
+					uint16_t length = 0;
+					valid = stream->getU16(length) && stream->skip(length);
 					break;
 				}
 				case OTBM_ATTR_PODIUMOUTFIT:
@@ -789,6 +792,23 @@ static bool readOtbmBytes(const FileName& filename, std::vector<uint8_t>& output
 
 	constexpr size_t OUTPUT_CHUNK_SIZE = 1024 * 1024;
 	std::vector<uint8_t> inflated;
+
+	// The gzip trailer carries the uncompressed size in its last four bytes.
+	// Untrusted and only modulo 2^32, so it is used purely as a reserve hint: the
+	// growth loop below still handles the case where it is wrong. Getting it right
+	// turns a few hundred-megabyte reallocations into one allocation.
+	if (bytes.size() >= 4) {
+		uint32_t isize = 0;
+		std::memcpy(&isize, bytes.data() + bytes.size() - sizeof(isize), sizeof(isize));
+		if (isize > 0 && isize <= MAX_OTBM_SIZE) {
+			try {
+				inflated.reserve(isize);
+			} catch (const std::bad_alloc&) {
+				// A bad hint must not fail the load; fall back to growing in chunks.
+			}
+		}
+	}
+
 	int inflateResult = Z_OK;
 	do {
 		if (inflated.size() >= MAX_OTBM_SIZE) {
@@ -958,6 +978,22 @@ bool IOMapOTBM::checkMemoryBudget(const char* phase, uint64_t pendingBytes) {
 		return true;
 	}
 	error("%s", wxstr(budgetError));
+	return false;
+}
+
+bool IOMapOTBM::reportLoadProgress() {
+	if (!progressSource) {
+		return true;
+	}
+	const size_t total = progressSource->size();
+	if (total == 0) {
+		return true;
+	}
+	const auto done = static_cast<int32_t>(100.0 * progressSource->tell() / total);
+	if (g_gui.SetLoadDone(std::min<int32_t>(99, done))) {
+		return true;
+	}
+	error("Map loading was cancelled.");
 	return false;
 }
 
@@ -1206,8 +1242,16 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 
 	uint32_t tilesRead = 0;
 	for (BinaryNode* tileNode = mapNode->getChild(); tileNode != nullptr; tileNode = tileNode->advance()) {
-		if (++tilesRead % 2048 == 0 && !checkMemoryBudget("while parsing OTBM tiles")) {
-			return false;
+		if (++tilesRead % 2048 == 0) {
+			if (!checkMemoryBudget("while parsing OTBM tiles")) {
+				return false;
+			}
+			// A single tile area holds up to 65536 tiles, so reporting only once
+			// per batch of areas leaves the window unattended long enough for
+			// Windows to ghost it. SetLoadDone throttles itself.
+			if (!reportLoadProgress()) {
+				return false;
+			}
 		}
 		Tile* tile = nullptr;
 		uint8_t tile_type;
@@ -1239,14 +1283,18 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 				continue;
 			}
 
+			// Read the house id before allocating: the discard path below used to
+			// `continue` with the tile already allocated and not yet stored in its
+			// location, leaking it. Stream order is unchanged.
+			uint32_t house_id = 0;
+			if (tile_type == OTBM_HOUSETILE && !tileNode->getU32(house_id)) {
+				warning("House tile without house data, discarding tile");
+				continue;
+			}
+
 			tile = map.allocator(tileLocation);
 			House* house = nullptr;
 			if (tile_type == OTBM_HOUSETILE) {
-				uint32_t house_id;
-				if (!tileNode->getU32(house_id)) {
-					warning("House tile without house data, discarding tile");
-					continue;
-				}
 				if (house_id) {
 					house = map.houses.getHouse(house_id);
 					if (!house) {
@@ -1362,7 +1410,9 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 				house->addTile(tile);
 			}
 
-			map.setTile(pos.x, pos.y, pos.z, tile);
+			// The coordinate overload would walk the quadtree down from the root
+			// and re-create the floor to reach the location resolved above.
+			map.setTile(tileLocation, tile);
 		} else {
 			warning("Unknown type of tile node");
 		}
@@ -1371,6 +1421,16 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 }
 
 bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
+	// `f` outlives this call in none of the callers, and loadMap has many early
+	// returns, so the borrow is scoped rather than cleared by hand at each one.
+	struct ProgressSourceBorrow {
+		NodeFileReadHandle*& slot;
+		~ProgressSourceBorrow() {
+			slot = nullptr;
+		}
+	} borrow { progressSource };
+	progressSource = &f;
+
 	BinaryNode* root = f.getRootNode();
 	if (!root) {
 		error("Could not read root node.");
@@ -1448,8 +1508,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 			if (!checkMemoryBudget("while parsing the OTBM map")) {
 				return false;
 			}
-			if (!g_gui.SetLoadDone(std::min<int32_t>(99, static_cast<int32_t>(100.0 * f.tell() / f.size())))) {
-				error("Map loading was cancelled.");
+			if (!reportLoadProgress()) {
 				return false;
 			}
 		}

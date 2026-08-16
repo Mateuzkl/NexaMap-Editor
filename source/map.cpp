@@ -342,26 +342,30 @@ void Map::updateUniqueIds(Tile* old_tile, Tile* new_tile) {
 }
 
 void Map::addUniqueId(uint16_t uid) {
-	auto it = std::find(uniqueIds.begin(), uniqueIds.end(), uid);
-	if (it == uniqueIds.end()) {
-		uniqueIds.push_back(uid);
+	if (uid == 0) {
+		return;
 	}
+	if (uidRefCount.empty()) {
+		uidRefCount.assign(std::numeric_limits<uint16_t>::max() + 1, 0);
+	}
+	++uidRefCount[uid];
 }
 
 void Map::removeUniqueId(uint16_t uid) {
-	auto it = std::find(uniqueIds.begin(), uniqueIds.end(), uid);
-	if (it != uniqueIds.end()) {
-		uniqueIds.erase(it);
+	if (uid == 0 || uidRefCount.empty()) {
+		return;
+	}
+	if (uidRefCount[uid] > 0) {
+		--uidRefCount[uid];
 	}
 }
 
 bool Map::hasUniqueId(uint16_t uid) const {
-	if (uid == 0 || uniqueIds.empty()) {
+	if (uid == 0 || uidRefCount.empty()) {
 		return false;
 	}
 
-	auto it = std::find(uniqueIds.begin(), uniqueIds.end(), uid);
-	return it != uniqueIds.end();
+	return uidRefCount[uid] != 0;
 }
 
 MapVersion Map::getVersion() const {

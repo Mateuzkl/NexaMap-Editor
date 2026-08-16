@@ -1333,6 +1333,7 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 	progressFrom = 0;
 	progressTo = 100;
 	currentProgress = -1;
+	lastProgressPump = std::chrono::steady_clock::now();
 
 	progressBar = newd wxGenericProgressDialog("Loading", progressText + " (0%)", 100, root, wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0));
 	progressBar->SetSize(280, -1);
@@ -1350,7 +1351,15 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 	if (done == 100) {
 		DestroyLoadBar();
 		return true;
-	} else if (done == currentProgress) {
+	}
+
+	// progressBar->Update() is the only call in a load that pumps the message
+	// queue. Returning early on every unchanged percent lets a giant map spend
+	// minutes between two pumps, which is what makes Windows ghost the window as
+	// "Not Responding" mid-load. Repaint on a changed percent or every 100 ms,
+	// whichever comes first.
+	const auto now = std::chrono::steady_clock::now();
+	if (done == currentProgress && now - lastProgressPump < std::chrono::milliseconds(100)) {
 		return true;
 	}
 
@@ -1368,6 +1377,7 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 			wxString::Format("%s (%d%%)", progressText, newProgress)
 		);
 		currentProgress = newProgress;
+		lastProgressPump = now;
 	}
 
 	return shouldContinue;
