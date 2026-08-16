@@ -800,7 +800,14 @@ static bool readOtbmBytes(const FileName& filename, std::vector<uint8_t>& output
 	if (bytes.size() >= 4) {
 		uint32_t isize = 0;
 		std::memcpy(&isize, bytes.data() + bytes.size() - sizeof(isize), sizeof(isize));
-		if (isize > 0 && isize <= MAX_OTBM_SIZE) {
+		// The hint is one large allocation, so it has to clear the same budget the
+		// loop below clears per chunk. A rejection drops only the hint: the growth
+		// path still runs and reports the budget error itself if the decompressed
+		// map really does not fit. The error goes to a scratch string so a refused
+		// hint cannot leave a stale message behind on an otherwise fine load.
+		std::string hintError;
+		if (isize > 0 && isize <= MAX_OTBM_SIZE
+			&& checkOtbmMemoryBudget(memoryBudgetCheck, "before reserving the decompressed OTBM", isize, hintError)) {
 			try {
 				inflated.reserve(isize);
 			} catch (const std::bad_alloc&) {

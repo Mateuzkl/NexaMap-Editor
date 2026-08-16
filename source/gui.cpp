@@ -1353,22 +1353,25 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 		return true;
 	}
 
+	// currentProgress stores the scaled value, so the throttle has to compare
+	// against the scaled value too. Under a SetLoadScale range the raw `done` and
+	// currentProgress live in different spaces and never line up.
+	int32_t newProgress = progressFrom + static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
+	newProgress = std::max<int32_t>(0, std::min<int32_t>(100, newProgress));
+
 	// progressBar->Update() is the only call in a load that pumps the message
 	// queue. Returning early on every unchanged percent lets a giant map spend
 	// minutes between two pumps, which is what makes Windows ghost the window as
 	// "Not Responding" mid-load. Repaint on a changed percent or every 100 ms,
 	// whichever comes first.
 	const auto now = std::chrono::steady_clock::now();
-	if (done == currentProgress && now - lastProgressPump < std::chrono::milliseconds(100)) {
+	if (newProgress == currentProgress && now - lastProgressPump < std::chrono::milliseconds(100)) {
 		return true;
 	}
 
 	if (!newMessage.empty()) {
 		progressText = newMessage;
 	}
-
-	int32_t newProgress = progressFrom + static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
-	newProgress = std::max<int32_t>(0, std::min<int32_t>(100, newProgress));
 
 	bool shouldContinue = true;
 	if (progressBar) {
