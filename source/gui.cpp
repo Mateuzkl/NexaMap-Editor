@@ -1336,10 +1336,16 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 	lastProgressPump = std::chrono::steady_clock::now();
 	progressUpdating = false;
 
-	progressBar = newd wxProgressDialog("Loading", progressText + " (0%)", 100, root, wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0));
+	progressBar = new wxProgressDialog(
+		"Loading",
+		progressText + " (0%)",
+		100,
+		root,
+		wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0)
+	);
+
 	progressBar->SetSize(280, -1);
 	progressBar->Show(true);
-
 	progressBar->Update(0);
 }
 
@@ -1355,19 +1361,26 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 	}
 
 	// currentProgress stores the scaled value, so the throttle has to compare
-	// against the scaled value too. Under a SetLoadScale range the raw `done` and
-	// currentProgress live in different spaces and never line up.
-	int32_t newProgress = progressFrom + static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
-	newProgress = std::max<int32_t>(0, std::min<int32_t>(100, newProgress));
+	// against the scaled value too. Under a SetLoadScale range the raw `done`
+	// and currentProgress live in different spaces and never line up.
+	int32_t newProgress =
+		progressFrom +
+		static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
 
-	// progressBar->Update() is the only call in a load that pumps the message
-	// queue. Returning early on every unchanged percent lets a giant map spend
-	// minutes between two pumps, which is what makes Windows ghost the window as
-	// "Not Responding" mid-load. Repaint on a changed percent or every 250 ms,
-	// whichever comes first. With the native dialog on Windows the pump concern
-	// is gone, but the throttle still avoids redundant COM round-trips.
+	newProgress = std::max<int32_t>(
+		0,
+		std::min<int32_t>(100, newProgress)
+	);
+
+	// Avoid excessive progress updates during very large map loads.
+	// Update immediately when percentage changes, otherwise allow a refresh
+	// every 250 ms so Windows continues receiving UI updates.
 	const auto now = std::chrono::steady_clock::now();
-	if (newProgress == currentProgress && now - lastProgressPump < std::chrono::milliseconds(250)) {
+
+	if (
+		newProgress == currentProgress &&
+		now - lastProgressPump < std::chrono::milliseconds(250)
+	) {
 		return true;
 	}
 
@@ -1375,40 +1388,46 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 		progressText = newMessage;
 	}
 
-	bool shouldContinue = true;
-	if (progressBar) {
-		// Guard against reentrancy: if a future dialog type or platform ever
-		// pumps events from Update(), this prevents recursive entry.
-		if (progressUpdating) {
-			return true;
-		}
-		progressUpdating = true;
-		shouldContinue = progressBar->Update(
-			newProgress,
-			wxString::Format("%s (%d%%)", progressText, newProgress)
-		);
-		currentProgress = newProgress;
-		lastProgressPump = now;
-		progressUpdating = false;
+	if (!progressBar) {
+		return true;
 	}
+
+	// Prevent recursive entry if Update() causes event processing/reentrancy.
+	if (progressUpdating) {
+		return true;
+	}
+
+	progressUpdating = true;
+
+	const bool shouldContinue = progressBar->Update(
+		newProgress,
+		wxString::Format("%s (%d%%)", progressText, newProgress)
+	);
+
+	currentProgress = newProgress;
+	lastProgressPump = now;
+	progressUpdating = false;
 
 	return shouldContinue;
 }
 
 void GUI::DestroyLoadBar() {
-	if (progressBar) {
-		progressBar->Show(false);
-		currentProgress = -1;
-		progressUpdating = false;
+	if (!progressBar) {
+		return;
+	}
 
-		progressBar->Destroy();
-		progressBar = nullptr;
+	progressBar->Show(false);
 
-		if (root->IsActive()) {
-			root->Raise();
-		} else {
-			root->RequestUserAttention();
-		}
+	currentProgress = -1;
+	progressUpdating = false;
+
+	progressBar->Destroy();
+	progressBar = nullptr;
+
+	if (root->IsActive()) {
+		root->Raise();
+	} else {
+		root->RequestUserAttention();
 	}
 }
 

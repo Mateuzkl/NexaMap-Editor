@@ -477,28 +477,29 @@ protected:
 	float custom_thickness_mod;
 
 	//=========================================================================
-	// Progress bar tracking
-	//=========================================================================
-	wxString progressText;
-	wxProgressDialog* progressBar;
+// Progress bar tracking
+//=========================================================================
+wxString progressText;
+wxProgressDialog* progressBar = nullptr;
 
-	int32_t progressFrom;
-	int32_t progressTo;
-	int32_t currentProgress;
-	// Long loads (giant OTBM maps) can spend well over Windows' five-second
-	// unresponsive threshold inside a single integer percent. Update() is the only
-	// point that pumps the message queue, so it is also driven by elapsed time.
-	std::chrono::steady_clock::time_point lastProgressPump;
-	// Prevents reentrant calls to SetLoadDone() if a future dialog type ever
-	// pumps the event loop from inside Update().
-	bool progressUpdating = false;
+int32_t progressFrom = 0;
+int32_t progressTo = 100;
+int32_t currentProgress = -1;
 
+// Long loads (giant OTBM maps) can spend well over Windows' five-second
+// unresponsive threshold inside a single integer percent. Update() is the only
+// point that pumps the message queue, so it is also driven by elapsed time.
+std::chrono::steady_clock::time_point lastProgressPump;
 
-	int disabled_counter;
+// Prevents reentrant calls to SetLoadDone() if Update() processes
+// GUI events and causes another progress update recursively.
+bool progressUpdating = false;
 
-	friend class RenderingLock;
-	friend MapTab::MapTab(MapTabbook*, Editor*);
-	friend MapTab::MapTab(const MapTab*);
+int disabled_counter;
+
+friend class RenderingLock;
+friend MapTab::MapTab(MapTabbook*, Editor*);
+friend MapTab::MapTab(const MapTab*);
 };
 
 extern GUI g_gui;
