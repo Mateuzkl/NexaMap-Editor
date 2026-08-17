@@ -623,14 +623,16 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 		delete todelete;
 	}
 
-	while (memory_size > size_t(1024 * 1024 * g_settings.getInteger(Config::UNDO_MEM_SIZE)) && !actions.empty()) {
+	const size_t max_undo_memory = static_cast<size_t>(std::max(0, g_settings.getInteger(Config::UNDO_MEM_SIZE))) * 1024ULL * 1024ULL;
+	while (memory_size > max_undo_memory && !actions.empty()) {
 		memory_size -= actions.front()->memsize();
 		delete actions.front();
 		actions.pop_front();
 		current--;
 	}
 
-	if (actions.size() > size_t(g_settings.getInteger(Config::UNDO_SIZE)) && !actions.empty()) {
+	const size_t max_undo_size = static_cast<size_t>(std::max(0, g_settings.getInteger(Config::UNDO_SIZE)));
+	while (actions.size() > max_undo_size && !actions.empty()) {
 		memory_size -= actions.front()->memsize();
 		BatchAction* todelete = actions.front();
 		actions.pop_front();
