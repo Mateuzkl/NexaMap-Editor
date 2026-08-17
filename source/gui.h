@@ -480,7 +480,7 @@ protected:
 	// Progress bar tracking
 	//=========================================================================
 	wxString progressText;
-	wxGenericProgressDialog* progressBar;
+	wxProgressDialog* progressBar;
 
 	int32_t progressFrom;
 	int32_t progressTo;
@@ -489,8 +489,11 @@ protected:
 	// unresponsive threshold inside a single integer percent. Update() is the only
 	// point that pumps the message queue, so it is also driven by elapsed time.
 	std::chrono::steady_clock::time_point lastProgressPump;
+	// Prevents reentrant calls to SetLoadDone() if a future dialog type ever
+	// pumps the event loop from inside Update().
+	bool progressUpdating = false;
 
-	wxWindowDisabler* winDisabler;
+
 	int disabled_counter;
 
 	friend class RenderingLock;
