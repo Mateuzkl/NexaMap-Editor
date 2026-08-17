@@ -149,8 +149,9 @@ public:
 
 	/**
 	 * Sets the scale of the loading bar.
-	 * Calling this with (50, 80) means that setting 50 as 'done',
-	 * it will display as 0% loaded, 80 will display as 100% loaded.
+	 * Sets the scale mapping for SetLoadDone, where 'done' represents a local
+	 * percentage from 0 to 100 that is linearly mapped into the global range
+	 * [from, to] and saturated between 0 and 100.
 	 */
 	void SetLoadScale(int32_t from, int32_t to);
 
@@ -494,6 +495,7 @@ protected:
 	// Prevents reentrant calls to SetLoadDone() if Update() processes
 	// GUI events and causes another progress update recursively.
 	bool progressUpdating = false;
+	bool destroyPending = false;
 
 	int disabled_counter;
 

@@ -21,6 +21,10 @@
 #include "main.h"
 
 namespace Config {
+	constexpr int MIN_WORKER_THREADS = 1;
+	constexpr int MAX_WORKER_THREADS = 256;
+	constexpr int DEFAULT_FALLBACK_WORKER_THREADS = 4;
+
 	enum Key {
 		NONE,
 		VERSION_ID,

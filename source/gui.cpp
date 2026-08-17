@@ -1335,6 +1335,7 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 	currentProgress = -1;
 	lastProgressPump = std::chrono::steady_clock::now();
 	progressUpdating = false;
+	destroyPending = false;
 
 	progressBar = new wxProgressDialog(
 		"Loading",
@@ -1346,7 +1347,14 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 
 	progressBar->SetSize(280, -1);
 	progressBar->Show(true);
+
+	progressUpdating = true;
 	progressBar->Update(0);
+	progressUpdating = false;
+
+	if (destroyPending) {
+		DestroyLoadBar();
+	}
 }
 
 void GUI::SetLoadScale(int32_t from, int32_t to) {
@@ -1360,6 +1368,11 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 		return true;
 	}
 
+	const bool messageChanged = !newMessage.empty() && newMessage != progressText;
+	if (messageChanged) {
+		progressText = newMessage;
+	}
+
 	// currentProgress stores the scaled value, so the throttle has to compare
 	// against the scaled value too. Under a SetLoadScale range the raw `done`
 	// and currentProgress live in different spaces and never line up.
@@ -1371,18 +1384,14 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 	);
 
 	// Avoid excessive progress updates during very large map loads.
-	// Update immediately when percentage changes, otherwise allow a refresh
+	// Update immediately when percentage or message changes, otherwise allow a refresh
 	// every 250 ms so Windows continues receiving UI updates.
 	const auto now = std::chrono::steady_clock::now();
 
 	if (
-		newProgress == currentProgress && now - lastProgressPump < std::chrono::milliseconds(250)
+		!messageChanged && newProgress == currentProgress && now - lastProgressPump < std::chrono::milliseconds(250)
 	) {
 		return true;
-	}
-
-	if (!newMessage.empty()) {
-		progressText = newMessage;
 	}
 
 	if (!progressBar) {
@@ -1405,6 +1414,10 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 	lastProgressPump = now;
 	progressUpdating = false;
 
+	if (destroyPending) {
+		DestroyLoadBar();
+	}
+
 	return shouldContinue;
 }
 
@@ -1413,6 +1426,12 @@ void GUI::DestroyLoadBar() {
 		return;
 	}
 
+	if (progressUpdating) {
+		destroyPending = true;
+		return;
+	}
+
+	destroyPending = false;
 	progressBar->Show(false);
 
 	currentProgress = -1;
@@ -1421,10 +1440,12 @@ void GUI::DestroyLoadBar() {
 	progressBar->Destroy();
 	progressBar = nullptr;
 
-	if (root->IsActive()) {
-		root->Raise();
-	} else {
-		root->RequestUserAttention();
+	if (root) {
+		if (root->IsActive()) {
+			root->Raise();
+		} else {
+			root->RequestUserAttention();
+		}
 	}
 }
 
