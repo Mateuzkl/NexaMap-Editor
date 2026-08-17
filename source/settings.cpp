@@ -46,6 +46,14 @@ namespace {
 		}
 		return true;
 	}
+
+	unsigned int GetDefaultWorkerThreads() {
+		unsigned int threads = std::thread::hardware_concurrency();
+		if (threads == 0) {
+			threads = Config::DEFAULT_FALLBACK_WORKER_THREADS;
+		}
+		return std::min<unsigned int>(threads, Config::MAX_WORKER_THREADS);
+	}
 }
 
 Settings::Settings() :
@@ -262,11 +270,11 @@ void Settings::IO(IOMode mode) {
 
 	section("Editor");
 	String(RECENT_FILES, "");
-	Int(WORKER_THREADS, 1);
+	Int(WORKER_THREADS, GetDefaultWorkerThreads());
 	Int(MERGE_MOVE, 0);
 	Int(MERGE_PASTE, 0);
-	Int(UNDO_SIZE, 400);
-	Int(UNDO_MEM_SIZE, 40);
+	Int(UNDO_SIZE, 16384);
+	Int(UNDO_MEM_SIZE, 4096);
 	Int(GROUP_ACTIONS, 1);
 	Int(SELECTION_TYPE, SELECT_CURRENT_FLOOR);
 	Int(COMPENSATED_SELECT, 1);
@@ -303,7 +311,7 @@ void Settings::IO(IOMode mode) {
 	Int(USE_OTBM_4_FOR_ALL_MAPS, 0);
 	Int(USE_OTGZ, 1);
 	Int(SAVE_WITH_OTB_MAGIC_NUMBER, 0);
-	Int(REPLACE_SIZE, 500);
+	Int(REPLACE_SIZE, 100000);
 	Int(COPY_POSITION_FORMAT, 0);
 	Int(ENABLE_DIAGNOSTIC_LOG, 0);
 

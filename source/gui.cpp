@@ -1334,12 +1334,27 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 	progressTo = 100;
 	currentProgress = -1;
 	lastProgressPump = std::chrono::steady_clock::now();
+	progressUpdating = false;
+	destroyPending = false;
 
-	progressBar = newd wxGenericProgressDialog("Loading", progressText + " (0%)", 100, root, wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0));
+	progressBar = new wxProgressDialog(
+		"Loading",
+		progressText + " (0%)",
+		100,
+		root,
+		wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0)
+	);
+
 	progressBar->SetSize(280, -1);
 	progressBar->Show(true);
 
+	progressUpdating = true;
 	progressBar->Update(0);
+	progressUpdating = false;
+
+	if (destroyPending) {
+		DestroyLoadBar();
+	}
 }
 
 void GUI::SetLoadScale(int32_t from, int32_t to) {
@@ -1353,47 +1368,79 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 		return true;
 	}
 
-	// currentProgress stores the scaled value, so the throttle has to compare
-	// against the scaled value too. Under a SetLoadScale range the raw `done` and
-	// currentProgress live in different spaces and never line up.
-	int32_t newProgress = progressFrom + static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
-	newProgress = std::max<int32_t>(0, std::min<int32_t>(100, newProgress));
-
-	// progressBar->Update() is the only call in a load that pumps the message
-	// queue. Returning early on every unchanged percent lets a giant map spend
-	// minutes between two pumps, which is what makes Windows ghost the window as
-	// "Not Responding" mid-load. Repaint on a changed percent or every 100 ms,
-	// whichever comes first.
-	const auto now = std::chrono::steady_clock::now();
-	if (newProgress == currentProgress && now - lastProgressPump < std::chrono::milliseconds(100)) {
-		return true;
-	}
-
-	if (!newMessage.empty()) {
+	const bool messageChanged = !newMessage.empty() && newMessage != progressText;
+	if (messageChanged) {
 		progressText = newMessage;
 	}
 
-	bool shouldContinue = true;
-	if (progressBar) {
-		shouldContinue = progressBar->Update(
-			newProgress,
-			wxString::Format("%s (%d%%)", progressText, newProgress)
-		);
-		currentProgress = newProgress;
-		lastProgressPump = now;
+	// currentProgress stores the scaled value, so the throttle has to compare
+	// against the scaled value too. Under a SetLoadScale range the raw `done`
+	// and currentProgress live in different spaces and never line up.
+	int32_t newProgress = progressFrom + static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
+
+	newProgress = std::max<int32_t>(
+		0,
+		std::min<int32_t>(100, newProgress)
+	);
+
+	// Avoid excessive progress updates during very large map loads.
+	// Update immediately when percentage or message changes, otherwise allow a refresh
+	// every 250 ms so Windows continues receiving UI updates.
+	const auto now = std::chrono::steady_clock::now();
+
+	if (
+		!messageChanged && newProgress == currentProgress && now - lastProgressPump < std::chrono::milliseconds(250)
+	) {
+		return true;
+	}
+
+	if (!progressBar) {
+		return true;
+	}
+
+	// Prevent recursive entry if Update() causes event processing/reentrancy.
+	if (progressUpdating) {
+		return true;
+	}
+
+	progressUpdating = true;
+
+	const bool shouldContinue = progressBar->Update(
+		newProgress,
+		wxString::Format("%s (%d%%)", progressText, newProgress)
+	);
+
+	currentProgress = newProgress;
+	lastProgressPump = now;
+	progressUpdating = false;
+
+	if (destroyPending) {
+		DestroyLoadBar();
 	}
 
 	return shouldContinue;
 }
 
 void GUI::DestroyLoadBar() {
-	if (progressBar) {
-		progressBar->Show(false);
-		currentProgress = -1;
+	if (!progressBar) {
+		return;
+	}
 
-		progressBar->Destroy();
-		progressBar = nullptr;
+	if (progressUpdating) {
+		destroyPending = true;
+		return;
+	}
 
+	destroyPending = false;
+	progressBar->Show(false);
+
+	currentProgress = -1;
+	progressUpdating = false;
+
+	progressBar->Destroy();
+	progressBar = nullptr;
+
+	if (root) {
 		if (root->IsActive()) {
 			root->Raise();
 		} else {

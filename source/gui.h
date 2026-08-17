@@ -149,8 +149,9 @@ public:
 
 	/**
 	 * Sets the scale of the loading bar.
-	 * Calling this with (50, 80) means that setting 50 as 'done',
-	 * it will display as 0% loaded, 80 will display as 100% loaded.
+	 * Sets the scale mapping for SetLoadDone, where 'done' represents a local
+	 * percentage from 0 to 100 that is linearly mapped into the global range
+	 * [from, to] and saturated between 0 and 100.
 	 */
 	void SetLoadScale(int32_t from, int32_t to);
 
@@ -480,17 +481,22 @@ protected:
 	// Progress bar tracking
 	//=========================================================================
 	wxString progressText;
-	wxGenericProgressDialog* progressBar;
+	wxProgressDialog* progressBar = nullptr;
 
-	int32_t progressFrom;
-	int32_t progressTo;
-	int32_t currentProgress;
+	int32_t progressFrom = 0;
+	int32_t progressTo = 100;
+	int32_t currentProgress = -1;
+
 	// Long loads (giant OTBM maps) can spend well over Windows' five-second
 	// unresponsive threshold inside a single integer percent. Update() is the only
 	// point that pumps the message queue, so it is also driven by elapsed time.
 	std::chrono::steady_clock::time_point lastProgressPump;
 
-	wxWindowDisabler* winDisabler;
+	// Prevents reentrant calls to SetLoadDone() if Update() processes
+	// GUI events and causes another progress update recursively.
+	bool progressUpdating = false;
+	bool destroyPending = false;
+
 	int disabled_counter;
 
 	friend class RenderingLock;
