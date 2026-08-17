@@ -1363,9 +1363,7 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 	// currentProgress stores the scaled value, so the throttle has to compare
 	// against the scaled value too. Under a SetLoadScale range the raw `done`
 	// and currentProgress live in different spaces and never line up.
-	int32_t newProgress =
-		progressFrom +
-		static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
+	int32_t newProgress = progressFrom + static_cast<int32_t>((done / 100.f) * (progressTo - progressFrom));
 
 	newProgress = std::max<int32_t>(
 		0,
@@ -1378,8 +1376,7 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
 	const auto now = std::chrono::steady_clock::now();
 
 	if (
-		newProgress == currentProgress &&
-		now - lastProgressPump < std::chrono::milliseconds(250)
+		newProgress == currentProgress && now - lastProgressPump < std::chrono::milliseconds(250)
 	) {
 		return true;
 	}
