@@ -105,8 +105,37 @@ int main() {
 		TemporaryDirectory server;
 		server.write("data/items/items.xml", "<items/>");
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
-		check(!detection.workspace.hasRequiredResources(), "missing items.otb prevents readiness");
-		check(detection.error.find("items.otb") != std::string::npos, "missing items.otb has a precise error");
+		check(!detection.workspace.hasRequiredResources(), "missing item database prevents readiness");
+		check(detection.error.find("appearances.dat") != std::string::npos, "missing item database names both supported formats");
+	}
+
+	{
+		TemporaryDirectory server;
+		server.write("data/items/appearances.dat", "modern appearances");
+		server.write("data/items/items.xml", "<items/>");
+		server.write("config.lua", "dataPackDirectory = \"data-global\"\nmapName = \"world\"\n");
+		server.write("data-global/world/world.otbm", "configured world");
+		server.write("data-crystal/world/world.otbm", "inactive world");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(detection.workspace.hasRequiredResources(), "appearances.dat is a valid Canary/Crystal item database");
+		check(detection.workspace.hasAppearances(), "appearances.dat is detected in data/items");
+		check(!detection.workspace.hasItemsOtb(), "Canary/Crystal does not require a synthetic items.otb");
+		check(detection.workspace.itemIdMode == ItemIdMode::ClientId, "appearances.dat selects the ClientID item model");
+		check(detection.workspace.serverProfile == "Canary/Crystal", "appearances.dat identifies a modern server profile");
+		check(detection.workspace.activeDataDirectory.filename() == "data-global", "config.lua selects the active data pack");
+		check(detection.workspace.primaryMapPath == std::filesystem::weakly_canonical(server.path / "data-global/world/world.otbm"), "mapName selects the active map automatically");
+		check(!detection.workspace.maps.empty() && detection.workspace.maps.front().path == detection.workspace.primaryMapPath, "configured map is the first detected map");
+		check(!detection.workspace.containsMap(server.path / "data-crystal/world/world.otbm"), "inactive Crystal data pack maps are not mixed into the active workspace");
+	}
+
+	{
+		TemporaryDirectory server;
+		server.write("data/items/appearances.dat", "old appearances");
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(!detection.workspace.trackedResourcesChanged(), "fresh appearances.dat fingerprint is unchanged");
+		server.write("data/items/appearances.dat", "changed modern appearances and larger");
+		check(detection.workspace.trackedResourcesChanged(), "changed appearances.dat invalidates the workspace cache");
 	}
 
 	{
@@ -178,8 +207,9 @@ int main() {
 	{
 		TemporaryDirectory server;
 		server.write("build/generated/items.otb");
+		server.write("build-native/generated/appearances.dat");
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
-		check(!detection.workspace.hasRequiredResources(), "build directories are excluded from fallback discovery");
+		check(!detection.workspace.hasRequiredResources(), "build and build-* directories are excluded from fallback discovery");
 	}
 
 	{

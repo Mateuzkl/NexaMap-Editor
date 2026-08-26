@@ -45,15 +45,11 @@ int main() {
 
 	std::size_t numericDirectories = 0;
 	for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(dataRoot)) {
-		if (!entry.is_directory() || !IsNumericVersion(entry.path())) {
-			continue;
+		if (entry.is_directory() && IsNumericVersion(entry.path())) {
+			++numericDirectories;
 		}
-		++numericDirectories;
-		check(!std::filesystem::exists(entry.path() / "items.otb"), entry.path().filename().string() + " has no bundled items.otb");
-		check(!std::filesystem::exists(entry.path() / "items.xml"), entry.path().filename().string() + " has no bundled items.xml");
-		check(std::filesystem::exists(entry.path() / "materials.xml"), entry.path().filename().string() + " migration reference data is preserved");
 	}
-	check(numericDirectories > 0, "numeric migration reference directories remain during canonical validation");
+	check(numericDirectories == 0, "numeric version directories have been fully retired");
 	check(std::filesystem::is_regular_file(dataRoot / "canary-crystal" / "items" / "items.xml"), "Canary/Crystal compatibility data remains isolated");
 
 	if (failures == 0) {

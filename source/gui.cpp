@@ -81,18 +81,23 @@ namespace {
 #endif
 	}
 
-	bool RefreshRequiredServerWorkspace(wxString& error, bool& changed) {
+	bool RefreshRequiredServerWorkspace(wxString& error, bool& changed, WorkspaceClientMode expectedClientMode) {
 		changed = false;
 		if (!g_workspace.hasServerSelection()) {
-			error = "Server Workspace is not configured. Select the OT server root containing items.otb.";
+			error = "Server Workspace is not configured. Select the OT server root containing items.otb or appearances.dat.";
 			return false;
 		}
 
 		const uint64_t previousGeneration = g_workspace.getGeneration();
 		if (!g_workspace.rescanServer(error)) {
 			if (error.empty()) {
-				error = "Server Workspace is configured, but items.otb was not found.";
+				error = "Server Workspace is configured, but neither items.otb nor appearances.dat was found.";
 			}
+			return false;
+		}
+		const ServerWorkspace& workspace = g_workspace.getServer();
+		if (expectedClientMode == WorkspaceClientMode::Classic && !workspace.hasItemsOtb()) {
+			error = "This classic DAT/SPR client requires items.otb in the selected Server Workspace. appearances.dat is supported by Canary/Crystal clients.";
 			return false;
 		}
 		changed = g_workspace.getGeneration() != previousGeneration;
@@ -315,7 +320,7 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 		return false;
 	}
 	bool serverResourcesChanged = false;
-	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged)) {
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Classic)) {
 		return false;
 	}
 	force = force || serverResourcesChanged;
@@ -367,7 +372,7 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		return false;
 	}
 	bool serverResourcesChanged = false;
-	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged)) {
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Appearances)) {
 		return false;
 	}
 	force = force || serverResourcesChanged;
@@ -404,7 +409,7 @@ bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
 		return false;
 	}
 	bool serverResourcesChanged = false;
-	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged)) {
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, g_workspace.getClient().mode)) {
 		return false;
 	}
 
@@ -498,7 +503,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	}
 
 	const ServerWorkspace& workspace = g_workspace.getServer();
-	if (!workspace.hasRequiredResources()) {
+	if (!workspace.hasItemsOtb()) {
 		error = "Server Workspace is configured, but items.otb was not found. NexaMap will not use a bundled item database.";
 		g_gui.DestroyLoadBar();
 		UnloadVersion();

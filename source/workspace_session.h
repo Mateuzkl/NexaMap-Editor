@@ -43,6 +43,7 @@ public:
 	[[nodiscard]] const ServerWorkspace& getServer() const;
 	[[nodiscard]] const wxString& getServerError() const;
 	[[nodiscard]] bool hasServerSelection() const;
+	[[nodiscard]] bool hasCompatibleServerResources() const;
 	[[nodiscard]] bool isReady() const;
 	[[nodiscard]] bool containsMap(const wxString& path) const;
 	[[nodiscard]] std::vector<wxString> getDetectedMaps() const;

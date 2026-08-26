@@ -48,11 +48,15 @@ namespace {
 		return left.rootPath == right.rootPath &&
 			left.itemsOtbPath == right.itemsOtbPath &&
 			left.itemsXmlPath == right.itemsXmlPath &&
+			left.appearancesPath == right.appearancesPath &&
+			left.activeDataDirectory == right.activeDataDirectory &&
 			left.mapsDirectory == right.mapsDirectory &&
+			left.primaryMapPath == right.primaryMapPath &&
 			left.monstersDirectory == right.monstersDirectory &&
 			left.npcsDirectory == right.npcsDirectory &&
 			left.itemsOtbFingerprint == right.itemsOtbFingerprint &&
 			left.itemsXmlFingerprint == right.itemsXmlFingerprint &&
+			left.appearancesFingerprint == right.appearancesFingerprint &&
 			left.itemIdMode == right.itemIdMode &&
 			left.serverProfile == right.serverProfile &&
 			left.protocol == right.protocol &&
@@ -190,8 +194,21 @@ bool WorkspaceSession::hasServerSelection() const {
 	return !server.rootPath.empty();
 }
 
+bool WorkspaceSession::hasCompatibleServerResources() const {
+	if (!client.valid) {
+		return false;
+	}
+	if (client.mode == WorkspaceClientMode::Classic) {
+		return server.hasItemsOtb();
+	}
+	if (client.mode == WorkspaceClientMode::Appearances) {
+		return server.hasRequiredResources();
+	}
+	return false;
+}
+
 bool WorkspaceSession::isReady() const {
-	return client.valid && server.hasRequiredResources() && getEffectiveItemIdMode() != ItemIdMode::Unknown;
+	return hasCompatibleServerResources() && getEffectiveItemIdMode() != ItemIdMode::Unknown;
 }
 
 bool WorkspaceSession::containsMap(const wxString& path) const {
@@ -216,5 +233,6 @@ void WorkspaceSession::persistPaths() {
 	g_settings.setString(Config::WORKSPACE_SERVER_ROOT, server.rootPath.empty() ? std::string() : nstr(FromFilesystemPath(server.rootPath)));
 	g_settings.setString(Config::WORKSPACE_ITEMS_OTB_PATH, server.itemsOtbPath.empty() ? std::string() : nstr(FromFilesystemPath(server.itemsOtbPath)));
 	g_settings.setString(Config::WORKSPACE_ITEMS_XML_PATH, server.itemsXmlPath.empty() ? std::string() : nstr(FromFilesystemPath(server.itemsXmlPath)));
+	g_settings.setString(Config::WORKSPACE_APPEARANCES_PATH, server.appearancesPath.empty() ? std::string() : nstr(FromFilesystemPath(server.appearancesPath)));
 	g_settings.setInteger(Config::WORKSPACE_ITEM_ID_MODE, static_cast<int>(idModePreference));
 }

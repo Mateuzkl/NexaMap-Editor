@@ -44,12 +44,16 @@ struct ServerWorkspace {
 	std::filesystem::path rootPath;
 	std::filesystem::path itemsOtbPath;
 	std::filesystem::path itemsXmlPath;
+	std::filesystem::path appearancesPath;
+	std::filesystem::path activeDataDirectory;
 	std::filesystem::path mapsDirectory;
+	std::filesystem::path primaryMapPath;
 	std::filesystem::path monstersDirectory;
 	std::filesystem::path npcsDirectory;
 
 	ResourceFingerprint itemsOtbFingerprint;
 	ResourceFingerprint itemsXmlFingerprint;
+	ResourceFingerprint appearancesFingerprint;
 	std::vector<DetectedMap> maps;
 
 	ItemIdMode itemIdMode = ItemIdMode::Unknown;
@@ -60,7 +64,9 @@ struct ServerWorkspace {
 	bool scanLimitReached = false;
 
 	[[nodiscard]] bool hasRequiredResources() const;
+	[[nodiscard]] bool hasItemsOtb() const;
 	[[nodiscard]] bool hasItemsXml() const;
+	[[nodiscard]] bool hasAppearances() const;
 	[[nodiscard]] bool containsMap(const std::filesystem::path& path) const;
 	[[nodiscard]] bool trackedResourcesChanged() const;
 };

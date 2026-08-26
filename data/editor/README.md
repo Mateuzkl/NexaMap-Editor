@@ -16,5 +16,6 @@ the bundled editor creature catalog, which is then enriched by monsters and
 NPCs detected in the selected server.
 
 The initial canonical catalog was seeded from the validated 8.60 data set.
-Numeric version directories remain temporarily for migration comparison only
-and are no longer used by the runtime item or materials loaders.
+The former numeric version directories have been retired. Classic versions now
+share this catalog, while `canary-crystal/` remains isolated for its genuinely
+different appearances-based workflow.

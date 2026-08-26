@@ -557,7 +557,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	for (int column = 0; column < 5; ++column) {
 		resourceGrid->AddGrowableCol(column, 1);
 	}
-	m_items_otb_status = makeText(resourcesCard, "items.otb  Not scanned", -2, false, subtle);
+	m_items_otb_status = makeText(resourcesCard, "Item DB  Not scanned", -2, false, subtle);
 	m_items_xml_status = makeText(resourcesCard, "items.xml  Not scanned", -2, false, subtle);
 	m_maps_status = makeText(resourcesCard, "Maps  Not scanned", -2, false, subtle);
 	m_monsters_status = makeText(resourcesCard, "Monsters  Not scanned", -2, false, subtle);
@@ -734,7 +734,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 
 	if (!server.rootPath.empty()) {
 		setPath(m_server_path_label, pathText(server.rootPath));
-		m_server_status_label->SetLabel(server.hasRequiredResources() ? "Ready" : "items.otb missing");
+		m_server_status_label->SetLabel(server.hasRequiredResources() ? wxString("Ready  |  ") + wxString::FromUTF8(server.serverProfile) : wxString("Item DB missing"));
 		m_server_status_label->SetForegroundColour(server.hasRequiredResources() ? green : danger);
 	} else {
 		setPath(m_server_path_label, "No server folder selected");
@@ -742,7 +742,11 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		m_server_status_label->SetForegroundColour(subtle);
 	}
 
-	setResource(m_items_otb_status, "items.otb", server.itemsOtbFingerprint.exists, "Found", true);
+	if (server.hasAppearances()) {
+		setResource(m_items_otb_status, "appearances.dat", true, "Found", true);
+	} else {
+		setResource(m_items_otb_status, "items.otb", server.hasItemsOtb(), "Found", true);
+	}
 	setResource(m_items_xml_status, "items.xml", server.itemsXmlFingerprint.exists);
 	setResource(m_maps_status, "Maps", !server.maps.empty(), wxString::Format("%llu found", static_cast<unsigned long long>(server.maps.size())));
 	setResource(m_monsters_status, "Monsters", !server.monstersDirectory.empty(), "Found");
@@ -756,7 +760,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		: (idPreference == ItemIdModePreference::ClientId ? wxString("Manual") : wxString("Auto"));
 	m_id_mode_value->SetLabel(idMode == ItemIdMode::Unknown ? wxString("Needs review") : preferenceLabel + "  |  " + wxString::FromUTF8(ItemIdModeName(idMode)));
 	m_id_mode_value->SetForegroundColour(idMode == ItemIdMode::Unknown ? warning : cyan);
-	m_items_source_value->SetLabel(server.hasRequiredResources() ? "Server folder" : "-");
+	m_items_source_value->SetLabel(server.hasAppearances() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
 	m_workspace_status_value->SetLabel(g_workspace.isReady() ? "Ready" : "Setup required");
 	m_workspace_status_value->SetForegroundColour(g_workspace.isReady() ? green : warning);
 	m_open_workspace_button->Enable(g_workspace.isReady());
@@ -768,7 +772,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		m_ready_description->SetLabel("Select a supported client folder.");
 		m_ready_description->SetForegroundColour(subtle);
 	} else {
-		m_ready_description->SetLabel("Select a server root containing items.otb.");
+		m_ready_description->SetLabel("Select a compatible server root containing items.otb or appearances.dat.");
 		m_ready_description->SetForegroundColour(subtle);
 	}
 

@@ -320,6 +320,7 @@ void Settings::IO(IOMode mode) {
 	String(WORKSPACE_SERVER_ROOT, "");
 	String(WORKSPACE_ITEMS_OTB_PATH, "");
 	String(WORKSPACE_ITEMS_XML_PATH, "");
+	String(WORKSPACE_APPEARANCES_PATH, "");
 	Int(WORKSPACE_ITEM_ID_MODE, 0);
 
 	section("Graphics");

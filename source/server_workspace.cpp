@@ -8,8 +8,10 @@
 #include <array>
 #include <cctype>
 #include <deque>
+#include <fstream>
+#include <optional>
+#include <regex>
 #include <system_error>
-#include <tuple>
 #include <unordered_set>
 
 namespace {
@@ -44,7 +46,8 @@ namespace {
 		static const std::unordered_set<std::string> ignored {
 			".git", ".svn", ".hg", "build", "builds", "node_modules", "vcpkg_installed", ".cache", ".idea", ".vs",
 		};
-		return ignored.contains(Lower(path.filename().string()));
+		const std::string name = Lower(path.filename().string());
+		return ignored.contains(name) || name.starts_with("build-") || name.starts_with("build_");
 	}
 
 	template <std::size_t Size>
@@ -58,27 +61,104 @@ namespace {
 		return {};
 	}
 
-	std::pair<std::filesystem::path, std::filesystem::path> FindKnownItems(const std::filesystem::path& root) {
+	struct KnownItemFiles {
+		std::filesystem::path otb;
+		std::filesystem::path xml;
+		std::filesystem::path appearances;
+	};
+
+	KnownItemFiles FindKnownItems(const std::filesystem::path& root) {
 		static constexpr std::array<const char*, 4> directories {
 			"data/items", "data", "items", "",
 		};
-		std::filesystem::path firstOtb;
-		std::filesystem::path firstXml;
+		KnownItemFiles files;
 		for (const char* relative : directories) {
 			const std::filesystem::path directory = relative[0] == '\0' ? root : root / relative;
 			const std::filesystem::path otb = directory / "items.otb";
 			const std::filesystem::path xml = directory / "items.xml";
-			if (IsRegularFile(otb) && firstOtb.empty()) {
-				firstOtb = Normalize(otb);
+			const std::filesystem::path appearances = directory / "appearances.dat";
+			if (IsRegularFile(otb) && files.otb.empty()) {
+				files.otb = Normalize(otb);
 			}
-			if (IsRegularFile(xml) && firstXml.empty()) {
-				firstXml = Normalize(xml);
+			if (IsRegularFile(xml) && files.xml.empty()) {
+				files.xml = Normalize(xml);
 			}
-			if (IsRegularFile(otb) && IsRegularFile(xml)) {
-				return { Normalize(otb), Normalize(xml) };
+			if (IsRegularFile(appearances) && files.appearances.empty()) {
+				files.appearances = Normalize(appearances);
 			}
 		}
-		return { firstOtb, firstXml };
+		return files;
+	}
+
+	std::optional<std::string> ReadLuaStringAssignment(const std::filesystem::path& file, const std::string& setting) {
+		std::ifstream stream(file);
+		if (!stream.is_open()) {
+			return std::nullopt;
+		}
+		const std::regex assignment("^\\s*" + setting + "\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']");
+		std::string line;
+		std::smatch match;
+		while (std::getline(stream, line)) {
+			if (std::regex_search(line, match, assignment) && match.size() == 2) {
+				return match[1].str();
+			}
+		}
+		return std::nullopt;
+	}
+
+	bool IsSafeRelativePath(const std::filesystem::path& path) {
+		if (path.empty() || path.is_absolute()) {
+			return false;
+		}
+		return std::none_of(path.begin(), path.end(), [](const std::filesystem::path& component) {
+			return component == "..";
+		});
+	}
+
+	void DetectConfiguredMap(ServerWorkspace& workspace) {
+		std::filesystem::path config = workspace.rootPath / "config.lua";
+		if (!IsRegularFile(config)) {
+			config = workspace.rootPath / "config.lua.dist";
+		}
+		if (!IsRegularFile(config)) {
+			return;
+		}
+
+		const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
+		const std::optional<std::string> configuredMap = ReadLuaStringAssignment(config, "mapName");
+		if (!configuredDataPack) {
+			return;
+		}
+		const std::filesystem::path relativeDataPack(*configuredDataPack);
+		if (!IsSafeRelativePath(relativeDataPack)) {
+			workspace.warnings.push_back("config.lua contains an unsafe dataPackDirectory; automatic map selection ignored it.");
+			return;
+		}
+
+		const std::filesystem::path activeData = workspace.rootPath / relativeDataPack;
+		const std::filesystem::path worldDirectory = activeData / "world";
+		if (!IsDirectory(worldDirectory)) {
+			workspace.warnings.push_back("The dataPackDirectory from config.lua has no world directory.");
+			return;
+		}
+		workspace.activeDataDirectory = Normalize(activeData);
+		workspace.mapsDirectory = Normalize(worldDirectory);
+		workspace.protocol = relativeDataPack.generic_string();
+
+		std::filesystem::path mapName = configuredMap ? std::filesystem::path(*configuredMap) : std::filesystem::path("world");
+		if (!IsSafeRelativePath(mapName)) {
+			workspace.warnings.push_back("config.lua contains an unsafe mapName; the configured data pack will still be scanned.");
+			return;
+		}
+		if (mapName.extension().empty()) {
+			mapName += ".otbm";
+		}
+		const std::filesystem::path primaryMap = worldDirectory / mapName;
+		if (IsRegularFile(primaryMap)) {
+			workspace.primaryMapPath = Normalize(primaryMap);
+		} else {
+			workspace.warnings.push_back("The map selected by config.lua was not found; the active world directory will be scanned.");
+		}
 	}
 
 	struct QueueEntry {
@@ -153,13 +233,16 @@ namespace {
 		return ItemIdMode::Unknown;
 	}
 
-	std::string DetectProfile(const std::filesystem::path& root) {
+	std::string DetectProfile(const std::filesystem::path& root, bool hasAppearances) {
 		const std::string name = Lower(root.filename().string());
 		if (name.find("canary") != std::string::npos) {
 			return "Canary";
 		}
 		if (name.find("crystal") != std::string::npos) {
 			return "Crystal";
+		}
+		if (hasAppearances) {
+			return "Canary/Crystal";
 		}
 		if (name.find("forgotten") != std::string::npos || name.find("tfs") != std::string::npos || IsRegularFile(root / "config.lua")) {
 			return "TFS";
@@ -194,11 +277,19 @@ bool ResourceFingerprint::MatchesCurrentFile() const {
 }
 
 bool ServerWorkspace::hasRequiredResources() const {
-	return !rootPath.empty() && itemsOtbFingerprint.exists;
+	return !rootPath.empty() && (hasItemsOtb() || hasAppearances());
+}
+
+bool ServerWorkspace::hasItemsOtb() const {
+	return itemsOtbFingerprint.exists;
 }
 
 bool ServerWorkspace::hasItemsXml() const {
 	return itemsXmlFingerprint.exists;
+}
+
+bool ServerWorkspace::hasAppearances() const {
+	return appearancesFingerprint.exists;
 }
 
 bool ServerWorkspace::containsMap(const std::filesystem::path& path) const {
@@ -209,10 +300,13 @@ bool ServerWorkspace::containsMap(const std::filesystem::path& path) const {
 }
 
 bool ServerWorkspace::trackedResourcesChanged() const {
-	if (!itemsOtbFingerprint.MatchesCurrentFile()) {
+	if (!itemsOtbPath.empty() && !itemsOtbFingerprint.MatchesCurrentFile()) {
 		return true;
 	}
 	if (!itemsXmlPath.empty() && !itemsXmlFingerprint.MatchesCurrentFile()) {
+		return true;
+	}
+	if (!appearancesPath.empty() && !appearancesFingerprint.MatchesCurrentFile()) {
 		return true;
 	}
 	return std::any_of(maps.begin(), maps.end(), [](const DetectedMap& map) {
@@ -236,13 +330,21 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	result.validRoot = true;
 	ServerWorkspace& workspace = result.workspace;
 	workspace.rootPath = root;
-	workspace.serverProfile = DetectProfile(root);
-	std::tie(workspace.itemsOtbPath, workspace.itemsXmlPath) = FindKnownItems(root);
+	const KnownItemFiles knownItems = FindKnownItems(root);
+	workspace.itemsOtbPath = knownItems.otb;
+	workspace.itemsXmlPath = knownItems.xml;
+	workspace.appearancesPath = knownItems.appearances;
+	workspace.serverProfile = DetectProfile(root, !workspace.appearancesPath.empty());
+	DetectConfiguredMap(workspace);
 
-	static constexpr std::array<const char*, 4> mapDirectories { "data/world", "data/maps", "world", "maps" };
+	static constexpr std::array<const char*, 7> mapDirectories {
+		"data/world", "data-global/world", "data-crystal/world", "data-otservbr-global/world", "data/maps", "world", "maps",
+	};
 	static constexpr std::array<const char*, 4> monsterDirectories { "data/monster", "data/monsters", "monster", "monsters" };
 	static constexpr std::array<const char*, 4> npcDirectories { "data/npc", "data/npcs", "npc", "npcs" };
-	workspace.mapsDirectory = FirstExistingDirectory(root, mapDirectories);
+	if (workspace.mapsDirectory.empty()) {
+		workspace.mapsDirectory = FirstExistingDirectory(root, mapDirectories);
+	}
 	workspace.monstersDirectory = FirstExistingDirectory(root, monsterDirectories);
 	workspace.npcsDirectory = FirstExistingDirectory(root, npcDirectories);
 
@@ -261,9 +363,11 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 					workspace.itemsOtbPath = Normalize(entry.path());
 				} else if (workspace.itemsXmlPath.empty() && fileName == "items.xml") {
 					workspace.itemsXmlPath = Normalize(entry.path());
+				} else if (workspace.appearancesPath.empty() && fileName == "appearances.dat") {
+					workspace.appearancesPath = Normalize(entry.path());
 				}
 				const std::string extension = Lower(entry.path().extension().string());
-				if (extension == ".otbm" || extension == ".otgz") {
+				if (workspace.activeDataDirectory.empty() && (extension == ".otbm" || extension == ".otgz")) {
 					AddMap(workspace, entry.path(), options.maximumMaps);
 					if (workspace.mapsDirectory.empty()) {
 						workspace.mapsDirectory = Normalize(entry.path().parent_path());
@@ -291,19 +395,31 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		workspace.warnings.push_back("The bounded server scan reached its directory limit; known resources were kept.");
 	}
 	if (!workspace.mapsDirectory.empty()) {
+		if (!workspace.primaryMapPath.empty()) {
+			AddMap(workspace, workspace.primaryMapPath, options.maximumMaps);
+		}
 		ScanMaps(workspace, workspace.mapsDirectory, options);
 	}
-	std::sort(workspace.maps.begin(), workspace.maps.end(), [](const DetectedMap& left, const DetectedMap& right) {
-		return Lower(left.path.filename().string()) < Lower(right.path.filename().string());
+	std::sort(workspace.maps.begin(), workspace.maps.end(), [&](const DetectedMap& left, const DetectedMap& right) {
+		const bool leftPrimary = left.path == workspace.primaryMapPath;
+		const bool rightPrimary = right.path == workspace.primaryMapPath;
+		if (leftPrimary != rightPrimary) {
+			return leftPrimary;
+		}
+		const std::string leftName = Lower(left.path.filename().string());
+		const std::string rightName = Lower(right.path.filename().string());
+		return leftName != rightName ? leftName < rightName : left.path < right.path;
 	});
 
 	workspace.itemsOtbFingerprint = ResourceFingerprint::Read(workspace.itemsOtbPath);
 	workspace.itemsXmlFingerprint = ResourceFingerprint::Read(workspace.itemsXmlPath);
-	workspace.itemIdMode = DetectModeFromMapNames(workspace.maps);
-	if (!workspace.itemsOtbFingerprint.exists) {
-		result.error = "Server folder selected, but items.otb was not found.";
+	workspace.appearancesFingerprint = ResourceFingerprint::Read(workspace.appearancesPath);
+	workspace.serverProfile = DetectProfile(root, workspace.appearancesFingerprint.exists);
+	workspace.itemIdMode = workspace.appearancesFingerprint.exists ? ItemIdMode::ClientId : DetectModeFromMapNames(workspace.maps);
+	if (!workspace.hasRequiredResources()) {
+		result.error = "Server folder selected, but neither items.otb nor appearances.dat was found.";
 	} else if (!workspace.itemsXmlFingerprint.exists) {
-		workspace.warnings.push_back("items.xml was not found. The OTB item database can still be loaded, but server item metadata will be incomplete.");
+		workspace.warnings.push_back("items.xml was not found. Server item metadata will be incomplete.");
 	}
 	return result;
 }
