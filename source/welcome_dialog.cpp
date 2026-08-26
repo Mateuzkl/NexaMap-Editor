@@ -607,10 +607,11 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	m_recent_maps_panel = newd RecentMapsPanel(contentPanel, dialog, recentFiles);
 	contentSizer->Add(m_recent_maps_panel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentSizer->AddStretchSpacer();
-	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by Mateuzkl and Skyyzyy");
-	creditText->SetFont(FontWithPointSize(GetFont(), std::max(7, GetFont().GetPointSize() - 2)));
-	creditText->SetForegroundColour(wxColour(246, 196, 69));
+	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by  Mateuzkl  •  Skyyzyy");
+	creditText->SetFont(FontWithPointSize(GetFont(), std::max(11, GetFont().GetPointSize() + 1), true));
+	creditText->SetForegroundColour(wxColour(255, 211, 77));
 	creditText->SetBackgroundColour(background);
+	creditText->SetToolTip("NexaMap Editor developers: Mateuzkl and Skyyzyy");
 	contentSizer->Add(creditText, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentPanel->SetSizer(contentSizer);
 
