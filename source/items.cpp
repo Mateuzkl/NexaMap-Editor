@@ -792,6 +792,10 @@ bool ItemDatabase::loadFromOtb(const FileName& datafile, wxString& error, wxArra
 	}
 
 	BinaryNode* root = f.getRootNode();
+	if (root == nullptr) {
+		error = "items.otb: Missing or malformed root node.";
+		return false;
+	}
 
 #define safe_get(node, func, ...)               \
 	do {                                        \
@@ -827,6 +831,7 @@ bool ItemDatabase::loadFromOtb(const FileName& datafile, wxString& error, wxArra
 		}
 	} else {
 		error = "Expected ROOT_ATTR_VERSION as first node of items.otb!";
+		return false;
 	}
 
 	if (g_settings.getInteger(Config::CHECK_SIGNATURES)) {
@@ -844,8 +849,10 @@ bool ItemDatabase::loadFromOtb(const FileName& datafile, wxString& error, wxArra
 			return loadFromOtbVer2(itemNode, error, warnings);
 		case 3:
 			return loadFromOtbVer3(itemNode, error, warnings);
+		default:
+			error = "Unsupported items.otb format version (version " + i2ws(MajorVersion) + ")";
+			return false;
 	}
-	return true;
 }
 
 static void parseSlotType(ItemType& it, const std::string& typeValue) {
@@ -1062,13 +1069,13 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 	pugi::xml_document doc;
 	pugi::xml_parse_result result = doc.load_file(identifier.GetFullPath().mb_str());
 	if (!result) {
-		error = "Could not load items.xml (Syntax error?)";
+		error = "Could not load items.xml \"" + identifier.GetFullPath() + "\": " + wxString::FromUTF8(result.description());
 		return false;
 	}
 
 	pugi::xml_node node = doc.child("items");
 	if (!node) {
-		error = "items.xml, invalid root node.";
+		error = "items.xml \"" + identifier.GetFullPath() + "\" has no <items> root node.";
 		return false;
 	}
 

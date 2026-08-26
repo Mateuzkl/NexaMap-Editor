@@ -399,6 +399,81 @@ ClientVersion* ClientVersion::getLatestVersion() {
 	return latest_version;
 }
 
+ClientVersion* ClientVersion::detectFromPath(const FileName& requestedPath, wxString& error) {
+	// wxFileName(const wxString&) interprets a path without a trailing separator
+	// as a file name. Folder pickers return exactly that form, which previously
+	// made GetPath() drop the final directory (for example, "860"). Keep the
+	// selection explicitly as a directory so both detection and loading use the
+	// same root.
+	FileName candidatePath = FileName::DirName(requestedPath.GetFullPath());
+	candidatePath.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE);
+	if (!candidatePath.DirExists()) {
+		error = "The selected client folder does not exist or cannot be read.";
+		return nullptr;
+	}
+
+	const wxString clientDirectory = candidatePath.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+	wxFileName metadata(clientDirectory, wxString(ASSETS_NAME) + ".dat");
+	wxFileName sprites(clientDirectory, wxString(ASSETS_NAME) + ".spr");
+	wxDir directory(clientDirectory);
+	wxString otfiFile;
+	if (directory.GetFirst(&otfiFile, "*.otfi", wxDIR_FILES)) {
+		const wxFileName otfi(clientDirectory, otfiFile);
+		const OTMLDocumentPtr document = OTMLDocument::parse(otfi.GetFullPath().ToStdString());
+		if (document->size() != 0 && document->hasChildAt("DatSpr")) {
+			const OTMLNodePtr node = document->get("DatSpr");
+			metadata = wxFileName(clientDirectory, wxstr(node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat")));
+			sprites = wxFileName(clientDirectory, wxstr(node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr")));
+		}
+	}
+
+	if (!metadata.FileExists() || !sprites.FileExists()) {
+		error = "The selected folder does not contain a supported DAT/SPR client or OTC .otfi layout.";
+		return nullptr;
+	}
+
+	FileReadHandle metadataFile(static_cast<const char*>(metadata.GetFullPath().mb_str()));
+	FileReadHandle spritesFile(static_cast<const char*>(sprites.GetFullPath().mb_str()));
+	uint32_t metadataSignature = 0;
+	uint32_t spritesSignature = 0;
+	if (!metadataFile.isOk() || !metadataFile.getU32(metadataSignature) || !spritesFile.isOk() || !spritesFile.getU32(spritesSignature)) {
+		error = "Could not read the DAT/SPR signatures from the selected client folder.";
+		return nullptr;
+	}
+
+	std::vector<ClientVersion*> matches;
+	for (ClientVersion* version : client_version_order) {
+		const bool matchesVersion = std::any_of(version->data_versions.begin(), version->data_versions.end(), [&](const ClientData& data) {
+			return data.datSignature == metadataSignature && data.sprSignature == spritesSignature;
+		});
+		if (matchesVersion) {
+			matches.push_back(version);
+		}
+	}
+	if (matches.empty()) {
+		error = wxString::Format(
+			"No NexaMap client profile matches this folder (DAT %08X, SPR %08X).",
+			metadataSignature,
+			spritesSignature
+		);
+		return nullptr;
+	}
+
+	ClientVersion* selected = matches.front();
+	const ClientVersionID preferred = static_cast<ClientVersionID>(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION));
+	const auto preferredMatch = std::find_if(matches.begin(), matches.end(), [&](const ClientVersion* version) {
+		return version->getID() == preferred;
+	});
+	if (preferredMatch != matches.end()) {
+		selected = *preferredMatch;
+	}
+
+	selected->client_path = candidatePath;
+	selected->metadata_path = metadata;
+	selected->sprites_path = sprites;
+	return selected;
+}
+
 FileName ClientVersion::getDataPath() const {
 	wxString basePath = g_gui.GetDataDirectory();
 	if (!wxFileName(basePath).DirExists()) {

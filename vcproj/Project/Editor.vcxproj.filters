@@ -252,9 +252,15 @@
     <ClInclude Include="..\..\source\selection.h">
       <Filter>editor</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\source\settings.h">
-      <Filter>common</Filter>
-    </ClInclude>
+	<ClInclude Include="..\..\source\settings.h">
+	  <Filter>common</Filter>
+	</ClInclude>
+	<ClInclude Include="..\..\source\server_workspace.h">
+	  <Filter>common</Filter>
+	</ClInclude>
+	<ClInclude Include="..\..\source\workspace_session.h">
+	  <Filter>common</Filter>
+	</ClInclude>
     <ClInclude Include="..\..\source\theme.h">
       <Filter>common</Filter>
     </ClInclude>
@@ -515,9 +521,15 @@
     <ClCompile Include="..\..\source\mt_rand.cpp">
       <Filter>common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\source\settings.cpp">
-      <Filter>common</Filter>
-    </ClCompile>
+	<ClCompile Include="..\..\source\settings.cpp">
+	  <Filter>common</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\server_workspace.cpp">
+	  <Filter>common</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\workspace_session.cpp">
+	  <Filter>common</Filter>
+	</ClCompile>
     <ClCompile Include="..\..\source\theme.cpp">
       <Filter>common</Filter>
     </ClCompile>

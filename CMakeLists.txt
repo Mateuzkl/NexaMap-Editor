@@ -177,6 +177,27 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME client_assets_manifest_tests COMMAND client_assets_manifest_tests)
 
+	add_executable(server_workspace_tests
+		tests/server_workspace_tests.cpp
+		source/server_workspace.cpp
+	)
+	target_include_directories(server_workspace_tests PRIVATE source)
+	set_target_properties(server_workspace_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME server_workspace_tests COMMAND server_workspace_tests)
+
+	add_executable(editor_data_layout_tests
+		tests/editor_data_layout_tests.cpp
+	)
+	target_compile_definitions(editor_data_layout_tests PRIVATE NEXAMAP_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+	set_target_properties(editor_data_layout_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME editor_data_layout_tests COMMAND editor_data_layout_tests)
+
 	add_executable(map_format_tests
 		tests/map_format_tests.cpp
 		source/map_format.cpp

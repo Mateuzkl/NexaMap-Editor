@@ -44,7 +44,7 @@ namespace {
 		if (!g_gui.IsVersionLoaded()) {
 			return wxString();
 		}
-		FileName path = g_gui.GetCurrentVersion().getDataPath();
+		FileName path = FileName::DirName(GUI::GetEditorDataDirectory());
 		path.SetFullName("materials.xml");
 		path.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE);
 		return path.GetFullPath();
@@ -125,7 +125,7 @@ void BorderWorkspaceWindow::OpenForItems(wxWindow* parent, const std::vector<Ite
 	}
 	if (!IsAvailableForCurrentClient()) {
 		wxMessageBox(
-			wxString::Format("The current client's materials.xml was not found:\n%s", CurrentMaterialsPath()),
+			wxString::Format("The canonical editor materials.xml was not found:\n%s", CurrentMaterialsPath()),
 			"Border Workspace", wxOK | wxICON_ERROR, parent
 		);
 		return;
@@ -161,7 +161,7 @@ void BorderWorkspaceWindow::OpenForItems(wxWindow* parent, const std::vector<Ite
 
 bool BorderWorkspaceWindow::OpenBorder(wxWindow* parent, int borderId) {
 	if (!g_gui.IsVersionLoaded() || !IsAvailableForCurrentClient()) {
-		wxMessageBox("Load a client version with a valid materials.xml before opening Border Workspace.", "Border Workspace", wxOK | wxICON_INFORMATION, parent);
+		wxMessageBox("Load a workspace with valid canonical editor data before opening Border Workspace.", "Border Workspace", wxOK | wxICON_INFORMATION, parent);
 		return false;
 	}
 
@@ -218,7 +218,7 @@ bool BorderWorkspaceWindow::OpenDraft(wxWindow* parent, const Draft& draft) {
 	}
 	if (!IsAvailableForCurrentClient()) {
 		wxMessageBox(
-			wxString::Format("The current client's materials.xml was not found:\n%s", CurrentMaterialsPath()),
+			wxString::Format("The canonical editor materials.xml was not found:\n%s", CurrentMaterialsPath()),
 			"Border Workspace", wxOK | wxICON_ERROR, parent
 		);
 		return false;
@@ -486,7 +486,7 @@ void BorderWorkspaceWindow::BindEvents() {
 
 void BorderWorkspaceWindow::LoadDefaultMaterialsFile() {
 	if (!g_gui.IsVersionLoaded()) {
-		sourceLabel_->SetLabel("Load a client version, then open Border Workspace again; or choose a materials.xml manually.");
+		sourceLabel_->SetLabel("Load a workspace, then open Border Workspace again; or choose a materials.xml manually.");
 		return;
 	}
 	LoadCatalog(CurrentMaterialsPath());
@@ -536,7 +536,7 @@ bool BorderWorkspaceWindow::EnsureCurrentClientCatalog() {
 	if (!rootMaterialsPath_.IsEmpty() && NormalizePath(rootMaterialsPath_).CmpNoCase(NormalizePath(currentPath)) == 0) {
 		return true;
 	}
-	if (!ResolvePendingChanges("open the current client's border catalog")) {
+	if (!ResolvePendingChanges("open the canonical editor border catalog")) {
 		return false;
 	}
 	return LoadCatalog(currentPath);

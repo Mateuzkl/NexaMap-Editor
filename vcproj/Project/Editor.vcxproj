@@ -255,7 +255,9 @@
     <ClCompile Include="..\..\source\replace_tool\replace_visual_similarity_service.cpp" />
     <ClCompile Include="..\..\source\replace_tool\visual_similarity_index.cpp" />
     <ClCompile Include="..\..\source\tileset_window.cpp" />
-    <ClCompile Include="..\..\source\welcome_dialog.cpp" />
+	<ClCompile Include="..\..\source\welcome_dialog.cpp" />
+	<ClCompile Include="..\..\source\server_workspace.cpp" />
+	<ClCompile Include="..\..\source\workspace_session.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
     <ClInclude Include="..\..\source\add_tileset_window.h" />
     <ClInclude Include="..\..\source\artprovider.h" />
@@ -551,7 +553,9 @@
     <ClInclude Include="..\..\source\zones.h" />
     <ClCompile Include="..\..\source\zones.cpp" />
     <ClInclude Include="..\..\source\find_item_window.h" />
-    <ClInclude Include="..\..\source\welcome_dialog.h" />
+	<ClInclude Include="..\..\source\welcome_dialog.h" />
+	<ClInclude Include="..\..\source\server_workspace.h" />
+	<ClInclude Include="..\..\source\workspace_session.h" />
     <ClInclude Include="..\..\source\version_info.h" />
   </ItemGroup>
   <ItemGroup>

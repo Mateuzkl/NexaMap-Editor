@@ -533,10 +533,10 @@ void MaterialsWorkbenchWindow::BindEvents() {
 
 void MaterialsWorkbenchWindow::LoadDefaultMaterialsFile() {
 	if (!g_gui.IsVersionLoaded()) {
-		subtitleLabel_->SetLabel("Load a client version or use Open XML...");
+		subtitleLabel_->SetLabel("Load a workspace or use Open XML...");
 		return;
 	}
-	FileName path = g_gui.GetCurrentVersion().getDataPath();
+	FileName path = FileName::DirName(GUI::GetEditorDataDirectory());
 	path.SetFullName("materials.xml");
 	LoadCatalog(path.GetFullPath());
 }

@@ -36,6 +36,7 @@
 #include "spawn_converter_window.h"
 #include "map_item_id_converter_window.h"
 #include "client_assets.h"
+#include "workspace_session.h"
 
 #include "common_windows.h"
 #include "result_window.h"
@@ -70,6 +71,32 @@ namespace {
 		directory.AppendDir(wxString::FromUTF8(CANARY_CRYSTAL_DATA_DIRECTORY));
 		directory.Mkdir(0755, wxPATH_MKDIR_FULL);
 		return directory;
+	}
+
+	wxString WorkspacePath(const std::filesystem::path& path) {
+#ifdef __WINDOWS__
+		return wxString(path.wstring());
+#else
+		return wxString::FromUTF8(path.string());
+#endif
+	}
+
+	bool RefreshRequiredServerWorkspace(wxString& error, bool& changed) {
+		changed = false;
+		if (!g_workspace.hasServerSelection()) {
+			error = "Server Workspace is not configured. Select the OT server root containing items.otb.";
+			return false;
+		}
+
+		const uint64_t previousGeneration = g_workspace.getGeneration();
+		if (!g_workspace.rescanServer(error)) {
+			if (error.empty()) {
+				error = "Server Workspace is configured, but items.otb was not found.";
+			}
+			return false;
+		}
+		changed = g_workspace.getGeneration() != previousGeneration;
+		return true;
 	}
 }
 
@@ -180,6 +207,20 @@ wxString GUI::GetExecDirectory() {
 	return exec_directory.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
 }
 
+wxString GUI::GetEditorDataDirectory() {
+	for (const wxString& dataDirectory : { GetDataDirectory(), g_gui.getFoundDataDirectory() }) {
+		if (dataDirectory.empty()) {
+			continue;
+		}
+		FileName editorDirectory = FileName::DirName(dataDirectory);
+		editorDirectory.AppendDir("editor");
+		if (editorDirectory.DirExists()) {
+			return editorDirectory.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+		}
+	}
+	return {};
+}
+
 wxString GUI::GetLocalDataDirectory() {
 	if (g_settings.getInteger(Config::INDIRECTORY_INSTALLATION)) {
 		FileName dir = GetDataDirectory();
@@ -273,6 +314,11 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 		error = wxString::Format("Unsupported client version! (%d)", version);
 		return false;
 	}
+	bool serverResourcesChanged = false;
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged)) {
+		return false;
+	}
+	force = force || serverResourcesChanged;
 
 	if (version != loaded_version || force || canary_crystal_assets_loaded) {
 		if (getLoadedVersion() != nullptr) {
@@ -320,6 +366,11 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		error = "Configure a CipSoft/Crystal or OTC Assets root in Preferences > Client Version first.";
 		return false;
 	}
+	bool serverResourcesChanged = false;
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged)) {
+		return false;
+	}
+	force = force || serverResourcesChanged;
 	if (canary_crystal_assets_loaded && loaded_version == compatibilityProfile->getID() && !force) {
 		return true;
 	}
@@ -345,6 +396,30 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 	}
 	LoadPerspective();
 	return true;
+}
+
+bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
+	if (!g_workspace.getClient().valid) {
+		error = "Select a valid client folder before opening the workspace.";
+		return false;
+	}
+	bool serverResourcesChanged = false;
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged)) {
+		return false;
+	}
+
+	const uint64_t generation = g_workspace.getGeneration();
+	force = force || serverResourcesChanged || generation != loaded_workspace_generation;
+	bool loaded = false;
+	if (g_workspace.getClient().mode == WorkspaceClientMode::Appearances) {
+		loaded = LoadCanaryCrystalAssets(error, warnings, force);
+	} else {
+		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force);
+	}
+	if (loaded) {
+		loaded_workspace_generation = generation;
+	}
+	return loaded;
 }
 
 void GUI::EnableHotkeys() {
@@ -376,7 +451,11 @@ void GUI::CycleTab(bool forward) {
 }
 
 bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
-	FileName data_path = getLoadedVersion()->getDataPath();
+	const wxString editorDataDirectory = GetEditorDataDirectory();
+	if (editorDataDirectory.empty()) {
+		error = "The canonical NexaMap editor data directory (data/editor) was not found.";
+		return false;
+	}
 	FileName client_path = getLoadedVersion()->getClientPath();
 	FileName extension_path = GetExtensionsDirectory();
 
@@ -418,21 +497,37 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		return false;
 	}
 
-	g_gui.SetLoadDone(20, "Loading items.otb file...");
-	if (!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
+	const ServerWorkspace& workspace = g_workspace.getServer();
+	if (!workspace.hasRequiredResources()) {
+		error = "Server Workspace is configured, but items.otb was not found. NexaMap will not use a bundled item database.";
+		g_gui.DestroyLoadBar();
+		UnloadVersion();
+		return false;
+	}
+	const wxString itemsOtbPath = WorkspacePath(workspace.itemsOtbPath);
+	const bool loadItemsXml = workspace.hasItemsXml();
+	const wxString itemsXmlPath = loadItemsXml ? WorkspacePath(workspace.itemsXmlPath) : wxString {};
+
+	g_gui.SetLoadDone(20, "Loading server items.otb...");
+	if (!g_items.loadFromOtb(itemsOtbPath, error, warnings)) {
 		error = "Couldn't load items.otb: " + error;
 		g_gui.DestroyLoadBar();
 		UnloadVersion();
 		return false;
 	}
 
-	g_gui.SetLoadDone(30, "Loading items.xml ...");
-	if (!g_items.loadFromGameXml(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml"), error, warnings)) {
-		warnings.push_back("Couldn't load items.xml: " + error);
+	if (loadItemsXml) {
+		g_gui.SetLoadDone(30, "Loading server items.xml...");
+		if (!g_items.loadFromGameXml(itemsXmlPath, error, warnings)) {
+			warnings.push_back("Couldn't load items.xml: " + error);
+		}
+	} else {
+		g_gui.SetLoadDone(30, "Server items.xml not found; continuing with items.otb...");
+		warnings.push_back("Server items.xml was not found. The workspace loaded directly from items.otb without optional XML metadata.");
 	}
 
 	g_gui.SetLoadDone(45, "Loading creatures.xml ...");
-	if (!g_creatures.loadFromXML(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "creatures.xml"), true, error, warnings)) {
+	if (!g_creatures.loadFromXML(editorDataDirectory + "creatures.xml", true, error, warnings)) {
 		warnings.push_back("Couldn't load creatures.xml: " + error);
 	}
 
@@ -445,8 +540,21 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		g_creatures.loadFromXML(cdb, false, nerr, nwarn);
 	}
 
+	if (!workspace.monstersDirectory.empty()) {
+		wxString importError;
+		if (!g_creatures.importMonstersFromLuaDir(WorkspacePath(workspace.monstersDirectory), importError, warnings)) {
+			warnings.push_back("Couldn't import monsters from the Server Workspace: " + importError);
+		}
+	}
+	if (!workspace.npcsDirectory.empty()) {
+		wxString importError;
+		if (!g_creatures.importNpcsFromLuaDir(WorkspacePath(workspace.npcsDirectory), importError, warnings)) {
+			warnings.push_back("Couldn't import NPCs from the Server Workspace: " + importError);
+		}
+	}
+
 	g_gui.SetLoadDone(50, "Loading materials.xml ...");
-	if (!g_materials.loadMaterials(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "materials.xml"), error, warnings)) {
+	if (!g_materials.loadMaterials(editorDataDirectory + "materials.xml", error, warnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + error);
 	}
 
@@ -484,8 +592,14 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	SetLoadDone(35, "Loading item metadata...");
 	wxLogMessage("Canary/Crystal: loading dedicated item metadata.");
 	wxString supplementalError;
-	if (!g_items.loadFromGameXml(assetsDataDirectory + "items/items.xml", supplementalError, warnings, false)) {
-		warnings.push_back("Couldn't enrich Canary/Crystal items from items.xml: " + supplementalError);
+	const ServerWorkspace& workspace = g_workspace.getServer();
+	if (workspace.hasItemsXml()) {
+		const wxString serverItemsXml = WorkspacePath(workspace.itemsXmlPath);
+		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, true)) {
+			warnings.push_back("Couldn't enrich Canary/Crystal items from the server items.xml: " + supplementalError);
+		}
+	} else {
+		warnings.push_back("Server items.xml was not found. Canary/Crystal item properties are limited to appearances.dat metadata.");
 	}
 
 	SetLoadDone(50, "Loading creatures...");
@@ -509,14 +623,18 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		}
 	}
 
-	const wxString monstersDirectory = wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
+	const wxString monstersDirectory = !workspace.monstersDirectory.empty()
+		? WorkspacePath(workspace.monstersDirectory)
+		: wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
 	if (!monstersDirectory.empty() && wxDir::Exists(monstersDirectory)) {
 		wxString luaError;
 		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings)) {
 			warnings.push_back("Couldn't import the configured monsters Lua directory: " + luaError);
 		}
 	}
-	const wxString npcsDirectory = wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
+	const wxString npcsDirectory = !workspace.npcsDirectory.empty()
+		? WorkspacePath(workspace.npcsDirectory)
+		: wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
 	if (!npcsDirectory.empty() && wxDir::Exists(npcsDirectory)) {
 		wxString luaError;
 		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings)) {
@@ -578,6 +696,7 @@ void GUI::UnloadVersion() {
 	}
 	ClientAssets::unload();
 	canary_crystal_assets_loaded = false;
+	loaded_workspace_generation = 0;
 }
 
 void GUI::SaveUserCreatures() {
@@ -1451,7 +1570,7 @@ void GUI::DestroyLoadBar() {
 
 void GUI::ShowWelcomeDialog(const wxBitmap& icon) {
 	std::vector<wxString> recent_files = root->GetRecentFiles();
-	welcomeDialog = newd WelcomeDialog(__W_RME_APPLICATION_NAME__, "Version " + __W_RME_VERSION__, FROM_DIP(root, wxSize(1100, 700)), icon, recent_files);
+	welcomeDialog = newd WelcomeDialog(__W_RME_APPLICATION_NAME__, "Version " + __W_RME_VERSION__, FROM_DIP(root, wxSize(1000, 650)), icon, recent_files);
 	welcomeDialog->Bind(wxEVT_CLOSE_WINDOW, &GUI::OnWelcomeDialogClosed, this);
 	welcomeDialog->Bind(WELCOME_DIALOG_ACTION, &GUI::OnWelcomeDialogAction, this);
 	welcomeDialog->Show();
@@ -1480,10 +1599,36 @@ void GUI::OnWelcomeDialogClosed(wxCloseEvent& event) {
 }
 
 void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
-	if (event.GetId() == wxID_NEW) {
+	auto loadWorkspace = [&]() {
+		wxString error;
+		wxArrayString warnings;
+		if (!LoadWorkspace(error, warnings)) {
+			PopupDialog(welcomeDialog, "Workspace not ready", error, wxOK);
+			return false;
+		}
+		if (!warnings.empty()) {
+			ListDialog("Workspace warnings", warnings);
+		}
+		return true;
+	};
+
+	if (event.GetId() == WELCOME_DIALOG_OPEN_WORKSPACE) {
+		if (loadWorkspace()) {
+			NewMap();
+		}
+	} else if (event.GetId() == wxID_NEW) {
+		if ((g_workspace.getClient().valid || g_workspace.hasServerSelection()) && !loadWorkspace()) {
+			return;
+		}
 		NewMap();
 	} else if (event.GetId() == wxID_OPEN) {
-		LoadMap(FileName(event.GetString()));
+		if (event.GetInt() == 1) {
+			if (loadWorkspace()) {
+				LoadMapInternal(FileName(event.GetString()), EditorClientVersionPolicy::KeepLoaded);
+			}
+		} else {
+			LoadMap(FileName(event.GetString()));
+		}
 	} else if (event.GetId() == WELCOME_DIALOG_MAP_CONVERTER) {
 		static_cast<void>(RunMapItemIdConverter(welcomeDialog, MapItemIdConverterLaunchContext::Welcome));
 	} else if (event.GetId() == WELCOME_DIALOG_SPAWN_CONVERTER) {

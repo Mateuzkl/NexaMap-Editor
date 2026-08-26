@@ -14,6 +14,7 @@ wxDECLARE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 
 constexpr wxWindowID WELCOME_DIALOG_MAP_CONVERTER = wxID_HIGHEST + 7000;
 constexpr wxWindowID WELCOME_DIALOG_SPAWN_CONVERTER = wxID_HIGHEST + 7001;
+constexpr wxWindowID WELCOME_DIALOG_OPEN_WORKSPACE = wxID_HIGHEST + 7002;
 
 class WelcomeBrandPanel;
 class WelcomeFeatureItem;
@@ -44,11 +45,16 @@ public:
 	WelcomeDialogPanel(WelcomeDialog* parent, const wxString& titleText, const wxString& versionText, const wxBitmap& fallbackLogo, const std::vector<wxString>& recentFiles);
 
 	void OnThemeChanged(wxCommandEvent& event);
+	void OnSelectClient(wxCommandEvent& event);
+	void OnSelectServer(wxCommandEvent& event);
+	void OnRescanServer(wxCommandEvent& event);
+	void OnOpenWorkspace(wxCommandEvent& event);
 	void UpdateInputs();
 
 private:
 	void SetThemeSelection(int theme);
 	void UpdateThemeStatus();
+	void RefreshWorkspaceDashboard();
 	void AddNavigationItem(wxWindow* parent, wxSizer* sizer, const wxString& iconName, const wxString& title, const wxString& subtitle, const wxString& tooltip, wxWindowID action, bool primary = false);
 
 	wxCheckBox* m_show_welcome_dialog_checkbox = nullptr;
@@ -56,6 +62,24 @@ private:
 	WelcomeThemeChoice* m_dark_theme_choice = nullptr;
 	WelcomeThemeChoice* m_light_theme_choice = nullptr;
 	wxStaticText* m_theme_status_label = nullptr;
+	wxStaticText* m_client_path_label = nullptr;
+	wxStaticText* m_client_status_label = nullptr;
+	wxStaticText* m_server_path_label = nullptr;
+	wxStaticText* m_server_status_label = nullptr;
+	wxStaticText* m_items_otb_status = nullptr;
+	wxStaticText* m_items_xml_status = nullptr;
+	wxStaticText* m_maps_status = nullptr;
+	wxStaticText* m_monsters_status = nullptr;
+	wxStaticText* m_npcs_status = nullptr;
+	wxStaticText* m_protocol_value = nullptr;
+	wxStaticText* m_id_mode_value = nullptr;
+	wxStaticText* m_items_source_value = nullptr;
+	wxStaticText* m_workspace_status_value = nullptr;
+	wxStaticText* m_ready_description = nullptr;
+	wxControl* m_open_workspace_button = nullptr;
+	RecentMapsPanel* m_recent_maps_panel = nullptr;
+	std::vector<wxString> m_recent_files;
+	wxString m_version_text;
 	int m_active_theme = 0;
 	bool m_theme_prompt_open = false;
 };
@@ -166,9 +190,10 @@ private:
 	int m_columns = 4;
 };
 
-class RecentMapsPanel : public wxScrolledWindow {
+class RecentMapsPanel : public wxPanel {
 public:
 	RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const std::vector<wxString>& recentFiles);
+	void SetFiles(const std::vector<wxString>& files, bool detectedMaps);
 
 	void SetHoveredItem(RecentItem* item);
 	void ClearHoveredItem(RecentItem* item);
@@ -179,6 +204,8 @@ private:
 
 	RecentItem* m_hovered_item = nullptr;
 	RecentItem* m_selected_item = nullptr;
+	WelcomeDialog* m_dialog = nullptr;
+	wxBoxSizer* m_sizer = nullptr;
 };
 
 class RecentItem : public wxControl {

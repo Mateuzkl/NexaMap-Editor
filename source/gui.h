@@ -289,6 +289,7 @@ public:
 	// Fetch different useful directories
 	static wxString GetExecDirectory();
 	static wxString GetDataDirectory();
+	static wxString GetEditorDataDirectory();
 	static wxString GetLocalDataDirectory();
 	static wxString GetLocalDirectory();
 	static wxString GetExtensionsDirectory();
@@ -304,6 +305,7 @@ public:
 	void SaveUserCreatures();
 	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false);
 	bool LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force = false);
+	bool LoadWorkspace(wxString& error, wxArrayString& warnings, bool force = false);
 	bool IsCanaryCrystalAssetsLoaded() const {
 		return canary_crystal_assets_loaded;
 	}
@@ -457,6 +459,7 @@ protected:
 
 	ClientVersionID loaded_version;
 	bool canary_crystal_assets_loaded;
+	uint64_t loaded_workspace_generation = 0;
 	EditorMode mode;
 	bool pasting;
 

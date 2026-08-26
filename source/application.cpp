@@ -26,6 +26,7 @@
 #include "artprovider.h"
 #include "theme.h"
 #include "client_assets.h"
+#include "workspace_session.h"
 
 #include "materials.h"
 #include "map.h"
@@ -287,6 +288,7 @@ bool Application::OnInit() {
 	g_gui.LoadHotkeys();
 	ClientVersion::loadVersions();
 	ClientAssets::loadConfiguredPath();
+	g_workspace.loadConfiguredPaths();
 
 #ifdef _USE_PROCESS_COM
 	m_single_instance_checker = newd wxSingleInstanceChecker; // Instance checker has to stay alive throughout the applications lifetime

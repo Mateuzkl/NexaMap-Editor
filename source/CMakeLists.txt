@@ -120,6 +120,7 @@ ${CMAKE_CURRENT_LIST_DIR}/result_window.h
 ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
+${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.h
@@ -140,6 +141,7 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/workspace_session.h
 ${CMAKE_CURRENT_LIST_DIR}/version_info.h
 ${CMAKE_CURRENT_LIST_DIR}/zones.h
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.h
@@ -266,6 +268,7 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_tool/visual_similarity_index.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
+${CMAKE_CURRENT_LIST_DIR}/server_workspace.cpp
 ${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn.cpp
@@ -287,6 +290,7 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/workspace_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zones.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_zones.cpp

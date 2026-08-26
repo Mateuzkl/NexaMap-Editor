@@ -315,6 +315,13 @@ void Settings::IO(IOMode mode) {
 	Int(COPY_POSITION_FORMAT, 0);
 	Int(ENABLE_DIAGNOSTIC_LOG, 0);
 
+	section("Workspace");
+	String(WORKSPACE_CLIENT_ROOT, "");
+	String(WORKSPACE_SERVER_ROOT, "");
+	String(WORKSPACE_ITEMS_OTB_PATH, "");
+	String(WORKSPACE_ITEMS_XML_PATH, "");
+	Int(WORKSPACE_ITEM_ID_MODE, 0);
+
 	section("Graphics");
 	Int(TEXTURE_MANAGEMENT, 1);
 	Int(TEXTURE_CLEAN_PULSE, 15);
