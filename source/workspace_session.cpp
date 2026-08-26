@@ -73,13 +73,26 @@ void WorkspaceSession::loadConfiguredPaths() {
 
 	wxString ignoredError;
 	wxArrayString ignoredWarnings;
-	const wxString clientPath = wxstr(g_settings.getString(Config::WORKSPACE_CLIENT_ROOT));
-	if (!clientPath.empty()) {
-		configureClient(clientPath, ignoredError, ignoredWarnings, false);
-	}
 	const wxString serverPath = wxstr(g_settings.getString(Config::WORKSPACE_SERVER_ROOT));
 	if (!serverPath.empty()) {
 		configureServer(serverPath, ignoredError, false);
+	}
+
+	// The server item model decides which saved client should be restored. A
+	// Crystal workspace may have been opened after a classic client, so the
+	// generic workspace path is not allowed to shadow the dedicated Assets path.
+	bool clientRestored = false;
+	if (server.hasAppearances()) {
+		const wxString appearancesClientPath = wxstr(g_settings.getString(Config::CANARY_CRYSTAL_ASSETS_DIRECTORY));
+		if (!appearancesClientPath.empty() && ClientAssetsManifestLoader::Validate(ToFilesystemPath(appearancesClientPath)).valid) {
+			clientRestored = configureClient(appearancesClientPath, ignoredError, ignoredWarnings, false);
+		}
+	}
+	if (!clientRestored) {
+		const wxString clientPath = wxstr(g_settings.getString(Config::WORKSPACE_CLIENT_ROOT));
+		if (!clientPath.empty()) {
+			configureClient(clientPath, ignoredError, ignoredWarnings, false);
+		}
 	}
 
 	// Always rewrite the discovered external paths. This migrates any stale
@@ -154,6 +167,32 @@ bool WorkspaceSession::rescanServer(wxString& error) {
 		return false;
 	}
 	return configureServer(FromFilesystemPath(server.rootPath), error, true);
+}
+
+bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& warnings, bool persist) {
+	error.clear();
+	warnings.clear();
+	if (hasCompatibleServerResources()) {
+		return true;
+	}
+	if (!server.hasAppearances()) {
+		error = client.valid
+			? "The selected client is not compatible with this Server Workspace."
+			: "Select a valid client folder before opening the workspace.";
+		return false;
+	}
+
+	const wxString savedPath = wxstr(g_settings.getString(Config::CANARY_CRYSTAL_ASSETS_DIRECTORY));
+	if (savedPath.empty()) {
+		error = "This server uses appearances.dat. Select a Canary/Crystal or OTC Assets client once; NexaMap will remember it for detected maps.";
+		return false;
+	}
+	const ClientAssetsValidationResult validation = ClientAssetsManifestLoader::Validate(ToFilesystemPath(savedPath));
+	if (!validation.valid) {
+		error = wxString("The saved Canary/Crystal client is no longer valid: ") + wxstr(validation.error);
+		return false;
+	}
+	return configureClient(savedPath, error, warnings, persist);
 }
 
 void WorkspaceSession::setItemIdModePreference(ItemIdModePreference preference) {

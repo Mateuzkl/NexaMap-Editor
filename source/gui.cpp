@@ -404,9 +404,12 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 }
 
 bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
-	if (!g_workspace.getClient().valid) {
-		error = "Select a valid client folder before opening the workspace.";
+	wxArrayString restoredClientWarnings;
+	if (!g_workspace.restoreCompatibleClient(error, restoredClientWarnings)) {
 		return false;
+	}
+	for (const wxString& warning : restoredClientWarnings) {
+		warnings.push_back(warning);
 	}
 	bool serverResourcesChanged = false;
 	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, g_workspace.getClient().mode)) {

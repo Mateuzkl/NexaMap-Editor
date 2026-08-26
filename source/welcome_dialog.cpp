@@ -607,6 +607,11 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	m_recent_maps_panel = newd RecentMapsPanel(contentPanel, dialog, recentFiles);
 	contentSizer->Add(m_recent_maps_panel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentSizer->AddStretchSpacer();
+	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by Mateuzkl and Skyyzyy");
+	creditText->SetFont(FontWithPointSize(GetFont(), std::max(7, GetFont().GetPointSize() - 2)));
+	creditText->SetForegroundColour(wxColour(246, 196, 69));
+	creditText->SetBackgroundColour(background);
+	contentSizer->Add(creditText, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentPanel->SetSizer(contentSizer);
 
 	auto* rootSizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -671,6 +676,9 @@ void WelcomeDialogPanel::OnSelectServer(wxCommandEvent& WXUNUSED(event)) {
 
 	wxString error;
 	g_workspace.configureServer(dialog.GetPath(), error);
+	wxString clientError;
+	wxArrayString clientWarnings;
+	g_workspace.restoreCompatibleClient(clientError, clientWarnings);
 	RefreshWorkspaceDashboard();
 	if (!error.empty()) {
 		wxMessageBox(error, "Server scan completed", wxOK | wxICON_WARNING, this);

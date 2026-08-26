@@ -34,6 +34,7 @@ public:
 	bool configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist = true);
 	bool configureServer(const wxString& path, wxString& error, bool persist = true);
 	bool rescanServer(wxString& error);
+	bool restoreCompatibleClient(wxString& error, wxArrayString& warnings, bool persist = true);
 
 	void setItemIdModePreference(ItemIdModePreference preference);
 	[[nodiscard]] ItemIdModePreference getItemIdModePreference() const;
