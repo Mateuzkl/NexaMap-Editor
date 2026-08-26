@@ -607,12 +607,24 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	m_recent_maps_panel = newd RecentMapsPanel(contentPanel, dialog, recentFiles);
 	contentSizer->Add(m_recent_maps_panel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentSizer->AddStretchSpacer();
+	auto* footerSizer = newd wxBoxSizer(wxVERTICAL);
+	auto* communityText = newd wxStaticText(
+		contentPanel,
+		wxID_ANY,
+		"NexaMap is free and open-source software, shaped by community contributions to advance map editing for everyone."
+	);
+	communityText->SetFont(FontWithPointSize(GetFont(), std::max(9, GetFont().GetPointSize() - 1)));
+	communityText->SetForegroundColour(WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
+	communityText->SetBackgroundColour(background);
+	footerSizer->Add(communityText, 0, wxALIGN_RIGHT);
+	footerSizer->AddSpacer(FROM_DIP(this, 4));
 	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by  Mateuzkl  •  Skyyzyy");
 	creditText->SetFont(FontWithPointSize(GetFont(), std::max(11, GetFont().GetPointSize() + 1), true));
 	creditText->SetForegroundColour(wxColour(255, 211, 77));
 	creditText->SetBackgroundColour(background);
 	creditText->SetToolTip("NexaMap Editor developers: Mateuzkl and Skyyzyy");
-	contentSizer->Add(creditText, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
+	footerSizer->Add(creditText, 0, wxALIGN_RIGHT);
+	contentSizer->Add(footerSizer, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentPanel->SetSizer(contentSizer);
 
 	auto* rootSizer = newd wxBoxSizer(wxHORIZONTAL);
