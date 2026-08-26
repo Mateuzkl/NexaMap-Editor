@@ -1622,9 +1622,9 @@ void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
 
 	if (event.GetId() == WELCOME_DIALOG_OPEN_WORKSPACE) {
 		if (loadWorkspace()) {
-			const std::vector<wxString> detectedMaps = g_workspace.getDetectedMaps();
-			if (!detectedMaps.empty()) {
-				LoadMapInternal(FileName(detectedMaps.front()), EditorClientVersionPolicy::KeepLoaded);
+			const wxString primaryMap = WorkspacePath(g_workspace.getServer().primaryMapPath);
+			if (!primaryMap.empty()) {
+				LoadMapInternal(FileName(primaryMap), EditorClientVersionPolicy::KeepLoaded);
 			} else {
 				NewMap();
 			}

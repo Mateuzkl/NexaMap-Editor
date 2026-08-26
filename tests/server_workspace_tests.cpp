@@ -47,6 +47,7 @@ int main() {
 		TemporaryDirectory server;
 		server.write("data/items/items.otb");
 		server.write("data/items/items.xml", "<items/>");
+		server.write("config.lua", "mapName = \"world\"\n");
 		server.write("data/world/world.otbm");
 		server.write("data/cache/maps/world.houses.otbm");
 		server.write("data/monster/rat.lua");
@@ -58,8 +59,21 @@ int main() {
 		check(detection.workspace.hasItemsXml(), "standard TFS items.xml is detected");
 		check(detection.workspace.maps.size() == 2, "maps from separate standard server directories are detected");
 		check(detection.workspace.containsMap(server.path / "data/cache/maps/world.houses.otbm"), "detected map membership uses normalized paths");
+		check(detection.workspace.primaryMapPath == std::filesystem::weakly_canonical(server.path / "data/world/world.otbm"), "classic TFS mapName selects the original world map");
+		check(detection.workspace.maps.front().path == detection.workspace.primaryMapPath, "generated houses map never precedes the original world map");
 		check(!detection.workspace.monstersDirectory.empty(), "standard TFS monsters are detected");
 		check(!detection.workspace.npcsDirectory.empty(), "standard TFS NPCs are detected");
+	}
+
+	{
+		TemporaryDirectory server;
+		server.write("data/items/items.otb");
+		server.write("data/world/forgotten.otbm");
+		server.write("data/cache/maps/forgotten.houses.otbm");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(detection.workspace.primaryMapPath == std::filesystem::weakly_canonical(server.path / "data/world/forgotten.otbm"), "fallback selection prefers an original map over a generated houses map");
+		check(detection.workspace.maps.front().path == detection.workspace.primaryMapPath, "fallback primary map is ordered first");
 	}
 
 	{

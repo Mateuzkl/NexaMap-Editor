@@ -127,6 +127,21 @@ namespace {
 		});
 	}
 
+	bool IsAuxiliaryMap(const std::filesystem::path& path) {
+		const std::string stem = Lower(path.stem().string());
+		static constexpr std::array<const char*, 6> suffixes {
+			".houses",
+			"-houses",
+			"_houses",
+			".spawns",
+			"-spawns",
+			"_spawns",
+		};
+		return std::any_of(suffixes.begin(), suffixes.end(), [&](const char* suffix) {
+			return stem.ends_with(suffix);
+		});
+	}
+
 	void DetectConfiguredMap(ServerWorkspace& workspace) {
 		std::filesystem::path config = workspace.rootPath / "config.lua";
 		if (!IsRegularFile(config)) {
@@ -136,41 +151,62 @@ namespace {
 			return;
 		}
 
-		const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
 		const std::optional<std::string> configuredMap = ReadLuaStringAssignment(config, "mapName");
-		if (!configuredDataPack) {
-			return;
-		}
-		const std::filesystem::path relativeDataPack(*configuredDataPack);
-		if (!IsSafeRelativePath(relativeDataPack)) {
-			workspace.warnings.push_back("config.lua contains an unsafe dataPackDirectory; automatic map selection ignored it.");
+		const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
+		if (!configuredMap && !configuredDataPack) {
 			return;
 		}
 
-		const std::filesystem::path activeData = workspace.rootPath / relativeDataPack;
-		const std::filesystem::path worldDirectory = activeData / "world";
-		if (!IsDirectory(worldDirectory)) {
-			workspace.warnings.push_back("The dataPackDirectory from config.lua has no world directory.");
-			return;
+		std::vector<std::filesystem::path> mapDirectories;
+		if (configuredDataPack) {
+			const std::filesystem::path relativeDataPack(*configuredDataPack);
+			if (!IsSafeRelativePath(relativeDataPack)) {
+				workspace.warnings.push_back("config.lua contains an unsafe dataPackDirectory; automatic map selection ignored it.");
+				return;
+			}
+
+			const std::filesystem::path activeData = workspace.rootPath / relativeDataPack;
+			const std::filesystem::path worldDirectory = activeData / "world";
+			if (!IsDirectory(worldDirectory)) {
+				workspace.warnings.push_back("The dataPackDirectory from config.lua has no world directory.");
+				return;
+			}
+			workspace.activeDataDirectory = Normalize(activeData);
+			workspace.mapsDirectory = Normalize(worldDirectory);
+			workspace.protocol = relativeDataPack.generic_string();
+			mapDirectories.push_back(worldDirectory);
+		} else {
+			// Classic TFS releases use mapName without dataPackDirectory. Their map
+			// lives under data/world, while generated *.houses.otbm files may live
+			// under data/cache/maps and must not become the primary map.
+			mapDirectories = {
+				workspace.rootPath,
+				workspace.rootPath / "data/world",
+				workspace.rootPath / "world",
+				workspace.rootPath / "data/maps",
+				workspace.rootPath / "maps",
+			};
 		}
-		workspace.activeDataDirectory = Normalize(activeData);
-		workspace.mapsDirectory = Normalize(worldDirectory);
-		workspace.protocol = relativeDataPack.generic_string();
 
 		std::filesystem::path mapName = configuredMap ? std::filesystem::path(*configuredMap) : std::filesystem::path("world");
 		if (!IsSafeRelativePath(mapName)) {
-			workspace.warnings.push_back("config.lua contains an unsafe mapName; the configured data pack will still be scanned.");
+			workspace.warnings.push_back("config.lua contains an unsafe mapName; automatic map selection ignored it.");
 			return;
 		}
 		if (mapName.extension().empty()) {
 			mapName += ".otbm";
 		}
-		const std::filesystem::path primaryMap = worldDirectory / mapName;
-		if (IsRegularFile(primaryMap)) {
+
+		for (const std::filesystem::path& directory : mapDirectories) {
+			const std::filesystem::path primaryMap = directory / mapName;
+			if (!IsRegularFile(primaryMap)) {
+				continue;
+			}
 			workspace.primaryMapPath = Normalize(primaryMap);
-		} else {
-			workspace.warnings.push_back("The map selected by config.lua was not found; the active world directory will be scanned.");
+			workspace.mapsDirectory = Normalize(primaryMap.parent_path());
+			return;
 		}
+		workspace.warnings.push_back("The map selected by config.lua was not found; known map directories will be scanned.");
 	}
 
 	struct QueueEntry {
@@ -228,6 +264,36 @@ namespace {
 					queue.push_back({ entry.path(), current.depth + 1 });
 				}
 			}
+		}
+	}
+
+	void SelectFallbackPrimaryMap(ServerWorkspace& workspace) {
+		if (!workspace.primaryMapPath.empty()) {
+			return;
+		}
+
+		const auto preferred = std::min_element(workspace.maps.begin(), workspace.maps.end(), [&](const DetectedMap& left, const DetectedMap& right) {
+			const bool leftAuxiliary = IsAuxiliaryMap(left.path);
+			const bool rightAuxiliary = IsAuxiliaryMap(right.path);
+			if (leftAuxiliary != rightAuxiliary) {
+				return !leftAuxiliary;
+			}
+			const bool leftInMapDirectory = !workspace.mapsDirectory.empty() && left.path.parent_path() == workspace.mapsDirectory;
+			const bool rightInMapDirectory = !workspace.mapsDirectory.empty() && right.path.parent_path() == workspace.mapsDirectory;
+			if (leftInMapDirectory != rightInMapDirectory) {
+				return leftInMapDirectory;
+			}
+			const std::string leftName = Lower(left.path.filename().string());
+			const std::string rightName = Lower(right.path.filename().string());
+			const bool leftWorld = leftName == "world.otbm" || leftName == "world.otgz";
+			const bool rightWorld = rightName == "world.otbm" || rightName == "world.otgz";
+			if (leftWorld != rightWorld) {
+				return leftWorld;
+			}
+			return leftName != rightName ? leftName < rightName : left.path < right.path;
+		});
+		if (preferred != workspace.maps.end() && !IsAuxiliaryMap(preferred->path)) {
+			workspace.primaryMapPath = preferred->path;
 		}
 	}
 
@@ -418,6 +484,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		}
 		ScanMaps(workspace, workspace.mapsDirectory, options);
 	}
+	SelectFallbackPrimaryMap(workspace);
 	std::sort(workspace.maps.begin(), workspace.maps.end(), [&](const DetectedMap& left, const DetectedMap& right) {
 		const bool leftPrimary = left.path == workspace.primaryMapPath;
 		const bool rightPrimary = right.path == workspace.primaryMapPath;
