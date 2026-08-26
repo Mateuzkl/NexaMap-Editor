@@ -335,10 +335,8 @@ void ClientVersion::saveVersions() {
 
 	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
 		ClientVersion* version = i->second;
-		vers_obj.push_back({
-			{"id", version->getName()},
-			{"path", nstr(version->getClientPath().GetFullPath())}
-		});
+		vers_obj.push_back({ { "id", version->getName() },
+							 { "path", nstr(version->getClientPath().GetFullPath()) } });
 	}
 	g_settings.setString(Config::ASSETS_DATA_DIRS, vers_obj.dump());
 }

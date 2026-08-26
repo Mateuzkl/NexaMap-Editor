@@ -45,7 +45,7 @@ namespace {
 			m_default_action(defaultAction),
 			m_action(std::move(action)),
 			m_selected_state(selectedState),
-			m_selected(std::move(selected)) {}
+			m_selected(std::move(selected)) { }
 
 		wxAccStatus GetName(int childId, wxString* name) override {
 			if (childId != wxACC_SELF || !name) {
@@ -331,7 +331,7 @@ namespace {
 			const wxColour background = !IsEnabled()
 				? WelcomeThemeStyle::Get(Theme::Role::Surface)
 				: (primary ? (pressed ? accent.ChangeLightness(82) : (hovered ? accentHover : accent))
-						 : (pressed ? WelcomeThemeStyle::Get(Theme::Role::SelectionFill) : (hovered ? accentHover : WelcomeThemeStyle::Get(Theme::Role::RaisedSurface))));
+						   : (pressed ? WelcomeThemeStyle::Get(Theme::Role::SelectionFill) : (hovered ? accentHover : WelcomeThemeStyle::Get(Theme::Role::RaisedSurface))));
 			dc.SetBackground(wxBrush(WelcomeThemeStyle::Get(Theme::Role::RaisedSurface)));
 			dc.Clear();
 			dc.SetBrush(wxBrush(background));
@@ -478,7 +478,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	m_system_theme_choice = newd WelcomeThemeChoice(navigationPanel, 0, "icon_system.png", "System");
 	m_dark_theme_choice = newd WelcomeThemeChoice(navigationPanel, 1, "icon_dark.png", "Dark");
 	m_light_theme_choice = newd WelcomeThemeChoice(navigationPanel, 2, "icon_light.png", "Light");
-	for (WelcomeThemeChoice* choice : {m_system_theme_choice, m_dark_theme_choice, m_light_theme_choice}) {
+	for (WelcomeThemeChoice* choice : { m_system_theme_choice, m_dark_theme_choice, m_light_theme_choice }) {
 		choice->Bind(wxEVT_BUTTON, &WelcomeDialogPanel::OnThemeChanged, this);
 		themeSizer->Add(choice, 1, wxEXPAND | wxRIGHT, choice == m_light_theme_choice ? 0 : FROM_DIP(this, 4));
 	}
@@ -562,7 +562,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	m_maps_status = makeText(resourcesCard, "Maps  Not scanned", -2, false, subtle);
 	m_monsters_status = makeText(resourcesCard, "Monsters  Not scanned", -2, false, subtle);
 	m_npcs_status = makeText(resourcesCard, "NPCs  Not scanned", -2, false, subtle);
-	for (wxStaticText* row : {m_items_otb_status, m_items_xml_status, m_maps_status, m_monsters_status, m_npcs_status}) {
+	for (wxStaticText* row : { m_items_otb_status, m_items_xml_status, m_maps_status, m_monsters_status, m_npcs_status }) {
 		resourceGrid->Add(row, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
 	}
 	resourcesSizer->Add(resourceGrid, 0, wxEXPAND | wxALL, FROM_DIP(this, 10));
@@ -1051,7 +1051,9 @@ WelcomeThemeChoice::WelcomeThemeChoice(wxWindow* parent, int theme, const wxStri
 
 #if wxUSE_ACCESSIBILITY && defined(__WXMSW__)
 wxAccessible* WelcomeThemeChoice::CreateAccessible() {
-	return newd WelcomeControlAccessible(this, wxROLE_SYSTEM_RADIOBUTTON, "Select", [this] { Activate(); }, wxACC_STATE_SYSTEM_CHECKED, [this] { return m_selected; });
+	return newd WelcomeControlAccessible(
+		this, wxROLE_SYSTEM_RADIOBUTTON, "Select", [this] { Activate(); }, wxACC_STATE_SYSTEM_CHECKED, [this] { return m_selected; }
+	);
 }
 #endif
 
@@ -1505,7 +1507,9 @@ RecentItem::RecentItem(RecentMapsPanel* parent, const wxString& itemName) :
 
 #if wxUSE_ACCESSIBILITY && defined(__WXMSW__)
 wxAccessible* RecentItem::CreateAccessible() {
-	return newd WelcomeControlAccessible(this, wxROLE_SYSTEM_LISTITEM, "Open", [this] { Activate(); }, wxACC_STATE_SYSTEM_SELECTED, [this] { return m_selected; });
+	return newd WelcomeControlAccessible(
+		this, wxROLE_SYSTEM_LISTITEM, "Open", [this] { Activate(); }, wxACC_STATE_SYSTEM_SELECTED, [this] { return m_selected; }
+	);
 }
 #endif
 

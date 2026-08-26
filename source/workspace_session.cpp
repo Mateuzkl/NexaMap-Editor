@@ -45,22 +45,7 @@ namespace {
 	}
 
 	bool SameServerWorkspace(const ServerWorkspace& left, const ServerWorkspace& right) {
-		return left.rootPath == right.rootPath &&
-			left.itemsOtbPath == right.itemsOtbPath &&
-			left.itemsXmlPath == right.itemsXmlPath &&
-			left.appearancesPath == right.appearancesPath &&
-			left.activeDataDirectory == right.activeDataDirectory &&
-			left.mapsDirectory == right.mapsDirectory &&
-			left.primaryMapPath == right.primaryMapPath &&
-			left.monstersDirectory == right.monstersDirectory &&
-			left.npcsDirectory == right.npcsDirectory &&
-			left.itemsOtbFingerprint == right.itemsOtbFingerprint &&
-			left.itemsXmlFingerprint == right.itemsXmlFingerprint &&
-			left.appearancesFingerprint == right.appearancesFingerprint &&
-			left.itemIdMode == right.itemIdMode &&
-			left.serverProfile == right.serverProfile &&
-			left.protocol == right.protocol &&
-			SameDetectedMaps(left.maps, right.maps);
+		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.itemIdMode == right.itemIdMode && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
 	}
 }
 

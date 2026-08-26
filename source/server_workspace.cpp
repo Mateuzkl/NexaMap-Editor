@@ -44,7 +44,16 @@ namespace {
 
 	bool IsSkippedDirectory(const std::filesystem::path& path) {
 		static const std::unordered_set<std::string> ignored {
-			".git", ".svn", ".hg", "build", "builds", "node_modules", "vcpkg_installed", ".cache", ".idea", ".vs",
+			".git",
+			".svn",
+			".hg",
+			"build",
+			"builds",
+			"node_modules",
+			"vcpkg_installed",
+			".cache",
+			".idea",
+			".vs",
 		};
 		const std::string name = Lower(path.filename().string());
 		return ignored.contains(name) || name.starts_with("build-") || name.starts_with("build_");
@@ -69,7 +78,10 @@ namespace {
 
 	KnownItemFiles FindKnownItems(const std::filesystem::path& root) {
 		static constexpr std::array<const char*, 4> directories {
-			"data/items", "data", "items", "",
+			"data/items",
+			"data",
+			"items",
+			"",
 		};
 		KnownItemFiles files;
 		for (const char* relative : directories) {
@@ -338,7 +350,13 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	DetectConfiguredMap(workspace);
 
 	static constexpr std::array<const char*, 7> mapDirectories {
-		"data/world", "data-global/world", "data-crystal/world", "data-otservbr-global/world", "data/maps", "world", "maps",
+		"data/world",
+		"data-global/world",
+		"data-crystal/world",
+		"data-otservbr-global/world",
+		"data/maps",
+		"world",
+		"maps",
 	};
 	static constexpr std::array<const char*, 4> monsterDirectories { "data/monster", "data/monsters", "monster", "monsters" };
 	static constexpr std::array<const char*, 4> npcDirectories { "data/npc", "data/npcs", "npc", "npcs" };

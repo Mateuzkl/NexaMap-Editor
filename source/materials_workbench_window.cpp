@@ -129,7 +129,8 @@ namespace {
 
 	class BrushTreeData final : public wxTreeItemData {
 	public:
-		explicit BrushTreeData(int index) : index(index) { }
+		explicit BrushTreeData(int index) :
+			index(index) { }
 		int index;
 	};
 }
@@ -466,29 +467,73 @@ void MaterialsWorkbenchWindow::BuildLayout() {
 }
 
 void MaterialsWorkbenchWindow::BindEvents() {
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenMaterialsFile(); }, wxID_OPEN);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { if (!rootMaterialsPath_.IsEmpty() && ResolvePendingChanges("reload")){ LoadCatalog(rootMaterialsPath_);
-} }, ID_RELOAD);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { BorderWorkspaceWindow::Open(this); }, ID_BORDERS);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AddContext(); }, ID_ADD_CONTEXT);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveContext(); }, ID_REMOVE_CONTEXT);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { PickItem(); }, ID_PICK_ITEM);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyItem(true); }, ID_ADD_ITEM);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyItem(false); }, ID_UPDATE_ITEM);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveItem(); }, ID_REMOVE_ITEM);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyDoor(true); }, ID_ADD_DOOR);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyDoor(false); }, ID_UPDATE_DOOR);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveDoor(); }, ID_REMOVE_DOOR);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AddComposite(); }, ID_ADD_COMPOSITE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveComposite(); }, ID_REMOVE_COMPOSITE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyTile(true); }, ID_ADD_TILE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyTile(false); }, ID_UPDATE_TILE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveTile(); }, ID_REMOVE_TILE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CreateBrush(); }, wxID_NEW);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { DeleteBrush(); }, wxID_DELETE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ShowUsedBy(); }, ID_USED_BY);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SaveCurrentBrush(); }, wxID_SAVE);
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RevertCurrentBrush(); }, wxID_REVERT);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { OpenMaterialsFile(); }, wxID_OPEN
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { if (!rootMaterialsPath_.IsEmpty() && ResolvePendingChanges("reload")){ LoadCatalog(rootMaterialsPath_);
+} }, ID_RELOAD
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { BorderWorkspaceWindow::Open(this); }, ID_BORDERS
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { AddContext(); }, ID_ADD_CONTEXT
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveContext(); }, ID_REMOVE_CONTEXT
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { PickItem(); }, ID_PICK_ITEM
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyItem(true); }, ID_ADD_ITEM
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyItem(false); }, ID_UPDATE_ITEM
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveItem(); }, ID_REMOVE_ITEM
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyDoor(true); }, ID_ADD_DOOR
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyDoor(false); }, ID_UPDATE_DOOR
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveDoor(); }, ID_REMOVE_DOOR
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { AddComposite(); }, ID_ADD_COMPOSITE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveComposite(); }, ID_REMOVE_COMPOSITE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyTile(true); }, ID_ADD_TILE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ApplyTile(false); }, ID_UPDATE_TILE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { RemoveTile(); }, ID_REMOVE_TILE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { CreateBrush(); }, wxID_NEW
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { DeleteBrush(); }, wxID_DELETE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { ShowUsedBy(); }, ID_USED_BY
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { SaveCurrentBrush(); }, wxID_SAVE
+	);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { RevertCurrentBrush(); }, wxID_REVERT
+	);
 	Bind(wxEVT_CLOSE_WINDOW, &MaterialsWorkbenchWindow::OnClose, this);
 	filterCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { PopulateCatalog(); });
 	typeFilterCtrl_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { PopulateCatalog(); });
@@ -561,7 +606,7 @@ bool MaterialsWorkbenchWindow::LoadCatalog(const wxString& path) {
 		return false;
 	}
 	std::cerr << "[materials] Parsed " << records_.size() << " brushes from "
-	          << visited.size() << " XML files" << std::endl;
+			  << visited.size() << " XML files" << std::endl;
 	rootMaterialsPath_ = path;
 	currentBrush_ = -1;
 	dirty_ = false;
