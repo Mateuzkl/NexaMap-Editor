@@ -560,6 +560,24 @@ void MapDrawer::DrawMap() {
 	bool show_zone_tooltips = options.isTooltips() && !far_zoom_mode;
 	if (far_zoom_mode) {
 		DrawMapMinimapPages();
+		if (g_gui.secondary_map != nullptr && canvas->isPasting()) {
+			Position sourceMinimum;
+			Position sourceMaximum;
+			if (editor.copybuffer.getBounds(sourceMinimum, sourceMaximum)) {
+				const Position sourceAnchor = editor.copybuffer.getPosition();
+				const int floorOffset = floor <= GROUND_LAYER ? (GROUND_LAYER - floor) * TileSize : 0;
+				const int targetMinimumX = mouse_map_x + sourceMinimum.x - sourceAnchor.x;
+				const int targetMinimumY = mouse_map_y + sourceMinimum.y - sourceAnchor.y;
+				const int targetMaximumX = mouse_map_x + sourceMaximum.x - sourceAnchor.x;
+				const int targetMaximumY = mouse_map_y + sourceMaximum.y - sourceAnchor.y;
+				const int drawX = targetMinimumX * TileSize - view_scroll_x - floorOffset;
+				const int drawY = targetMinimumY * TileSize - view_scroll_y - floorOffset;
+				const int drawWidth = std::max(TileSize, (targetMaximumX - targetMinimumX + 1) * TileSize);
+				const int drawHeight = std::max(TileSize, (targetMaximumY - targetMinimumY + 1) * TileSize);
+				drawFilledRect(drawX, drawY, drawWidth, drawHeight, wxColour(116, 76, 238, 42));
+				drawRect(drawX, drawY, drawWidth, drawHeight, wxColour(155, 125, 255, 235), 2);
+			}
+		}
 		return;
 	}
 

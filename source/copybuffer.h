@@ -36,6 +36,8 @@ public:
 	void cut(Editor& editor, int floor);
 	void paste(Editor& editor, const Position& toPosition);
 	bool canPaste() const;
+	uint64_t getTileCount() const;
+	bool getBounds(Position& minimum, Position& maximum) const;
 	// Returns the upper-left corner of the copybuffer
 	Position getPosition() const;
 
@@ -48,7 +50,14 @@ public:
 	BaseMap& getBufferMap();
 
 private:
+	void resetBounds();
+	void includePosition(const Position& position);
+	void rebuildBounds();
+
 	Position copyPos;
+	Position minimumPosition;
+	Position maximumPosition;
+	bool boundsValid = false;
 	BaseMap* tiles;
 };
 

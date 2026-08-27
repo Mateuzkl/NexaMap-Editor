@@ -1959,6 +1959,8 @@ void GUI::StartPasting() {
 	if (GetCurrentEditor()) {
 		pasting = true;
 		secondary_map = &copybuffer.getBufferMap();
+		const uint64_t tileCount = copybuffer.getTileCount();
+		SetStatusText(wxString::Format("Paste ready: %llu tiles. Move the outline and click the map to place the complete area.", static_cast<unsigned long long>(tileCount)));
 	}
 }
 
