@@ -1946,6 +1946,7 @@ bool GUI::PrepareCrossClientPaste(Editor& editor) {
 	if (dialog.ShowModal() != wxID_OK) {
 		return false;
 	}
+	analysis = dialog.GetAnalysis();
 	if (!crossClientClipboard->apply(analysis, editor.copybuffer, error)) {
 		PopupDialog(root, "Cross-Client Paste", error, wxOK | wxICON_ERROR);
 		return false;

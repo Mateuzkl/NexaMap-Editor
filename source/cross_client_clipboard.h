@@ -39,6 +39,13 @@ struct CrossClientItemSnapshot {
 	std::vector<uint8_t> previewRgba;
 };
 
+struct CrossClientItemRecommendation {
+	uint16_t destinationId = 0;
+	uint16_t destinationClientId = 0;
+	std::string destinationName;
+	uint8_t confidence = 0;
+};
+
 struct CrossClientPasteRow {
 	CrossClientItemSnapshot source;
 	uint16_t destinationId = 0;
@@ -46,6 +53,7 @@ struct CrossClientPasteRow {
 	std::string destinationName;
 	CrossClientMatchState state = CrossClientMatchState::Missing;
 	wxString detail;
+	std::vector<CrossClientItemRecommendation> recommendations;
 };
 
 struct CrossClientPasteAnalysis {
@@ -88,6 +96,8 @@ public:
 		const ProgressCallback& progress,
 		wxString& error
 	) const;
+	static bool resolveMapping(CrossClientPasteAnalysis& analysis, size_t rowIndex, uint16_t destinationId, wxString& error);
+	static bool isCompatibleDestination(const CrossClientItemSnapshot& source, uint16_t destinationId);
 	bool apply(const CrossClientPasteAnalysis& analysis, CopyBuffer& destination, wxString& error);
 
 private:
