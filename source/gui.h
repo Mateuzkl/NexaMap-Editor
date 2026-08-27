@@ -37,6 +37,7 @@
 class BaseMap;
 class Map;
 class EditorResourceSession;
+class CrossClientClipboard;
 
 enum class EditorClientVersionPolicy;
 class Editor;
@@ -331,6 +332,8 @@ public:
 	void DoCopy();
 	void DoPaste();
 	void PreparePaste();
+	bool CanPaste() const;
+	void CaptureCrossClientCopy(CopyBuffer& source);
 	void StartPasting();
 	void EndPasting();
 	bool IsPasting() const {
@@ -375,6 +378,7 @@ public:
 
 protected:
 	void SwapResourceSessionState(EditorResourceSession& session);
+	bool PrepareCrossClientPaste(Editor& editor);
 	bool LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false, bool replaceEmptyEditor = true);
 	bool ConfigureSpawnSaveAs(const FileName& mapFilename);
 	bool LoadDataFiles(wxString& error, wxArrayString& warnings);
@@ -506,6 +510,7 @@ protected:
 	bool progressUpdating = false;
 	bool destroyPending = false;
 	bool resourceSessionUiPending = false;
+	std::unique_ptr<CrossClientClipboard> crossClientClipboard;
 
 	int disabled_counter;
 

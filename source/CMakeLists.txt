@@ -22,6 +22,8 @@ ${CMAKE_CURRENT_LIST_DIR}/complexitem.h
 ${CMAKE_CURRENT_LIST_DIR}/con_vector.h
 ${CMAKE_CURRENT_LIST_DIR}/container_properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/copybuffer.h
+${CMAKE_CURRENT_LIST_DIR}/cross_client_clipboard.h
+${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/creature.h
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/creatures.h
@@ -181,6 +183,8 @@ ${CMAKE_CURRENT_LIST_DIR}/common_windows.cpp
 ${CMAKE_CURRENT_LIST_DIR}/complexitem.cpp
 ${CMAKE_CURRENT_LIST_DIR}/container_properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/copybuffer.cpp
+${CMAKE_CURRENT_LIST_DIR}/cross_client_clipboard.cpp
+${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp

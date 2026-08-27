@@ -195,7 +195,7 @@ void MainToolBar::UpdateButtons() {
 	if (editor) {
 		standard_toolbar->EnableTool(wxID_UNDO, editor->actionQueue->canUndo());
 		standard_toolbar->EnableTool(wxID_REDO, editor->actionQueue->canRedo());
-		standard_toolbar->EnableTool(wxID_PASTE, editor->copybuffer.canPaste());
+		standard_toolbar->EnableTool(wxID_PASTE, g_gui.CanPaste());
 	} else {
 		standard_toolbar->EnableTool(wxID_UNDO, false);
 		standard_toolbar->EnableTool(wxID_REDO, false);

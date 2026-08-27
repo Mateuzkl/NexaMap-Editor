@@ -50,6 +50,8 @@
 #include "object_pool.h"
 #include "editor_resource_session.h"
 #include "new_map_tab_dialog.h"
+#include "cross_client_clipboard.h"
+#include "cross_client_paste_dialog.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -161,6 +163,7 @@ GUI::GUI() :
 	progressBar(nullptr),
 	disabled_counter(0) {
 	doodad_buffer_map = newd BaseMap();
+	crossClientClipboard = std::make_unique<CrossClientClipboard>();
 }
 
 GUI::~GUI() {
@@ -1865,14 +1868,24 @@ void GUI::DoCopy() {
 
 void GUI::DoPaste() {
 	MapTab* mapTab = GetCurrentMapTab();
-	if (mapTab) {
-		copybuffer.paste(*mapTab->GetEditor(), mapTab->GetCanvas()->GetCursorPosition());
+	if (!mapTab) {
+		return;
+	}
+	Editor* editor = mapTab->GetEditor();
+	if (!PrepareCrossClientPaste(*editor)) {
+		return;
+	}
+	if (editor->copybuffer.canPaste()) {
+		editor->copybuffer.paste(*editor, mapTab->GetCanvas()->GetCursorPosition());
 	}
 }
 
 void GUI::PreparePaste() {
 	Editor* editor = GetCurrentEditor();
 	if (editor) {
+		if (!PrepareCrossClientPaste(*editor) || !editor->copybuffer.canPaste()) {
+			return;
+		}
 		SetSelectionMode();
 		editor->selection.start();
 		editor->selection.clear();
@@ -1880,6 +1893,65 @@ void GUI::PreparePaste() {
 		StartPasting();
 		RefreshView();
 	}
+}
+
+bool GUI::CanPaste() const {
+	if (copybuffer.canPaste()) {
+		return true;
+	}
+	return crossClientClipboard && crossClientClipboard->canPaste()
+		&& !crossClientClipboard->isFromSession(GetActiveEditorResourceSession());
+}
+
+void GUI::CaptureCrossClientCopy(CopyBuffer& source) {
+	if (!crossClientClipboard) {
+		crossClientClipboard = std::make_unique<CrossClientClipboard>();
+	}
+	wxString error;
+	if (!crossClientClipboard->capture(source, GetActiveEditorResourceSession(), error) && !error.empty()) {
+		wxLogWarning("Could not update the cross-client clipboard: " + error);
+	}
+}
+
+bool GUI::PrepareCrossClientPaste(Editor& editor) {
+	const EditorResourceSessionPtr activeSession = GetActiveEditorResourceSession();
+	if (!crossClientClipboard || !crossClientClipboard->canPaste() || crossClientClipboard->isFromSession(activeSession)) {
+		return editor.copybuffer.canPaste();
+	}
+
+	wxProgressDialog progress(
+		"Cross-Client Paste",
+		"Comparing destination sprites and item metadata...",
+		100,
+		root,
+		wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_SMOOTH | wxPD_AUTO_HIDE
+	);
+	wxString error;
+	CrossClientPasteAnalysis analysis = crossClientClipboard->analyze(
+		activeSession,
+		[&](size_t current, size_t total) {
+			const int percent = total == 0 ? 100 : static_cast<int>((current * 100) / total);
+			return progress.Update(std::clamp(percent, 0, 100));
+		},
+		error
+	);
+	if (!error.empty()) {
+		if (error != "Cross-client comparison was cancelled.") {
+			PopupDialog(root, "Cross-Client Paste", error, wxOK | wxICON_ERROR);
+		}
+		return false;
+	}
+
+	CrossClientPasteDialog dialog(root, analysis);
+	if (dialog.ShowModal() != wxID_OK) {
+		return false;
+	}
+	if (!crossClientClipboard->apply(analysis, editor.copybuffer, error)) {
+		PopupDialog(root, "Cross-Client Paste", error, wxOK | wxICON_ERROR);
+		return false;
+	}
+	SetStatusText(wxString::Format("Cross-client paste ready: %u matched, %u remapped.", analysis.matched, analysis.remapped));
+	return true;
 }
 
 void GUI::StartPasting() {

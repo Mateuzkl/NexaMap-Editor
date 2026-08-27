@@ -406,6 +406,10 @@
     <ClCompile Include="..\..\source\editor_tabs.cpp" />
     <ClInclude Include="..\..\source\editor_resource_session.h" />
     <ClCompile Include="..\..\source\editor_resource_session.cpp" />
+    <ClInclude Include="..\..\source\cross_client_clipboard.h" />
+    <ClCompile Include="..\..\source\cross_client_clipboard.cpp" />
+    <ClInclude Include="..\..\source\cross_client_paste_dialog.h" />
+    <ClCompile Include="..\..\source\cross_client_paste_dialog.cpp" />
     <ClInclude Include="..\..\source\gui.h" />
     <ClCompile Include="..\..\source\gui.cpp" />
     <ClInclude Include="..\..\source\gui_ids.h" />

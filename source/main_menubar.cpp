@@ -339,7 +339,7 @@ void MainMenuBar::Update() {
 	if (editor) {
 		EnableItem(UNDO, editor->actionQueue->canUndo());
 		EnableItem(REDO, editor->actionQueue->canRedo());
-		EnableItem(PASTE, editor->copybuffer.canPaste());
+		EnableItem(PASTE, g_gui.CanPaste());
 	} else {
 		EnableItem(UNDO, false);
 		EnableItem(REDO, false);

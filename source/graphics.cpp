@@ -1543,7 +1543,7 @@ void GameSprite::unloadDC() {
 	dc[SPRITE_SIZE_32x32] = nullptr;
 }
 
-bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending) {
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync) {
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
@@ -1567,7 +1567,14 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 					std::vector<uint8_t> sourcePixels;
 					ClientSpriteSize sourceSize;
 					bool imagePending = false;
-					if (!g_spriteAppearances.getSpritePixelsIfLoaded(image->id, sourcePixels, sourceSize, imagePending)) {
+					bool loaded = false;
+					if (allowAsync) {
+						loaded = g_spriteAppearances.getSpritePixelsIfLoaded(image->id, sourcePixels, sourceSize, imagePending);
+					} else {
+						wxString loadError;
+						loaded = g_spriteAppearances.getSpritePixels(image->id, sourcePixels, sourceSize, loadError);
+					}
+					if (!loaded) {
 						pending = pending || imagePending;
 						pixels.clear();
 						return false;
@@ -1590,7 +1597,7 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 					}
 				} else {
 					bool imagePending = false;
-					uint8_t* rgba = image->getRGBAData(&imagePending);
+					uint8_t* rgba = image->getRGBAData(allowAsync ? &imagePending : nullptr);
 					if (!rgba) {
 						pending = pending || imagePending;
 						pixels.clear();
@@ -1615,6 +1622,66 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 			}
 		}
 	}
+	return true;
+}
+
+bool GameSprite::getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync) {
+	pending = false;
+	fingerprint = {};
+	if (spriteList.empty() || width == 0 || height == 0 || layers == 0 || frames == 0) {
+		return false;
+	}
+
+	constexpr uint64_t FnvOffset = 14695981039346656037ull;
+	constexpr uint64_t FnvPrime = 1099511628211ull;
+	uint64_t primaryHash = FnvOffset;
+	uint64_t secondaryHash = 0x9E3779B97F4A7C15ull;
+	auto hashByte = [&](uint8_t byte) {
+		primaryHash = (primaryHash ^ byte) * FnvPrime;
+		secondaryHash ^= static_cast<uint64_t>(byte) + 0x9E3779B97F4A7C15ull + (secondaryHash << 6) + (secondaryHash >> 2);
+	};
+	auto hashU32 = [&](uint32_t value) {
+		for (int shift = 0; shift < 32; shift += 8) {
+			hashByte(static_cast<uint8_t>((value >> shift) & 0xFF));
+		}
+	};
+
+	hashU32(width);
+	hashU32(height);
+	hashU32(layers);
+	hashU32(pattern_x);
+	hashU32(pattern_y);
+	hashU32(pattern_z);
+	hashU32(frames);
+	hashU32(draw_height);
+	hashU32(drawoffset_x);
+	hashU32(drawoffset_y);
+	hashU32(ground_speed);
+	hashU32(minimap_color);
+	hashU32(has_light ? 1 : 0);
+	hashU32(light.intensity);
+	hashU32(light.color);
+	hashU32(static_cast<uint32_t>(spriteList.size()));
+	for (NormalImage* image : spriteList) {
+		if (!image) {
+			hashU32(0);
+			continue;
+		}
+		bool imagePending = false;
+		uint8_t* rgba = image->getRGBAData(allowAsync ? &imagePending : nullptr);
+		if (!rgba) {
+			pending = pending || imagePending;
+			return false;
+		}
+		for (size_t byte = 0; byte < SPRITE_PIXELS_SIZE * 4; ++byte) {
+			hashByte(rgba[byte]);
+		}
+		delete[] rgba;
+		fingerprint.pixelBytes += SPRITE_PIXELS_SIZE * 4;
+	}
+
+	fingerprint.primary = primaryHash;
+	fingerprint.secondary = secondaryHash;
 	return true;
 }
 

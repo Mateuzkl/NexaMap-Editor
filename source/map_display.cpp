@@ -2791,7 +2791,7 @@ void MapPopupMenu::Update() {
 	copyPositionItem->Enable(anything_selected);
 
 	wxMenuItem* pasteItem = Append(MAP_POPUP_MENU_PASTE, "&Paste\tCTRL+V", "Paste items in the copybuffer here");
-	pasteItem->Enable(editor.copybuffer.canPaste());
+	pasteItem->Enable(g_gui.CanPaste());
 
 	wxMenuItem* deleteItem = Append(MAP_POPUP_MENU_DELETE, "&Delete\tDEL", "Removes all seleceted items");
 	deleteItem->Enable(anything_selected);

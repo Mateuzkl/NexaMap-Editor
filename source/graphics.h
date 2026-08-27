@@ -88,6 +88,16 @@ protected:
 	wxBitmap* bm[SPRITE_SIZE_COUNT];
 };
 
+struct SpriteVisualFingerprint {
+	uint64_t primary = 0;
+	uint64_t secondary = 0;
+	uint64_t pixelBytes = 0;
+
+	bool operator==(const SpriteVisualFingerprint& other) const noexcept {
+		return primary == other.primary && secondary == other.secondary && pixelBytes == other.pixelBytes;
+	}
+};
+
 class GameSprite : public Sprite {
 public:
 	GameSprite();
@@ -111,7 +121,8 @@ public:
 	void unloadDC() override;
 
 	void clean(int time);
-	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending);
+	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync = true);
+	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 
 	int getDrawHeight() const;
 	std::pair<int, int> getDrawOffset() const;

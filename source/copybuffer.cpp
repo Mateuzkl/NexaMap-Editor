@@ -111,6 +111,7 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	std::ostringstream ss;
 	ss << "Copied " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+	g_gui.CaptureCrossClientCopy(*this);
 }
 
 void CopyBuffer::cut(Editor& editor, int floor) {
@@ -217,6 +218,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	std::stringstream ss;
 	ss << "Cut out " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+	g_gui.CaptureCrossClientCopy(*this);
 }
 
 void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
