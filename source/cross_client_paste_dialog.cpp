@@ -9,6 +9,7 @@
 #include <wx/filename.h>
 #include <wx/imaglist.h>
 #include <wx/listctrl.h>
+#include <wx/settings.h>
 #include <wx/statline.h>
 
 namespace {
@@ -109,7 +110,7 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 	itemList->InsertColumn(1, "Destination item");
 	itemList->InsertColumn(2, "Result");
 	itemList->InsertColumn(3, "Uses", wxLIST_FORMAT_RIGHT);
-	root->Add(itemList, 1, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 14));
+	root->Add(itemList, 1, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 16));
 	PopulateRows();
 	itemList->Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
 		UpdateColumnWidths();
@@ -128,12 +129,16 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 	}
 	auto* cancel = newd wxButton(this, wxID_CANCEL, "Cancel");
 	auto* apply = newd wxButton(this, wxID_OK, "Apply && Paste");
-	apply->SetBackgroundColour(accent);
-	apply->SetForegroundColour(Theme::GetDark(Theme::Role::TextOnAccent));
-	apply->Enable(analysis.canApply());
+	const bool canApply = analysis.canApply();
+	apply->SetBackgroundColour(canApply ? accent : raised);
+	apply->SetForegroundColour(canApply ? Theme::GetDark(Theme::Role::TextOnAccent) : subtle);
+	apply->Enable(canApply);
+	if (!canApply) {
+		apply->SetToolTip("Resolve every missing destination resource before applying this paste.");
+	}
 	footer->Add(cancel, 0, wxRIGHT, FROM_DIP(this, 8));
 	footer->Add(apply, 0);
-	root->Add(footer, 0, wxEXPAND | wxALL, FROM_DIP(this, 14));
+	root->Add(footer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 16));
 
 	SetSizer(root);
 	SetMinClientSize(FROM_DIP(this, wxSize(650, 410)));
@@ -177,9 +182,17 @@ void CrossClientPasteDialog::UpdateColumnWidths() {
 	if (!itemList) {
 		return;
 	}
-	const int available = std::max(FROM_DIP(this, 580), itemList->GetClientSize().x - FROM_DIP(this, 4));
-	const int usesWidth = FROM_DIP(this, 58);
-	const int resultWidth = FROM_DIP(this, 104);
+	int scrollbarWidth = wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, itemList);
+	if (scrollbarWidth <= 0) {
+		scrollbarWidth = FROM_DIP(this, 17);
+	}
+	// wxListCtrl reports the full client width even when the native vertical
+	// scrollbar overlays its last report column on Windows. Keep an explicit
+	// gutter so right-aligned occurrence counts never sit under the scrollbar.
+	const int rightGutter = scrollbarWidth + FROM_DIP(this, 10);
+	const int available = std::max(FROM_DIP(this, 580), itemList->GetClientSize().x - rightGutter);
+	const int usesWidth = FROM_DIP(this, 68);
+	const int resultWidth = FROM_DIP(this, 112);
 	const int resourceWidth = std::max(FROM_DIP(this, 190), (available - usesWidth - resultWidth) / 2);
 	itemList->SetColumnWidth(0, resourceWidth);
 	itemList->SetColumnWidth(1, resourceWidth);
