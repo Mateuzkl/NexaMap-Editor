@@ -116,3 +116,10 @@ void ClientAssets::unload() {
 	versionName.clear();
 	g_spriteAppearances.unload();
 }
+
+void ClientAssets::swapState(State& state) {
+	using std::swap;
+	swap(path, state.path);
+	swap(versionName, state.versionName);
+	swap(loaded, state.loaded);
+}

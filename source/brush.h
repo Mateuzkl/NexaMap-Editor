@@ -67,6 +67,7 @@ public:
 
 	void init();
 	void clear();
+	void swap(Brushes& other) noexcept;
 
 	Brush* getBrush(const std::string& name) const;
 

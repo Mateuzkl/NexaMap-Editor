@@ -36,6 +36,11 @@ CopyBuffer::~CopyBuffer() {
 	clear();
 }
 
+void CopyBuffer::swap(CopyBuffer& other) noexcept {
+	std::swap(tiles, other.tiles);
+	std::swap(copyPos, other.copyPos);
+}
+
 Position CopyBuffer::getPosition() const {
 	ASSERT(tiles);
 	return copyPos;

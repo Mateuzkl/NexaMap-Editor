@@ -48,6 +48,8 @@
 #include "theme.h"
 #include "welcome_dialog.h"
 #include "object_pool.h"
+#include "editor_resource_session.h"
+#include "new_map_tab_dialog.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -124,12 +126,20 @@ GUI::GUI() :
 	waypoint_brush(nullptr),
 	optional_brush(nullptr),
 	eraser(nullptr),
+	spawn_brush(nullptr),
 	normal_door_brush(nullptr),
 	locked_door_brush(nullptr),
 	magic_door_brush(nullptr),
 	quest_door_brush(nullptr),
 	hatch_door_brush(nullptr),
+	normal_door_alt_brush(nullptr),
+	archway_door_brush(nullptr),
 	window_door_brush(nullptr),
+	pz_brush(nullptr),
+	rook_brush(nullptr),
+	nolog_brush(nullptr),
+	pvp_brush(nullptr),
+	zone_brush(nullptr),
 
 	OGLContext(nullptr),
 	loaded_version(CLIENT_VERSION_NONE),
@@ -351,7 +361,9 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 
 		bool ret = LoadDataFiles(error, warnings);
 		if (ret) {
-			g_gui.LoadPerspective();
+			if (!resourceSessionUiPending) {
+				g_gui.LoadPerspective();
+			}
 		} else {
 			loaded_version = CLIENT_VERSION_NONE;
 		}
@@ -380,7 +392,7 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		return true;
 	}
 
-	if (getLoadedVersion() != nullptr) {
+	if (getLoadedVersion() != nullptr && !resourceSessionUiPending) {
 		SavePerspective();
 	}
 	UnnamedRenderingLock();
@@ -399,7 +411,9 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		loaded_version = CLIENT_VERSION_NONE;
 		return false;
 	}
-	LoadPerspective();
+	if (!resourceSessionUiPending) {
+		LoadPerspective();
+	}
 	return true;
 }
 
@@ -456,6 +470,157 @@ const ClientVersion& GUI::GetCurrentVersion() const {
 
 void GUI::CycleTab(bool forward) {
 	tabbook->CycleTab(forward);
+}
+
+void GUI::SwapResourceSessionState(EditorResourceSession& session) {
+	using std::swap;
+	swap(loaded_version, session.loadedVersion);
+	swap(canary_crystal_assets_loaded, session.canaryCrystalAssetsLoaded);
+	swap(loaded_workspace_generation, session.loadedWorkspaceGeneration);
+	swap(current_brush, session.currentBrush);
+	swap(previous_brush, session.previousBrush);
+	swap(house_brush, session.houseBrush);
+	swap(house_exit_brush, session.houseExitBrush);
+	swap(waypoint_brush, session.waypointBrush);
+	swap(optional_brush, session.optionalBrush);
+	swap(eraser, session.eraser);
+	swap(spawn_brush, session.spawnBrush);
+	swap(normal_door_brush, session.normalDoorBrush);
+	swap(locked_door_brush, session.lockedDoorBrush);
+	swap(magic_door_brush, session.magicDoorBrush);
+	swap(quest_door_brush, session.questDoorBrush);
+	swap(hatch_door_brush, session.hatchDoorBrush);
+	swap(normal_door_alt_brush, session.normalDoorAltBrush);
+	swap(archway_door_brush, session.archwayDoorBrush);
+	swap(window_door_brush, session.windowDoorBrush);
+	swap(pz_brush, session.pzBrush);
+	swap(rook_brush, session.rookBrush);
+	swap(nolog_brush, session.nologBrush);
+	swap(pvp_brush, session.pvpBrush);
+	swap(zone_brush, session.zoneBrush);
+	swap(doodad_buffer_map, session.doodadBufferMap);
+}
+
+bool GUI::ActivateResourceSession(const std::shared_ptr<EditorResourceSession>& session) {
+	if (!session) {
+		return false;
+	}
+	const EditorResourceSessionPtr current = GetActiveEditorResourceSession();
+	if (current == session) {
+		return true;
+	}
+
+	UnnamedRenderingLock();
+	if (getLoadedVersion() != nullptr && !resourceSessionUiPending) {
+		SavePerspective();
+	}
+	DestroyPalettes();
+	DestroyMinimap();
+	DestroyIngamePreview();
+	g_autoborder_preview.Clear();
+	pasting = false;
+	secondary_map = nullptr;
+
+	SwapResourceSessionState(*current);
+	current->swapWithGlobals();
+	session->swapWithGlobals();
+	SwapResourceSessionState(*session);
+	SetActiveEditorResourceSession(session);
+	if (!doodad_buffer_map) {
+		doodad_buffer_map = newd BaseMap();
+	}
+
+	const WorkspaceClientSelection& client = g_workspace.getClient();
+	if (loaded_version != CLIENT_VERSION_NONE && client.mode == WorkspaceClientMode::Classic && !client.rootPath.empty()) {
+		if (ClientVersion* version = ClientVersion::get(loaded_version)) {
+			version->setClientPath(FileName(client.rootPath));
+		}
+	}
+	gfx.activateSpritePreloader();
+	resourceSessionUiPending = true;
+	if (MapTab* displayedTab = GetCurrentMapTab(); displayedTab && displayedTab->GetResourceSession() == session) {
+		FinalizeResourceSessionActivation();
+	}
+	return true;
+}
+
+void GUI::FinalizeResourceSessionActivation() {
+	if (!resourceSessionUiPending) {
+		return;
+	}
+	resourceSessionUiPending = false;
+	if (getLoadedVersion() != nullptr) {
+		LoadPerspective();
+	}
+	InvalidateAutoborderPreview();
+	UpdateIngamePreview();
+	UpdateTitle();
+	UpdateMenus();
+}
+
+void GUI::ShowNewMapTabDialog() {
+	NewMapTabDialog dialog(root);
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+	const NewMapTabSelection selection = dialog.GetSelection();
+	if (selection.useCurrentClient) {
+		if (selection.mapFile.empty()) {
+			NewMap();
+		} else {
+			LoadMapInternal(FileName(selection.mapFile), EditorClientVersionPolicy::KeepLoaded, nullptr, false, false);
+		}
+		return;
+	}
+
+	const EditorResourceSessionPtr previousSession = GetActiveEditorResourceSession();
+	const EditorResourceSessionPtr newSession = CreateEditorResourceSession();
+	// Loading dialogs pump the event loop. Keep the old canvas from rendering
+	// against the new session until its own map tab has been created.
+	RenderingLock sessionCreationLock;
+	if (!ActivateResourceSession(newSession)) {
+		PopupDialog(root, "New Tab", "Could not activate an independent resource session.", wxOK | wxICON_ERROR);
+		return;
+	}
+
+	auto restorePreviousSession = [&] {
+		ActivateResourceSession(previousSession);
+	};
+	g_workspace.setPersistenceEnabled(false);
+	gfx.loadEditorSprites();
+
+	wxString error;
+	wxArrayString warnings;
+	if (!g_workspace.configureClient(selection.clientDirectory, error, warnings, false)) {
+		restorePreviousSession();
+		PopupDialog(root, "Client not supported", error, wxOK | wxICON_ERROR);
+		return;
+	}
+	if (!g_workspace.configureServer(selection.serverDirectory, error, false)) {
+		restorePreviousSession();
+		PopupDialog(root, "Server not supported", error, wxOK | wxICON_ERROR);
+		return;
+	}
+	if (!LoadWorkspace(error, warnings, true)) {
+		restorePreviousSession();
+		PopupDialog(root, "Workspace not ready", error, wxOK | wxICON_ERROR);
+		return;
+	}
+
+	wxString mapPath = selection.mapFile;
+	if (mapPath.empty() && !g_workspace.getServer().primaryMapPath.empty()) {
+		mapPath = WorkspacePath(g_workspace.getServer().primaryMapPath);
+	}
+	const bool created = mapPath.empty()
+		? NewMap()
+		: LoadMapInternal(FileName(mapPath), EditorClientVersionPolicy::KeepLoaded, nullptr, false, false);
+	if (!created) {
+		restorePreviousSession();
+		return;
+	}
+	if (!warnings.empty()) {
+		ListDialog("Workspace warnings", warnings);
+	}
 }
 
 bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
@@ -683,12 +848,20 @@ void GUI::UnloadVersion() {
 	waypoint_brush = nullptr;
 	optional_brush = nullptr;
 	eraser = nullptr;
+	spawn_brush = nullptr;
 	normal_door_brush = nullptr;
 	locked_door_brush = nullptr;
 	magic_door_brush = nullptr;
 	quest_door_brush = nullptr;
 	hatch_door_brush = nullptr;
+	normal_door_alt_brush = nullptr;
+	archway_door_brush = nullptr;
 	window_door_brush = nullptr;
+	pz_brush = nullptr;
+	rook_brush = nullptr;
+	nolog_brush = nullptr;
+	pvp_brush = nullptr;
+	zone_brush = nullptr;
 
 	if (loaded_version != CLIENT_VERSION_NONE) {
 		// g_gui.UnloadVersion();
@@ -914,12 +1087,12 @@ bool GUI::LoadValidatedConvertedMap(const FileName& fileName, const ItemIdCodec*
 	return LoadMapInternal(fileName, EditorClientVersionPolicy::KeepLoaded, readCodec, detachedDecodedView);
 }
 
-bool GUI::LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec, bool detachedDecodedView) {
+bool GUI::LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec, bool detachedDecodedView, bool replaceEmptyEditor) {
 	rme::bindPooledObjectOwnerThread();
 
 	FinishWelcomeDialog();
 
-	const bool replaceEmptyEditor = GetCurrentEditor() && !GetCurrentMap().hasChanged() && !GetCurrentMap().hasFile();
+	const bool shouldReplaceEmptyEditor = replaceEmptyEditor && GetCurrentEditor() && !GetCurrentMap().hasChanged() && !GetCurrentMap().hasFile();
 
 	Editor* editor;
 	try {
@@ -928,7 +1101,7 @@ bool GUI::LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy cl
 		PopupDialog(root, "Error!", wxString(e.what(), wxConvUTF8), wxOK);
 		return false;
 	}
-	if (replaceEmptyEditor && GetCurrentEditor()) {
+	if (shouldReplaceEmptyEditor && GetCurrentEditor()) {
 		g_gui.CloseCurrentEditor();
 	}
 

@@ -30,6 +30,8 @@ struct WorkspaceClientSelection {
 class WorkspaceSession {
 public:
 	void loadConfiguredPaths();
+	void swap(WorkspaceSession& other) noexcept;
+	void setPersistenceEnabled(bool enabled);
 
 	bool configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist = true);
 	bool configureServer(const wxString& path, wxString& error, bool persist = true);
@@ -58,6 +60,7 @@ private:
 	wxString serverError;
 	ItemIdModePreference idModePreference = ItemIdModePreference::Auto;
 	uint64_t generation = 0;
+	bool persistenceEnabled = true;
 };
 
 extern WorkspaceSession g_workspace;

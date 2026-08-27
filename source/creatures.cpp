@@ -319,6 +319,10 @@ void CreatureDatabase::clear() {
 	creature_map.clear();
 }
 
+void CreatureDatabase::swap(CreatureDatabase& other) noexcept {
+	creature_map.swap(other.creature_map);
+}
+
 CreatureType* CreatureDatabase::operator[](const std::string& name) {
 	auto iter = creature_map.find(as_lower_str(name));
 	if (iter != creature_map.end()) {

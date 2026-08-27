@@ -40,6 +40,7 @@ public:
 	~CreatureDatabase();
 
 	void clear();
+	void swap(CreatureDatabase& other) noexcept;
 
 	CreatureType* operator[](const std::string& name);
 	CreatureType* addMissingCreatureType(const std::string& name, bool isNpc);

@@ -189,6 +189,7 @@ ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.cpp
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor.cpp
+${CMAKE_CURRENT_LIST_DIR}/editor_resource_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.cpp
 ${CMAKE_CURRENT_LIST_DIR}/eraser_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension.cpp
@@ -236,6 +237,7 @@ ${CMAKE_CURRENT_LIST_DIR}/minimap_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mkpch.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mt_rand.cpp
+${CMAKE_CURRENT_LIST_DIR}/new_map_tab_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/numbertextctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/object_pool.cpp
 ${CMAKE_CURRENT_LIST_DIR}/old_properties_window.cpp

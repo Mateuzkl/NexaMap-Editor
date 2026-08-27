@@ -137,6 +137,15 @@ void ItemDatabase::clear() {
 	max_item_id = 0;
 }
 
+void ItemDatabase::swap(ItemDatabase& other) noexcept {
+	items.swap(other.items);
+	std::swap(MajorVersion, other.MajorVersion);
+	std::swap(MinorVersion, other.MinorVersion);
+	std::swap(BuildNumber, other.BuildNumber);
+	std::swap(item_count, other.item_count);
+	std::swap(max_item_id, other.max_item_id);
+}
+
 bool ItemDatabase::loadFromAppearances(const rme::protobuf::appearances::Appearances& appearances, wxString& error, wxArrayString& warnings) {
 	using namespace rme::protobuf::appearances;
 

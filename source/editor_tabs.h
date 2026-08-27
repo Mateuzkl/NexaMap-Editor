@@ -40,13 +40,22 @@ public:
 	EditorTab* GetTab(int idx);
 
 	// Events
+	void OnNotebookPageChanging(wxAuiNotebookEvent& evt);
 	void OnNotebookPageClose(wxAuiNotebookEvent& evt);
 	void OnNotebookPageChanged(wxAuiNotebookEvent& evt);
+	void OnNotebookLeftDown(wxMouseEvent& evt);
 	void OnSwitchEditorMode(EditorMode mode);
 
 protected:
 	EditorTab* GetInternalTab(int idx);
+	EditorTab* GetInternalTabByPageIndex(int pageIndex);
+	int GetPageIndexForTab(int tabIndex) const;
+	int GetTabIndexForPage(int pageIndex) const;
+	void RequestNewMapTab();
 	wxAuiNotebook* notebook;
+	wxWindow* addPage = nullptr;
+	bool initializing = true;
+	bool newTabDialogPending = false;
 	std::map<wxWindow*, EditorTab*> conv;
 
 	DECLARE_EVENT_TABLE();

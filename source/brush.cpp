@@ -61,6 +61,11 @@ void Brushes::clear() {
 	borders.clear();
 }
 
+void Brushes::swap(Brushes& other) noexcept {
+	brushes.swap(other.brushes);
+	borders.swap(other.borders);
+}
+
 void Brushes::init() {
 	addBrush(g_gui.optional_brush = newd OptionalBorderBrush());
 	addBrush(g_gui.eraser = newd EraserBrush());

@@ -119,6 +119,14 @@ void Materials::clear() {
 	extensions.clear();
 }
 
+void Materials::swap(Materials& other) noexcept {
+	tilesets.swap(other.tilesets);
+	extensions.swap(other.extensions);
+	std::swap(modified, other.modified);
+	std::swap(other_tileset_creature_count, other.other_tileset_creature_count);
+	std::swap(other_tileset_item_maxid, other.other_tileset_item_maxid);
+}
+
 const MaterialsExtensionList& Materials::getExtensions() {
 	return extensions;
 }

@@ -9,11 +9,18 @@
 
 class ClientAssets {
 public:
+	struct State {
+		wxString path;
+		std::string versionName;
+		bool loaded = false;
+	};
+
 	static void loadConfiguredPath();
 	static void saveConfiguredPath();
 	static bool validatePath(const wxString& path, ClientAssetsManifest& manifest, wxString& error, wxArrayString& warnings);
 	static bool load(wxString& error, wxArrayString& warnings);
 	static void unload();
+	static void swapState(State& state);
 
 	static const wxString& getPath() noexcept {
 		return path;

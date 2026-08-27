@@ -216,6 +216,58 @@ GraphicManager::~GraphicManager() {
 	delete animation_timer;
 }
 
+void GraphicManager::swap(GraphicManager& other) noexcept {
+	using std::swap;
+	swap(client_version, other.client_version);
+	swap(unloaded, other.unloaded);
+	swap(spritefile, other.spritefile);
+	swap(sprite_file_handle, other.sprite_file_handle);
+	swap(sprite_offsets, other.sprite_offsets);
+	sprite_space.swap(other.sprite_space);
+	image_space.swap(other.image_space);
+	cleanup_list.swap(other.cleanup_list);
+	swap(dat_format, other.dat_format);
+	swap(item_count, other.item_count);
+	swap(creature_count, other.creature_count);
+	swap(otfi_found, other.otfi_found);
+	swap(is_extended, other.is_extended);
+	swap(has_transparency, other.has_transparency);
+	swap(has_frame_durations, other.has_frame_durations);
+	swap(has_frame_groups, other.has_frame_groups);
+	swap(metadata_file, other.metadata_file);
+	swap(sprites_file, other.sprites_file);
+	swap(loaded_textures, other.loaded_textures);
+	swap(lastclean, other.lastclean);
+	atlas_textures.swap(other.atlas_textures);
+	atlas_page_last_use.swap(other.atlas_page_last_use);
+	atlas_page_last_frame.swap(other.atlas_page_last_frame);
+	swap(atlas_access_counter, other.atlas_access_counter);
+	swap(atlas_frame_counter, other.atlas_frame_counter);
+	swap(atlas_size, other.atlas_size);
+	swap(atlas_count, other.atlas_count);
+	swap(atlas_allocation_failure_logged, other.atlas_allocation_failure_logged);
+
+	texture_upload_budget_active = false;
+	texture_upload_deferred = false;
+	frame_had_missing_texture = false;
+	texture_upload_attempt_active = false;
+	atlas_frame_active = false;
+	active_map_renderer = nullptr;
+	other.texture_upload_budget_active = false;
+	other.texture_upload_deferred = false;
+	other.frame_had_missing_texture = false;
+	other.texture_upload_attempt_active = false;
+	other.atlas_frame_active = false;
+	other.active_map_renderer = nullptr;
+}
+
+void GraphicManager::activateSpritePreloader() {
+	g_spritePreloader.clear();
+	if (!spritefile.empty() && !sprite_offsets.empty()) {
+		g_spritePreloader.configure(spritefile, sprite_offsets, has_transparency);
+	}
+}
+
 bool GraphicManager::hasTransparency() const {
 	return has_transparency;
 }
@@ -455,8 +507,10 @@ void GraphicManager::markTextureMissing() noexcept {
 	}
 }
 
-void GraphicManager::clear() {
-	g_spritePreloader.clear();
+void GraphicManager::clear(bool clearPreloader) {
+	if (clearPreloader) {
+		g_spritePreloader.clear();
+	}
 
 	SpriteMap new_sprite_space;
 	for (auto iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {

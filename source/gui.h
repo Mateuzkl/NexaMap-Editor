@@ -22,6 +22,7 @@
 #include "position.h"
 
 #include <chrono>
+#include <memory>
 
 #include "copybuffer.h"
 #include "dcbutton.h"
@@ -35,6 +36,7 @@
 
 class BaseMap;
 class Map;
+class EditorResourceSession;
 
 enum class EditorClientVersionPolicy;
 class Editor;
@@ -350,6 +352,9 @@ public:
 	Editor* GetCurrentEditor();
 	MapTab* GetCurrentMapTab() const;
 	void CycleTab(bool forward = true);
+	bool ActivateResourceSession(const std::shared_ptr<EditorResourceSession>& session);
+	void FinalizeResourceSessionActivation();
+	void ShowNewMapTabDialog();
 	bool CloseAllEditors(bool querySave = true);
 	void NewMapView();
 
@@ -369,7 +374,8 @@ public:
 	bool LoadValidatedConvertedMap(const FileName& fileName, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 
 protected:
-	bool LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
+	void SwapResourceSessionState(EditorResourceSession& session);
+	bool LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false, bool replaceEmptyEditor = true);
 	bool ConfigureSpawnSaveAs(const FileName& mapFilename);
 	bool LoadDataFiles(wxString& error, wxArrayString& warnings);
 	bool LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings);
@@ -499,10 +505,12 @@ protected:
 	// GUI events and causes another progress update recursively.
 	bool progressUpdating = false;
 	bool destroyPending = false;
+	bool resourceSessionUiPending = false;
 
 	int disabled_counter;
 
 	friend class RenderingLock;
+	friend class EditorResourceSession;
 	friend MapTab::MapTab(MapTabbook*, Editor*);
 	friend MapTab::MapTab(const MapTab*);
 };

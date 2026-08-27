@@ -86,6 +86,20 @@ void WorkspaceSession::loadConfiguredPaths() {
 	g_settings.save();
 }
 
+void WorkspaceSession::swap(WorkspaceSession& other) noexcept {
+	using std::swap;
+	swap(client, other.client);
+	swap(server, other.server);
+	swap(serverError, other.serverError);
+	swap(idModePreference, other.idModePreference);
+	swap(generation, other.generation);
+	swap(persistenceEnabled, other.persistenceEnabled);
+}
+
+void WorkspaceSession::setPersistenceEnabled(bool enabled) {
+	persistenceEnabled = enabled;
+}
+
 bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist) {
 	error.clear();
 	warnings.clear();
@@ -102,13 +116,15 @@ bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wx
 			warnings.push_back(wxstr(warning));
 		}
 		ClientAssets::setPath(path);
-		ClientAssets::saveConfiguredPath();
+		if (persist && persistenceEnabled) {
+			ClientAssets::saveConfiguredPath();
+		}
 	} else {
 		ClientVersion* version = ClientVersion::detectFromPath(FileName(path), error);
 		if (version == nullptr) {
 			client = std::move(selection);
 			++generation;
-			if (persist) {
+			if (persist && persistenceEnabled) {
 				persistPaths();
 			}
 			return false;
@@ -117,13 +133,15 @@ bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wx
 		selection.valid = true;
 		selection.versionName = wxstr(version->getName());
 		selection.versionId = version->getID();
-		g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, version->getID());
-		ClientVersion::saveVersions();
+		if (persist && persistenceEnabled) {
+			g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, version->getID());
+			ClientVersion::saveVersions();
+		}
 	}
 
 	client = std::move(selection);
 	++generation;
-	if (persist) {
+	if (persist && persistenceEnabled) {
 		persistPaths();
 		g_settings.save();
 	}
@@ -139,7 +157,7 @@ bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bo
 	if (changed) {
 		++generation;
 	}
-	if (persist) {
+	if (persist && persistenceEnabled) {
 		persistPaths();
 		g_settings.save();
 	}
@@ -151,7 +169,7 @@ bool WorkspaceSession::rescanServer(wxString& error) {
 		error = "Select the OT server root folder first.";
 		return false;
 	}
-	return configureServer(FromFilesystemPath(server.rootPath), error, true);
+	return configureServer(FromFilesystemPath(server.rootPath), error, persistenceEnabled);
 }
 
 bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& warnings, bool persist) {
@@ -182,9 +200,11 @@ bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& w
 
 void WorkspaceSession::setItemIdModePreference(ItemIdModePreference preference) {
 	idModePreference = preference;
-	g_settings.setInteger(Config::WORKSPACE_ITEM_ID_MODE, static_cast<int>(preference));
 	++generation;
-	g_settings.save();
+	if (persistenceEnabled) {
+		g_settings.setInteger(Config::WORKSPACE_ITEM_ID_MODE, static_cast<int>(preference));
+		g_settings.save();
+	}
 }
 
 ItemIdModePreference WorkspaceSession::getItemIdModePreference() const {

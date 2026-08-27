@@ -26,6 +26,7 @@ public:
 	~Materials();
 
 	void clear();
+	void swap(Materials& other) noexcept;
 
 	const MaterialsExtensionList& getExtensions();
 

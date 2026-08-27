@@ -331,8 +331,10 @@ public:
 	GraphicManager(const GraphicManager&) = delete;
 	GraphicManager& operator=(const GraphicManager&) = delete;
 
-	void clear();
+	void clear(bool clearPreloader = true);
 	void cleanSoftwareSprites();
+	void swap(GraphicManager& other) noexcept;
+	void activateSpritePreloader();
 
 	Sprite* getSprite(int id);
 	GameSprite* getCreatureSprite(int id);

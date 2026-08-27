@@ -404,6 +404,8 @@
     <ClCompile Include="..\..\source\dcbutton.cpp" />
     <ClInclude Include="..\..\source\editor_tabs.h" />
     <ClCompile Include="..\..\source\editor_tabs.cpp" />
+    <ClInclude Include="..\..\source\editor_resource_session.h" />
+    <ClCompile Include="..\..\source\editor_resource_session.cpp" />
     <ClInclude Include="..\..\source\gui.h" />
     <ClCompile Include="..\..\source\gui.cpp" />
     <ClInclude Include="..\..\source\gui_ids.h" />
@@ -415,6 +417,8 @@
     <ClCompile Include="..\..\source\main_menubar.cpp" />
     <ClInclude Include="..\..\source\map_tab.h" />
     <ClCompile Include="..\..\source\map_tab.cpp" />
+    <ClInclude Include="..\..\source\new_map_tab_dialog.h" />
+    <ClCompile Include="..\..\source\new_map_tab_dialog.cpp" />
     <ClInclude Include="..\..\source\minimap_window.h" />
     <ClInclude Include="..\..\source\minimap_page_cache.h" />
     <ClCompile Include="..\..\source\minimap_window.cpp" />

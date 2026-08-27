@@ -22,6 +22,10 @@
 #include "application.h"
 #include "map_window.h"
 
+#include <memory>
+
+class EditorResourceSession;
+
 class MapTab : public EditorTab, public MapWindow {
 public:
 	MapTab(MapTabbook* aui, Editor* editor);
@@ -39,6 +43,7 @@ public:
 	wxString GetTitle() const override;
 	Editor* GetEditor() const;
 	Map* GetMap() const;
+	std::shared_ptr<EditorResourceSession> GetResourceSession() const;
 
 	void VisibilityCheck();
 
@@ -48,6 +53,7 @@ public:
 protected:
 	struct InternalReference {
 		Editor* editor;
+		std::shared_ptr<EditorResourceSession> resourceSession;
 		int owner_count;
 	};
 	MapTabbook* aui;

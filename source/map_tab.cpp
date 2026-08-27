@@ -23,6 +23,7 @@
 #include "sprites.h"
 #include "map_tab.h"
 #include "editor_tabs.h"
+#include "editor_resource_session.h"
 #include "map_display.h"
 
 #include <thread>
@@ -33,6 +34,7 @@ MapTab::MapTab(MapTabbook* aui, Editor* editor) :
 	aui(aui) {
 	iref = newd InternalReference;
 	iref->editor = editor;
+	iref->resourceSession = GetActiveEditorResourceSession();
 	iref->owner_count = 1;
 
 	aui->AddTab(this, true);
@@ -95,6 +97,10 @@ Editor* MapTab::GetEditor() const {
 
 Map* MapTab::GetMap() const {
 	return &editor.map;
+}
+
+std::shared_ptr<EditorResourceSession> MapTab::GetResourceSession() const {
+	return iref->resourceSession;
 }
 
 void MapTab::VisibilityCheck() {

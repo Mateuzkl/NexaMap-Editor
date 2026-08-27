@@ -29,6 +29,7 @@ class CopyBuffer {
 public:
 	CopyBuffer();
 	virtual ~CopyBuffer();
+	void swap(CopyBuffer& other) noexcept;
 
 	// In-editor implantation
 	void copy(Editor& editor, int floor);
