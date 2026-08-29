@@ -54,6 +54,35 @@ typedef uint32_t flags_t;
 static const uint32_t LEGACY_TILESTATE_ZONE_BRUSH = 0x0040;
 
 namespace {
+	bool useDragonSoulsItemCountEncoding() {
+		return g_settings.getBoolean(Config::DRAGON_SOULS_OTBM_COUNT_UINT16);
+	}
+
+	size_t persistedItemCountSize() {
+		return useDragonSoulsItemCountEncoding() ? sizeof(uint16_t) : sizeof(uint8_t);
+	}
+
+	bool readPersistedItemCount(BinaryNode* stream, uint16_t& value) {
+		if (useDragonSoulsItemCountEncoding()) {
+			return stream->getU16(value);
+		}
+
+		uint8_t legacyValue = 0;
+		if (!stream->getU8(legacyValue)) {
+			return false;
+		}
+		value = legacyValue;
+		return true;
+	}
+
+	void writePersistedItemCount(NodeFileWriteHandle& stream, uint16_t value) {
+		if (useDragonSoulsItemCountEncoding()) {
+			stream.addU16(value);
+		} else {
+			stream.addU8(static_cast<uint8_t>(value));
+		}
+	}
+
 	struct SpecialItemAttributeHints {
 		bool hasTeleportDestination = false;
 		bool hasHouseDoorId = false;
@@ -105,7 +134,7 @@ namespace {
 		// OTBM 1 stores the subtype immediately after the ID instead of as an
 		// attribute. Newer formats, including 8.60, start attributes here.
 		if (version.otbm == MAP_OTBM_1 && (itemType.stackable || itemType.isSplash() || itemType.isFluidContainer())) {
-			stream->skip(1);
+			stream->skip(persistedItemCountSize());
 		}
 
 		uint8_t rawAttribute = 0;
@@ -126,6 +155,8 @@ namespace {
 					valid = stream->skip(2);
 					break;
 				case OTBM_ATTR_COUNT:
+					valid = stream->skip(persistedItemCountSize());
+					break;
 				case OTBM_ATTR_RUNE_CHARGES:
 				case OTBM_ATTR_DECAYING_STATE:
 				case OTBM_ATTR_TIER:
@@ -212,11 +243,13 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 
 	const SpecialItemAttributeHints specialAttributes = inspectSpecialAttributes ? inspectSpecialItemAttributes(stream, maphandle.version, iType) : SpecialItemAttributeHints {};
 
-	uint8_t _count = 0;
+	uint16_t _count = 0;
 
 	if (maphandle.version.otbm == MAP_OTBM_1) {
 		if (iType.stackable || iType.isSplash() || iType.isFluidContainer()) {
-			stream->getU8(_count);
+			if (!readPersistedItemCount(stream, _count)) {
+				return nullptr;
+			}
 		}
 	}
 	// Converted IDs can point at a plain ItemType in the active items.otb. The
@@ -238,8 +271,8 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute attr, BinaryNode* stream) {
 	switch (attr) {
 		case OTBM_ATTR_COUNT: {
-			uint8_t subtype;
-			if (!stream->getU8(subtype)) {
+			uint16_t subtype;
+			if (!readPersistedItemCount(stream, subtype)) {
 				return false;
 			}
 			if (!hasSubtypeKind(SUBTYPE_STACK_COUNT) && !hasSubtypeKind(SUBTYPE_FLUID)) {
@@ -349,7 +382,7 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 	if (maphandle.version.otbm >= MAP_OTBM_2) {
 		if (shouldSerializeCountSubtype()) {
 			stream.addU8(OTBM_ATTR_COUNT);
-			stream.addU8(getSubtype());
+			writePersistedItemCount(stream, getSubtype());
 		}
 	}
 	if (hasSubtypeAttribute(SUBTYPE_ATTR_CHARGES)) {
@@ -429,7 +462,7 @@ bool Item::serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f
 	file.addU16(storedId);
 	if (maphandle.version.otbm == MAP_OTBM_1) {
 		if (shouldSerializeCountSubtype()) {
-			file.addU8(getSubtype());
+			writePersistedItemCount(file, getSubtype());
 		}
 	}
 	serializeItemAttributes_OTBM(maphandle, file);
@@ -581,7 +614,7 @@ bool Container::serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHand
 	if (maphandle.version.otbm == MAP_OTBM_1) {
 		// In the ludicrous event that an item is a container AND stackable, we have to do this. :p
 		if (shouldSerializeCountSubtype()) {
-			file.addU8(getSubtype());
+			writePersistedItemCount(file, getSubtype());
 		}
 	}
 
