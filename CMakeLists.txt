@@ -1,10 +1,20 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
+
+# Let CMake select the MSVC runtime through CMAKE_MSVC_RUNTIME_LIBRARY. This
+# must be set before project() so static vcpkg triplets can use /MT consistently.
+if(POLICY CMP0091)
+	cmake_policy(SET CMP0091 NEW)
+endif()
 
 project(rme)
 
 include(CTest)
 
 option(ENABLE_UNITY_BUILD "Enable unity build for faster compilation" ON)
+
+if(MSVC AND VCPKG_TARGET_TRIPLET MATCHES "-windows-static$")
+	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE RelWithDebInfo)
@@ -41,6 +51,9 @@ add_executable(${PROJECT_NAME} ${rme_H} ${rme_SRC})
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED ON)
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "NexaMap Editor")
+if(MSVC)
+	target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8)
+endif()
 if(WIN32)
 	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
