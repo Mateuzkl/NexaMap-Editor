@@ -10,7 +10,7 @@
 
 **Create. Convert. Build Worlds.**
 
-A modern native map editor for OpenTibia projects, focused on OTBM editing, ClientID workflows, asset compatibility, conversion tools and large-world performance.
+A modern native map editor for OpenTibia projects, focused on OTBM editing, ClientID workflows, asset compatibility, conversion tools, large-world performance and **Dragon Souls TFS 1.4 compatibility**.
 
 [![Version](https://img.shields.io/badge/version-5.0.0-00B8C8?style=flat-square)](https://github.com/Mateuzkl/NexaMap-Editor)
 ![C++](https://img.shields.io/badge/C++-20-00599C?style=flat-square&logo=cplusplus&logoColor=white)
@@ -28,6 +28,7 @@ A modern native map editor for OpenTibia projects, focused on OTBM editing, Clie
 ![ClientID](https://img.shields.io/badge/WORKFLOW-ClientID-2563EB?style=for-the-badge)
 ![Canary](https://img.shields.io/badge/SUPPORT-Canary-F59E0B?style=for-the-badge)
 ![Crystal](https://img.shields.io/badge/SUPPORT-Crystal-8B5CF6?style=for-the-badge)
+![DragonSouls](https://img.shields.io/badge/SUPPORT-Dragon%20Souls-FF4444?style=for-the-badge)
 
 <br />
 <br />
@@ -37,6 +38,69 @@ A modern native map editor for OpenTibia projects, focused on OTBM editing, Clie
 [Pull Requests](https://github.com/Mateuzkl/NexaMap-Editor/pulls)
 
 </div>
+
+---
+
+## Why NexaMap over standard RME?
+
+NexaMap Editor is a **complete replacement** for the standard RME (Remere's Map Editor) from OTAcademy and similar forks. Here is what sets it apart:
+
+| Feature | Standard RME | NexaMap Editor |
+|---|:---:|:---:|
+| ClientID workflow | ❌ | ✅ |
+| ServerID ↔ ClientID conversion | ❌ | ✅ |
+| Spawn / NPC format conversion | ❌ | ✅ |
+| `appearances.dat` asset support | ❌ | ✅ |
+| OTC sprite resource support | ❌ | ✅ |
+| Canary project support | ❌ | ✅ |
+| Crystal project support | ❌ | ✅ |
+| **Dragon Souls TFS 1.4 map compatibility (uint16)** | ❌ | ✅ |
+| Dark / Light / System themes | ❌ | ✅ |
+| DPI-aware interface | ❌ | ✅ |
+| Welcome screen with recent projects | ❌ | ✅ |
+| Modern C++20 codebase | ❌ | ✅ |
+| Zone editing tools | ❌ | ✅ |
+| Procedural map generation | ❌ | ✅ |
+| Automated CI builds (x86 + x64) | ❌ | ✅ |
+
+NexaMap supports **everything** that the standard RME does — OTBM editing, brushes, palettes, houses, spawns, items — **plus** an entire modern toolset that RME will never have.
+
+---
+
+## 🐉 Dragon Souls TFS 1.4 — Map Compatibility
+
+NexaMap Editor includes **native support** for [Dragon Souls TFS 1.4 (Protocol 11.00)](https://github.com/Mateuzkl/Dragon-Souls-TFS-1.4-Protocol-11.00) maps.
+
+Dragon Souls uses a modified OTBM format where **item count and subtype fields are stored as `uint16` (16-bit)** instead of the standard `uint8` (8-bit) used by vanilla TFS/RME. This means:
+
+- Standard RME **cannot correctly open** Dragon Souls maps — it reads corrupted data.
+- Standard RME **cannot correctly save** Dragon Souls maps — it writes the wrong byte format.
+- NexaMap is the **only map editor** that properly supports this format.
+
+### How to use
+
+1. Open **NexaMap Editor**.
+2. Go to **Edit → Preferences → Editor** tab.
+3. **Check** the option: `Dragon Souls map compatibility (16-bit item count/subtype)`.
+4. Open / edit / save your Dragon Souls map normally.
+
+NexaMap will read and write the `uint16` format that Dragon Souls expects. Your server will open the map without issues.
+
+> [!IMPORTANT]
+> **Always enable** this option **before** opening a Dragon Souls map. If you open a Dragon Souls map without this option enabled, the item data will be read incorrectly.
+
+> [!WARNING]
+> **For standard OTBM maps** (vanilla TFS, Canary, Crystal, etc.), leave this option **unchecked**. Enabling it on normal maps will produce incompatible files.
+
+### Quick reference
+
+| Map type | Dragon Souls option |
+|---|---|
+| Dragon Souls TFS 1.4 | ✅ **Enabled** |
+| Standard TFS / OTServ | ❌ Disabled |
+| Canary | ❌ Disabled |
+| Crystal | ❌ Disabled |
+| Other custom servers using uint8 | ❌ Disabled |
 
 ---
 
@@ -53,6 +117,7 @@ It is intended for compatible OpenTibia ecosystems and workflows, including:
 - The Forgotten Server-based projects.
 - Canary-based projects.
 - Crystal-based projects.
+- **Dragon Souls TFS 1.4** projects (with 16-bit item count/subtype support).
 - Custom OpenTibia distributions.
 - ClientID-oriented servers and datapacks.
 - Legacy-to-modern map conversion workflows.
@@ -66,6 +131,7 @@ The goal is simple: provide one reliable environment for creating, maintaining a
 | Area | Capabilities |
 |---|---|
 | Map editing | Create and maintain cities, hunting grounds, dungeons, mountains, castles and complete OTBM worlds |
+| Dragon Souls support | Native 16-bit (uint16) item count/subtype format for Dragon Souls TFS 1.4 maps |
 | ClientID workflow | Work with ClientID-oriented maps, items and modern asset pipelines |
 | Map conversion | Convert supported maps and item identifiers between ServerID and ClientID workflows |
 | Spawn / NPC conversion | Convert supported spawn and NPC formats for TFS, Canary and Crystal-based projects |
@@ -90,6 +156,8 @@ OpenTibia Project
       +-- Canary
       |
       +-- Crystal
+      |
+      +-- Dragon Souls TFS 1.4 (uint16 mode)
       |
       +-- Custom Server
               |
@@ -358,9 +426,10 @@ CMake install rules package required welcome assets for installed builds.
 2. Open **Preferences**.
 3. Select/configure the client version used by your project.
 4. Configure compatible client assets.
-5. Create a new map or open an existing `.otbm` file.
-6. Verify sprites/items before editing important areas.
-7. Keep a backup before any conversion.
+5. **If editing Dragon Souls maps**: enable `Dragon Souls map compatibility (16-bit item count/subtype)` in **Editor** preferences.
+6. Create a new map or open an existing `.otbm` file.
+7. Verify sprites/items before editing important areas.
+8. Keep a backup before any conversion.
 
 ---
 
@@ -370,21 +439,24 @@ CMake install rules package required welcome assets for installed builds.
 Configure client assets
         |
         v
+Enable Dragon Souls mode (if applicable)
+        |
+        v
 Open / create OTBM
         |
         v
 Edit map
         |
-        +--> Terrain / brushes
-        +--> Items
-        +--> Spawns / NPCs
-        +--> Zones
+        +-->  Terrain / brushes
+        +-->  Items
+        +-->  Spawns / NPCs
+        +-->  Zones
         |
         v
 Optional conversion
         |
-        +--> ServerID <-> ClientID workflow
-        +--> Spawn / NPC conversion
+        +-->  ServerID <-> ClientID workflow
+        +-->  Spawn / NPC conversion
         |
         v
 Save
@@ -492,7 +564,7 @@ Include:
 - NexaMap version.
 - Operating system.
 - Client/protocol version.
-- Server family when relevant: TFS, Canary, Crystal or custom.
+- Server family when relevant: TFS, Canary, Crystal, Dragon Souls or custom.
 - Asset format used.
 - Clear reproduction steps.
 - Expected behavior.
@@ -525,6 +597,8 @@ See [`LICENSE.rtf`](LICENSE.rtf) for the terms that apply to this repository and
 ### NexaMap Editor 5.0.0
 
 **Universal ClientID Map Editor for OpenTibia**
+
+**The only editor with Dragon Souls TFS 1.4 native support.**
 
 Create. Convert. Build Worlds.
 
