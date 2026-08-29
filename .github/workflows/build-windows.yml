@@ -67,7 +67,7 @@ jobs:
       BUILD_DIR: build-${{ matrix.arch }}
       PACKAGE_DIR: package-${{ matrix.arch }}
       ARCHIVE_NAME: NexaMap-Editor-Windows-${{ matrix.arch }}-Release.zip
-      VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
+      NEXAMAP_VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
       VCPKG_DOWNLOADS: ${{ github.workspace }}\vcpkg-downloads\${{ matrix.arch }}
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-binary-cache\${{ matrix.arch }},readwrite
       VCPKG_FEATURE_FLAGS: manifests,binarycaching
@@ -79,7 +79,8 @@ jobs:
           persist-credentials: false
 
       - name: Restore vcpkg caches
-        uses: actions/cache@v4
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             vcpkg-binary-cache/${{ matrix.arch }}
@@ -94,12 +95,12 @@ jobs:
             throw 'vcpkg.json does not define builtin-baseline.'
           }
 
-          New-Item -ItemType Directory -Force $env:VCPKG_ROOT | Out-Null
-          git -C $env:VCPKG_ROOT init
-          git -C $env:VCPKG_ROOT remote add origin https://github.com/microsoft/vcpkg.git
-          git -C $env:VCPKG_ROOT fetch --depth 1 origin $baseline
-          git -C $env:VCPKG_ROOT checkout --detach FETCH_HEAD
-          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          New-Item -ItemType Directory -Force $env:NEXAMAP_VCPKG_ROOT | Out-Null
+          git -C $env:NEXAMAP_VCPKG_ROOT init
+          git -C $env:NEXAMAP_VCPKG_ROOT remote add origin https://github.com/microsoft/vcpkg.git
+          git -C $env:NEXAMAP_VCPKG_ROOT fetch --depth 1 origin $baseline
+          git -C $env:NEXAMAP_VCPKG_ROOT checkout --detach FETCH_HEAD
+          & "$env:NEXAMAP_VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
           if ($LASTEXITCODE -ne 0) {
             throw "vcpkg bootstrap failed with exit code $LASTEXITCODE."
           }
@@ -122,13 +123,22 @@ jobs:
 
           cmake -S . -B $env:BUILD_DIR -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:NEXAMAP_VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
             -DBUILD_TESTING=ON `
             -DENABLE_UNITY_BUILD=ON
           if ($LASTEXITCODE -ne 0) {
             throw "CMake configure failed with exit code $LASTEXITCODE."
           }
+
+      - name: Save vcpkg caches
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            vcpkg-binary-cache/${{ matrix.arch }}
+            vcpkg-downloads/${{ matrix.arch }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Build Release
         shell: pwsh

@@ -27,6 +27,7 @@
 #include <wx/wfstream.h>
 
 #include <string>
+#include <thread>
 
 Settings g_settings;
 
