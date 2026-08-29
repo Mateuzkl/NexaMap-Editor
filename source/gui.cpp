@@ -851,16 +851,11 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		wxString userError;
 		wxArrayString userWarnings;
 		g_creatures.loadFromXML(userCreatures, false, userError, userWarnings);
-		for (const wxString& warning : userWarnings) {
-			// Older NexaMap versions persisted creatures imported from an entire
-			// server into this shared overlay. They consequently overlap the
-			// bundled catalog on the next startup. The loader already keeps the
-			// first definition safely, so this legacy overlap is not a workspace
-			// error and must not produce thousands of modal warnings.
-			if (!warning.StartsWith("Duplicate creature type name \"")) {
-				warnings.push_back(warning);
-			}
-		}
+		// Older NexaMap versions persisted creatures imported from an entire
+		// server into this shared overlay. It can contain both stale duplicates
+		// and outfits newer than the selected appearance package; neither should
+		// interrupt opening because the active server import below refreshes them.
+		AppendActionableDedicatedCreatureWarnings(warnings, userWarnings);
 	}
 
 	const wxString monstersDirectory = !workspace.monstersDirectory.empty()
@@ -885,9 +880,11 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	SetLoadDone(65, "Loading materials...");
 	wxLogMessage("Canary/Crystal: loading dedicated materials and borders.");
 	supplementalError.clear();
-	if (!g_materials.loadMaterials(assetsDataDirectory + "materials/materials.xml", supplementalError, warnings)) {
+	wxArrayString dedicatedMaterialWarnings;
+	if (!g_materials.loadMaterials(assetsDataDirectory + "materials/materials.xml", supplementalError, dedicatedMaterialWarnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + supplementalError);
 	}
+	AppendActionableMaterialWarnings(warnings, dedicatedMaterialWarnings);
 
 	// Legacy extensions are tied to versioned TFS ServerIDs and may redefine
 	// brushes from the dedicated ClientID material set. Do not mix them into an
