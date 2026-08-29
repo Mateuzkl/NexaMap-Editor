@@ -28,6 +28,7 @@
 #include "zones.h"
 #include "templates.h"
 #include "map_format.h"
+#include "session_id.h"
 
 #include <unordered_set>
 
@@ -54,6 +55,15 @@ public:
 	// ctor and dtor
 	Map();
 	~Map() override;
+
+	SessionId getSessionId() const noexcept {
+		return sessionId;
+	}
+
+private:
+	const SessionId sessionId;
+
+public:
 
 	// Operations on the entire map
 	void cleanInvalidTiles(bool showdialog = false);

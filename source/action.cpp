@@ -22,11 +22,13 @@
 #include "map.h"
 #include "editor.h"
 #include "gui.h"
+#include "house_paste_transaction.h"
 
 namespace {
 	struct HouseRegistryChange {
 		HouseSnapshot snapshot;
 		bool add = true;
+		SessionId activeHouseSessionId = InvalidSessionId;
 	};
 }
 
@@ -54,7 +56,7 @@ Change* Change::Create(House* house, const Position& where) {
 Change* Change::CreateHouse(const HouseSnapshot& snapshot) {
 	auto* c = newd Change();
 	c->type = CHANGE_HOUSE_REGISTRY;
-	c->data = newd HouseRegistryChange { snapshot, true };
+	c->data = newd HouseRegistryChange { snapshot, true, InvalidSessionId };
 	return c;
 }
 
@@ -190,39 +192,75 @@ void Action::applyZoneChange(Change* c) {
 	}
 }
 
-void Action::applyHouseChange(Change* c) {
+bool Action::canApplyHouseChanges() const {
+	for (const Change* c : changes) {
+		if (!c || c->type != CHANGE_HOUSE_REGISTRY) {
+			continue;
+		}
+
+		const auto* change = reinterpret_cast<const HouseRegistryChange*>(c->data);
+		ASSERT(change);
+		if (!change) {
+			return false;
+		}
+
+		const House* house = editor.map.houses.getHouse(change->snapshot.id);
+		if (change->add) {
+			if (house) {
+				return false;
+			}
+			continue;
+		}
+
+		if (!house ||
+		    house->getSessionId() != change->activeHouseSessionId ||
+		    house->getSnapshot() != change->snapshot ||
+		    house->tileCount() != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Action::applyHouseChange(Change* c) {
 	auto* change = reinterpret_cast<HouseRegistryChange*>(c->data);
 	ASSERT(change);
 	if (!change) {
-		return;
+		return false;
 	}
 
 	if (change->add) {
 		// A paste must never attach its tiles to an unrelated house that appeared
 		// under the same id. Leave the change unapplied if the invariant is broken.
 		if (editor.map.houses.getHouse(change->snapshot.id)) {
-			return;
+			return false;
 		}
 
 		auto* house = newd House(editor.map);
 		house->applySnapshot(change->snapshot);
 		if (!editor.map.houses.addHouse(house)) {
 			delete house;
-			return;
+			return false;
 		}
 		if (change->snapshot.exit != Position() && change->snapshot.exit.isValid()) {
 			house->setExit(change->snapshot.exit);
 		}
+		change->activeHouseSessionId = house->getSessionId();
 		change->add = false;
-		return;
+		return true;
 	}
 
 	House* house = editor.map.houses.getHouse(change->snapshot.id);
-	if (!house || house->tileCount() != 0) {
-		return;
+	if (!house ||
+	    house->getSessionId() != change->activeHouseSessionId ||
+	    house->getSnapshot() != change->snapshot ||
+	    house->tileCount() != 0) {
+		return false;
 	}
 	editor.map.houses.removeHouse(house);
+	change->activeHouseSessionId = InvalidSessionId;
 	change->add = true;
+	return true;
 }
 
 Action::~Action() {
@@ -266,7 +304,14 @@ size_t Action::memsize() const {
 	return mem;
 }
 
-void Action::commit() {
+bool Action::commit() {
+	if (commited) {
+		return true;
+	}
+	if (!canApplyHouseChanges()) {
+		return false;
+	}
+
 	editor.selection.start(Selection::INTERNAL);
 	ChangeList::const_iterator it = changes.begin();
 	while (it != changes.end()) {
@@ -389,7 +434,10 @@ void Action::commit() {
 				break;
 
 			case CHANGE_HOUSE_REGISTRY:
-				applyHouseChange(c);
+				if (!applyHouseChange(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
 				break;
 
 			default:
@@ -399,11 +447,19 @@ void Action::commit() {
 	}
 	editor.selection.finish(Selection::INTERNAL);
 	commited = true;
+	return true;
 }
 
-void Action::undo() {
+bool Action::undo() {
+	if (!commited) {
+		return true;
+	}
 	if (changes.empty()) {
-		return;
+		commited = false;
+		return true;
+	}
+	if (!canApplyHouseChanges()) {
+		return false;
 	}
 
 	editor.selection.start(Selection::INTERNAL);
@@ -507,7 +563,10 @@ void Action::undo() {
 				break;
 
 			case CHANGE_HOUSE_REGISTRY:
-				applyHouseChange(c);
+				if (!applyHouseChange(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
 				break;
 
 			default:
@@ -517,6 +576,7 @@ void Action::undo() {
 	}
 	editor.selection.finish(Selection::INTERNAL);
 	commited = false;
+	return true;
 }
 
 BatchAction::BatchAction(Editor& editor, ActionIdentifier ident) :
@@ -579,54 +639,171 @@ void BatchAction::addAction(Action* action) {
 	timestamp = time(nullptr);
 }
 
-void BatchAction::addAndCommitAction(Action* action) {
+bool BatchAction::addAndCommitAction(Action* action) {
 	if (!action) {
-		return;
+		return false;
 	}
 
 	// If empty, do nothing.
 	if (action->size() == 0) {
 		delete action;
-		return;
+		return false;
 	}
 
 	if (!editor.CanEdit()) {
 		delete action;
-		return;
+		return false;
 	}
 
-	// Add it!
-	action->commit();
+	if (!action->commit()) {
+		delete action;
+		return false;
+	}
 	batch.push_back(action);
 	timestamp = time(nullptr);
+	return true;
 }
 
 void BatchAction::rollback() {
 	undo();
 }
 
-void BatchAction::commit() {
+bool BatchAction::commit() {
+	std::vector<Action*> committedActions;
 	for (Action* action : batch) {
 		if (action && !action->isCommited()) {
-			action->commit();
+			if (!action->commit()) {
+				for (Action* committedAction : std::views::reverse(committedActions)) {
+					committedAction->undo();
+				}
+				return false;
+			}
+			committedActions.push_back(action);
 		}
 	}
+	return true;
 }
 
-void BatchAction::undo() {
+bool BatchAction::canUndoHouseChanges() const {
+	if (type != ACTION_PASTE_TILES) {
+		return true;
+	}
+
+	std::set<Position> affectedPositions;
+	for (const Action* action : batch) {
+		if (!action) {
+			continue;
+		}
+		for (const Change* change : action->changes) {
+			if (change && change->type == CHANGE_TILE) {
+				const auto* tile = reinterpret_cast<const Tile*>(change->data);
+				if (tile) {
+					affectedPositions.insert(tile->getPosition());
+				}
+			}
+		}
+	}
+
+	std::vector<HousePasteTransaction::UndoState> states;
+	for (const Action* action : batch) {
+		if (!action) {
+			continue;
+		}
+		for (const Change* change : action->changes) {
+			if (!change || change->type != CHANGE_HOUSE_REGISTRY) {
+				continue;
+			}
+
+			const auto* registryChange = reinterpret_cast<const HouseRegistryChange*>(change->data);
+			if (!registryChange || registryChange->add || registryChange->activeHouseSessionId == InvalidSessionId) {
+				return false;
+			}
+
+			const House* house = editor.map.houses.getHouse(registryChange->snapshot.id);
+			HousePasteTransaction::UndoState state;
+			state.exists = house != nullptr;
+			if (house) {
+				state.sessionMatches = house->getSessionId() == registryChange->activeHouseSessionId;
+				state.snapshotMatches = house->getSnapshot() == registryChange->snapshot;
+				state.houseTileCount = house->tileCount();
+				for (const Position& position : affectedPositions) {
+					const Tile* tile = editor.map.getTile(position);
+					if (tile && tile->getHouseID() == registryChange->snapshot.id) {
+						++state.affectedHouseTileCount;
+					}
+				}
+			}
+			states.push_back(state);
+		}
+	}
+
+	return HousePasteTransaction::CanUndo(states);
+}
+
+bool BatchAction::canRedoHouseChanges() const {
+	if (type != ACTION_PASTE_TILES) {
+		return true;
+	}
+
+	std::vector<HousePasteTransaction::RedoState> states;
+	for (const Action* action : batch) {
+		if (!action) {
+			continue;
+		}
+		for (const Change* change : action->changes) {
+			if (!change || change->type != CHANGE_HOUSE_REGISTRY) {
+				continue;
+			}
+
+			const auto* registryChange = reinterpret_cast<const HouseRegistryChange*>(change->data);
+			if (!registryChange || !registryChange->add || registryChange->activeHouseSessionId != InvalidSessionId) {
+				return false;
+			}
+			states.push_back({ editor.map.houses.getHouse(registryChange->snapshot.id) != nullptr });
+		}
+	}
+
+	return HousePasteTransaction::CanRedo(states);
+}
+
+bool BatchAction::undo() {
+	if (!canUndoHouseChanges()) {
+		return false;
+	}
+
+	std::vector<Action*> undoneActions;
 	for (Action* action : std::views::reverse(batch)) {
 		if (action) {
-			action->undo();
+			if (!action->undo()) {
+				for (Action* undoneAction : std::views::reverse(undoneActions)) {
+					undoneAction->redo();
+				}
+				return false;
+			}
+			undoneActions.push_back(action);
 		}
 	}
+	return true;
 }
 
-void BatchAction::redo() {
+bool BatchAction::redo() {
+	if (!canRedoHouseChanges()) {
+		return false;
+	}
+
+	std::vector<Action*> redoneActions;
 	for (Action* action : batch) {
 		if (action) {
-			action->redo();
+			if (!action->redo()) {
+				for (Action* redoneAction : std::views::reverse(redoneActions)) {
+					redoneAction->undo();
+				}
+				return false;
+			}
+			redoneActions.push_back(action);
 		}
 	}
+	return true;
 }
 
 void BatchAction::merge(BatchAction* other) {
@@ -676,8 +853,12 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 		return;
 	}
 
-	// Commit any uncommited actions...
-	batch->commit();
+	// Commit any uncommited actions. A failed batch must not enter history.
+	if (!batch->commit()) {
+		batch->rollback();
+		delete batch;
+		return;
+	}
 
 	// Update title
 	if (editor.map.doChange()) {
@@ -744,20 +925,28 @@ void ActionQueue::addAction(Action* action, int stacking_delay) {
 	addBatch(batch, stacking_delay);
 }
 
-void ActionQueue::undo() {
+bool ActionQueue::undo() {
 	if (current > 0) {
-		current--;
-		BatchAction* batch = actions[current];
-		batch->undo();
+		BatchAction* batch = actions[current - 1];
+		if (!batch->undo()) {
+			return false;
+		}
+		--current;
+		return true;
 	}
+	return false;
 }
 
-void ActionQueue::redo() {
+bool ActionQueue::redo() {
 	if (current < actions.size()) {
 		BatchAction* batch = actions[current];
-		batch->redo();
-		current++;
+		if (!batch->redo()) {
+			return false;
+		}
+		++current;
+		return true;
 	}
+	return false;
 }
 
 void ActionQueue::clear() {

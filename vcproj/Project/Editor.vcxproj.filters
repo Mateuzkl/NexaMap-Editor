@@ -91,6 +91,12 @@
     <ClInclude Include="..\..\source\copybuffer.h">
       <Filter>editor</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\house_paste_transaction.h">
+      <Filter>editor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\session_id.h">
+      <Filter>common</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\creature.h">
       <Filter>objects</Filter>
     </ClInclude>
@@ -454,6 +460,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\selection.cpp">
       <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\session_id.cpp">
+      <Filter>common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\about_window.cpp">
       <Filter>gui\dialogs</Filter>
