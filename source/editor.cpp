@@ -629,7 +629,8 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 	if (house_import_type != IMPORT_DONT) {
 		for (auto tit = imported_map.towns.begin(); tit != imported_map.towns.end();) {
 			Town* imported_town = tit->second;
-			Town* current_town = map.towns.getTown(imported_town->getID());
+			const uint32_t old_town_id = imported_town->getID();
+			Town* current_town = map.towns.getTown(old_town_id);
 
 			Position oldexit = imported_town->getTemplePosition();
 			Position newexit = oldexit + offset;
@@ -640,7 +641,7 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 
 			switch (house_import_type) {
 				case IMPORT_MERGE: {
-					town_id_map[imported_town->getID()] = imported_town->getID();
+					town_id_map[old_town_id] = old_town_id;
 					if (current_town) {
 						++tit;
 						continue;
@@ -652,17 +653,17 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 						// Compare and insert/merge depending on parameters
 						if (current_town->getName() == imported_town->getName() && current_town->getID() == imported_town->getID()) {
 							// Just add to map
-							town_id_map[imported_town->getID()] = current_town->getID();
+							town_id_map[old_town_id] = current_town->getID();
 							++tit;
 							continue;
 						} else {
 							// Conflict! Find a newd id and replace old
 							uint32_t new_id = map.towns.getEmptyID();
 							imported_town->setID(new_id);
-							town_id_map[imported_town->getID()] = new_id;
+							town_id_map[old_town_id] = new_id;
 						}
 					} else {
-						town_id_map[imported_town->getID()] = imported_town->getID();
+						town_id_map[old_town_id] = old_town_id;
 					}
 					break;
 				}
@@ -670,7 +671,7 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 					// Find a newd id and replace old
 					uint32_t new_id = map.towns.getEmptyID();
 					imported_town->setID(new_id);
-					town_id_map[imported_town->getID()] = new_id;
+					town_id_map[old_town_id] = new_id;
 					break;
 				}
 				case IMPORT_DONT: {
@@ -700,23 +701,34 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 #endif
 		}
 
+		auto move_house_exit = [&](House* house, const Position& old_exit) {
+			if (!house || old_exit == Position()) {
+				return;
+			}
+			const Position new_exit = old_exit + offset;
+			if (new_exit.isValid()) {
+				house->setExit(&map, new_exit);
+			}
+		};
+
 		for (auto hit = imported_map.houses.begin(); hit != imported_map.houses.end();) {
 			House* imported_house = hit->second;
-			House* current_house = map.houses.getHouse(imported_house->getID());
-			imported_house->townid = town_id_map[imported_house->townid];
+			const uint32_t old_house_id = imported_house->getID();
+			House* current_house = map.houses.getHouse(old_house_id);
+			auto town_remap = town_id_map.find(imported_house->townid);
+			if (town_remap != town_id_map.end()) {
+				imported_house->townid = town_remap->second;
+			}
 
 			Position oldexit = imported_house->getExit();
 			imported_house->setExit(nullptr, Position()); // Reset it
 
 			switch (house_import_type) {
 				case IMPORT_MERGE: {
-					house_id_map[imported_house->getID()] = imported_house->getID();
+					house_id_map[old_house_id] = old_house_id;
 					if (current_house) {
 						++hit;
-						Position newexit = oldexit + offset;
-						if (newexit.isValid()) {
-							current_house->setExit(&map, newexit);
-						}
+						move_house_exit(current_house, oldexit);
 						continue;
 					}
 					break;
@@ -726,64 +738,42 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 						// Compare and insert/merge depending on parameters
 						if (current_house->name == imported_house->name && current_house->townid == imported_house->townid) {
 							// Just add to map
-							house_id_map[imported_house->getID()] = current_house->getID();
+							house_id_map[old_house_id] = current_house->getID();
 							++hit;
-							Position newexit = oldexit + offset;
-							if (newexit.isValid()) {
-								imported_house->setExit(&map, newexit);
-							}
+							move_house_exit(current_house, oldexit);
 							continue;
 						} else {
 							// Conflict! Find a newd id and replace old
 							uint32_t new_id = map.houses.getEmptyID();
-							house_id_map[imported_house->getID()] = new_id;
+							house_id_map[old_house_id] = new_id;
 							imported_house->setID(new_id);
 						}
 					} else {
-						house_id_map[imported_house->getID()] = imported_house->getID();
+						house_id_map[old_house_id] = old_house_id;
 					}
 					break;
 				}
 				case IMPORT_INSERT: {
 					// Find a newd id and replace old
 					uint32_t new_id = map.houses.getEmptyID();
-					house_id_map[imported_house->getID()] = new_id;
+					house_id_map[old_house_id] = new_id;
 					imported_house->setID(new_id);
 					break;
 				}
 				case IMPORT_DONT: {
 					++hit;
-					Position newexit = oldexit + offset;
-					if (newexit.isValid()) {
-						imported_house->setExit(&map, newexit);
-					}
+					move_house_exit(imported_house, oldexit);
 					continue; // Should never happend..?
 					break;
 				}
 			}
 
-			Position newexit = oldexit + offset;
-			if (newexit.isValid()) {
-				imported_house->setExit(&map, newexit);
-			}
-			map.houses.addHouse(imported_house);
-
-#ifdef __VISUALC__ // C++0x compliance to some degree :)
-			hit = imported_map.houses.erase(hit);
-#else // Bulky, slow way
-			HouseMap::iterator tmp_iter = hit;
-			++tmp_iter;
-			uint32_t next_key = 0;
-			if (tmp_iter != imported_map.houses.end()) {
-				next_key = tmp_iter->first;
-			}
-			imported_map.houses.erase(hit);
-			if (next_key != 0) {
-				hit = imported_map.houses.find(next_key);
+			move_house_exit(imported_house, oldexit);
+			if (map.houses.addHouse(imported_house)) {
+				hit = imported_map.houses.erase(hit);
 			} else {
-				hit = imported_map.houses.end();
+				++hit;
 			}
-#endif
 		}
 	}
 
@@ -880,7 +870,11 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 		TileLocation* location = map.createTileL(new_pos);
 
 		// Check if we should update any houses
-		int new_houseid = house_id_map[import_tile->getHouseID()];
+		uint32_t new_houseid = 0;
+		auto house_remap = house_id_map.find(import_tile->getHouseID());
+		if (house_remap != house_id_map.end()) {
+			new_houseid = house_remap->second;
+		}
 		House* house = map.houses.getHouse(new_houseid);
 		if (import_tile->isHouseTile() && house_import_type != IMPORT_DONT && house) {
 			// We need to notify houses of the tile moving
@@ -1054,23 +1048,11 @@ void Editor::clearInvalidHouseTiles(bool showdialog) {
 	auto iter = houses.begin();
 	while (iter != houses.end()) {
 		House* h = iter->second;
-		if (map.towns.getTown(h->townid) == nullptr) {
-#ifdef __VISUALC__ // C++0x compliance to some degree :)
+		if (!h) {
 			iter = houses.erase(iter);
-#else // Bulky, slow way
-			HouseMap::iterator tmp_iter = iter;
-			++tmp_iter;
-			uint32_t next_key = 0;
-			if (tmp_iter != houses.end()) {
-				next_key = tmp_iter->first;
-			}
-			houses.erase(iter);
-			if (next_key != 0) {
-				iter = houses.find(next_key);
-			} else {
-				iter = houses.end();
-			}
-#endif
+		} else if (map.towns.getTown(h->townid) == nullptr) {
+			++iter;
+			houses.removeHouse(h);
 		} else {
 			++iter;
 		}

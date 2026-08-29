@@ -35,7 +35,7 @@ HouseExitBrush::~HouseExitBrush() {
 }
 
 void HouseExitBrush::setHouse(const House* house) {
-	draw_house = house->getID();
+	draw_house = house ? house->getID() : 0;
 }
 
 uint32_t HouseExitBrush::getHouseID() const {
