@@ -333,17 +333,25 @@ public:
 	void OnClickSelectTemplePosition(wxCommandEvent&);
 	void OnClickAdd(wxCommandEvent&);
 	void OnClickRemove(wxCommandEvent&);
+	void OnClickMoveUp(wxCommandEvent&);
+	void OnClickMoveDown(wxCommandEvent&);
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
 
 protected:
 	void BuildListBox(bool doselect);
+	void SaveCurrentTown();
 	void UpdateSelection(int new_selection);
+	void UpdateButtons();
+	void MoveSelectedTown(int offset);
+	uint32_t GetOriginalTownId(const Town* town) const;
 
 	Editor& editor;
 
 	std::vector<Town*> town_list;
+	std::map<const Town*, uint32_t> original_town_ids;
 	uint32_t max_town_id;
+	int current_selection;
 
 	wxListBox* town_listbox;
 	wxString town_name, town_id;
@@ -353,6 +361,8 @@ protected:
 
 	PositionCtrl* temple_position;
 	wxButton* remove_button;
+	wxButton* move_up_button;
+	wxButton* move_down_button;
 	wxButton* select_position_button;
 
 	DECLARE_EVENT_TABLE();

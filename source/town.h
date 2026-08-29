@@ -69,6 +69,9 @@ public:
 
 	bool addTown(Town* town);
 	uint32_t getEmptyID();
+	void swap(Towns& other) noexcept {
+		towns.swap(other.towns);
+	}
 
 	Town* getTown(const std::string& townname);
 	Town* getTown(uint32_t _townid);
