@@ -545,9 +545,7 @@ void DoorBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 			Door* door = dynamic_cast<Door*>(item);
 			if (mmap && door) {
 				House* house = mmap->houses.getHouse(tile->getHouseID());
-				ASSERT(house);
-				Map* real_map = dynamic_cast<Map*>(map);
-				if (real_map) {
+				if (house) {
 					door->setDoorID(house->getEmptyDoorID());
 				}
 			}

@@ -19,12 +19,27 @@
 #define RME_HOUSE_H_
 
 #include "position.h"
+#include "session_id.h"
 
 class Map;
 class Tile;
 class Door;
 
 class Houses;
+
+struct HouseSnapshot {
+	uint32_t id = 0;
+	int rent = 0;
+	uint32_t requiredReset = 0;
+	uint32_t clientid = 0;
+	int32_t beds = 0;
+	std::string name;
+	uint32_t townid = 0;
+	bool guildhall = false;
+	Position exit;
+
+	bool operator==(const HouseSnapshot&) const = default;
+};
 
 class House {
 public:
@@ -34,6 +49,9 @@ public:
 	uint32_t getID() const {
 		return id;
 	}
+	SessionId getSessionId() const noexcept {
+		return sessionId;
+	}
 	void setID(uint32_t newId) {
 		this->id = newId;
 	}
@@ -42,7 +60,12 @@ public:
 	void addTile(Tile* tile);
 	void removeTile(Tile* tile);
 	size_t size() const;
-	std::string getDescription();
+	size_t tileCount() const {
+		return tiles.size();
+	}
+	std::string getDescription() const;
+	HouseSnapshot getSnapshot() const;
+	void applySnapshot(const HouseSnapshot& snapshot);
 
 	int rent;
 	uint32_t requiredReset;
@@ -62,6 +85,7 @@ public:
 	Position getDoorPositionByID(uint8_t id_) const;
 
 private:
+	const SessionId sessionId;
 	uint32_t id;
 
 protected:
@@ -95,22 +119,15 @@ public:
 	HouseMap::const_iterator end() const {
 		return houses.end();
 	}
-#ifdef __VISUALC__ // C++0x compliance to some degree :)
+	// Removes only the registry entry. Used when ownership is transferred to
+	// another Houses collection; callers remain responsible for the pointer.
 	HouseMap::iterator erase(HouseMap::iterator iter) {
 		return houses.erase(iter);
 	}
-#else
-	void erase(HouseMap::iterator iter) {
-		houses.erase(iter);
-	}
-#endif
-	HouseMap::iterator find(uint32_t val) {
-		return houses.find(val);
-	}
 
 	void removeHouse(House* house_to_remove);
-	void changeId(House* house, uint32_t newID);
-	void addHouse(House* new_house);
+	bool changeId(House* house, uint32_t newID);
+	bool addHouse(House* new_house);
 	House* getHouse(uint32_t houseid);
 	const House* getHouse(uint32_t houseid) const;
 	uint32_t getEmptyID();

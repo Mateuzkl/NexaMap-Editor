@@ -23,6 +23,7 @@
 
 Map::Map() :
 	BaseMap(),
+	sessionId(CreateSessionId()),
 	width(512),
 	height(512),
 	houses(*this),

@@ -17,6 +17,7 @@ A modern native map editor for OpenTibia projects, focused on OTBM editing, Clie
 ![wxWidgets](https://img.shields.io/badge/UI-wxWidgets-007ACC?style=flat-square)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-44545F?style=flat-square)
 [![Formatting](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml/badge.svg)](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml)
+[![Windows builds](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml/badge.svg)](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml)
 [![Repository size](https://img.shields.io/github/repo-size/Mateuzkl/NexaMap-Editor?style=flat-square)](https://github.com/Mateuzkl/NexaMap-Editor)
 [![Issues](https://img.shields.io/github/issues/Mateuzkl/NexaMap-Editor?style=flat-square)](https://github.com/Mateuzkl/NexaMap-Editor/issues)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-F6C445?style=flat-square)](LICENSE.rtf)
@@ -284,6 +285,18 @@ Build and install:
 cmake --build out/build/release
 cmake --install out/build/release --prefix out/install/release
 ```
+
+---
+
+## Automatic Windows builds
+
+GitHub Actions produces independent Release packages for Windows x86 (32-bit) and x64 (64-bit). Each package contains `NexaMap Editor.exe` and the required runtime resource directories.
+
+- Open **Actions → Build Windows** to download `NexaMap-Editor-Windows-x86-Release` or `NexaMap-Editor-Windows-x64-Release` from a successful run.
+- Use **Run workflow** on that page to start a build manually.
+- Tags matching `v*` (for example, `v5.0.1`) publish both architecture-specific ZIP files to the corresponding GitHub Release.
+
+The workflow validates the PE machine type before uploading, so an x86 artifact must contain a real PE32 executable and an x64 artifact must contain a real PE32+ executable.
 
 ---
 

@@ -22,8 +22,13 @@
 
 #include "position.h"
 #include "basemap.h"
+#include "house.h"
+#include "session_id.h"
+
+#include <memory>
 
 class Editor;
+class Map;
 
 class CopyBuffer {
 public:
@@ -45,7 +50,7 @@ public:
 	void clear();
 
 	// Takes ownership of map and sets the paste anchor (used by terrain stamps).
-	void replace(BaseMap* map, const Position& position);
+	void replace(std::unique_ptr<BaseMap> map, const Position& position);
 
 	BaseMap& getBufferMap();
 
@@ -53,12 +58,16 @@ private:
 	void resetBounds();
 	void includePosition(const Position& position);
 	void rebuildBounds();
+	void captureHouse(const Map& map, uint32_t houseId);
+	HouseSnapshot getHouseSnapshot(uint32_t houseId) const;
 
 	Position copyPos;
 	Position minimumPosition;
 	Position maximumPosition;
 	bool boundsValid = false;
-	BaseMap* tiles;
+	std::unique_ptr<BaseMap> tiles;
+	SessionId sourceMapSessionId;
+	std::map<uint32_t, HouseSnapshot> houses;
 };
 
 #endif

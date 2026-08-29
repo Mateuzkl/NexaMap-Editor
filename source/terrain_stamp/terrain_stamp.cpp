@@ -128,7 +128,7 @@ bool TerrainStamp::LoadIntoCopyBuffer(CopyBuffer& buffer) const {
 		minDz = std::min(minDz, stampTile.dz);
 	}
 
-	auto* map = newd BaseMap();
+	auto map = std::make_unique<BaseMap>();
 	for (const TerrainStampTile& stampTile : tiles) {
 		const Position position(stampTile.dx, stampTile.dy, stampTile.dz - minDz);
 		if (position.x < 0 || position.y < 0 || position.z < 0 || position.z > MAP_MAX_LAYER) {
@@ -156,11 +156,10 @@ bool TerrainStamp::LoadIntoCopyBuffer(CopyBuffer& buffer) const {
 	}
 
 	if (map->size() == 0) {
-		delete map;
 		return false;
 	}
 
 	// paste uses buffer_pos - copyPos + cursor; copyPos.z = -minDz restores relative floors.
-	buffer.replace(map, Position(0, 0, -minDz));
+	buffer.replace(std::move(map), Position(0, 0, -minDz));
 	return true;
 }

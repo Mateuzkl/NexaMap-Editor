@@ -26,6 +26,7 @@
 class Editor;
 class Tile;
 class House;
+struct HouseSnapshot;
 class Waypoint;
 class Change;
 class Action;
@@ -39,6 +40,7 @@ enum ChangeType {
 	CHANGE_MOVE_WAYPOINT,
 	CHANGE_ZONE_REGISTRY,
 	CHANGE_RENAME_ZONE,
+	CHANGE_HOUSE_REGISTRY,
 };
 
 class Change {
@@ -62,6 +64,7 @@ private:
 public:
 	Change(Tile* tile);
 	static Change* Create(House* house, const Position& where);
+	static Change* CreateHouse(const HouseSnapshot& snapshot);
 	static Change* Create(Waypoint* wp, const Position& where);
 	static Change* CreateZone(const std::string& name, unsigned int id, bool add);
 	static Change* RenameZone(const std::string& oldName, const std::string& newName);
@@ -79,6 +82,7 @@ public:
 	uint32_t memsize() const;
 
 	friend class Action;
+	friend class BatchAction;
 };
 
 typedef std::vector<Change*> ChangeList;
@@ -122,18 +126,20 @@ public:
 		return type;
 	}
 
-	void commit();
+	bool commit();
 	bool isCommited() const {
 		return commited;
 	}
-	void undo();
-	void redo() {
-		commit();
+	bool undo();
+	bool redo() {
+		return commit();
 	}
 
 protected:
 	Action(Editor& editor, ActionIdentifier ident);
 	void applyZoneChange(Change* change);
+	bool applyHouseChange(Change* change);
+	bool canApplyHouseChanges() const;
 
 	bool commited;
 	ChangeList changes;
@@ -141,6 +147,7 @@ protected:
 	ActionIdentifier type;
 
 	friend class ActionQueue;
+	friend class BatchAction;
 };
 
 typedef std::vector<Action*> ActionVector;
@@ -163,7 +170,7 @@ public:
 	}
 
 	virtual void addAction(Action* action);
-	virtual void addAndCommitAction(Action* action);
+	virtual bool addAndCommitAction(Action* action);
 	// Revert all already-committed child actions. Intended for transactional
 	// producers that must recover if a later construction phase fails.
 	void rollback();
@@ -171,9 +178,11 @@ public:
 protected:
 	BatchAction(Editor& editor, ActionIdentifier ident);
 
-	virtual void commit();
-	virtual void undo();
-	virtual void redo();
+	virtual bool commit();
+	virtual bool undo();
+	virtual bool redo();
+	bool canUndoHouseChanges() const;
+	bool canRedoHouseChanges() const;
 
 	void merge(BatchAction* other);
 
@@ -202,8 +211,8 @@ public:
 	void addBatch(BatchAction* action, int stacking_delay = 0);
 	void addAction(Action* action, int stacking_delay = 0);
 
-	void undo();
-	void redo();
+	bool undo();
+	bool redo();
 	void clear();
 
 	bool canUndo() {

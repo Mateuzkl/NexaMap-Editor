@@ -810,7 +810,9 @@ void Tile::addHouseExit(const House* h) {
 		return;
 	}
 	HouseExitList* house_exits = location->createHouseExits();
-	house_exits->push_back(h->getID());
+	if (std::find(house_exits->begin(), house_exits->end(), h->getID()) == house_exits->end()) {
+		house_exits->push_back(h->getID());
+	}
 }
 
 void Tile::removeHouseExit(const House* h) {
@@ -823,10 +825,5 @@ void Tile::removeHouseExit(const House* h) {
 		return;
 	}
 
-	auto it = std::find_if(house_exits->begin(), house_exits->end(), [&](uint32_t exitId) {
-		return exitId == h->getID();
-	});
-	if (it != house_exits->end()) {
-		house_exits->erase(it);
-	}
+	house_exits->erase(std::remove(house_exits->begin(), house_exits->end(), h->getID()), house_exits->end());
 }

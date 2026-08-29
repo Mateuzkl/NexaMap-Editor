@@ -25,8 +25,18 @@
 #include <algorithm>
 #include <memory>
 
+namespace {
+	HouseSnapshot makeRecoveredHouseSnapshot(uint32_t houseId) {
+		HouseSnapshot recovered;
+		recovered.id = houseId;
+		recovered.name = "Recovered House #" + std::to_string(houseId);
+		return recovered;
+	}
+}
+
 CopyBuffer::CopyBuffer() :
-	tiles(newd BaseMap()) {
+	tiles(std::make_unique<BaseMap>()),
+	sourceMapSessionId(InvalidSessionId) {
 	;
 }
 
@@ -35,9 +45,7 @@ BaseMap& CopyBuffer::getBufferMap() {
 	return *tiles;
 }
 
-CopyBuffer::~CopyBuffer() {
-	clear();
-}
+CopyBuffer::~CopyBuffer() = default;
 
 void CopyBuffer::swap(CopyBuffer& other) noexcept {
 	std::swap(tiles, other.tiles);
@@ -45,6 +53,8 @@ void CopyBuffer::swap(CopyBuffer& other) noexcept {
 	std::swap(minimumPosition, other.minimumPosition);
 	std::swap(maximumPosition, other.maximumPosition);
 	std::swap(boundsValid, other.boundsValid);
+	std::swap(sourceMapSessionId, other.sourceMapSessionId);
+	std::swap(houses, other.houses);
 }
 
 Position CopyBuffer::getPosition() const {
@@ -53,14 +63,15 @@ Position CopyBuffer::getPosition() const {
 }
 
 void CopyBuffer::clear() {
-	delete tiles;
-	tiles = nullptr;
+	tiles.reset();
+	sourceMapSessionId = InvalidSessionId;
+	houses.clear();
 	resetBounds();
 }
 
-void CopyBuffer::replace(BaseMap* map, const Position& position) {
+void CopyBuffer::replace(std::unique_ptr<BaseMap> map, const Position& position) {
 	clear();
-	tiles = map;
+	tiles = std::move(map);
 	copyPos = position;
 	rebuildBounds();
 }
@@ -96,6 +107,30 @@ void CopyBuffer::rebuildBounds() {
 	}
 }
 
+void CopyBuffer::captureHouse(const Map& map, uint32_t houseId) {
+	if (houseId == 0 || houses.find(houseId) != houses.end()) {
+		return;
+	}
+
+	if (const House* house = map.houses.getHouse(houseId)) {
+		houses.emplace(houseId, house->getSnapshot());
+		return;
+	}
+
+	// Keep an invalid/orphaned source tile usable without discarding its house
+	// identity. The destination receives a real, editable placeholder House.
+	houses.emplace(houseId, makeRecoveredHouseSnapshot(houseId));
+}
+
+HouseSnapshot CopyBuffer::getHouseSnapshot(uint32_t houseId) const {
+	auto it = houses.find(houseId);
+	if (it != houses.end()) {
+		return it->second;
+	}
+
+	return makeRecoveredHouseSnapshot(houseId);
+}
+
 void CopyBuffer::copy(Editor& editor, int floor) {
 	if (editor.selection.size() == 0) {
 		g_gui.SetStatusText("No tiles to copy.");
@@ -103,7 +138,8 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	}
 
 	clear();
-	tiles = newd BaseMap();
+	tiles = std::make_unique<BaseMap>();
+	sourceMapSessionId = editor.map.getSessionId();
 
 	int tile_count = 0;
 	int item_count = 0;
@@ -121,6 +157,7 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 			copied_tile->setMapFlags(tile->getMapFlags());
 			copied_tile->zones = tile->zones;
 		}
+		captureHouse(editor.map, copied_tile->getHouseID());
 
 		ItemVector tile_selection = tile->getSelectedItems();
 		for (auto iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
@@ -161,7 +198,8 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	}
 
 	clear();
-	tiles = newd BaseMap();
+	tiles = std::make_unique<BaseMap>();
+	sourceMapSessionId = editor.map.getSessionId();
 
 	int tile_count = 0;
 	int item_count = 0;
@@ -187,6 +225,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 			newtile->setMapFlags(TILESTATE_NONE);
 			newtile->removeZones();
 		}
+		captureHouse(editor.map, copied_tile->getHouseID());
 
 		ItemVector tile_selection = newtile->popSelectedItems();
 		for (auto iit = tile_selection.begin(); iit != tile_selection.end(); ++iit) {
@@ -277,6 +316,53 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 
 	constexpr size_t ActionChunkSize = 1024;
 	BatchAction* batchAction = editor.actionQueue->createBatch(ACTION_PASTE_TILES);
+	std::set<uint32_t> pasted_house_ids;
+	for (MapIterator it = tiles->begin(); it != tiles->end(); ++it) {
+		Tile* buffer_tile = (*it)->get();
+		const Position pos = buffer_tile->getPosition() - copyPos + toPosition;
+		if (pos.isValid() && buffer_tile->isHouseTile()) {
+			pasted_house_ids.insert(buffer_tile->getHouseID());
+		}
+	}
+
+	std::map<uint32_t, uint32_t> house_id_map;
+	const bool same_map = sourceMapSessionId != InvalidSessionId && sourceMapSessionId == editor.map.getSessionId();
+	bool created_houses = false;
+	for (uint32_t old_house_id : pasted_house_ids) {
+		if (same_map && editor.map.houses.getHouse(old_house_id)) {
+			house_id_map.emplace(old_house_id, old_house_id);
+			continue;
+		}
+
+		uint32_t new_house_id = old_house_id;
+		if (editor.map.houses.getHouse(new_house_id)) {
+			new_house_id = editor.map.houses.getEmptyID();
+		}
+
+		HouseSnapshot snapshot = getHouseSnapshot(old_house_id);
+		snapshot.id = new_house_id;
+		if (snapshot.exit != Position()) {
+			snapshot.exit = snapshot.exit - copyPos + toPosition;
+			if (!snapshot.exit.isValid()) {
+				snapshot.exit = Position();
+			}
+		}
+
+		// Commit each registry entry immediately. Besides guaranteeing that every
+		// House exists before tile changes run, this reserves the chosen id so the
+		// next conflicting House gets a different getEmptyID() result.
+		Action* house_action = editor.actionQueue->createAction(batchAction);
+		house_action->addChange(Change::CreateHouse(snapshot));
+		if (!batchAction->addAndCommitAction(house_action)) {
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Paste cancelled: unable to create all required Houses.");
+			return;
+		}
+		house_id_map.emplace(old_house_id, new_house_id);
+		created_houses = true;
+	}
+
 	Action* action = editor.actionQueue->createAction(batchAction);
 	uint64_t processedTiles = 0;
 	uint64_t pastedTiles = 0;
@@ -295,6 +381,14 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 
 		TileLocation* location = editor.map.createTileL(pos);
 		Tile* copy_tile = buffer_tile->deepCopy(editor.map);
+		if (copy_tile->isHouseTile()) {
+			auto remap = house_id_map.find(copy_tile->getHouseID());
+			if (remap == house_id_map.end()) {
+				delete copy_tile;
+				continue;
+			}
+			copy_tile->setHouseID(remap->second);
+		}
 		Tile* old_dest_tile = location->get();
 		Tile* new_dest_tile = nullptr;
 		copy_tile->setLocation(location);
@@ -433,6 +527,9 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 	}
 	editor.addBatch(batchAction);
 	g_gui.SetStatusText(wxString::Format("Pasted %llu tiles successfully.", static_cast<unsigned long long>(pastedTiles)));
+	if (created_houses) {
+		g_gui.RefreshPalettes(nullptr, true, false);
+	}
 }
 
 bool CopyBuffer::canPaste() const {

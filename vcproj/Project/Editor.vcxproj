@@ -469,6 +469,11 @@
     <ClCompile Include="..\..\source\map_window.cpp" />
     <ClInclude Include="..\..\source\action.h" />
     <ClCompile Include="..\..\source\action.cpp" />
+    <ClInclude Include="..\..\source\house_paste_transaction.h" />
+    <ClInclude Include="..\..\source\session_id.h" />
+    <ClCompile Include="..\..\source\session_id.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClInclude Include="..\..\source\client_version.h" />
     <ClCompile Include="..\..\source\client_version.cpp" />
     <ClInclude Include="..\..\source\client_assets.h" />

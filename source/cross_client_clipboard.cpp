@@ -605,6 +605,6 @@ bool CrossClientClipboard::apply(const CrossClientPasteAnalysis& analysis, CopyB
 		error = "The converted paste buffer is empty.";
 		return false;
 	}
-	destination.replace(converted.release(), copyPosition);
+	destination.replace(std::move(converted), copyPosition);
 	return true;
 }

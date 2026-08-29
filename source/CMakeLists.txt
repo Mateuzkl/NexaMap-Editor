@@ -50,6 +50,7 @@ ${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.h
 ${CMAKE_CURRENT_LIST_DIR}/house.h
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.h
+${CMAKE_CURRENT_LIST_DIR}/house_paste_transaction.h
 ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/ingame_preview_window.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.h
@@ -121,6 +122,7 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_tool/visual_similarity_index.h
 ${CMAKE_CURRENT_LIST_DIR}/result_window.h
 ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/selection.h
+${CMAKE_CURRENT_LIST_DIR}/session_id.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
@@ -273,6 +275,7 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_visual_similarity_service.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/visual_similarity_index.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
+${CMAKE_CURRENT_LIST_DIR}/session_id.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.cpp
 ${CMAKE_CURRENT_LIST_DIR}/theme.cpp

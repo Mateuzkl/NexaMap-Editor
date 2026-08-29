@@ -1,0 +1,256 @@
+---
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/build-windows.yml"
+      - "CMakeLists.txt"
+      - "CMakeSettings.json"
+      - "vcpkg.json"
+      - "cmake/**"
+      - "source/**"
+      - "tests/**"
+      - "vcproj/**"
+      - "brushes/**"
+      - "data/**"
+      - "extensions/**"
+      - "icons/**"
+      - "LICENSE.rtf"
+      - "README.md"
+  pull_request:
+    paths:
+      - ".github/workflows/build-windows.yml"
+      - "CMakeLists.txt"
+      - "CMakeSettings.json"
+      - "vcpkg.json"
+      - "cmake/**"
+      - "source/**"
+      - "tests/**"
+      - "vcproj/**"
+      - "brushes/**"
+      - "data/**"
+      - "extensions/**"
+      - "icons/**"
+      - "LICENSE.rtf"
+      - "README.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  build:
+    name: Windows ${{ matrix.arch }} Release
+    runs-on: windows-2022
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            msvc_arch: x86
+            triplet: x86-windows-static
+          - arch: x64
+            msvc_arch: amd64
+            triplet: x64-windows-static
+
+    env:
+      BUILD_DIR: build-${{ matrix.arch }}
+      PACKAGE_DIR: package-${{ matrix.arch }}
+      ARCHIVE_NAME: NexaMap-Editor-Windows-${{ matrix.arch }}-Release.zip
+      NEXAMAP_VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
+      VCPKG_DOWNLOADS: ${{ github.workspace }}\vcpkg-downloads\${{ matrix.arch }}
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-binary-cache\${{ matrix.arch }},readwrite
+      VCPKG_FEATURE_FLAGS: manifests,binarycaching
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Restore vcpkg caches
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            vcpkg-binary-cache/${{ matrix.arch }}
+            vcpkg-downloads/${{ matrix.arch }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Bootstrap pinned vcpkg
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          if (-not $baseline) {
+            throw 'vcpkg.json does not define builtin-baseline.'
+          }
+
+          New-Item -ItemType Directory -Force $env:NEXAMAP_VCPKG_ROOT | Out-Null
+          git -C $env:NEXAMAP_VCPKG_ROOT init
+          git -C $env:NEXAMAP_VCPKG_ROOT remote add origin https://github.com/microsoft/vcpkg.git
+          git -C $env:NEXAMAP_VCPKG_ROOT fetch --depth 1 origin $baseline
+          git -C $env:NEXAMAP_VCPKG_ROOT checkout --detach FETCH_HEAD
+          & "$env:NEXAMAP_VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) {
+            throw "vcpkg bootstrap failed with exit code $LASTEXITCODE."
+          }
+
+          New-Item -ItemType Directory -Force $env:VCPKG_DOWNLOADS | Out-Null
+          $binaryCache = Join-Path $env:GITHUB_WORKSPACE "vcpkg-binary-cache\${{ matrix.arch }}"
+          New-Item -ItemType Directory -Force $binaryCache | Out-Null
+
+      - name: Configure MSVC for ${{ matrix.arch }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cl 2>&1 | Select-Object -First 3
+          cmake --version
+          ninja --version
+
+          cmake -S . -B $env:BUILD_DIR -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:NEXAMAP_VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+            -DBUILD_TESTING=ON `
+            -DENABLE_UNITY_BUILD=ON
+          if ($LASTEXITCODE -ne 0) {
+            throw "CMake configure failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Save vcpkg caches
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            vcpkg-binary-cache/${{ matrix.arch }}
+            vcpkg-downloads/${{ matrix.arch }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Build Release
+        shell: pwsh
+        run: |
+          cmake --build $env:BUILD_DIR --config Release --parallel $env:NUMBER_OF_PROCESSORS
+          if ($LASTEXITCODE -ne 0) {
+            throw "Build failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          ctest --test-dir $env:BUILD_DIR --build-config Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) {
+            throw "Tests failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Install runtime package
+        shell: pwsh
+        run: |
+          cmake --install $env:BUILD_DIR --config Release --prefix $env:PACKAGE_DIR
+          if ($LASTEXITCODE -ne 0) {
+            throw "CMake install failed with exit code $LASTEXITCODE."
+          }
+
+          $runtimeBin = Join-Path $env:BUILD_DIR "vcpkg_installed\${{ matrix.triplet }}\bin"
+          if (Test-Path $runtimeBin) {
+            Get-ChildItem $runtimeBin -Filter '*.dll' -File | Copy-Item -Destination $env:PACKAGE_DIR -Force
+          }
+
+      - name: Validate architecture and package
+        id: package
+        shell: pwsh
+        run: |
+          & .\cmake\ValidateWindowsPackage.ps1 `
+            -Architecture '${{ matrix.arch }}' `
+            -PackageDirectory $env:PACKAGE_DIR `
+            -ArchivePath $env:ARCHIVE_NAME
+
+          $archive = Get-Item $env:ARCHIVE_NAME
+          "archive_size_bytes=$($archive.Length)" >> $env:GITHUB_OUTPUT
+          "### Windows ${{ matrix.arch }} package" >> $env:GITHUB_STEP_SUMMARY
+          "- Triplet: ``${{ matrix.triplet }}``" >> $env:GITHUB_STEP_SUMMARY
+          "- Archive: ``$env:ARCHIVE_NAME``" >> $env:GITHUB_STEP_SUMMARY
+          "- Size: $([math]::Round($archive.Length / 1MB, 2)) MiB" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Show executable dependencies
+        shell: pwsh
+        run: |
+          $executable = Join-Path $env:PACKAGE_DIR 'NexaMap Editor.exe'
+          $dumpbinOutput = dumpbin /dependents $executable
+          if ($LASTEXITCODE -ne 0) {
+            throw "dumpbin failed with exit code $LASTEXITCODE."
+          }
+          $dumpbinOutput | Out-Host
+
+          $dependencies = @($dumpbinOutput | ForEach-Object {
+            if ($_ -match '^\s+([A-Za-z0-9_.-]+\.dll)\s*$') {
+              $Matches[1]
+            }
+          } | Sort-Object -Unique)
+          $systemDirectory = if ('${{ matrix.arch }}' -eq 'x86') {
+            Join-Path $env:SystemRoot 'SysWOW64'
+          } else {
+            Join-Path $env:SystemRoot 'System32'
+          }
+          foreach ($dependency in $dependencies) {
+            $packaged = Test-Path -LiteralPath (Join-Path $env:PACKAGE_DIR $dependency)
+            $system = Test-Path -LiteralPath (Join-Path $systemDirectory $dependency)
+            if (-not ($packaged -or $system)) {
+              throw "Runtime dependency is missing from the package and Windows: $dependency"
+            }
+          }
+
+      - name: Upload ${{ matrix.arch }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexaMap-Editor-Windows-${{ matrix.arch }}-Release
+          path: ${{ env.ARCHIVE_NAME }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: NexaMap-Editor-Windows-*-Release
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t archives < <(find release-assets -maxdepth 1 -type f -name 'NexaMap-Editor-Windows-*-Release.zip' -print | sort)
+          if [[ "${#archives[@]}" -ne 2 ]]; then
+            echo "Expected two Windows archives, found ${#archives[@]}." >&2
+            exit 1
+          fi
+
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${archives[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
+          else
+            gh release create "${GITHUB_REF_NAME}" "${archives[@]}" --verify-tag --generate-notes --repo "${GITHUB_REPOSITORY}"
+          fi
