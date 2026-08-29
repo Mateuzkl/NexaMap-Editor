@@ -104,7 +104,7 @@ protected:
 	Map* map;
 	House* what_house;
 
-	wxString house_name, house_id, house_rent;
+	wxString house_name, house_rent;
 
 	wxTextCtrl* name_field;
 	wxChoice* town_id_field;

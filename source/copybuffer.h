@@ -22,8 +22,10 @@
 
 #include "position.h"
 #include "basemap.h"
+#include "house.h"
 
 class Editor;
+class Map;
 
 class CopyBuffer {
 public:
@@ -47,8 +49,13 @@ public:
 	BaseMap& getBufferMap();
 
 private:
+	void captureHouse(const Map& map, uint32_t houseId);
+	HouseSnapshot getHouseSnapshot(uint32_t houseId) const;
+
 	Position copyPos;
 	BaseMap* tiles;
+	const Map* sourceMap;
+	std::map<uint32_t, HouseSnapshot> houses;
 };
 
 #endif

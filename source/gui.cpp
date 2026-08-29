@@ -1568,10 +1568,11 @@ void GUI::EndPasting() {
 bool GUI::DoUndo() {
 	Editor* editor = GetCurrentEditor();
 	if (editor && editor->actionQueue->canUndo()) {
-		const bool refreshZonePalettes = editor->actionQueue->getUndoType() == ACTION_ZONE_EDIT;
+		const ActionIdentifier action_type = editor->actionQueue->getUndoType();
+		const bool refreshDynamicPalettes = action_type == ACTION_ZONE_EDIT || action_type == ACTION_PASTE_TILES;
 		editor->actionQueue->undo();
 		InvalidateAutoborderPreview();
-		if (refreshZonePalettes) {
+		if (refreshDynamicPalettes) {
 			RefreshPalettes(nullptr, true, false);
 		}
 		if (editor->selection.size() > 0) {
@@ -1589,10 +1590,11 @@ bool GUI::DoUndo() {
 bool GUI::DoRedo() {
 	Editor* editor = GetCurrentEditor();
 	if (editor && editor->actionQueue->canRedo()) {
-		const bool refreshZonePalettes = editor->actionQueue->getRedoType() == ACTION_ZONE_EDIT;
+		const ActionIdentifier action_type = editor->actionQueue->getRedoType();
+		const bool refreshDynamicPalettes = action_type == ACTION_ZONE_EDIT || action_type == ACTION_PASTE_TILES;
 		editor->actionQueue->redo();
 		InvalidateAutoborderPreview();
-		if (refreshZonePalettes) {
+		if (refreshDynamicPalettes) {
 			RefreshPalettes(nullptr, true, false);
 		}
 		if (editor->selection.size() > 0) {
@@ -2202,10 +2204,10 @@ void GUI::ListDialog(wxWindow* parent, const wxString& title, const wxArrayStrin
 }
 
 void GUI::ShowTextBox(wxWindow* parent, const wxString& title, const wxString& content) {
-	auto* dlg = newd wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
-	dlg->SetBackgroundColour(Theme::Get(Theme::Role::Surface));
+	wxDialog dlg(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
+	dlg.SetBackgroundColour(Theme::Get(Theme::Role::Surface));
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
-	auto* text_field = newd wxTextCtrl(dlg, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_DONTWRAP);
+	auto* text_field = newd wxTextCtrl(&dlg, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_DONTWRAP);
 	text_field->SetBackgroundColour(Theme::Get(Theme::Role::Background));
 	text_field->SetForegroundColour(Theme::Get(Theme::Role::Text));
 	text_field->SetFont(wxFontInfo(9).Family(wxFONTFAMILY_TELETYPE));
@@ -2216,11 +2218,11 @@ void GUI::ShowTextBox(wxWindow* parent, const wxString& title, const wxString& c
 	topsizer->Add(text_field, wxSizerFlags(5).Expand());
 
 	wxSizer* choicesizer = newd wxBoxSizer(wxHORIZONTAL);
-	choicesizer->Add(newd wxButton(dlg, wxID_CANCEL, "OK"), wxSizerFlags(1).Center());
+	choicesizer->Add(newd wxButton(&dlg, wxID_CANCEL, "OK"), wxSizerFlags(1).Center());
 	topsizer->Add(choicesizer, wxSizerFlags(0).Center());
-	dlg->SetSizerAndFit(topsizer);
+	dlg.SetSizerAndFit(topsizer);
 
-	dlg->ShowModal();
+	dlg.ShowModal();
 }
 
 void GUI::SetHotkey(int index, Hotkey& hotkey) {

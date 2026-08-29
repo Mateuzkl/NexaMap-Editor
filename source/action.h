@@ -26,6 +26,7 @@
 class Editor;
 class Tile;
 class House;
+struct HouseSnapshot;
 class Waypoint;
 class Change;
 class Action;
@@ -39,6 +40,7 @@ enum ChangeType {
 	CHANGE_MOVE_WAYPOINT,
 	CHANGE_ZONE_REGISTRY,
 	CHANGE_RENAME_ZONE,
+	CHANGE_HOUSE_REGISTRY,
 };
 
 class Change {
@@ -62,6 +64,7 @@ private:
 public:
 	Change(Tile* tile);
 	static Change* Create(House* house, const Position& where);
+	static Change* CreateHouse(const HouseSnapshot& snapshot);
 	static Change* Create(Waypoint* wp, const Position& where);
 	static Change* CreateZone(const std::string& name, unsigned int id, bool add);
 	static Change* RenameZone(const std::string& oldName, const std::string& newName);
@@ -134,6 +137,7 @@ public:
 protected:
 	Action(Editor& editor, ActionIdentifier ident);
 	void applyZoneChange(Change* change);
+	void applyHouseChange(Change* change);
 
 	bool commited;
 	ChangeList changes;

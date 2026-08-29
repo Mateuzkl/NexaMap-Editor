@@ -23,6 +23,13 @@
 #include "editor.h"
 #include "gui.h"
 
+namespace {
+	struct HouseRegistryChange {
+		HouseSnapshot snapshot;
+		bool add = true;
+	};
+}
+
 Change::Change() :
 	type(CHANGE_NONE), data(nullptr) {
 	////
@@ -41,6 +48,13 @@ Change* Change::Create(House* house, const Position& where) {
 	p->first = house->getID();
 	p->second = where;
 	c->data = p;
+	return c;
+}
+
+Change* Change::CreateHouse(const HouseSnapshot& snapshot) {
+	auto* c = newd Change();
+	c->type = CHANGE_HOUSE_REGISTRY;
+	c->data = newd HouseRegistryChange { snapshot, true };
 	return c;
 }
 
@@ -94,6 +108,10 @@ void Change::clear() {
 			ASSERT(data);
 			delete reinterpret_cast<ZoneRenameChange*>(data);
 			break;
+		case CHANGE_HOUSE_REGISTRY:
+			ASSERT(data);
+			delete reinterpret_cast<HouseRegistryChange*>(data);
+			break;
 		case CHANGE_NONE:
 			break;
 		default:
@@ -125,6 +143,12 @@ uint32_t Change::memsize() const {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<ZoneRenameChange*>(data);
 			mem += sizeof(ZoneRenameChange) + change->from.capacity() + change->to.capacity();
+			break;
+		}
+		case CHANGE_HOUSE_REGISTRY: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<HouseRegistryChange*>(data);
+			mem += sizeof(HouseRegistryChange) + change->snapshot.name.capacity();
 			break;
 		}
 		default:
@@ -166,6 +190,41 @@ void Action::applyZoneChange(Change* c) {
 	}
 }
 
+void Action::applyHouseChange(Change* c) {
+	auto* change = reinterpret_cast<HouseRegistryChange*>(c->data);
+	ASSERT(change);
+	if (!change) {
+		return;
+	}
+
+	if (change->add) {
+		// A paste must never attach its tiles to an unrelated house that appeared
+		// under the same id. Leave the change unapplied if the invariant is broken.
+		if (editor.map.houses.getHouse(change->snapshot.id)) {
+			return;
+		}
+
+		auto* house = newd House(editor.map);
+		house->applySnapshot(change->snapshot);
+		if (!editor.map.houses.addHouse(house)) {
+			delete house;
+			return;
+		}
+		if (change->snapshot.exit != Position() && change->snapshot.exit.isValid()) {
+			house->setExit(change->snapshot.exit);
+		}
+		change->add = false;
+		return;
+	}
+
+	House* house = editor.map.houses.getHouse(change->snapshot.id);
+	if (!house || house->tileCount() != 0) {
+		return;
+	}
+	editor.map.houses.removeHouse(house);
+	change->add = true;
+}
+
 Action::~Action() {
 	auto it = changes.rbegin();
 	while (it != changes.rend()) {
@@ -195,6 +254,7 @@ size_t Action::memsize() const {
 
 			case CHANGE_ZONE_REGISTRY:
 			case CHANGE_RENAME_ZONE:
+			case CHANGE_HOUSE_REGISTRY:
 				mem += c->memsize();
 				break;
 
@@ -328,6 +388,10 @@ void Action::commit() {
 				applyZoneChange(c);
 				break;
 
+			case CHANGE_HOUSE_REGISTRY:
+				applyHouseChange(c);
+				break;
+
 			default:
 				break;
 		}
@@ -440,6 +504,10 @@ void Action::undo() {
 			case CHANGE_ZONE_REGISTRY:
 			case CHANGE_RENAME_ZONE:
 				applyZoneChange(c);
+				break;
+
+			case CHANGE_HOUSE_REGISTRY:
+				applyHouseChange(c);
 				break;
 
 			default:

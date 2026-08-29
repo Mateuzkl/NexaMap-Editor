@@ -1307,7 +1307,10 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 					if (!house) {
 						house = newd House(map);
 						house->setID(house_id);
-						map.houses.addHouse(house);
+						if (!map.houses.addHouse(house)) {
+							delete house;
+							house = map.houses.getHouse(house_id);
+						}
 					}
 				} else {
 					warning("Invalid house id from tile %d:%d:%d", pos.x, pos.y, pos.z);
@@ -1653,8 +1656,12 @@ bool IOMapOTBM::loadHouses(Map& map, pugi::xml_document& doc) {
 		if ((attribute = houseNode.attribute("houseid"))) {
 			house = map.houses.getHouse(attribute.as_uint());
 			if (!house) {
-				break;
+				warning("House metadata references unknown house id %u; entry was ignored.", attribute.as_uint());
+				continue;
 			}
+		} else {
+			warning("House metadata entry has no house id; entry was ignored.");
+			continue;
 		}
 
 		if ((attribute = houseNode.attribute("name"))) {
@@ -1689,6 +1696,7 @@ bool IOMapOTBM::loadHouses(Map& map, pugi::xml_document& doc) {
 		} else {
 			warning("House %d has no town! House was removed.", house->getID());
 			map.houses.removeHouse(house);
+			continue;
 		}
 
 		if ((attribute = houseNode.attribute("clientid"))) {
