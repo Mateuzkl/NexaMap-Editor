@@ -19,6 +19,14 @@ namespace {
 		std::ofstream stream(file, std::ios::binary | std::ios::trunc);
 		stream << content;
 	}
+
+	bool samePath(const std::filesystem::path& left, const std::filesystem::path& right) {
+		std::error_code leftError;
+		std::error_code rightError;
+		const std::filesystem::path canonicalLeft = std::filesystem::weakly_canonical(left, leftError);
+		const std::filesystem::path canonicalRight = std::filesystem::weakly_canonical(right, rightError);
+		return !leftError && !rightError && canonicalLeft == canonicalRight;
+	}
 }
 
 int main() {
@@ -57,7 +65,7 @@ int main() {
 	const ClientAssetsValidationResult otc = ClientAssetsManifestLoader::Validate(otcRoot);
 	check(otc.valid, "OTC root with data/things/version is accepted");
 	check(otc.manifest.layout == ClientAssetsLayout::OtClient, "OTC layout is detected");
-	check(otc.manifest.assetsDirectory == otcAssets, "OTC version assets directory is resolved");
+	check(samePath(otc.manifest.assetsDirectory, otcAssets), "OTC version assets directory is resolved");
 	check(otc.manifest.version == "15.25 (OTC)", "OTC directory version is formatted");
 	check(ClientAssetsManifestLoader::Validate(otcAssets).valid, "OTC version directory can be selected directly");
 
@@ -73,7 +81,7 @@ int main() {
 	const ClientAssetsValidationResult directOtc = ClientAssetsManifestLoader::Validate(directOtcRoot);
 	check(directOtc.valid, "OTC root with direct data/things catalog is accepted");
 	check(directOtc.manifest.layout == ClientAssetsLayout::OtClient, "direct OTC layout is detected");
-	check(directOtc.manifest.assetsDirectory == directOtcAssets, "direct OTC assets directory is resolved");
+	check(samePath(directOtc.manifest.assetsDirectory, directOtcAssets), "direct OTC assets directory is resolved");
 
 	const std::filesystem::path olderOtcAssets = directOtcAssets / "1500";
 	const std::filesystem::path newerOtcAssets = directOtcAssets / "1526";
@@ -88,7 +96,7 @@ int main() {
 	}
 	const ClientAssetsValidationResult preferredOtc = ClientAssetsManifestLoader::Validate(directOtcRoot);
 	check(preferredOtc.valid, "OTC root with direct and versioned catalogs is accepted");
-	check(preferredOtc.manifest.assetsDirectory == newerOtcAssets, "newest OTC version is preferred over direct catalog");
+	check(samePath(preferredOtc.manifest.assetsDirectory, newerOtcAssets), "newest OTC version is preferred over direct catalog");
 	check(preferredOtc.manifest.version == "15.26 (OTC)", "preferred OTC version is retained");
 
 	write(root / "assets" / "catalog-content.json", R"([
