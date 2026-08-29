@@ -1147,6 +1147,9 @@ namespace OnSearchForStuff {
 				if (item->getActionID() > 0) {
 					label << "AID: " << item->getActionID() << " ";
 				}
+				if (item->getUniqueID() > 0 || item->getActionID() > 0) {
+					label << "ID: " << item->getID() << " ";
+				}
 
 				label << wxstr(item->getName());
 
