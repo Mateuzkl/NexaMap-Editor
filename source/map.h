@@ -64,7 +64,6 @@ private:
 	const SessionId sessionId;
 
 public:
-
 	// Operations on the entire map
 	void cleanInvalidTiles(bool showdialog = false);
 	Position getZonePosition(unsigned int zoneId);

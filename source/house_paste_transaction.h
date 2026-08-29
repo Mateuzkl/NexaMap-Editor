@@ -23,10 +23,7 @@ namespace HousePasteTransaction {
 
 	inline bool CanUndo(std::span<const UndoState> states) {
 		return std::ranges::all_of(states, [](const UndoState& state) {
-			return state.exists &&
-			       state.sessionMatches &&
-			       state.snapshotMatches &&
-			       state.houseTileCount == state.affectedHouseTileCount;
+			return state.exists && state.sessionMatches && state.snapshotMatches && state.houseTileCount == state.affectedHouseTileCount;
 		});
 	}
 

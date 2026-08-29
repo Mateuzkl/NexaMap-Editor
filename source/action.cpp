@@ -212,10 +212,7 @@ bool Action::canApplyHouseChanges() const {
 			continue;
 		}
 
-		if (!house ||
-		    house->getSessionId() != change->activeHouseSessionId ||
-		    house->getSnapshot() != change->snapshot ||
-		    house->tileCount() != 0) {
+		if (!house || house->getSessionId() != change->activeHouseSessionId || house->getSnapshot() != change->snapshot || house->tileCount() != 0) {
 			return false;
 		}
 	}
@@ -251,10 +248,7 @@ bool Action::applyHouseChange(Change* c) {
 	}
 
 	House* house = editor.map.houses.getHouse(change->snapshot.id);
-	if (!house ||
-	    house->getSessionId() != change->activeHouseSessionId ||
-	    house->getSnapshot() != change->snapshot ||
-	    house->tileCount() != 0) {
+	if (!house || house->getSessionId() != change->activeHouseSessionId || house->getSnapshot() != change->snapshot || house->tileCount() != 0) {
 		return false;
 	}
 	editor.map.houses.removeHouse(house);
