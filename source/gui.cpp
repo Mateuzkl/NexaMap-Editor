@@ -113,12 +113,7 @@ namespace {
 		normalized.Trim(true);
 		normalized.Trim(false);
 
-		return normalized.StartsWith("Invalid item id ") ||
-		       (normalized.StartsWith("Item ") && normalized.EndsWith(" is not ground item.")) ||
-		       normalized == "Ground dependency equivalent is not a ground item." ||
-		       normalized.StartsWith("There is no itemtype with id ") ||
-		       normalized.StartsWith("Tileset: ") ||
-		       normalized.StartsWith("Unknown item id #");
+		return normalized.StartsWith("Invalid item id ") || (normalized.StartsWith("Item ") && normalized.EndsWith(" is not ground item.")) || normalized == "Ground dependency equivalent is not a ground item." || normalized.StartsWith("There is no itemtype with id ") || normalized.StartsWith("Tileset: ") || normalized.StartsWith("Unknown item id #");
 	}
 
 	void AppendActionableMaterialWarnings(wxArrayString& target, const wxArrayString& materialWarnings) {
