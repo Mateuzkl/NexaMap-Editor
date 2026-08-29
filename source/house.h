@@ -19,6 +19,7 @@
 #define RME_HOUSE_H_
 
 #include "position.h"
+#include "session_id.h"
 
 class Map;
 class Tile;
@@ -36,6 +37,8 @@ struct HouseSnapshot {
 	uint32_t townid = 0;
 	bool guildhall = false;
 	Position exit;
+
+	bool operator==(const HouseSnapshot&) const = default;
 };
 
 class House {
@@ -45,6 +48,9 @@ public:
 
 	uint32_t getID() const {
 		return id;
+	}
+	SessionId getSessionId() const noexcept {
+		return sessionId;
 	}
 	void setID(uint32_t newId) {
 		this->id = newId;
@@ -79,6 +85,7 @@ public:
 	Position getDoorPositionByID(uint8_t id_) const;
 
 private:
+	const SessionId sessionId;
 	uint32_t id;
 
 protected:

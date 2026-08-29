@@ -32,8 +32,8 @@ namespace {
 }
 
 CopyBuffer::CopyBuffer() :
-	tiles(newd BaseMap()),
-	sourceMap(nullptr) {
+	tiles(std::make_unique<BaseMap>()),
+	sourceMapSessionId(InvalidSessionId) {
 	;
 }
 
@@ -42,9 +42,7 @@ BaseMap& CopyBuffer::getBufferMap() {
 	return *tiles;
 }
 
-CopyBuffer::~CopyBuffer() {
-	clear();
-}
+CopyBuffer::~CopyBuffer() = default;
 
 Position CopyBuffer::getPosition() const {
 	ASSERT(tiles);
@@ -52,15 +50,14 @@ Position CopyBuffer::getPosition() const {
 }
 
 void CopyBuffer::clear() {
-	delete tiles;
-	tiles = nullptr;
-	sourceMap = nullptr;
+	tiles.reset();
+	sourceMapSessionId = InvalidSessionId;
 	houses.clear();
 }
 
-void CopyBuffer::replace(BaseMap* map, const Position& position) {
+void CopyBuffer::replace(std::unique_ptr<BaseMap> map, const Position& position) {
 	clear();
-	tiles = map;
+	tiles = std::move(map);
 	copyPos = position;
 }
 
@@ -95,8 +92,8 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	}
 
 	clear();
-	tiles = newd BaseMap();
-	sourceMap = &editor.map;
+	tiles = std::make_unique<BaseMap>();
+	sourceMapSessionId = editor.map.getSessionId();
 
 	int tile_count = 0;
 	int item_count = 0;
@@ -153,8 +150,8 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	}
 
 	clear();
-	tiles = newd BaseMap();
-	sourceMap = &editor.map;
+	tiles = std::make_unique<BaseMap>();
+	sourceMapSessionId = editor.map.getSessionId();
 
 	int tile_count = 0;
 	int item_count = 0;
@@ -270,7 +267,7 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 	}
 
 	std::map<uint32_t, uint32_t> house_id_map;
-	const bool same_map = sourceMap == &editor.map;
+	const bool same_map = sourceMapSessionId != InvalidSessionId && sourceMapSessionId == editor.map.getSessionId();
 	bool created_houses = false;
 	for (uint32_t old_house_id : pasted_house_ids) {
 		if (same_map && editor.map.houses.getHouse(old_house_id)) {
@@ -297,11 +294,14 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		// next conflicting House gets a different getEmptyID() result.
 		Action* house_action = editor.actionQueue->createAction(batchAction);
 		house_action->addChange(Change::CreateHouse(snapshot));
-		batchAction->addAndCommitAction(house_action);
-		if (editor.map.houses.getHouse(new_house_id)) {
-			house_id_map.emplace(old_house_id, new_house_id);
-			created_houses = true;
+		if (!batchAction->addAndCommitAction(house_action)) {
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Paste cancelled: unable to create all required Houses.");
+			return;
 		}
+		house_id_map.emplace(old_house_id, new_house_id);
+		created_houses = true;
 	}
 
 	Action* action = editor.actionQueue->createAction(batchAction);

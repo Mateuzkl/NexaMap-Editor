@@ -130,6 +130,7 @@ House::House(Map& map) :
 	beds(0),
 	townid(0),
 	guildhall(false),
+	sessionId(CreateSessionId()),
 	id(0),
 	map(&map),
 	exit(0, 0, 0) {

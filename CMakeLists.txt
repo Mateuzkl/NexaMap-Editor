@@ -94,6 +94,19 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+	add_executable(house_paste_hardening_tests
+		tests/house_paste_hardening_tests.cpp
+		source/session_id.cpp
+	)
+	target_include_directories(house_paste_hardening_tests PRIVATE source)
+	set_target_properties(house_paste_hardening_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/house_paste_hardening_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/house_paste_hardening_tests"
+	)
+	add_test(NAME house_paste_hardening_tests COMMAND house_paste_hardening_tests)
+
 	add_executable(border_learning_tests
 		tests/border_learning_tests.cpp
 		source/border_learning.cpp

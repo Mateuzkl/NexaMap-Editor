@@ -1570,7 +1570,11 @@ bool GUI::DoUndo() {
 	if (editor && editor->actionQueue->canUndo()) {
 		const ActionIdentifier action_type = editor->actionQueue->getUndoType();
 		const bool refreshDynamicPalettes = action_type == ACTION_ZONE_EDIT || action_type == ACTION_PASTE_TILES;
-		editor->actionQueue->undo();
+		if (!editor->actionQueue->undo()) {
+			SetStatusText("Undo cancelled: the pasted House was changed or removed.");
+			root->UpdateMenubar();
+			return false;
+		}
 		InvalidateAutoborderPreview();
 		if (refreshDynamicPalettes) {
 			RefreshPalettes(nullptr, true, false);
@@ -1592,7 +1596,11 @@ bool GUI::DoRedo() {
 	if (editor && editor->actionQueue->canRedo()) {
 		const ActionIdentifier action_type = editor->actionQueue->getRedoType();
 		const bool refreshDynamicPalettes = action_type == ACTION_ZONE_EDIT || action_type == ACTION_PASTE_TILES;
-		editor->actionQueue->redo();
+		if (!editor->actionQueue->redo()) {
+			SetStatusText("Redo cancelled: a House id needed by the paste is already in use.");
+			root->UpdateMenubar();
+			return false;
+		}
 		InvalidateAutoborderPreview();
 		if (refreshDynamicPalettes) {
 			RefreshPalettes(nullptr, true, false);
