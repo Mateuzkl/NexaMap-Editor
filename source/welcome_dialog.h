@@ -210,7 +210,7 @@ private:
 
 class RecentItem : public wxControl {
 public:
-	RecentItem(RecentMapsPanel* parent, const wxString& itemName);
+	RecentItem(RecentMapsPanel* parent, const wxString& itemName, const wxString& serverType = {});
 
 	void SetHovered(bool hovered);
 	void SetSelected(bool selected);
@@ -229,6 +229,7 @@ private:
 	void OnFocus(wxFocusEvent& event);
 
 	wxString m_item_text;
+	wxString m_server_type;
 	bool m_hovered = false;
 	bool m_selected = false;
 	bool m_pressed = false;

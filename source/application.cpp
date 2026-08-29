@@ -294,7 +294,20 @@ bool Application::OnInit() {
 	m_single_instance_checker = newd wxSingleInstanceChecker; // Instance checker has to stay alive throughout the applications lifetime
 	if (g_settings.getInteger(Config::ONLY_ONE_INSTANCE) && m_single_instance_checker->IsAnotherRunning()) {
 		RMEProcessClient client;
-		wxConnectionBase* connection = client.MakeConnection("localhost", "rme_host", "rme_talk");
+		wxConnectionBase* connection = nullptr;
+		// The primary process may own the single-instance lock just before its
+		// DDE server is ready. Retry that short startup window and suppress the
+		// wxWidgets DDE error dialog; failure simply leaves the primary instance
+		// responsible for the user's existing session.
+		for (int attempt = 0; attempt < 5 && connection == nullptr; ++attempt) {
+			{
+				wxLogNull suppressExpectedIpcError;
+				connection = client.MakeConnection("localhost", "rme_host", "rme_talk");
+			}
+			if (connection == nullptr && attempt < 4) {
+				wxMilliSleep(100);
+			}
+		}
 		if (connection) {
 			wxString fileName;
 			if (ParseCommandLineMap(fileName)) {

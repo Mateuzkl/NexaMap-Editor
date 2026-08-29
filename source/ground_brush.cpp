@@ -83,7 +83,10 @@ bool AutoBorder::load(pugi::xml_node node, wxArrayString& warnings, GroundBrush*
 
 		ItemType& it = g_items[itemid];
 		if (it.id == 0) {
-			warnings.push_back("Invalid item ID " + std::to_string(itemid) + " for border " + std::to_string(id));
+			// The bundled border catalog spans multiple client generations. An
+			// item missing from the active server items.otb is an inapplicable
+			// variant, not a broken workspace; leave that edge unavailable.
+			wxLogDebug("Skipped unavailable item ID %u for border %u.", static_cast<unsigned int>(itemid), static_cast<unsigned int>(id));
 			continue;
 		}
 
@@ -333,7 +336,14 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 			}
 
 			if (!it.isGroundTile()) {
-				warnings.push_back("\nItem " + std::to_string(itemId) + " is not ground item.");
+				// Item 100 is only the historical fallback for the editor's
+				// internal void brush. Newer TFS item databases may legitimately
+				// assign that Server ID to a non-ground item; in that case the
+				// void brush remains empty and must not be reported as a broken
+				// server material definition.
+				if (getName() != "void" || itemId != 100) {
+					warnings.push_back("\nItem " + std::to_string(itemId) + " is not ground item.");
+				}
 				continue;
 			}
 

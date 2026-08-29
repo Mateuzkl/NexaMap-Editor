@@ -9,6 +9,7 @@
 #include <cctype>
 #include <deque>
 #include <fstream>
+#include <initializer_list>
 #include <optional>
 #include <regex>
 #include <system_error>
@@ -125,6 +126,160 @@ namespace {
 		return std::none_of(path.begin(), path.end(), [](const std::filesystem::path& component) {
 			return component == "..";
 		});
+	}
+
+	bool IsPathWithin(const std::filesystem::path& path, const std::filesystem::path& directory) {
+		if (path.empty() || directory.empty()) {
+			return false;
+		}
+		const std::filesystem::path relative = Normalize(path).lexically_relative(Normalize(directory));
+		return relative == "." || IsSafeRelativePath(relative);
+	}
+
+	bool HasDirectory(const std::filesystem::path& root, std::initializer_list<const char*> candidates) {
+		return std::any_of(candidates.begin(), candidates.end(), [&](const char* relative) {
+			return IsDirectory(root / relative);
+		});
+	}
+
+	bool HasFile(const std::filesystem::path& root, std::initializer_list<const char*> candidates) {
+		return std::any_of(candidates.begin(), candidates.end(), [&](const char* relative) {
+			return IsRegularFile(root / relative);
+		});
+	}
+
+	ServerType ModernTypeFromName(const std::string& value) {
+		const std::string name = Lower(value);
+		if (name.find("crystal") != std::string::npos) {
+			return ServerType::Crystal;
+		}
+		if (name.find("canary") != std::string::npos || name == "data-global" || name == "data-otservbr-global") {
+			return ServerType::Canary;
+		}
+		return ServerType::CanaryCrystal;
+	}
+
+	struct ProfileEvidence {
+		ServerType type = ServerType::UnknownGeneric;
+		int score = 0;
+	};
+
+	ProfileEvidence DetectProfileEvidence(const std::filesystem::path& root, const std::filesystem::path& mapPath = {}) {
+		const bool hasClassicItemsOtb = IsRegularFile(root / "data/items/items.otb");
+		const bool hasAlternateItemsOtb = HasFile(root, { "data/items.otb", "items/items.otb", "items.otb" });
+		const bool hasItemsOtb = hasClassicItemsOtb || hasAlternateItemsOtb;
+		const bool hasClassicItemsXml = IsRegularFile(root / "data/items/items.xml");
+		const bool hasAlternateItemsXml = HasFile(root, { "data/items.xml", "items/items.xml", "items.xml" });
+		const bool hasAppearances = HasFile(root, { "data/items/appearances.dat", "data/appearances.dat", "items/appearances.dat", "appearances.dat" });
+		const bool hasConfig = IsRegularFile(root / "config.lua") || IsRegularFile(root / "config.lua.dist");
+		const bool hasMonsters = HasDirectory(root, { "data/monster", "data/monsters", "monster", "monsters" });
+		const bool hasNpcs = HasDirectory(root, { "data/npc", "data/npcs", "npc", "npcs" });
+		const bool mapInDataWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "data/world");
+		const bool mapInRootWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "world");
+
+		int tfsScore = 0;
+		if (hasClassicItemsOtb) {
+			tfsScore += 85;
+		} else if (hasAlternateItemsOtb) {
+			tfsScore += 55;
+		}
+		if (hasClassicItemsXml) {
+			tfsScore += 20;
+		} else if (hasAlternateItemsXml) {
+			tfsScore += 10;
+		}
+		if (mapInDataWorld) {
+			tfsScore += 50;
+		} else if (mapInRootWorld) {
+			tfsScore += 25;
+		}
+		if (hasConfig) {
+			tfsScore += 10;
+		}
+		tfsScore += hasMonsters ? 10 : 0;
+		tfsScore += hasNpcs ? 10 : 0;
+		if (!hasItemsOtb) {
+			tfsScore = 0;
+		}
+
+		int modernScore = hasAppearances ? 30 : 0;
+		ServerType modernType = ServerType::CanaryCrystal;
+		std::filesystem::path config = root / "config.lua";
+		if (!IsRegularFile(config)) {
+			config = root / "config.lua.dist";
+		}
+		if (IsRegularFile(config)) {
+			const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
+			if (configuredDataPack) {
+				const std::filesystem::path relativeDataPack(*configuredDataPack);
+				if (IsSafeRelativePath(relativeDataPack)) {
+					const std::filesystem::path configuredWorld = root / relativeDataPack / "world";
+					if (mapPath.empty() || IsPathWithin(mapPath, configuredWorld)) {
+						modernScore += 170;
+						modernType = ModernTypeFromName(relativeDataPack.filename().string());
+					}
+				}
+			}
+		}
+
+		struct NamedDataPack {
+			const char* directory;
+			ServerType type;
+		};
+		static constexpr std::array<NamedDataPack, 4> modernDataPacks {
+			NamedDataPack { "data-global", ServerType::Canary },
+			NamedDataPack { "data-canary", ServerType::Canary },
+			NamedDataPack { "data-otservbr-global", ServerType::Canary },
+			NamedDataPack { "data-crystal", ServerType::Crystal },
+		};
+		for (const NamedDataPack& dataPack : modernDataPacks) {
+			const std::filesystem::path worldDirectory = root / dataPack.directory / "world";
+			if (IsDirectory(worldDirectory) && (mapPath.empty() || IsPathWithin(mapPath, worldDirectory))) {
+				modernScore += 150;
+				modernType = dataPack.type;
+				break;
+			}
+		}
+
+		const std::string rootName = Lower(root.filename().string());
+		if (hasAppearances && (rootName.find("canary") != std::string::npos || rootName.find("crystal") != std::string::npos)) {
+			modernScore += 55;
+			modernType = ModernTypeFromName(rootName);
+		}
+
+		// A stray appearances.dat is not enough to turn a classic items.otb
+		// workspace into Canary/Crystal. Dedicated loading requires structural
+		// evidence from the active/named datapack or an identified modern root.
+		if (modernScore > tfsScore && modernScore >= 80) {
+			return { modernType, modernScore };
+		}
+		if (tfsScore >= 75) {
+			return { ServerType::Tfs, tfsScore };
+		}
+		return {};
+	}
+
+	struct DetectedMapContext {
+		std::filesystem::path root;
+		ServerType type = ServerType::UnknownGeneric;
+		int score = 0;
+	};
+
+	DetectedMapContext DetectMapContext(const std::filesystem::path& mapPath, const std::filesystem::path& boundaryRoot) {
+		DetectedMapContext best { Normalize(boundaryRoot), ServerType::UnknownGeneric, 0 };
+		std::filesystem::path candidate = Normalize(mapPath).parent_path();
+		const std::filesystem::path boundary = Normalize(boundaryRoot);
+		while (!candidate.empty() && IsPathWithin(candidate, boundary)) {
+			const ProfileEvidence evidence = DetectProfileEvidence(candidate, mapPath);
+			if (evidence.score > best.score) {
+				best = { candidate, evidence.type, evidence.score };
+			}
+			if (candidate == boundary || candidate == candidate.root_path()) {
+				break;
+			}
+			candidate = candidate.parent_path();
+		}
+		return best;
 	}
 
 	bool IsAuxiliaryMap(const std::filesystem::path& path) {
@@ -311,22 +466,6 @@ namespace {
 		return ItemIdMode::Unknown;
 	}
 
-	std::string DetectProfile(const std::filesystem::path& root, bool hasAppearances) {
-		const std::string name = Lower(root.filename().string());
-		if (name.find("canary") != std::string::npos) {
-			return "Canary";
-		}
-		if (name.find("crystal") != std::string::npos) {
-			return "Crystal";
-		}
-		if (hasAppearances) {
-			return "Canary/Crystal";
-		}
-		if (name.find("forgotten") != std::string::npos || name.find("tfs") != std::string::npos || IsRegularFile(root / "config.lua")) {
-			return "TFS";
-		}
-		return "OT Server";
-	}
 }
 
 ResourceFingerprint ResourceFingerprint::Read(const std::filesystem::path& path) {
@@ -370,11 +509,20 @@ bool ServerWorkspace::hasAppearances() const {
 	return appearancesFingerprint.exists;
 }
 
+bool ServerWorkspace::usesCanaryCrystalLoader() const {
+	return UsesCanaryCrystalLoader(serverType);
+}
+
 bool ServerWorkspace::containsMap(const std::filesystem::path& path) const {
+	return findMap(path) != nullptr;
+}
+
+const DetectedMap* ServerWorkspace::findMap(const std::filesystem::path& path) const {
 	const std::filesystem::path normalized = Normalize(path);
-	return std::any_of(maps.begin(), maps.end(), [&](const DetectedMap& map) {
+	const auto found = std::find_if(maps.begin(), maps.end(), [&](const DetectedMap& map) {
 		return map.path == normalized;
 	});
+	return found == maps.end() ? nullptr : &*found;
 }
 
 bool ServerWorkspace::trackedResourcesChanged() const {
@@ -412,12 +560,24 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	workspace.itemsOtbPath = knownItems.otb;
 	workspace.itemsXmlPath = knownItems.xml;
 	workspace.appearancesPath = knownItems.appearances;
-	workspace.serverProfile = DetectProfile(root, !workspace.appearancesPath.empty());
 	DetectConfiguredMap(workspace);
+	if (!workspace.activeDataDirectory.empty()) {
+		const KnownItemFiles activeItems = FindKnownItems(workspace.activeDataDirectory);
+		if (!activeItems.otb.empty()) {
+			workspace.itemsOtbPath = activeItems.otb;
+		}
+		if (!activeItems.xml.empty()) {
+			workspace.itemsXmlPath = activeItems.xml;
+		}
+		if (!activeItems.appearances.empty()) {
+			workspace.appearancesPath = activeItems.appearances;
+		}
+	}
 
-	static constexpr std::array<const char*, 7> mapDirectories {
+	static constexpr std::array<const char*, 8> mapDirectories {
 		"data/world",
 		"data-global/world",
+		"data-canary/world",
 		"data-crystal/world",
 		"data-otservbr-global/world",
 		"data/maps",
@@ -429,8 +589,16 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	if (workspace.mapsDirectory.empty()) {
 		workspace.mapsDirectory = FirstExistingDirectory(root, mapDirectories);
 	}
-	workspace.monstersDirectory = FirstExistingDirectory(root, monsterDirectories);
-	workspace.npcsDirectory = FirstExistingDirectory(root, npcDirectories);
+	if (!workspace.activeDataDirectory.empty()) {
+		workspace.monstersDirectory = FirstExistingDirectory(workspace.activeDataDirectory, monsterDirectories);
+		workspace.npcsDirectory = FirstExistingDirectory(workspace.activeDataDirectory, npcDirectories);
+	}
+	if (workspace.monstersDirectory.empty()) {
+		workspace.monstersDirectory = FirstExistingDirectory(root, monsterDirectories);
+	}
+	if (workspace.npcsDirectory.empty()) {
+		workspace.npcsDirectory = FirstExistingDirectory(root, npcDirectories);
+	}
 
 	std::deque<QueueEntry> queue;
 	queue.push_back({ root, 0 });
@@ -485,6 +653,11 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		ScanMaps(workspace, workspace.mapsDirectory, options);
 	}
 	SelectFallbackPrimaryMap(workspace);
+	for (DetectedMap& map : workspace.maps) {
+		const DetectedMapContext context = DetectMapContext(map.path, root);
+		map.serverRootPath = context.root;
+		map.serverType = context.type;
+	}
 	std::sort(workspace.maps.begin(), workspace.maps.end(), [&](const DetectedMap& left, const DetectedMap& right) {
 		const bool leftPrimary = left.path == workspace.primaryMapPath;
 		const bool rightPrimary = right.path == workspace.primaryMapPath;
@@ -499,8 +672,16 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	workspace.itemsOtbFingerprint = ResourceFingerprint::Read(workspace.itemsOtbPath);
 	workspace.itemsXmlFingerprint = ResourceFingerprint::Read(workspace.itemsXmlPath);
 	workspace.appearancesFingerprint = ResourceFingerprint::Read(workspace.appearancesPath);
-	workspace.serverProfile = DetectProfile(root, workspace.appearancesFingerprint.exists);
-	workspace.itemIdMode = workspace.appearancesFingerprint.exists ? ItemIdMode::ClientId : DetectModeFromMapNames(workspace.maps);
+	const DetectedMap* primaryMap = workspace.findMap(workspace.primaryMapPath);
+	if (primaryMap != nullptr) {
+		workspace.serverType = primaryMap->serverType;
+	} else {
+		workspace.serverType = DetectProfileEvidence(root).type;
+	}
+	workspace.serverProfile = ServerTypeName(workspace.serverType);
+	workspace.itemIdMode = workspace.usesCanaryCrystalLoader()
+		? ItemIdMode::ClientId
+		: DetectModeFromMapNames(workspace.maps);
 	if (!workspace.hasRequiredResources()) {
 		result.error = "Server folder selected, but neither items.otb nor appearances.dat was found.";
 	} else if (!workspace.itemsXmlFingerprint.exists) {
@@ -518,6 +699,25 @@ const char* ItemIdModeName(ItemIdMode mode) {
 		default:
 			return "Unknown";
 	}
+}
+
+const char* ServerTypeName(ServerType type) {
+	switch (type) {
+		case ServerType::Tfs:
+			return "TFS";
+		case ServerType::Canary:
+			return "Canary";
+		case ServerType::Crystal:
+			return "Crystal";
+		case ServerType::CanaryCrystal:
+			return "Canary/Crystal";
+		default:
+			return "Unknown/Generic";
+	}
+}
+
+bool UsesCanaryCrystalLoader(ServerType type) {
+	return type == ServerType::Canary || type == ServerType::Crystal || type == ServerType::CanaryCrystal;
 }
 
 ItemIdMode ResolveEffectiveItemIdMode(ItemIdModePreference preference, ItemIdMode clientAssetMode, ItemIdMode serverEvidence) {

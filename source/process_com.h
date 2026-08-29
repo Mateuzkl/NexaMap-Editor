@@ -39,12 +39,7 @@ public:
 };
 
 class RMEProcessClient : public wxClient {
-	wxConnectionBase* proc;
-
 public:
-	RMEProcessClient();
-	~RMEProcessClient() override;
-
 	wxConnectionBase* OnMakeConnection() override;
 };
 

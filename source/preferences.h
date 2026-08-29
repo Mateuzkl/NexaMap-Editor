@@ -66,6 +66,7 @@ protected:
 	wxCheckBox* allow_multiple_orderitems_chkbox;
 	wxCheckBox* merge_move_chkbox;
 	wxCheckBox* merge_paste_chkbox;
+	wxCheckBox* dragon_souls_otbm_count_uint16_chkbox;
 
 	// Graphics
 	wxCheckBox* icon_selection_shadow_chkbox;

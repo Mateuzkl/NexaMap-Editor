@@ -80,9 +80,10 @@ namespace {
 		return creatureType;
 	}
 
-	void addOrUpdateLuaCreature(CreatureMap& creatureMap, CreatureType* creatureType) {
+	void addOrUpdateLuaCreature(CreatureMap& creatureMap, CreatureType* creatureType, bool standard) {
 		auto iter = creatureMap.find(as_lower_str(creatureType->name));
 		if (iter == creatureMap.end()) {
+			creatureType->standard = standard;
 			creatureMap[as_lower_str(creatureType->name)] = creatureType;
 			return;
 		}
@@ -93,7 +94,7 @@ namespace {
 		*current = *creatureType;
 		current->brush = currentBrush;
 		current->in_other_tileset = inOtherTileset;
-		current->standard = false;
+		current->standard = standard;
 		current->missing = false;
 		delete creatureType;
 	}
@@ -505,7 +506,7 @@ bool CreatureDatabase::importLuaFromOT(const FileName& filename, wxString& error
 		return false;
 	}
 
-	addOrUpdateLuaCreature(creature_map, creatureType);
+	addOrUpdateLuaCreature(creature_map, creatureType, false);
 	g_materials.createOtherTileset();
 	return true;
 }
@@ -532,7 +533,11 @@ static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directo
 		if (!creatureType) {
 			continue;
 		}
-		addOrUpdateLuaCreature(creatureMap, creatureType);
+		// Creatures discovered automatically from the active server workspace
+		// belong to that workspace. Do not persist them into the shared user
+		// creature overlay, where they would be reloaded as stale duplicates
+		// when another TFS/Canary/Crystal project is opened.
+		addOrUpdateLuaCreature(creatureMap, creatureType, true);
 	}
 
 	g_materials.createOtherTileset();

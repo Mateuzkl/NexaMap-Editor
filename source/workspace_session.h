@@ -11,6 +11,7 @@
 #include <wx/string.h>
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 enum class WorkspaceClientMode : uint8_t {
@@ -35,6 +36,7 @@ public:
 
 	bool configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist = true);
 	bool configureServer(const wxString& path, wxString& error, bool persist = true);
+	bool selectDetectedMap(const wxString& path, wxString& error, bool persist = true);
 	bool rescanServer(wxString& error);
 	bool restoreCompatibleClient(wxString& error, wxArrayString& warnings, bool persist = true);
 
@@ -49,6 +51,7 @@ public:
 	[[nodiscard]] bool hasCompatibleServerResources() const;
 	[[nodiscard]] bool isReady() const;
 	[[nodiscard]] bool containsMap(const wxString& path) const;
+	[[nodiscard]] std::optional<DetectedMap> getDetectedMap(const wxString& path) const;
 	[[nodiscard]] std::vector<wxString> getDetectedMaps() const;
 	[[nodiscard]] uint64_t getGeneration() const;
 
@@ -57,6 +60,7 @@ private:
 
 	WorkspaceClientSelection client;
 	ServerWorkspace server;
+	std::filesystem::path selectedDetectedMapPath;
 	wxString serverError;
 	ItemIdModePreference idModePreference = ItemIdModePreference::Auto;
 	uint64_t generation = 0;

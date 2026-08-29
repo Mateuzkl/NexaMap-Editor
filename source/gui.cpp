@@ -107,6 +107,57 @@ namespace {
 		changed = g_workspace.getGeneration() != previousGeneration;
 		return true;
 	}
+
+	bool IsInapplicableMaterialItemWarning(const wxString& warning) {
+		wxString normalized = warning;
+		normalized.Trim(true);
+		normalized.Trim(false);
+
+		return normalized.StartsWith("Invalid item id ") ||
+		       (normalized.StartsWith("Item ") && normalized.EndsWith(" is not ground item.")) ||
+		       normalized == "Ground dependency equivalent is not a ground item." ||
+		       normalized.StartsWith("There is no itemtype with id ") ||
+		       normalized.StartsWith("Tileset: ") ||
+		       normalized.StartsWith("Unknown item id #");
+	}
+
+	void AppendActionableMaterialWarnings(wxArrayString& target, const wxArrayString& materialWarnings) {
+		wxString pendingBrushHeader;
+		for (const wxString& warning : materialWarnings) {
+			if (warning.StartsWith("Errors while loading brush \"")) {
+				// A brush header is emitted only if that brush also has a warning
+				// other than an item missing from/incompatible with the active OTB.
+				pendingBrushHeader = warning;
+				continue;
+			}
+
+			if (IsInapplicableMaterialItemWarning(warning)) {
+				continue;
+			}
+
+			if (!pendingBrushHeader.empty()) {
+				target.push_back(pendingBrushHeader);
+				pendingBrushHeader.clear();
+			}
+			target.push_back(warning);
+		}
+	}
+
+	void AppendActionableDedicatedCreatureWarnings(wxArrayString& target, const wxArrayString& catalogWarnings) {
+		for (const wxString& warning : catalogWarnings) {
+			const bool sharedMonsterNpcName = warning.StartsWith("Duplicate creature type name \"");
+			const bool unsupportedCatalogOutfit = warning.StartsWith("Invalid creature \"") && warning.Contains("\" look type #");
+			if (sharedMonsterNpcName || unsupportedCatalogOutfit) {
+				// Canary/Crystal legitimately contains some identical monster/NPC
+				// names, and the bundled catalog can be newer than the selected
+				// appearance package. Both cases are non-fatal and remain available
+				// in the diagnostic log without interrupting workspace opening.
+				wxLogDebug("Canary/Crystal creature catalog: " + warning);
+				continue;
+			}
+			target.push_back(warning);
+		}
+	}
 }
 
 // Global GUI instance
@@ -436,7 +487,7 @@ bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
 	const uint64_t generation = g_workspace.getGeneration();
 	force = force || serverResourcesChanged || generation != loaded_workspace_generation;
 	bool loaded = false;
-	if (g_workspace.getClient().mode == WorkspaceClientMode::Appearances) {
+	if (g_workspace.getServer().usesCanaryCrystalLoader()) {
 		loaded = LoadCanaryCrystalAssets(error, warnings, force);
 	} else {
 		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force);
@@ -730,14 +781,18 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	}
 
 	g_gui.SetLoadDone(50, "Loading materials.xml ...");
-	if (!g_materials.loadMaterials(editorDataDirectory + "materials.xml", error, warnings)) {
+	wxArrayString materialWarnings;
+	if (!g_materials.loadMaterials(editorDataDirectory + "materials.xml", error, materialWarnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + error);
 	}
+	AppendActionableMaterialWarnings(warnings, materialWarnings);
 
 	g_gui.SetLoadDone(70, "Loading extensions...");
-	if (!g_materials.loadExtensions(extension_path, error, warnings)) {
+	wxArrayString extensionWarnings;
+	if (!g_materials.loadExtensions(extension_path, error, extensionWarnings)) {
 		// warnings.push_back("Couldn't load extensions: " + error);
 	}
+	AppendActionableMaterialWarnings(warnings, extensionWarnings);
 
 	g_gui.SetLoadDone(70, "Finishing...");
 	g_brushes.init();
@@ -780,14 +835,16 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 
 	SetLoadDone(50, "Loading creatures...");
 	wxLogMessage("Canary/Crystal: loading dedicated monsters and NPCs.");
+	wxArrayString catalogWarnings;
 	supplementalError.clear();
-	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/monsters.xml", true, supplementalError, warnings)) {
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/monsters.xml", true, supplementalError, catalogWarnings)) {
 		warnings.push_back("Couldn't load Canary/Crystal monsters.xml: " + supplementalError);
 	}
 	supplementalError.clear();
-	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/npcs.xml", true, supplementalError, warnings)) {
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/npcs.xml", true, supplementalError, catalogWarnings)) {
 		warnings.push_back("Couldn't load Canary/Crystal npcs.xml: " + supplementalError);
 	}
+	AppendActionableDedicatedCreatureWarnings(warnings, catalogWarnings);
 	{
 		FileName userCreatures = GetCanaryCrystalLocalDataDirectory();
 		userCreatures.SetFullName("creatures.xml");
@@ -795,7 +852,14 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		wxArrayString userWarnings;
 		g_creatures.loadFromXML(userCreatures, false, userError, userWarnings);
 		for (const wxString& warning : userWarnings) {
-			warnings.push_back(warning);
+			// Older NexaMap versions persisted creatures imported from an entire
+			// server into this shared overlay. They consequently overlap the
+			// bundled catalog on the next startup. The loader already keeps the
+			// first definition safely, so this legacy overlap is not a workspace
+			// error and must not produce thousands of modal warnings.
+			if (!warning.StartsWith("Duplicate creature type name \"")) {
+				warnings.push_back(warning);
+			}
 		}
 	}
 
@@ -1812,6 +1876,19 @@ void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
 		NewMap();
 	} else if (event.GetId() == wxID_OPEN) {
 		if (event.GetInt() == 1) {
+			const std::optional<DetectedMap> detectedMap = g_workspace.getDetectedMap(event.GetString());
+			if (!detectedMap || detectedMap->serverType == ServerType::UnknownGeneric) {
+				// Unknown folders follow the established manual-opening path. They
+				// never inherit the previously selected Canary/Crystal workspace.
+				LoadMap(FileName(event.GetString()));
+				return;
+			}
+
+			wxString error;
+			if (!g_workspace.selectDetectedMap(event.GetString(), error)) {
+				PopupDialog(welcomeDialog, "Server not supported", error, wxOK);
+				return;
+			}
 			if (loadWorkspace()) {
 				LoadMapInternal(FileName(event.GetString()), EditorClientVersionPolicy::KeepLoaded);
 			}
@@ -2597,7 +2674,22 @@ void GUI::ListDialog(wxWindow* parent, const wxString& title, const wxArrayStrin
 	sizer->Add(item_list, 1, wxEXPAND);
 
 	wxSizer* stdsizer = newd wxBoxSizer(wxHORIZONTAL);
-	stdsizer->Add(newd wxButton(dlg, wxID_OK, "OK"), wxSizerFlags(1).Center());
+	auto* copyButton = newd wxButton(dlg, wxID_COPY, "Copy");
+	copyButton->Bind(wxEVT_BUTTON, [item_list](wxCommandEvent&) {
+		wxString text;
+		for (unsigned int index = 0; index < item_list->GetCount(); ++index) {
+			if (!text.empty()) {
+				text += "\n";
+			}
+			text += item_list->GetString(index);
+		}
+		if (!text.empty() && wxTheClipboard->Open()) {
+			wxTheClipboard->SetData(newd wxTextDataObject(text));
+			wxTheClipboard->Close();
+		}
+	});
+	stdsizer->Add(copyButton, wxSizerFlags(0).Center().Border(wxRIGHT, 8));
+	stdsizer->Add(newd wxButton(dlg, wxID_OK, "OK"), wxSizerFlags(0).Center());
 	sizer->Add(stdsizer, wxSizerFlags(0).Center());
 
 	dlg->SetSizerAndFit(sizer);

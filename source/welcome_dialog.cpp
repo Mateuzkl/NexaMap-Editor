@@ -763,8 +763,8 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		m_server_status_label->SetForegroundColour(subtle);
 	}
 
-	if (server.hasAppearances()) {
-		setResource(m_items_otb_status, "appearances.dat", true, "Found", true);
+	if (server.usesCanaryCrystalLoader()) {
+		setResource(m_items_otb_status, "appearances.dat", server.hasAppearances(), "Found", true);
 	} else {
 		setResource(m_items_otb_status, "items.otb", server.hasItemsOtb(), "Found", true);
 	}
@@ -781,7 +781,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		: (idPreference == ItemIdModePreference::ClientId ? wxString("Manual") : wxString("Auto"));
 	m_id_mode_value->SetLabel(idMode == ItemIdMode::Unknown ? wxString("Needs review") : preferenceLabel + "  |  " + wxString::FromUTF8(ItemIdModeName(idMode)));
 	m_id_mode_value->SetForegroundColour(idMode == ItemIdMode::Unknown ? warning : cyan);
-	m_items_source_value->SetLabel(server.hasAppearances() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
+	m_items_source_value->SetLabel(server.usesCanaryCrystalLoader() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
 	m_workspace_status_value->SetLabel(g_workspace.isReady() ? "Ready" : "Setup required");
 	m_workspace_status_value->SetForegroundColour(g_workspace.isReady() ? green : warning);
 	m_open_workspace_button->Enable(g_workspace.isReady());
@@ -1436,11 +1436,17 @@ void RecentMapsPanel::SetFiles(const std::vector<wxString>& files, bool detected
 		const size_t visibleItems = std::min<size_t>(2, files.size());
 		for (size_t index = 0; index < visibleItems; ++index) {
 			const wxString& file = files[index];
-			auto* recentItem = newd RecentItem(this, file);
+			wxString serverType;
+			if (detectedMaps) {
+				const std::optional<DetectedMap> detectedMap = g_workspace.getDetectedMap(file);
+				serverType = wxString::FromUTF8(ServerTypeName(detectedMap ? detectedMap->serverType : ServerType::UnknownGeneric));
+			}
+			auto* recentItem = newd RecentItem(this, file, serverType);
 			recentItem->Bind(wxEVT_BUTTON, &WelcomeDialog::OnRecentItemActivated, m_dialog);
 			m_sizer->Add(recentItem, 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 4));
 		}
-		const wxSize recentSize(-1, FROM_DIP(this, 24 + static_cast<int>(visibleItems) * 44));
+		const int itemHeight = detectedMaps ? 72 : 44;
+		const wxSize recentSize(-1, FROM_DIP(this, 24 + static_cast<int>(visibleItems) * itemHeight));
 		SetMinSize(recentSize);
 		SetMaxSize(recentSize);
 	}
@@ -1487,14 +1493,16 @@ void RecentMapsPanel::OnMouseLeave(wxMouseEvent& event) {
 	event.Skip();
 }
 
-RecentItem::RecentItem(RecentMapsPanel* parent, const wxString& itemName) :
-	wxControl(parent, wxID_ANY, wxDefaultPosition, FROM_DIP(parent, wxSize(-1, 40)), wxBORDER_NONE | wxWANTS_CHARS),
-	m_item_text(itemName) {
+RecentItem::RecentItem(RecentMapsPanel* parent, const wxString& itemName, const wxString& serverType) :
+	wxControl(parent, wxID_ANY, wxDefaultPosition, FROM_DIP(parent, wxSize(-1, serverType.empty() ? 40 : 68)), wxBORDER_NONE | wxWANTS_CHARS),
+	m_item_text(itemName),
+	m_server_type(serverType) {
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
-	SetMinSize(wxSize(-1, FROM_DIP(this, 40)));
+	SetMinSize(wxSize(-1, FROM_DIP(this, m_server_type.empty() ? 40 : 68)));
 	SetName(wxFileNameFromPath(m_item_text));
-	SetHelpText(m_item_text);
-	SetToolTip(m_item_text);
+	const wxString details = m_server_type.empty() ? m_item_text : m_item_text + "\nType: " + m_server_type;
+	SetHelpText(details);
+	SetToolTip(details);
 	Bind(wxEVT_PAINT, &RecentItem::OnPaint, this);
 	Bind(wxEVT_ENTER_WINDOW, &RecentItem::OnMouseEnter, this);
 	Bind(wxEVT_LEAVE_WINDOW, &RecentItem::OnMouseLeave, this);
@@ -1563,8 +1571,18 @@ void RecentItem::OnPaint(wxPaintEvent& WXUNUSED(event)) {
 	dc.SetFont(FontWithPointSize(GetFont(), GetFont().GetPointSize(), true));
 	dc.SetTextForeground(WelcomeThemeStyle::Get(Theme::Role::Text));
 	const wxString fileName = Ellipsize(wxFileNameFromPath(m_item_text), dc, wxELLIPSIZE_END, width);
-	const wxSize fileSize = dc.GetTextExtent(fileName);
-	dc.DrawText(fileName, textX, std::max(0, (bounds.height - fileSize.y) / 2));
+	if (m_server_type.empty()) {
+		const wxSize fileSize = dc.GetTextExtent(fileName);
+		dc.DrawText(fileName, textX, std::max(0, (bounds.height - fileSize.y) / 2));
+	} else {
+		dc.DrawText(fileName, textX, FROM_DIP(this, 5));
+		dc.SetFont(FontWithPointSize(GetFont(), std::max(7, GetFont().GetPointSize() - 2)));
+		dc.SetTextForeground(WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
+		const wxString path = Ellipsize(m_item_text, dc, wxELLIPSIZE_MIDDLE, width);
+		dc.DrawText(path, textX, FROM_DIP(this, 25));
+		dc.SetTextForeground(WelcomeThemeStyle::Get(Theme::Role::Accent));
+		dc.DrawText("Type: " + m_server_type, textX, FROM_DIP(this, 45));
+	}
 	dc.SetFont(FontWithPointSize(GetFont(), std::max(8, GetFont().GetPointSize() - 1), true));
 	dc.SetTextForeground(m_hovered || m_selected ? WelcomeThemeStyle::Get(Theme::Role::Accent) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
 	const wxString action = "Open";

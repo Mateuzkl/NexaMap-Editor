@@ -305,7 +305,13 @@ bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node no
 				warnings.push_back(filename.GetFullName() + ": Ignored an empty materials include.");
 				continue;
 			}
-			FileName includeName(filename.GetPath(), includeFile);
+			// wxFileName(path, name) treats separators inside `name` as part of a
+			// filename on Windows. Resolve nested includes as complete relative
+			// paths so entries such as "brushs/animals.xml" keep their directory.
+			FileName includeName(includeFile);
+			if (!includeName.IsAbsolute()) {
+				includeName.MakeAbsolute(filename.GetPath());
+			}
 
 			wxString subError;
 			if (!loadMaterialsInternal(includeName, subError, warnings, serverIdsToClientIds, visited)) {

@@ -61,8 +61,38 @@ int main() {
 		check(detection.workspace.containsMap(server.path / "data/cache/maps/world.houses.otbm"), "detected map membership uses normalized paths");
 		check(detection.workspace.primaryMapPath == std::filesystem::weakly_canonical(server.path / "data/world/world.otbm"), "classic TFS mapName selects the original world map");
 		check(detection.workspace.maps.front().path == detection.workspace.primaryMapPath, "generated houses map never precedes the original world map");
+		check(detection.workspace.serverType == ServerType::Tfs, "TFS 1.4 structure selects the normal loader");
+		check(detection.workspace.maps.front().serverType == ServerType::Tfs, "world.otbm inherits the detected TFS project type");
+		check(!detection.workspace.usesCanaryCrystalLoader(), "TFS 1.4 never enables the dedicated Canary/Crystal loader");
 		check(!detection.workspace.monstersDirectory.empty(), "standard TFS monsters are detected");
 		check(!detection.workspace.npcsDirectory.empty(), "standard TFS NPCs are detected");
+	}
+
+	{
+		TemporaryDirectory server;
+		server.write("data/items/items.otb");
+		server.write("data/items/items.xml", "<items/>");
+		server.write("data/world/world.otbm");
+		server.write("data/monsters/rat.lua");
+		server.write("data/npc/guide.lua");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(detection.workspace.serverType == ServerType::Tfs, "TFS 1.8 structure is detected as TFS");
+		check(detection.workspace.serverProfile == "TFS", "TFS 1.8 has the stable display label");
+	}
+
+	{
+		TemporaryDirectory server;
+		server.write("data/items/items.otb");
+		server.write("data/items/items.xml", "<items/>");
+		server.write("data/items/appearances.dat", "unrelated client metadata");
+		server.write("data/world/world.otbm");
+		server.write("data/monster/rat.lua");
+		server.write("data/npc/guide.lua");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(detection.workspace.serverType == ServerType::Tfs, "appearances.dat alone cannot override a complete TFS structure");
+		check(!detection.workspace.usesCanaryCrystalLoader(), "stray appearances.dat does not start dedicated loading");
 	}
 
 	{
@@ -136,11 +166,72 @@ int main() {
 		check(detection.workspace.hasAppearances(), "appearances.dat is detected in data/items");
 		check(!detection.workspace.hasItemsOtb(), "Canary/Crystal does not require a synthetic items.otb");
 		check(detection.workspace.itemIdMode == ItemIdMode::ClientId, "appearances.dat selects the ClientID item model");
-		check(detection.workspace.serverProfile == "Canary/Crystal", "appearances.dat identifies a modern server profile");
+		check(detection.workspace.serverType == ServerType::Canary, "configured data-global datapack identifies Canary");
+		check(detection.workspace.serverProfile == "Canary", "Canary has a specific display label");
+		check(detection.workspace.maps.front().serverType == ServerType::Canary, "configured Canary map carries its own type");
+		check(detection.workspace.usesCanaryCrystalLoader(), "Canary structure enables dedicated loading");
 		check(detection.workspace.activeDataDirectory.filename() == "data-global", "config.lua selects the active data pack");
 		check(detection.workspace.primaryMapPath == std::filesystem::weakly_canonical(server.path / "data-global/world/world.otbm"), "mapName selects the active map automatically");
 		check(!detection.workspace.maps.empty() && detection.workspace.maps.front().path == detection.workspace.primaryMapPath, "configured map is the first detected map");
 		check(!detection.workspace.containsMap(server.path / "data-crystal/world/world.otbm"), "inactive Crystal data pack maps are not mixed into the active workspace");
+	}
+
+	{
+		TemporaryDirectory server;
+		server.write("data/items/appearances.dat", "modern appearances");
+		server.write("data/items/items.xml", "<items/>");
+		server.write("config.lua", "dataPackDirectory = \"data-crystal\"\nmapName = \"world\"\n");
+		server.write("data-crystal/world/world.otbm");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(detection.workspace.serverType == ServerType::Crystal, "configured data-crystal datapack identifies Crystal");
+		check(detection.workspace.maps.front().serverType == ServerType::Crystal, "Crystal map carries the dedicated type");
+		check(detection.workspace.usesCanaryCrystalLoader(), "Crystal structure enables dedicated loading");
+	}
+
+	{
+		TemporaryDirectory folder;
+		folder.write("Crystal-Server-devv/data/items/appearances.dat", "modern appearances");
+		folder.write("Crystal-Server-devv/data/items/items.xml", "<items/>");
+		folder.write("Crystal-Server-devv/config.lua", "dataPackDirectory = \"data-global\"\nmapName = \"world\"\n");
+		folder.write("Crystal-Server-devv/data-global/world/world.otbm");
+		folder.write("Crystal-Server-devv/data-crystal/world/world.otbm");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(folder.path / "Crystal-Server-devv");
+		check(detection.workspace.serverType == ServerType::Crystal, "Crystal server root remains Crystal when its active datapack is data-global");
+		check(detection.workspace.usesCanaryCrystalLoader(), "Crystal data-global configuration still uses the dedicated loader");
+	}
+
+	{
+		TemporaryDirectory collection;
+		collection.write("tfs/data/items/items.otb");
+		collection.write("tfs/data/items/items.xml", "<items/>");
+		collection.write("tfs/data/world/world.otbm");
+		collection.write("tfs/data/monsters/rat.lua");
+		collection.write("tfs/data/npc/guide.lua");
+		collection.write("canary/data/items/appearances.dat", "modern appearances");
+		collection.write("canary/data/items/items.xml", "<items/>");
+		collection.write("canary/config.lua", "dataPackDirectory = \"data-global\"\nmapName = \"world\"\n");
+		collection.write("canary/data-global/world/world.otbm");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(collection.path);
+		const DetectedMap* tfsMap = detection.workspace.findMap(collection.path / "tfs/data/world/world.otbm");
+		const DetectedMap* canaryMap = detection.workspace.findMap(collection.path / "canary/data-global/world/world.otbm");
+		check(tfsMap != nullptr && tfsMap->serverType == ServerType::Tfs, "same-named TFS world keeps its per-map type");
+		check(canaryMap != nullptr && canaryMap->serverType == ServerType::Canary, "same-named Canary world keeps its per-map type");
+		check(tfsMap != nullptr && tfsMap->serverRootPath == std::filesystem::weakly_canonical(collection.path / "tfs"), "TFS map resolves its nearest project root");
+		check(canaryMap != nullptr && canaryMap->serverRootPath == std::filesystem::weakly_canonical(collection.path / "canary"), "Canary map resolves its nearest project root");
+	}
+
+	{
+		TemporaryDirectory folder;
+		folder.write("maps/world.otbm");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(folder.path);
+		check(!detection.workspace.maps.empty(), "unknown folder still lists its map");
+		check(detection.workspace.maps.front().serverType == ServerType::UnknownGeneric, "an otbm file alone remains Unknown/Generic");
+		check(std::string(ServerTypeName(detection.workspace.maps.front().serverType)) == "Unknown/Generic", "generic maps have a stable display label");
+		check(!UsesCanaryCrystalLoader(detection.workspace.maps.front().serverType), "an otbm file alone never enables dedicated loading");
 	}
 
 	{
@@ -231,7 +322,7 @@ int main() {
 		server.write("config.lua", "worldType = \"open\"");
 		server.write("items.otb");
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
-		check(detection.workspace.serverProfile == "TFS", "config.lua identifies a TFS-style root");
+		check(detection.workspace.serverProfile == "Unknown/Generic", "config.lua and a loose items.otb are not enough to assume TFS");
 	}
 
 	{

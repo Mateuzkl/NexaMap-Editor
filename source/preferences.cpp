@@ -197,6 +197,13 @@ wxNotebookPage* PreferencesWindow::CreateEditorPage() {
 	merge_paste_chkbox->SetToolTip("Pasted tiles won't replace already placed tiles.");
 	sizer->Add(merge_paste_chkbox, 0, wxLEFT | wxTOP, 5);
 
+	sizer->AddSpacer(10);
+
+	dragon_souls_otbm_count_uint16_chkbox = newd wxCheckBox(editor_page, wxID_ANY, "Dragon Souls map compatibility (16-bit item count/subtype)");
+	dragon_souls_otbm_count_uint16_chkbox->SetValue(g_settings.getBoolean(Config::DRAGON_SOULS_OTBM_COUNT_UINT16));
+	dragon_souls_otbm_count_uint16_chkbox->SetToolTip("Enable before opening or saving Dragon Souls maps. Leave disabled for standard OTBM maps.");
+	sizer->Add(dragon_souls_otbm_count_uint16_chkbox, 0, wxLEFT | wxTOP, 5);
+
 	editor_page->SetSizerAndFit(sizer);
 
 	return editor_page;
@@ -725,6 +732,7 @@ bool PreferencesWindow::Apply() {
 	g_settings.setInteger(Config::RAW_LIKE_SIMONE, allow_multiple_orderitems_chkbox->GetValue());
 	g_settings.setInteger(Config::MERGE_MOVE, merge_move_chkbox->GetValue());
 	g_settings.setInteger(Config::MERGE_PASTE, merge_paste_chkbox->GetValue());
+	g_settings.setInteger(Config::DRAGON_SOULS_OTBM_COUNT_UINT16, dragon_souls_otbm_count_uint16_chkbox->GetValue());
 
 	// Graphics
 	g_settings.setInteger(Config::USE_GUI_SELECTION_SHADOW, icon_selection_shadow_chkbox->GetValue());

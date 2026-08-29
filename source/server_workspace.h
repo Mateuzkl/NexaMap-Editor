@@ -23,6 +23,14 @@ enum class ItemIdModePreference : uint8_t {
 	ClientId,
 };
 
+enum class ServerType : uint8_t {
+	UnknownGeneric = 0,
+	Tfs,
+	Canary,
+	Crystal,
+	CanaryCrystal,
+};
+
 struct ResourceFingerprint {
 	std::filesystem::path path;
 	uintmax_t size = 0;
@@ -38,6 +46,8 @@ struct ResourceFingerprint {
 struct DetectedMap {
 	std::filesystem::path path;
 	ResourceFingerprint fingerprint;
+	std::filesystem::path serverRootPath;
+	ServerType serverType = ServerType::UnknownGeneric;
 };
 
 struct ServerWorkspace {
@@ -57,6 +67,7 @@ struct ServerWorkspace {
 	std::vector<DetectedMap> maps;
 
 	ItemIdMode itemIdMode = ItemIdMode::Unknown;
+	ServerType serverType = ServerType::UnknownGeneric;
 	std::string serverProfile;
 	std::string protocol;
 	std::vector<std::string> warnings;
@@ -67,7 +78,9 @@ struct ServerWorkspace {
 	[[nodiscard]] bool hasItemsOtb() const;
 	[[nodiscard]] bool hasItemsXml() const;
 	[[nodiscard]] bool hasAppearances() const;
+	[[nodiscard]] bool usesCanaryCrystalLoader() const;
 	[[nodiscard]] bool containsMap(const std::filesystem::path& path) const;
+	[[nodiscard]] const DetectedMap* findMap(const std::filesystem::path& path) const;
 	[[nodiscard]] bool trackedResourcesChanged() const;
 };
 
@@ -93,6 +106,8 @@ public:
 };
 
 [[nodiscard]] const char* ItemIdModeName(ItemIdMode mode);
+[[nodiscard]] const char* ServerTypeName(ServerType type);
+[[nodiscard]] bool UsesCanaryCrystalLoader(ServerType type);
 [[nodiscard]] ItemIdMode ResolveEffectiveItemIdMode(
 	ItemIdModePreference preference,
 	ItemIdMode clientAssetMode,

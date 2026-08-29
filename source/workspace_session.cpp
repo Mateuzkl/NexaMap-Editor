@@ -37,7 +37,7 @@ namespace {
 			return false;
 		}
 		for (std::size_t index = 0; index < left.size(); ++index) {
-			if (left[index].path != right[index].path || left[index].fingerprint != right[index].fingerprint) {
+			if (left[index].path != right[index].path || left[index].fingerprint != right[index].fingerprint || left[index].serverRootPath != right[index].serverRootPath || left[index].serverType != right[index].serverType) {
 				return false;
 			}
 		}
@@ -45,7 +45,22 @@ namespace {
 	}
 
 	bool SameServerWorkspace(const ServerWorkspace& left, const ServerWorkspace& right) {
-		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.itemIdMode == right.itemIdMode && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
+		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.itemIdMode == right.itemIdMode && left.serverType == right.serverType && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
+	}
+
+	bool ApplyDetectedMapSelection(ServerWorkspace& workspace, const std::filesystem::path& path) {
+		const DetectedMap* selected = workspace.findMap(path);
+		if (selected == nullptr) {
+			return false;
+		}
+		workspace.primaryMapPath = selected->path;
+		workspace.mapsDirectory = selected->path.parent_path();
+		workspace.serverType = selected->serverType;
+		workspace.serverProfile = ServerTypeName(selected->serverType);
+		workspace.itemIdMode = workspace.usesCanaryCrystalLoader()
+			? ItemIdMode::ClientId
+			: (workspace.serverType == ServerType::Tfs ? ItemIdMode::ServerId : ItemIdMode::Unknown);
+		return true;
 	}
 }
 
@@ -63,17 +78,9 @@ void WorkspaceSession::loadConfiguredPaths() {
 		configureServer(serverPath, ignoredError, false);
 	}
 
-	// The server item model decides which saved client should be restored. A
-	// Crystal workspace may have been opened after a classic client, so the
-	// generic workspace path is not allowed to shadow the dedicated Assets path.
-	bool clientRestored = false;
-	if (server.hasAppearances()) {
-		const wxString appearancesClientPath = wxstr(g_settings.getString(Config::CANARY_CRYSTAL_ASSETS_DIRECTORY));
-		if (!appearancesClientPath.empty() && ClientAssetsManifestLoader::Validate(ToFilesystemPath(appearancesClientPath)).valid) {
-			clientRestored = configureClient(appearancesClientPath, ignoredError, ignoredWarnings, false);
-		}
-	}
-	if (!clientRestored) {
+	if (hasServerSelection()) {
+		restoreCompatibleClient(ignoredError, ignoredWarnings, false);
+	} else {
 		const wxString clientPath = wxstr(g_settings.getString(Config::WORKSPACE_CLIENT_ROOT));
 		if (!clientPath.empty()) {
 			configureClient(clientPath, ignoredError, ignoredWarnings, false);
@@ -90,6 +97,7 @@ void WorkspaceSession::swap(WorkspaceSession& other) noexcept {
 	using std::swap;
 	swap(client, other.client);
 	swap(server, other.server);
+	swap(selectedDetectedMapPath, other.selectedDetectedMapPath);
 	swap(serverError, other.serverError);
 	swap(idModePreference, other.idModePreference);
 	swap(generation, other.generation);
@@ -149,7 +157,10 @@ bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wx
 }
 
 bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bool persist) {
-	const ServerDetectionResult detection = ServerResourceDetector::Detect(ToFilesystemPath(path));
+	ServerDetectionResult detection = ServerResourceDetector::Detect(ToFilesystemPath(path));
+	if (!selectedDetectedMapPath.empty() && !ApplyDetectedMapSelection(detection.workspace, selectedDetectedMapPath)) {
+		selectedDetectedMapPath.clear();
+	}
 	const bool changed = !SameServerWorkspace(server, detection.workspace) || serverError != wxstr(detection.error);
 	server = detection.workspace;
 	serverError = wxstr(detection.error);
@@ -162,6 +173,40 @@ bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bo
 		g_settings.save();
 	}
 	return detection.validRoot && server.hasRequiredResources();
+}
+
+bool WorkspaceSession::selectDetectedMap(const wxString& path, wxString& error, bool persist) {
+	const std::optional<DetectedMap> detected = getDetectedMap(path);
+	if (!detected) {
+		error = "The selected map is no longer part of the detected workspace.";
+		return false;
+	}
+
+	if (!detected->serverRootPath.empty() && detected->serverRootPath != server.rootPath) {
+		if (!configureServer(FromFilesystemPath(detected->serverRootPath), error, false)) {
+			return false;
+		}
+	}
+
+	const DetectedMap* refreshed = server.findMap(ToFilesystemPath(path));
+	const DetectedMap& selected = refreshed != nullptr ? *refreshed : *detected;
+	const bool changed = server.primaryMapPath != selected.path || server.serverType != selected.serverType;
+	selectedDetectedMapPath = selected.path;
+	if (!ApplyDetectedMapSelection(server, selectedDetectedMapPath)) {
+		selectedDetectedMapPath.clear();
+		error = "The selected map could not be resolved after refreshing its server root.";
+		return false;
+	}
+	if (changed) {
+		++generation;
+	}
+
+	error.clear();
+	if (persist && persistenceEnabled) {
+		persistPaths();
+		g_settings.save();
+	}
+	return server.hasRequiredResources();
 }
 
 bool WorkspaceSession::rescanServer(wxString& error) {
@@ -178,24 +223,45 @@ bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& w
 	if (hasCompatibleServerResources()) {
 		return true;
 	}
-	if (!server.hasAppearances()) {
-		error = client.valid
-			? "The selected client is not compatible with this Server Workspace."
-			: "Select a valid client folder before opening the workspace.";
-		return false;
+	if (server.usesCanaryCrystalLoader()) {
+		const wxString savedPath = wxstr(g_settings.getString(Config::CANARY_CRYSTAL_ASSETS_DIRECTORY));
+		if (savedPath.empty()) {
+			error = "This Canary/Crystal server requires a compatible Assets client. Select one once; NexaMap will remember it for detected maps.";
+			return false;
+		}
+		const ClientAssetsValidationResult validation = ClientAssetsManifestLoader::Validate(ToFilesystemPath(savedPath));
+		if (!validation.valid) {
+			error = wxString("The saved Canary/Crystal client is no longer valid: ") + wxstr(validation.error);
+			return false;
+		}
+		return configureClient(savedPath, error, warnings, persist);
 	}
 
-	const wxString savedPath = wxstr(g_settings.getString(Config::CANARY_CRYSTAL_ASSETS_DIRECTORY));
-	if (savedPath.empty()) {
-		error = "This server uses appearances.dat. Select a Canary/Crystal or OTC Assets client once; NexaMap will remember it for detected maps.";
-		return false;
+	// TFS and unknown/generic workspaces must never inherit the dedicated
+	// appearances client merely because it was used by the previous project.
+	const wxString savedClassicPath = wxstr(g_settings.getString(Config::WORKSPACE_CLIENT_ROOT));
+	if (!savedClassicPath.empty() && !ClientAssetsManifestLoader::Validate(ToFilesystemPath(savedClassicPath)).valid) {
+		if (configureClient(savedClassicPath, error, warnings, persist) && client.mode == WorkspaceClientMode::Classic) {
+			return true;
+		}
 	}
-	const ClientAssetsValidationResult validation = ClientAssetsManifestLoader::Validate(ToFilesystemPath(savedPath));
-	if (!validation.valid) {
-		error = wxString("The saved Canary/Crystal client is no longer valid: ") + wxstr(validation.error);
-		return false;
+
+	ClientVersionID defaultVersionId = static_cast<ClientVersionID>(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION));
+	if (defaultVersionId == CLIENT_VERSION_NONE && ClientVersion::getLatestVersion() != nullptr) {
+		defaultVersionId = ClientVersion::getLatestVersion()->getID();
 	}
-	return configureClient(savedPath, error, warnings, persist);
+	ClientVersion* defaultVersion = ClientVersion::get(defaultVersionId);
+	if (defaultVersion != nullptr) {
+		const FileName defaultPath = defaultVersion->getClientPath();
+		if (defaultPath.DirExists() && configureClient(defaultPath.GetFullPath(), error, warnings, persist) && client.mode == WorkspaceClientMode::Classic) {
+			return true;
+		}
+	}
+
+	error = server.hasItemsOtb()
+		? "This TFS/Generic server requires a classic DAT/SPR or OTC .otfi client. The Canary/Crystal Assets loader was not started."
+		: "This Unknown/Generic server has no items.otb. Select the correct server root or open the map manually.";
+	return false;
 }
 
 void WorkspaceSession::setItemIdModePreference(ItemIdModePreference preference) {
@@ -242,13 +308,10 @@ bool WorkspaceSession::hasCompatibleServerResources() const {
 	if (!client.valid) {
 		return false;
 	}
-	if (client.mode == WorkspaceClientMode::Classic) {
-		return server.hasItemsOtb();
+	if (server.usesCanaryCrystalLoader()) {
+		return client.mode == WorkspaceClientMode::Appearances && server.hasRequiredResources();
 	}
-	if (client.mode == WorkspaceClientMode::Appearances) {
-		return server.hasRequiredResources();
-	}
-	return false;
+	return client.mode == WorkspaceClientMode::Classic && server.hasItemsOtb();
 }
 
 bool WorkspaceSession::isReady() const {
@@ -257,6 +320,14 @@ bool WorkspaceSession::isReady() const {
 
 bool WorkspaceSession::containsMap(const wxString& path) const {
 	return server.containsMap(ToFilesystemPath(path));
+}
+
+std::optional<DetectedMap> WorkspaceSession::getDetectedMap(const wxString& path) const {
+	const DetectedMap* map = server.findMap(ToFilesystemPath(path));
+	if (map == nullptr) {
+		return std::nullopt;
+	}
+	return *map;
 }
 
 std::vector<wxString> WorkspaceSession::getDetectedMaps() const {

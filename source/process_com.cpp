@@ -33,7 +33,7 @@ RMEProcessServer::~RMEProcessServer() {
 }
 
 wxConnectionBase* RMEProcessServer::OnAcceptConnection(const wxString& topic) {
-	if (topic.Lower() == "rme_talk") {
+	if (topic.Lower() == "rme_talk" && g_gui.root != nullptr) {
 		g_gui.root->Iconize(false); // Show application if minimized
 		g_gui.root->Raise(); // Request the window manager to raise this application to the top of Z-order
 		return newd RMEProcessConnection();
@@ -41,19 +41,8 @@ wxConnectionBase* RMEProcessServer::OnAcceptConnection(const wxString& topic) {
 	return nullptr;
 }
 
-// Client
-
-RMEProcessClient::RMEProcessClient() :
-	proc(nullptr) {
-	////
-}
-
-RMEProcessClient::~RMEProcessClient() {
-	delete proc;
-}
-
 wxConnectionBase* RMEProcessClient::OnMakeConnection() {
-	return proc = newd RMEProcessConnection();
+	return newd RMEProcessConnection();
 }
 
 // Connection
