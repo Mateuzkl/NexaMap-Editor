@@ -186,6 +186,7 @@ namespace MenuBar {
 		MULTIPLAYER_PLAYERS,
 		MULTIPLAYER_LOCK_SELECTION,
 		MULTIPLAYER_UNLOCK,
+		COMMAND_PALETTE,
 	};
 }
 
@@ -212,6 +213,8 @@ public:
 	void EnableItem(MenuBar::ActionID id, bool enable);
 	void CheckItem(MenuBar::ActionID id, bool enable);
 	bool IsItemChecked(MenuBar::ActionID id) const;
+	bool HasItem(MenuBar::ActionID id) const;
+	bool IsItemEnabled(MenuBar::ActionID id) const;
 
 	// Event handlers for all menu buttons
 	// File Menu
@@ -341,6 +344,7 @@ public:
 	void OnGotoWebsite(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
 	void OnShowHotkeys(wxCommandEvent& event);
+	void OnCommandPalette(wxCommandEvent& event);
 
 	// Access actions map for hotkey discovery
 	const std::map<std::string, MenuBar::Action*>& GetActions() const {
@@ -350,6 +354,9 @@ public:
 	void UpdateLabelHotkeys();
 
 protected:
+	wxMenuItem* FindEnabledItem(MenuBar::ActionID id) const;
+	std::vector<MenuBar::ActionID> recentCommands;
+
 	// Load and returns a menu item, also sets accelerator
 	wxObject* LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayString& warnings, wxString& error);
 	// Checks the items in the menus according to the settings (in config)

@@ -155,6 +155,9 @@
     <ClInclude Include="..\..\source\hotkey_manager.h">
       <Filter>gui</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\quick_command_palette.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\house.h">
       <Filter>objects</Filter>
     </ClInclude>
@@ -761,6 +764,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\hotkey_manager.cpp">
       <Filter>gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\quick_command_palette.cpp">
+      <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\extension_window.cpp">
       <Filter>gui\dialogs</Filter>

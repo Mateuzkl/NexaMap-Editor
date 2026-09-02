@@ -67,6 +67,8 @@
 		<item name="Release My Locks" action="MULTIPLAYER_UNLOCK" help="Release your tile and area locks."/>
 	</menu>
 	<menu name="Tools">
+		<item name="Command Palette..." action="COMMAND_PALETTE" hotkey="Ctrl+Shift+P" help="Search and execute NexaMap commands."/>
+		<separator/>
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
 		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>
 		<item name="Learn Border from Selection..." action="LEARN_BORDER_SELECTION" help="Analyze selected map tiles and infer an autoborder draft without changing the map."/>

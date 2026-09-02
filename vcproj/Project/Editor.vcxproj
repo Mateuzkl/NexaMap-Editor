@@ -417,6 +417,8 @@
     <ClCompile Include="..\..\source\hotkey_dialog.cpp" />
     <ClInclude Include="..\..\source\hotkey_manager.h" />
     <ClCompile Include="..\..\source\hotkey_manager.cpp" />
+    <ClInclude Include="..\..\source\quick_command_palette.h" />
+    <ClCompile Include="..\..\source\quick_command_palette.cpp" />
     <ClInclude Include="..\..\source\main_menubar.h" />
     <ClCompile Include="..\..\source\main_menubar.cpp" />
     <ClInclude Include="..\..\source\map_tab.h" />

@@ -42,10 +42,12 @@
 
 #include "gui.h"
 #include "hotkey_manager.h"
+#include "quick_command_palette.h"
 
 #include <unordered_set>
 
 #include <wx/dir.h>
+#include <wx/weakref.h>
 
 #include "editor.h"
 #include "materials.h"
@@ -236,6 +238,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(GOTO_WEBSITE, wxITEM_NORMAL, OnGotoWebsite);
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
 	MAKE_ACTION(SHOW_HOTKEYS, wxITEM_NORMAL, OnShowHotkeys);
+	MAKE_ACTION(COMMAND_PALETTE, wxITEM_NORMAL, OnCommandPalette);
 
 	// A deleter, this way the frame does not need
 	// to bother deleting us.
@@ -331,6 +334,51 @@ bool MainMenuBar::IsItemChecked(MenuBar::ActionID id) const {
 	}
 
 	return false;
+}
+
+bool MainMenuBar::HasItem(MenuBar::ActionID id) const {
+	const auto it = items.find(id);
+	return it != items.end() && !it->second.empty();
+}
+
+bool MainMenuBar::IsItemEnabled(MenuBar::ActionID id) const {
+	return FindEnabledItem(id) != nullptr;
+}
+
+wxMenuItem* MainMenuBar::FindEnabledItem(MenuBar::ActionID id) const {
+	// A modal palette disables its parent frame, but not the menu's own state.
+	if (!menubar->IsThisEnabled()) {
+		return nullptr;
+	}
+	const auto it = items.find(id);
+	if (it == items.end()) {
+		return nullptr;
+	}
+	for (wxMenuItem* item : it->second) {
+		if (!item->IsEnabled()) {
+			continue;
+		}
+		wxMenu* menu = item->GetMenu();
+		bool enabled = true;
+		while (menu && menu->GetParent()) {
+			wxMenu* parent = menu->GetParent();
+			for (wxMenuItem* parentItem : parent->GetMenuItems()) {
+				if (parentItem->GetSubMenu() == menu && !parentItem->IsEnabled()) {
+					enabled = false;
+					break;
+				}
+			}
+			menu = parent;
+		}
+		if (enabled) {
+			for (size_t i = 0; i < menubar->GetMenuCount(); ++i) {
+				if (menubar->GetMenu(i) == menu && menubar->IsEnabledTop(i)) {
+					return item;
+				}
+			}
+		}
+	}
+	return nullptr;
 }
 
 void MainMenuBar::Update() {
@@ -1131,6 +1179,53 @@ void MainMenuBar::OnAbout(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnShowHotkeys(wxCommandEvent& WXUNUSED(event)) {
 	g_hotkey_manager.ShowHotkeyDialog(frame, this);
+}
+
+void MainMenuBar::OnCommandPalette(wxCommandEvent& WXUNUSED(event)) {
+	Update();
+	if (!IsItemEnabled(MenuBar::COMMAND_PALETTE)) {
+		return;
+	}
+	wxWeakRef<wxWindow> previousFocus(wxWindow::FindFocus());
+	std::optional<MenuBar::ActionID> selected;
+	{
+		QuickCommandPalette palette(frame, g_hotkey_manager, *this, recentCommands);
+		if (palette.ShowModal() == wxID_OK) {
+			selected = palette.GetSelectedAction();
+		}
+	} // Destroy the palette before a command can open another modal dialog.
+
+	if (MapTab* tab = g_gui.GetCurrentMapTab()) {
+		tab->GetCanvas()->SetFocus();
+	} else if (previousFocus && previousFocus->CanBeFocused()) {
+		previousFocus->SetFocus();
+	}
+	if (!selected) {
+		return;
+	}
+
+	// Recheck after closing: multiplayer events may have changed availability.
+	Update();
+	wxMenuItem* item = FindEnabledItem(*selected);
+	if (!item) {
+		return;
+	}
+	wxCommandEvent command(wxEVT_MENU, MAIN_FRAME_MENU + *selected);
+	command.SetEventObject(item->GetMenu());
+	if (item->IsCheckable()) {
+		const bool checked = item->IsRadio() || !IsItemChecked(*selected);
+		CheckItem(*selected, checked);
+		command.SetInt(checked);
+	}
+
+	std::erase(recentCommands, *selected);
+	recentCommands.insert(recentCommands.begin(), *selected);
+	if (recentCommands.size() > 10) {
+		recentCommands.resize(10);
+	}
+	// Same ID and handler routing as the menu and HotkeyManager accelerators.
+	// Do not access members afterwards: Exit can destroy the frame and menu.
+	frame->GetEventHandler()->ProcessEvent(command);
 }
 
 void MainMenuBar::OnUndo(wxCommandEvent& WXUNUSED(event)) {

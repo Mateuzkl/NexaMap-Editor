@@ -47,6 +47,7 @@ ${CMAKE_CURRENT_LIST_DIR}/gui.h
 ${CMAKE_CURRENT_LIST_DIR}/gui_ids.h
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.h
+${CMAKE_CURRENT_LIST_DIR}/quick_command_palette.h
 ${CMAKE_CURRENT_LIST_DIR}/house.h
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.h
@@ -209,6 +210,7 @@ ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gui.cpp
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.cpp
+${CMAKE_CURRENT_LIST_DIR}/quick_command_palette.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.cpp
