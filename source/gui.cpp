@@ -25,6 +25,7 @@
 #include "gui.h"
 #include "autoborder_preview.h"
 #include "main_menubar.h"
+#include "multiplayer_session.h"
 
 #include "editor.h"
 #include "brush.h"
@@ -551,6 +552,10 @@ void GUI::SwapResourceSessionState(EditorResourceSession& session) {
 }
 
 bool GUI::ActivateResourceSession(const std::shared_ptr<EditorResourceSession>& session) {
+	if (!MultiplayerSession::permitsResourceSession(session)) {
+		PopupDialog("Multiplayer", "Disconnect the multiplayer session before switching to different client assets.", wxOK);
+		return false;
+	}
 	if (!session) {
 		return false;
 	}

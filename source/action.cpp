@@ -23,6 +23,7 @@
 #include "editor.h"
 #include "gui.h"
 #include "house_paste_transaction.h"
+#include "multiplayer_session.h"
 
 namespace {
 	struct HouseRegistryChange {
@@ -302,6 +303,9 @@ bool Action::commit() {
 	if (commited) {
 		return true;
 	}
+	if (editor.multiplayer && editor.multiplayer->active() && !editor.multiplayer->internalChange() && type != ACTION_SELECT && type != ACTION_REMOTE && !editor.multiplayer->canEdit()) {
+		return false;
+	}
 	if (!canApplyHouseChanges()) {
 		return false;
 	}
@@ -578,7 +582,10 @@ BatchAction::BatchAction(Editor& editor, ActionIdentifier ident) :
 	timestamp(0),
 	memory_size(0),
 	type(ident) {
-	////
+	if (editor.multiplayer && editor.multiplayer->active() && !editor.multiplayer->internalChange()) {
+		multiplayerGroup = editor.multiplayer.get();
+		multiplayerGroup->beginActionGroup();
+	}
 }
 
 BatchAction::~BatchAction() {
@@ -586,6 +593,7 @@ BatchAction::~BatchAction() {
 		delete action;
 	}
 	batch.clear();
+	if (multiplayerGroup) multiplayerGroup->endActionGroup();
 }
 
 size_t BatchAction::memsize(bool recalc) const {
@@ -855,6 +863,12 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 	}
 
 	// Update title
+	if (editor.multiplayer && editor.multiplayer->active() && !editor.multiplayer->internalChange()) {
+		editor.multiplayer->consumeBatch(batch);
+		return;
+	}
+
+	// Update title
 	if (editor.map.doChange()) {
 		g_gui.UpdateTitle();
 	}
@@ -920,6 +934,7 @@ void ActionQueue::addAction(Action* action, int stacking_delay) {
 }
 
 bool ActionQueue::undo() {
+	if (editor.multiplayer && editor.multiplayer->active()) return editor.multiplayer->undo();
 	if (current > 0) {
 		BatchAction* batch = actions[current - 1];
 		if (!batch->undo()) {
@@ -932,6 +947,7 @@ bool ActionQueue::undo() {
 }
 
 bool ActionQueue::redo() {
+	if (editor.multiplayer && editor.multiplayer->active()) return editor.multiplayer->redo();
 	if (current < actions.size()) {
 		BatchAction* batch = actions[current];
 		if (!batch->redo()) {
@@ -949,6 +965,14 @@ void ActionQueue::clear() {
 		it = actions.erase(it);
 	}
 	current = 0;
+	memory_size = 0;
+}
+
+bool ActionQueue::canUndo() {
+	return editor.multiplayer && editor.multiplayer->active() ? editor.multiplayer->canUndo() : current > 0;
+}
+bool ActionQueue::canRedo() {
+	return editor.multiplayer && editor.multiplayer->active() ? editor.multiplayer->canRedo() : current < actions.size();
 }
 
 ActionIdentifier ActionQueue::getUndoType() const {

@@ -323,3 +323,26 @@ ${CMAKE_CURRENT_LIST_DIR}/add_item_window.cpp
 #       $<$<PLATFORM_ID:Windows>:psapi>
 #   )
 # ============================================================================
+
+# Multiplayer modules have independent wire/GUI boundaries.
+list(APPEND rme_H
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.h
+)
+list(APPEND rme_SRC
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
+)
+set_source_files_properties(
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
+PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)

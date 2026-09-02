@@ -563,7 +563,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	m_monsters_status = makeText(resourcesCard, "Monsters  Not scanned", -2, false, subtle);
 	m_npcs_status = makeText(resourcesCard, "NPCs  Not scanned", -2, false, subtle);
 	for (wxStaticText* row : { m_items_otb_status, m_items_xml_status, m_maps_status, m_monsters_status, m_npcs_status }) {
-		resourceGrid->Add(row, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
+		resourceGrid->Add(row, 1, wxEXPAND);
 	}
 	resourcesSizer->Add(resourceGrid, 0, wxEXPAND | wxALL, FROM_DIP(this, 10));
 	resourcesCard->SetSizer(resourcesSizer);
@@ -585,7 +585,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 		value = makeText(summaryCard, "-", -1, true, cyan);
 		value->SetWindowStyleFlag(wxST_ELLIPSIZE_END);
 		metric->Add(value, 0, wxEXPAND);
-		summaryBody->Add(metric, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 10));
+		summaryBody->Add(metric, 1, wxEXPAND | wxRIGHT, FROM_DIP(this, 10));
 	};
 	addSummary("Client", m_protocol_value);
 	addSummary("ID Mode", m_id_mode_value);
@@ -674,6 +674,7 @@ void WelcomeDialogPanel::OnSelectClient(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void WelcomeDialogPanel::OnSelectServer(wxCommandEvent& WXUNUSED(event)) {
+	std::cerr << "[workspace] Select Server Folder clicked; preparing folder dialog" << std::endl;
 	wxString current;
 	if (!g_workspace.getServer().rootPath.empty()) {
 #ifdef __WINDOWS__
@@ -683,16 +684,28 @@ void WelcomeDialogPanel::OnSelectServer(wxCommandEvent& WXUNUSED(event)) {
 #endif
 	}
 	wxDirDialog dialog(this, "Select the OT server root folder", current, wxDD_DIR_MUST_EXIST);
+	std::cerr << "[workspace] Opening native server folder dialog" << std::endl;
 	if (dialog.ShowModal() != wxID_OK) {
+		std::cerr << "[workspace] Server folder selection cancelled" << std::endl;
 		return;
 	}
 
+	std::cerr << "[workspace] Selected server folder: " << dialog.GetPath().ToStdString(wxConvUTF8) << std::endl;
 	wxString error;
 	g_workspace.configureServer(dialog.GetPath(), error);
+	std::cerr << "[workspace] Restoring compatible client" << std::endl;
 	wxString clientError;
 	wxArrayString clientWarnings;
 	g_workspace.restoreCompatibleClient(clientError, clientWarnings);
+	if (!clientError.empty()) {
+		std::cerr << "[workspace] Client compatibility: " << clientError.ToStdString(wxConvUTF8) << std::endl;
+	}
+	for (const wxString& warning : clientWarnings) {
+		std::cerr << "[workspace] Client warning: " << warning.ToStdString(wxConvUTF8) << std::endl;
+	}
+	std::cerr << "[workspace] Refreshing dashboard after server selection" << std::endl;
 	RefreshWorkspaceDashboard();
+	std::cerr << "[workspace] Server selection finished" << std::endl;
 	if (!error.empty()) {
 		wxMessageBox(error, "Server scan completed", wxOK | wxICON_WARNING, this);
 	}

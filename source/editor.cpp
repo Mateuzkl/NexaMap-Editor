@@ -34,6 +34,7 @@
 #include "map_format.h"
 #include "spawn_format.h"
 #include "item_id_codec.h"
+#include "multiplayer_session.h"
 
 #include <filesystem>
 #include <optional>
@@ -313,6 +314,7 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPo
 }
 
 Editor::~Editor() {
+	multiplayer.reset();
 	UnnamedRenderingLock();
 	selection.clear();
 	delete actionQueue;
@@ -329,6 +331,10 @@ void Editor::addAction(Action* action, int stacking_delay) {
 }
 
 bool Editor::saveMap(const FileName& filename, bool showdialog) {
+	if (multiplayer && !multiplayer->isHost()) {
+		g_gui.PopupDialog("Multiplayer", "Only the host saves the official map. Ask the host to save it.", wxOK);
+		return false;
+	}
 	const std::string originalFilename = map.filename;
 	const std::string originalName = map.name;
 	const bool originallyUnnamed = map.unnamed;

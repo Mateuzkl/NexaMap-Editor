@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="common">
@@ -49,6 +49,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\NexaMap-Debug.cmd"><Filter>common</Filter></None>
     <ClInclude Include="..\..\source\about_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -902,5 +903,26 @@
     <ClCompile Include="$(AppearancesGeneratedDir)\appearances.pb.cc">
       <Filter>protobuf</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="multiplayer">
+      <UniqueIdentifier>{820F5F74-7E38-48CD-BFCB-436C812FC583}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="multiplayer\Source Files">
+      <UniqueIdentifier>{1D7463C2-73AC-4C87-91D4-0844AC487CB5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="multiplayer\Header Files">
+      <UniqueIdentifier>{8D44E68E-44E7-432D-B1B5-67DAD30460B2}</UniqueIdentifier>
+    </Filter>
+    <ClInclude Include="..\..\source\multiplayer_protocol.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
+    <ClCompile Include="..\..\source\multiplayer_protocol.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
+    <ClInclude Include="..\..\source\multiplayer_crypto.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
+    <ClCompile Include="..\..\source\multiplayer_crypto.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
+    <ClInclude Include="..\..\source\multiplayer_codec.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
+    <ClCompile Include="..\..\source\multiplayer_codec.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
+    <ClInclude Include="..\..\source\multiplayer_session.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
+    <ClCompile Include="..\..\source\multiplayer_session.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
+    <ClInclude Include="..\..\source\multiplayer_window.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
+    <ClCompile Include="..\..\source\multiplayer_window.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
   </ItemGroup>
 </Project>

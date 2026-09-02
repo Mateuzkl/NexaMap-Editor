@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "multiplayer_session.h"
 #include "profiling.h"
 
 #include "bitmap_font.h"
@@ -344,6 +345,30 @@ void MapDrawer::DrawScene() {
 	last_scene_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
 }
 
+void MapDrawer::DrawMultiplayer() {
+	if (!editor.multiplayer || !editor.multiplayer->active() || options.ingame) return;
+	auto point = [&](const Position& p, const wxColor& color, const std::string& label, bool ping) {
+		if (p.z != floor || p.x < start_x || p.x > end_x || p.y < start_y || p.y > end_y) return;
+		const int offset = p.z <= GROUND_LAYER ? (GROUND_LAYER - p.z) * TileSize : 0;
+		const int x = p.x * TileSize - view_scroll_x - offset, y = p.y * TileSize - view_scroll_y - offset;
+		drawRect(x, y, TileSize, TileSize, color, ping ? 4 : 2);
+		MakeTooltip(x, y - 16, label, color.Red(), color.Green(), color.Blue());
+	};
+	for (const auto& [id, player] : editor.multiplayer->players()) {
+		if (id == editor.multiplayer->clientId()) continue;
+		wxColor color((player.color >> 16) & 255, (player.color >> 8) & 255, player.color & 255);
+		point(player.cursor, color, player.name + (player.afk ? " (AFK)" : ""), false);
+	}
+	for (const auto& ping : editor.multiplayer->pings()) {
+		wxColor color((ping.color >> 16) & 255, (ping.color >> 8) & 255, ping.color & 255); point(ping.position, color, ping.author + " ping", true);
+	}
+	for (const auto& lock : editor.multiplayer->locks()) {
+		const auto& r = lock.region; if (r.z != floor || r.x2 < start_x || r.x1 > end_x || r.y2 < start_y || r.y1 > end_y) continue;
+		const int offset = r.z <= GROUND_LAYER ? (GROUND_LAYER - r.z) * TileSize : 0;
+		drawRect(r.x1 * TileSize - view_scroll_x - offset, r.y1 * TileSize - view_scroll_y - offset, (r.x2 - r.x1 + 1) * TileSize, (r.y2 - r.y1 + 1) * TileSize, lock.owner == editor.multiplayer->clientId() ? wxColor(80, 220, 130) : wxColor(255, 150, 70), 2);
+	}
+}
+
 void MapDrawer::DrawOverlays() {
 	DrawMinimapImportOverlay();
 	if (!far_zoom_mode) {
@@ -353,6 +378,7 @@ void MapDrawer::DrawOverlays() {
 		DrawSelectionBox();
 	}
 	DrawBrush();
+	DrawMultiplayer();
 	if (options.show_grid && !medium_zoom_mode && !far_zoom_mode) {
 		DrawGrid();
 	}

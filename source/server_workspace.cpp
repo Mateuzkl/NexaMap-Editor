@@ -6,19 +6,39 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <deque>
 #include <fstream>
 #include <initializer_list>
+#include <iostream>
 #include <optional>
 #include <regex>
 #include <system_error>
 #include <unordered_set>
 
 namespace {
+	std::string ServerPathUtf8(const std::filesystem::path& path) {
+		// path::string() narrows UTF-16 through the Windows code page and can
+		// throw even for unrelated directory entries (for example U+F05C).
+		const auto utf8 = path.generic_u8string();
+		return std::string(utf8.begin(), utf8.end());
+	}
+
+	void TraceServerScan(const ServerDetectionOptions& options, const char* stage, const std::filesystem::path& path = {}) {
+		if (!options.diagnosticLogging) {
+			return;
+		}
+		std::cerr << "[server-scan] " << stage;
+		if (!path.empty()) {
+			std::cerr << ": " << ServerPathUtf8(path);
+		}
+		std::cerr << std::endl;
+	}
+
 	std::string Lower(std::string value) {
 		std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
-			return static_cast<char>(std::tolower(character));
+			// Resource names and profile markers are ASCII. Preserve all UTF-8
+			// bytes instead of passing them through locale-dependent tolower().
+			return static_cast<char>(character >= 'A' && character <= 'Z' ? character + ('a' - 'A') : character);
 		});
 		return value;
 	}
@@ -56,7 +76,7 @@ namespace {
 			".idea",
 			".vs",
 		};
-		const std::string name = Lower(path.filename().string());
+		const std::string name = Lower(ServerPathUtf8(path.filename()));
 		return ignored.contains(name) || name.starts_with("build-") || name.starts_with("build_");
 	}
 
@@ -216,7 +236,7 @@ namespace {
 					const std::filesystem::path configuredWorld = root / relativeDataPack / "world";
 					if (mapPath.empty() || IsPathWithin(mapPath, configuredWorld)) {
 						modernScore += 170;
-						modernType = ModernTypeFromName(relativeDataPack.filename().string());
+						modernType = ModernTypeFromName(ServerPathUtf8(relativeDataPack.filename()));
 					}
 				}
 			}
@@ -241,7 +261,7 @@ namespace {
 			}
 		}
 
-		const std::string rootName = Lower(root.filename().string());
+		const std::string rootName = Lower(ServerPathUtf8(root.filename()));
 		if (hasAppearances && (rootName.find("canary") != std::string::npos || rootName.find("crystal") != std::string::npos)) {
 			modernScore += 55;
 			modernType = ModernTypeFromName(rootName);
@@ -283,7 +303,7 @@ namespace {
 	}
 
 	bool IsAuxiliaryMap(const std::filesystem::path& path) {
-		const std::string stem = Lower(path.stem().string());
+		const std::string stem = Lower(ServerPathUtf8(path.stem()));
 		static constexpr std::array<const char*, 6> suffixes {
 			".houses",
 			"-houses",
@@ -297,7 +317,7 @@ namespace {
 		});
 	}
 
-	void DetectConfiguredMap(ServerWorkspace& workspace) {
+	void DetectConfiguredMap(ServerWorkspace& workspace, const ServerDetectionOptions& options) {
 		std::filesystem::path config = workspace.rootPath / "config.lua";
 		if (!IsRegularFile(config)) {
 			config = workspace.rootPath / "config.lua.dist";
@@ -306,8 +326,11 @@ namespace {
 			return;
 		}
 
+		TraceServerScan(options, "Reading mapName", config);
 		const std::optional<std::string> configuredMap = ReadLuaStringAssignment(config, "mapName");
+		TraceServerScan(options, "Reading dataPackDirectory", config);
 		const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
+		TraceServerScan(options, "Resolving configured map and data pack");
 		if (!configuredMap && !configuredDataPack) {
 			return;
 		}
@@ -328,7 +351,7 @@ namespace {
 			}
 			workspace.activeDataDirectory = Normalize(activeData);
 			workspace.mapsDirectory = Normalize(worldDirectory);
-			workspace.protocol = relativeDataPack.generic_string();
+			workspace.protocol = ServerPathUtf8(relativeDataPack);
 			mapDirectories.push_back(worldDirectory);
 		} else {
 			// Classic TFS releases use mapName without dataPackDirectory. Their map
@@ -378,7 +401,7 @@ namespace {
 			entries.push_back(*iterator);
 		}
 		std::sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
-			return Lower(left.path().filename().string()) < Lower(right.path().filename().string());
+			return Lower(ServerPathUtf8(left.path().filename())) < Lower(ServerPathUtf8(right.path().filename()));
 		});
 		return entries;
 	}
@@ -408,10 +431,11 @@ namespace {
 			const QueueEntry current = queue.front();
 			queue.pop_front();
 			++visited;
+			TraceServerScan(options, "Scanning map directory", current.directory);
 			for (const auto& entry : SortedEntries(current.directory)) {
 				std::error_code error;
 				if (entry.is_regular_file(error) && !error) {
-					const std::string extension = Lower(entry.path().extension().string());
+					const std::string extension = Lower(ServerPathUtf8(entry.path().extension()));
 					if (extension == ".otbm" || extension == ".otgz") {
 						AddMap(workspace, entry.path(), options.maximumMaps);
 					}
@@ -438,8 +462,8 @@ namespace {
 			if (leftInMapDirectory != rightInMapDirectory) {
 				return leftInMapDirectory;
 			}
-			const std::string leftName = Lower(left.path.filename().string());
-			const std::string rightName = Lower(right.path.filename().string());
+			const std::string leftName = Lower(ServerPathUtf8(left.path.filename()));
+			const std::string rightName = Lower(ServerPathUtf8(right.path.filename()));
 			const bool leftWorld = leftName == "world.otbm" || leftName == "world.otgz";
 			const bool rightWorld = rightName == "world.otbm" || rightName == "world.otgz";
 			if (leftWorld != rightWorld) {
@@ -456,7 +480,7 @@ namespace {
 		bool hasClientEvidence = false;
 		bool hasServerEvidence = false;
 		for (const DetectedMap& map : maps) {
-			const std::string name = Lower(map.path.stem().string());
+			const std::string name = Lower(ServerPathUtf8(map.path.stem()));
 			hasClientEvidence = hasClientEvidence || name.find("clientid") != std::string::npos || name.find("-client") != std::string::npos;
 			hasServerEvidence = hasServerEvidence || name.find("serverid") != std::string::npos || name.find("-server") != std::string::npos;
 		}
@@ -541,6 +565,7 @@ bool ServerWorkspace::trackedResourcesChanged() const {
 }
 
 ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path& requestedRoot, const ServerDetectionOptions& options) {
+	TraceServerScan(options, "Normalizing server root", requestedRoot);
 	ServerDetectionResult result;
 	if (requestedRoot.empty()) {
 		result.error = "Select the OT server root folder.";
@@ -556,11 +581,13 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	result.validRoot = true;
 	ServerWorkspace& workspace = result.workspace;
 	workspace.rootPath = root;
+	TraceServerScan(options, "Finding known item files", root);
 	const KnownItemFiles knownItems = FindKnownItems(root);
 	workspace.itemsOtbPath = knownItems.otb;
 	workspace.itemsXmlPath = knownItems.xml;
 	workspace.appearancesPath = knownItems.appearances;
-	DetectConfiguredMap(workspace);
+	TraceServerScan(options, "Finding server configuration", root);
+	DetectConfiguredMap(workspace, options);
 	if (!workspace.activeDataDirectory.empty()) {
 		const KnownItemFiles activeItems = FindKnownItems(workspace.activeDataDirectory);
 		if (!activeItems.otb.empty()) {
@@ -602,15 +629,17 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 
 	std::deque<QueueEntry> queue;
 	queue.push_back({ root, 0 });
+	TraceServerScan(options, "Starting bounded resource scan", root);
 	while (!queue.empty() && workspace.directoriesScanned < options.maximumDirectories) {
 		const QueueEntry current = queue.front();
 		queue.pop_front();
 		++workspace.directoriesScanned;
+		TraceServerScan(options, "Scanning resource directory", current.directory);
 
 		for (const auto& entry : SortedEntries(current.directory)) {
 			std::error_code error;
 			if (entry.is_regular_file(error) && !error) {
-				const std::string fileName = Lower(entry.path().filename().string());
+				const std::string fileName = Lower(ServerPathUtf8(entry.path().filename()));
 				if (workspace.itemsOtbPath.empty() && fileName == "items.otb") {
 					workspace.itemsOtbPath = Normalize(entry.path());
 				} else if (workspace.itemsXmlPath.empty() && fileName == "items.xml") {
@@ -618,7 +647,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 				} else if (workspace.appearancesPath.empty() && fileName == "appearances.dat") {
 					workspace.appearancesPath = Normalize(entry.path());
 				}
-				const std::string extension = Lower(entry.path().extension().string());
+				const std::string extension = Lower(ServerPathUtf8(entry.path().extension()));
 				if (workspace.activeDataDirectory.empty() && (extension == ".otbm" || extension == ".otgz")) {
 					AddMap(workspace, entry.path(), options.maximumMaps);
 					if (workspace.mapsDirectory.empty()) {
@@ -631,7 +660,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 			if (current.depth >= options.fallbackDepth || !entry.is_directory(error) || error || entry.is_symlink(error) || IsSkippedDirectory(entry.path())) {
 				continue;
 			}
-			const std::string directoryName = Lower(entry.path().filename().string());
+			const std::string directoryName = Lower(ServerPathUtf8(entry.path().filename()));
 			if (workspace.monstersDirectory.empty() && (directoryName == "monster" || directoryName == "monsters")) {
 				workspace.monstersDirectory = Normalize(entry.path());
 			}
@@ -643,6 +672,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	}
 
 	workspace.scanLimitReached = !queue.empty();
+	TraceServerScan(options, "Resource scan completed");
 	if (workspace.scanLimitReached) {
 		workspace.warnings.push_back("The bounded server scan reached its directory limit; known resources were kept.");
 	}
@@ -652,8 +682,10 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		}
 		ScanMaps(workspace, workspace.mapsDirectory, options);
 	}
+	TraceServerScan(options, "Selecting primary map");
 	SelectFallbackPrimaryMap(workspace);
 	for (DetectedMap& map : workspace.maps) {
+		TraceServerScan(options, "Detecting map server profile", map.path);
 		const DetectedMapContext context = DetectMapContext(map.path, root);
 		map.serverRootPath = context.root;
 		map.serverType = context.type;
@@ -664,14 +696,18 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		if (leftPrimary != rightPrimary) {
 			return leftPrimary;
 		}
-		const std::string leftName = Lower(left.path.filename().string());
-		const std::string rightName = Lower(right.path.filename().string());
+		const std::string leftName = Lower(ServerPathUtf8(left.path.filename()));
+		const std::string rightName = Lower(ServerPathUtf8(right.path.filename()));
 		return leftName != rightName ? leftName < rightName : left.path < right.path;
 	});
 
+	TraceServerScan(options, "Reading items.otb metadata", workspace.itemsOtbPath);
 	workspace.itemsOtbFingerprint = ResourceFingerprint::Read(workspace.itemsOtbPath);
+	TraceServerScan(options, "Reading items.xml metadata", workspace.itemsXmlPath);
 	workspace.itemsXmlFingerprint = ResourceFingerprint::Read(workspace.itemsXmlPath);
+	TraceServerScan(options, "Reading appearances.dat metadata", workspace.appearancesPath);
 	workspace.appearancesFingerprint = ResourceFingerprint::Read(workspace.appearancesPath);
+	TraceServerScan(options, "Finalizing server profile");
 	const DetectedMap* primaryMap = workspace.findMap(workspace.primaryMapPath);
 	if (primaryMap != nullptr) {
 		workspace.serverType = primaryMap->serverType;
@@ -687,6 +723,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	} else if (!workspace.itemsXmlFingerprint.exists) {
 		workspace.warnings.push_back("items.xml was not found. Server item metadata will be incomplete.");
 	}
+	TraceServerScan(options, "Server detection completed", root);
 	return result;
 }
 

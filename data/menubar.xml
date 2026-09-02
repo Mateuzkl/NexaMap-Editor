@@ -57,6 +57,15 @@
 		<item name="Preferences" action="PREFERENCES" help="Configure the map editor."/>
 		<item name="Exit" action="EXIT" help="Close the editor."/>
 	</menu>
+	<menu name="Multiplayer">
+		<item name="Host Session..." action="MULTIPLAYER_HOST" help="Share this map with other NexaMap users."/>
+		<item name="Join Session..." action="MULTIPLAYER_JOIN" help="Join a host by IP and port in an empty map tab."/>
+		<item name="Disconnect" action="MULTIPLAYER_DISCONNECT" help="Leave or close the multiplayer session."/>
+		<separator/>
+		<item name="Players, Chat and Approvals..." action="MULTIPLAYER_PLAYERS" help="Participants, permissions, chat, reviews and connection diagnostics."/>
+		<item name="Lock Selected Area" action="MULTIPLAYER_LOCK_SELECTION" help="Reserve the selection's bounding rectangle on each floor."/>
+		<item name="Release My Locks" action="MULTIPLAYER_UNLOCK" help="Release your tile and area locks."/>
+	</menu>
 	<menu name="Tools">
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
 		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>

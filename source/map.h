@@ -199,6 +199,7 @@ public:
 
 	// Returns true if the given (non-zero) unique id is already present somewhere on the map.
 	bool hasUniqueId(uint16_t uid) const;
+	uint32_t getUniqueIdCount(uint16_t uid) const { return uid < uidRefCount.size() ? uidRefCount[uid] : 0; }
 
 protected:
 	// Loads a map
@@ -248,6 +249,7 @@ protected:
 	friend class Editor;
 	friend class SpawnMapAdapter;
 	friend class GUI;
+	friend class MultiplayerSession;
 
 public:
 	Waypoints waypoints;

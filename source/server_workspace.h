@@ -89,6 +89,7 @@ struct ServerDetectionOptions {
 	std::size_t maximumMaps = 256;
 	std::size_t fallbackDepth = 4;
 	std::size_t mapDepth = 3;
+	bool diagnosticLogging = false;
 };
 
 struct ServerDetectionResult {

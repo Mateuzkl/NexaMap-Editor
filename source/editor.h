@@ -28,6 +28,7 @@
 
 class BaseMap;
 class CopyBuffer;
+class MultiplayerSession;
 
 enum class EditorClientVersionPolicy {
 	DetectFromMap,
@@ -47,6 +48,7 @@ public:
 	CopyBuffer& copybuffer;
 	GroundBrush* replace_brush;
 	Map map; // The map that is being edited
+	std::unique_ptr<MultiplayerSession> multiplayer;
 
 public: // Functions
 	static bool CanEdit() {

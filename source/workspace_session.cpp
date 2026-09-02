@@ -157,7 +157,21 @@ bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wx
 }
 
 bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bool persist) {
-	ServerDetectionResult detection = ServerResourceDetector::Detect(ToFilesystemPath(path));
+	ServerDetectionOptions options;
+	options.diagnosticLogging = g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG);
+	if (options.diagnosticLogging) {
+		std::cerr << "[workspace] Detecting server: " << path.ToStdString(wxConvUTF8) << std::endl;
+	}
+	ServerDetectionResult detection = ServerResourceDetector::Detect(ToFilesystemPath(path), options);
+	if (options.diagnosticLogging) {
+		std::cerr << "[workspace] Detection result: profile=" << detection.workspace.serverProfile
+				  << ", maps=" << detection.workspace.maps.size()
+				  << ", directories=" << detection.workspace.directoriesScanned
+				  << ", error=" << detection.error << std::endl;
+		for (const auto& warning : detection.workspace.warnings) {
+			std::cerr << "[workspace] Warning: " << warning << std::endl;
+		}
+	}
 	if (!selectedDetectedMapPath.empty() && !ApplyDetectedMapSelection(detection.workspace, selectedDetectedMapPath)) {
 		selectedDetectedMapPath.clear();
 	}
@@ -169,8 +183,14 @@ bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bo
 		++generation;
 	}
 	if (persist && persistenceEnabled) {
+		if (options.diagnosticLogging) {
+			std::cerr << "[workspace] Saving server selection" << std::endl;
+		}
 		persistPaths();
 		g_settings.save();
+	}
+	if (options.diagnosticLogging) {
+		std::cerr << "[workspace] Server selection applied" << std::endl;
 	}
 	return detection.validRoot && server.hasRequiredResources();
 }

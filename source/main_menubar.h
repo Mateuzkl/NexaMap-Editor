@@ -180,6 +180,12 @@ namespace MenuBar {
 		SEARCH_ON_SELECTION_WALLS_UPON_WALLS,
 
 		SHOW_HOTKEYS,
+		MULTIPLAYER_HOST,
+		MULTIPLAYER_JOIN,
+		MULTIPLAYER_DISCONNECT,
+		MULTIPLAYER_PLAYERS,
+		MULTIPLAYER_LOCK_SELECTION,
+		MULTIPLAYER_UNLOCK,
 	};
 }
 
@@ -290,6 +296,12 @@ public:
 	void OnMapCleanHouseItems(wxCommandEvent& event);
 	void OnMapCleanup(wxCommandEvent& event);
 	void OnMapProperties(wxCommandEvent& event);
+	void OnMultiplayerHost(wxCommandEvent& event);
+	void OnMultiplayerJoin(wxCommandEvent& event);
+	void OnMultiplayerDisconnect(wxCommandEvent& event);
+	void OnMultiplayerPlayers(wxCommandEvent& event);
+	void OnMultiplayerLockSelection(wxCommandEvent& event);
+	void OnMultiplayerUnlock(wxCommandEvent& event);
 	void OnMapStatistics(wxCommandEvent& event);
 
 	// View Menu

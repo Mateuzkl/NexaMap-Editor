@@ -46,6 +46,35 @@ int main() {
 	{
 		TemporaryDirectory server;
 		server.write("data/items/items.otb");
+		server.write("data/world/world.otbm");
+		// Reproduce the unrelated U+F05C directory in the reported TFS root.
+		server.write(u8"\uF05C/notes.txt");
+		server.write(u8"readme-\u5730\u56FE.txt");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(detection.validRoot && detection.workspace.hasItemsOtb(), "Unicode directory entries do not interrupt server discovery");
+		check(detection.workspace.maps.size() == 1, "unrelated Unicode entries do not hide the world map");
+		check(detection.workspace.serverType == ServerType::Tfs, "Unicode directory entries preserve TFS detection");
+	}
+
+	{
+		TemporaryDirectory server;
+		const std::filesystem::path root = u8"servidor-\u5730\u56FE-\U0001F30D";
+		const std::filesystem::path world = root / u8"data/world/cidade-\u5730\u56FE-client.OTBM";
+		server.write(root / "data/items/items.otb");
+		server.write(world);
+		server.write(root / u8"data/world/cidade-\u5730\u56FE-client.houses.otbm");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path / root);
+		check(detection.workspace.hasItemsOtb(), "item resources can be discovered under a Unicode server root");
+		check(detection.workspace.maps.size() == 2, "Unicode map filenames and uppercase OTBM extensions are recognized");
+		check(detection.workspace.primaryMapPath == std::filesystem::weakly_canonical(server.path / world), "Unicode world names remain ahead of generated houses maps");
+		check(detection.workspace.itemIdMode == ItemIdMode::ClientId, "ASCII client markers are detected without changing Unicode filename bytes");
+	}
+
+	{
+		TemporaryDirectory server;
+		server.write("data/items/items.otb");
 		server.write("data/items/items.xml", "<items/>");
 		server.write("config.lua", "mapName = \"world\"\n");
 		server.write("data/world/world.otbm");

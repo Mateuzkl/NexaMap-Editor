@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "multiplayer_session.h"
 
 #include <cstdlib>
 #include <limits>
@@ -674,6 +675,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 	last_cursor_map_x = mouse_map_x;
 	last_cursor_map_y = mouse_map_y;
 	last_cursor_map_z = floor;
+	if (editor.multiplayer && editor.multiplayer->active()) editor.multiplayer->updateCursor({mouse_map_x, mouse_map_y, floor});
 
 	if (map_update) {
 		UpdatePositionStatus(cursor_x, cursor_y);
@@ -805,6 +807,9 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
 }
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent& event) {
+	if (editor.multiplayer && editor.multiplayer->active() && event.AltDown() && event.ControlDown()) {
+		int x, y; ScreenToMap(event.GetX(), event.GetY(), &x, &y); editor.multiplayer->pingLocation({x, y, floor}); return;
+	}
 	if (ingamePreview) {
 		SetFocus();
 		return;
@@ -822,6 +827,10 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent& event) {
 		Tile* tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
 
 		if (tile && tile->size() > 0) {
+			MultiplayerSession::PropertyEdit propertyLock(&editor.map, tile->getPosition());
+			if (!propertyLock.allowed()) return;
+			tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
+			if (!tile) return;
 			Tile* new_tile = tile->deepCopy(editor.map);
 			wxDialog* w = nullptr;
 			if (new_tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
@@ -2259,6 +2268,10 @@ void MapCanvas::OnBrowseTile(wxCommandEvent& WXUNUSED(event)) {
 		return;
 	}
 	ASSERT(tile->isSelected());
+	MultiplayerSession::PropertyEdit propertyLock(&editor.map, tile->getPosition());
+	if (!propertyLock.allowed()) return;
+	tile = editor.selection.getSelectedTile();
+	if (!tile) return;
 	Tile* new_tile = tile->deepCopy(editor.map);
 
 	wxDialog* w = new BrowseTileWindow(g_gui.root, new_tile, wxPoint(cursor_x, cursor_y));

@@ -313,6 +313,7 @@ public:
 	void DrawHigherFloors();
 	void DrawSelectionBox();
 	void DrawBrush();
+	void DrawMultiplayer();
 	void DrawIngameBox();
 	void DrawGrid();
 	void DrawTooltips();

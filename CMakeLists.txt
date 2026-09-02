@@ -28,6 +28,9 @@ find_package(Protobuf REQUIRED)
 
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
+if(NOT WIN32)
+	find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+endif()
 
 # LibArchive support is disabled by default. To enable OTGZ support, define
 # OTGZ_SUPPORT in source/definitions.h and add LibArchive back to the build.
@@ -55,7 +58,8 @@ if(MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8)
 endif()
 if(WIN32)
-	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+	# Keep a console in Release too, as in RME Redux, for startup/crash output.
+	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 endif()
 if(ENABLE_UNITY_BUILD)
 	if(CMAKE_VERSION VERSION_LESS 3.16)
@@ -93,6 +97,24 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+if(WIN32)
+	target_link_libraries(${PROJECT_NAME} bcrypt)
+else()
+	target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto)
+endif()
+
+if(BUILD_TESTING)
+	add_executable(multiplayer_protocol_tests tests/multiplayer_protocol_tests.cpp source/multiplayer_protocol.cpp source/multiplayer_crypto.cpp)
+	target_include_directories(multiplayer_protocol_tests PRIVATE source)
+	target_compile_features(multiplayer_protocol_tests PRIVATE cxx_std_20)
+	if(WIN32)
+		target_link_libraries(multiplayer_protocol_tests PRIVATE bcrypt)
+		target_compile_options(multiplayer_protocol_tests PRIVATE /utf-8)
+	else()
+		target_link_libraries(multiplayer_protocol_tests PRIVATE OpenSSL::Crypto)
+	endif()
+	add_test(NAME multiplayer_protocol_tests COMMAND multiplayer_protocol_tests)
+endif()
 install(DIRECTORY
 	"${CMAKE_CURRENT_SOURCE_DIR}/brushes"
 	"${CMAKE_CURRENT_SOURCE_DIR}/data"
@@ -103,6 +125,7 @@ install(DIRECTORY
 install(FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.rtf"
 	"${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+	"${CMAKE_CURRENT_SOURCE_DIR}/NexaMap-Debug.cmd"
 	DESTINATION .
 )
 
