@@ -163,8 +163,7 @@ namespace {
 		DWORD processIds[2] {};
 		DWORD inputMode = 0;
 		const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
-		if (IsDebuggerPresent() || GetConsoleProcessList(processIds, 2) != 1 ||
-			!GetConsoleMode(input, &inputMode) || diagnosticConsolePaused.exchange(true)) {
+		if (IsDebuggerPresent() || GetConsoleProcessList(processIds, 2) != 1 || !GetConsoleMode(input, &inputMode) || diagnosticConsolePaused.exchange(true)) {
 			return;
 		}
 		std::cerr << "\n[critical] NexaMap stopped after an error. Copy the messages above or send nexamap.log."

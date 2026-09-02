@@ -361,7 +361,10 @@ void MainMenuBar::Update() {
 	bool is_local = has_map;
 	auto* live = MultiplayerSession::current();
 	const bool this_session = live && &live->getEditor() == editor;
-	if (this_session) { is_host = live->isHost(); is_local = false; }
+	if (this_session) {
+		is_host = live->isHost();
+		is_local = false;
+	}
 	EnableItem(MULTIPLAYER_HOST, has_map && !live);
 	EnableItem(MULTIPLAYER_JOIN, loaded && !live);
 	EnableItem(MULTIPLAYER_DISCONNECT, live != nullptr);
@@ -466,10 +469,14 @@ void MainMenuBar::Update() {
 	EnableItem(DEBUG_VIEW_DAT, loaded);
 	if (live) {
 		// Asset swaps and tools that mutate outside ActionQueue need an offline map.
-		for (auto id : {RELOAD_DATA, PREFERENCES, MAP_ITEM_ID_CONVERTER, IMPORT_MONSTERS}) EnableItem(id, false);
+		for (auto id : { RELOAD_DATA, PREFERENCES, MAP_ITEM_ID_CONVERTER, IMPORT_MONSTERS }) {
+			EnableItem(id, false);
+		}
 	}
 	if (this_session) {
-		for (auto id : {MAP_REMOVE_ITEMS, REMOVE_ON_MAP_DUPLICATED_ITEMS, REMOVE_ON_SELECTION_DUPLICATED_ITEMS, REMOVE_ON_SELECTION_ITEM, REMOVE_ON_SELECTION_MONSTER, ON_EDIT_EDIT_MONSTER_SPAWN_TIME}) EnableItem(id, false);
+		for (auto id : { MAP_REMOVE_ITEMS, REMOVE_ON_MAP_DUPLICATED_ITEMS, REMOVE_ON_SELECTION_DUPLICATED_ITEMS, REMOVE_ON_SELECTION_ITEM, REMOVE_ON_SELECTION_MONSTER, ON_EDIT_EDIT_MONSTER_SPAWN_TIME }) {
+			EnableItem(id, false);
+		}
 		EnableItem(PASTE, live->canEdit() && g_gui.CanPaste());
 		EnableItem(CUT, live->canEdit());
 	}
@@ -808,40 +815,96 @@ void MainMenuBar::OnSaveAs(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnMultiplayerHost(wxCommandEvent&) {
-	Editor* editor = g_gui.GetCurrentEditor(); if (!editor || MultiplayerSession::current()) return;
-	MultiplayerSession::Options options; if (!MultiplayerWindow::configure(frame, true, options)) return;
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor || MultiplayerSession::current()) {
+		return;
+	}
+	MultiplayerSession::Options options;
+	if (!MultiplayerWindow::configure(frame, true, options)) {
+		return;
+	}
 	try {
-		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor); std::string error;
-		if (!editor->multiplayer->host(options, error)) { editor->multiplayer.reset(); g_gui.PopupDialog("Multiplayer", wxstr(error), wxOK); return; }
-		editor->multiplayer->showWindow(); g_gui.UpdateMenus();
-	} catch (const std::exception& e) { g_gui.PopupDialog("Multiplayer", wxString::FromUTF8(e.what()), wxOK); }
+		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor);
+		std::string error;
+		if (!editor->multiplayer->host(options, error)) {
+			editor->multiplayer.reset();
+			g_gui.PopupDialog("Multiplayer", wxstr(error), wxOK);
+			return;
+		}
+		editor->multiplayer->showWindow();
+		g_gui.UpdateMenus();
+	} catch (const std::exception& e) {
+		g_gui.PopupDialog("Multiplayer", wxString::FromUTF8(e.what()), wxOK);
+	}
 }
 void MainMenuBar::OnMultiplayerJoin(wxCommandEvent&) {
-	if (MultiplayerSession::current()) return;
-	MultiplayerSession::Options options; if (!MultiplayerWindow::configure(frame, false, options)) return;
+	if (MultiplayerSession::current()) {
+		return;
+	}
+	MultiplayerSession::Options options;
+	if (!MultiplayerWindow::configure(frame, false, options)) {
+		return;
+	}
 	Editor* editor = g_gui.GetCurrentEditor();
-	if (!editor || editor->map.hasFile() || editor->map.getTileCount()) { if (!g_gui.NewMap()) return; editor = g_gui.GetCurrentEditor(); }
+	if (!editor || editor->map.hasFile() || editor->map.getTileCount()) {
+		if (!g_gui.NewMap()) {
+			return;
+		}
+		editor = g_gui.GetCurrentEditor();
+	}
 	try {
-		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor); std::string error;
-		if (!editor->multiplayer->join(options, error)) { editor->multiplayer.reset(); g_gui.PopupDialog("Multiplayer", wxstr(error), wxOK); return; }
-		editor->multiplayer->showWindow(); g_gui.UpdateMenus();
-	} catch (const std::exception& e) { g_gui.PopupDialog("Multiplayer", wxString::FromUTF8(e.what()), wxOK); }
+		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor);
+		std::string error;
+		if (!editor->multiplayer->join(options, error)) {
+			editor->multiplayer.reset();
+			g_gui.PopupDialog("Multiplayer", wxstr(error), wxOK);
+			return;
+		}
+		editor->multiplayer->showWindow();
+		g_gui.UpdateMenus();
+	} catch (const std::exception& e) {
+		g_gui.PopupDialog("Multiplayer", wxString::FromUTF8(e.what()), wxOK);
+	}
 }
 void MainMenuBar::OnMultiplayerDisconnect(wxCommandEvent&) {
-	if (auto* live = MultiplayerSession::current()) { live->disconnect(); g_gui.UpdateMenus(); g_gui.RefreshView(); }
+	if (auto* live = MultiplayerSession::current()) {
+		live->disconnect();
+		g_gui.UpdateMenus();
+		g_gui.RefreshView();
+	}
 }
-void MainMenuBar::OnMultiplayerPlayers(wxCommandEvent&) { if (auto* live = MultiplayerSession::current()) live->showWindow(); }
+void MainMenuBar::OnMultiplayerPlayers(wxCommandEvent&) {
+	if (auto* live = MultiplayerSession::current()) {
+		live->showWindow();
+	}
+}
 void MainMenuBar::OnMultiplayerLockSelection(wxCommandEvent&) {
-	auto* live = MultiplayerSession::current(); auto* editor = g_gui.GetCurrentEditor(); if (!live || !editor || &live->getEditor() != editor || !editor->hasSelection()) return;
+	auto* live = MultiplayerSession::current();
+	auto* editor = g_gui.GetCurrentEditor();
+	if (!live || !editor || &live->getEditor() != editor || !editor->hasSelection()) {
+		return;
+	}
 	const auto first = editor->selection.minPosition(), last = editor->selection.maxPosition();
-	for (int z = first.z; z <= last.z; ++z) live->lockRegion({static_cast<uint16_t>(first.x), static_cast<uint16_t>(first.y), static_cast<uint16_t>(last.x), static_cast<uint16_t>(last.y), static_cast<uint8_t>(z)});
+	for (int z = first.z; z <= last.z; ++z) {
+		live->lockRegion({ static_cast<uint16_t>(first.x), static_cast<uint16_t>(first.y), static_cast<uint16_t>(last.x), static_cast<uint16_t>(last.y), static_cast<uint8_t>(z) });
+	}
 }
 void MainMenuBar::OnMultiplayerUnlock(wxCommandEvent&) {
-	if (auto* live = MultiplayerSession::current()) { const auto locks = live->locks(); for (const auto& lock : locks) if (lock.owner == live->clientId()) live->unlockRegion(lock.id); }
+	if (auto* live = MultiplayerSession::current()) {
+		const auto locks = live->locks();
+		for (const auto& lock : locks) {
+			if (lock.owner == live->clientId()) {
+				live->unlockRegion(lock.id);
+			}
+		}
+	}
 }
 
 void MainMenuBar::OnPreferences(wxCommandEvent& WXUNUSED(event)) {
-	if (MultiplayerSession::current()) { g_gui.PopupDialog("Multiplayer", "Disconnect before changing client or item settings.", wxOK); return; }
+	if (MultiplayerSession::current()) {
+		g_gui.PopupDialog("Multiplayer", "Disconnect before changing client or item settings.", wxOK);
+		return;
+	}
 	PreferencesWindow dialog(frame);
 	dialog.ShowModal();
 	dialog.Destroy();
@@ -1041,7 +1104,10 @@ void MainMenuBar::OnDebugViewDat(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnReloadDataFiles(wxCommandEvent& WXUNUSED(event)) {
-	if (MultiplayerSession::current()) { g_gui.PopupDialog("Multiplayer", "Disconnect before reloading client or item definitions.", wxOK); return; }
+	if (MultiplayerSession::current()) {
+		g_gui.PopupDialog("Multiplayer", "Disconnect before reloading client or item definitions.", wxOK);
+		return;
+	}
 	wxString error;
 	wxArrayString warnings;
 	g_gui.LoadVersion(g_gui.GetCurrentVersionID(), error, warnings, true);
@@ -1884,7 +1950,9 @@ void MainMenuBar::OnMapCleanHouseItems(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnMapEditTowns(wxCommandEvent& WXUNUSED(event)) {
 	MultiplayerSession::MetadataEdit multiplayerEdit(g_gui.IsEditorOpen() ? &g_gui.GetCurrentMap() : nullptr);
-	if (!multiplayerEdit.allowed()) return;
+	if (!multiplayerEdit.allowed()) {
+		return;
+	}
 	if (g_gui.GetCurrentEditor()) {
 		wxDialog* town_dialog = newd EditTownsDialog(frame, *g_gui.GetCurrentEditor());
 		const int result = town_dialog->ShowModal();

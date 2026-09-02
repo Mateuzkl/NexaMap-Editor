@@ -124,7 +124,11 @@ void WaypointPalettePanel::OnClickWaypoint(wxListEvent& event) {
 }
 
 void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
-	MultiplayerSession::MetadataEdit multiplayerEdit(map); if (!multiplayerEdit.allowed()) { event.Veto(); return; }
+	MultiplayerSession::MetadataEdit multiplayerEdit(map);
+	if (!multiplayerEdit.allowed()) {
+		event.Veto();
+		return;
+	}
 	g_gui.EnableHotkeys();
 
 	std::string wpname = nstr(event.GetLabel());
@@ -174,10 +178,22 @@ void WaypointPalettePanel::OnEditWaypointLabel(wxListEvent& event) {
 
 void WaypointPalettePanel::OnClickAddWaypoint(wxCommandEvent& event) {
 	if (auto* live = MultiplayerSession::current(); live && &live->getEditor().map == map) {
-		MultiplayerSession::MetadataEdit multiplayerEdit(map); if (!multiplayerEdit.allowed()) return;
+		MultiplayerSession::MetadataEdit multiplayerEdit(map);
+		if (!multiplayerEdit.allowed()) {
+			return;
+		}
 		const wxString name = wxGetTextFromUser("Waypoint name", "New multiplayer waypoint", "", this);
-		if (name.empty() || map->waypoints.getWaypoint(nstr(name))) return;
-		auto* waypoint = new Waypoint; waypoint->name = nstr(name); if (auto* tab = g_gui.GetCurrentMapTab()) waypoint->pos = tab->GetScreenCenterPosition(); map->waypoints.addWaypoint(waypoint); refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true); return;
+		if (name.empty() || map->waypoints.getWaypoint(nstr(name))) {
+			return;
+		}
+		auto* waypoint = new Waypoint;
+		waypoint->name = nstr(name);
+		if (auto* tab = g_gui.GetCurrentMapTab()) {
+			waypoint->pos = tab->GetScreenCenterPosition();
+		}
+		map->waypoints.addWaypoint(waypoint);
+		refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
+		return;
 	}
 	if (map) {
 		auto* wp = newd Waypoint();
@@ -193,7 +209,10 @@ void WaypointPalettePanel::OnClickAddWaypoint(wxCommandEvent& event) {
 }
 
 void WaypointPalettePanel::OnClickRemoveWaypoint(wxCommandEvent& event) {
-	MultiplayerSession::MetadataEdit multiplayerEdit(map); if (!multiplayerEdit.allowed()) return;
+	MultiplayerSession::MetadataEdit multiplayerEdit(map);
+	if (!multiplayerEdit.allowed()) {
+		return;
+	}
 	if (!map) {
 		return;
 	}

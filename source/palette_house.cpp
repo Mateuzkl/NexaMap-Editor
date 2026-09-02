@@ -350,7 +350,10 @@ void HousePalettePanel::OnClickSelectExitButton(wxCommandEvent& event) {
 }
 
 void HousePalettePanel::OnClickAddHouse(wxCommandEvent& event) {
-	MultiplayerSession::MetadataEdit multiplayerEdit(map); if (!multiplayerEdit.allowed()) return;
+	MultiplayerSession::MetadataEdit multiplayerEdit(map);
+	if (!multiplayerEdit.allowed()) {
+		return;
+	}
 	if (map == nullptr) {
 		return;
 	}
@@ -397,7 +400,10 @@ void HousePalettePanel::OnClickEditHouse(wxCommandEvent& event) {
 	auto* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
 	if (house) {
 		EditHouseDialog dialog(g_gui.root, map, house);
-		MultiplayerSession::MetadataEdit multiplayerEdit(map, house); if (!multiplayerEdit.allowed()) return;
+		MultiplayerSession::MetadataEdit multiplayerEdit(map, house);
+		if (!multiplayerEdit.allowed()) {
+			return;
+		}
 		int ret = dialog.ShowModal();
 		if (ret == 1) {
 			g_gui.house_exit_brush->setHouse(nullptr);
@@ -418,7 +424,10 @@ void HousePalettePanel::OnClickRemoveHouse(wxCommandEvent& event) {
 	if (selection != wxNOT_FOUND) {
 		auto* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
 		g_gui.house_brush->setHouse(nullptr);
-		MultiplayerSession::MetadataEdit multiplayerEdit(map, house); if (!multiplayerEdit.allowed()) return;
+		MultiplayerSession::MetadataEdit multiplayerEdit(map, house);
+		if (!multiplayerEdit.allowed()) {
+			return;
+		}
 		g_gui.house_exit_brush->setHouse(nullptr);
 		map->houses.removeHouse(house);
 		house_list->Delete(selection);

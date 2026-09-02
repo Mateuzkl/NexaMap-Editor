@@ -593,7 +593,9 @@ BatchAction::~BatchAction() {
 		delete action;
 	}
 	batch.clear();
-	if (multiplayerGroup) multiplayerGroup->endActionGroup();
+	if (multiplayerGroup) {
+		multiplayerGroup->endActionGroup();
+	}
 }
 
 size_t BatchAction::memsize(bool recalc) const {
@@ -934,7 +936,9 @@ void ActionQueue::addAction(Action* action, int stacking_delay) {
 }
 
 bool ActionQueue::undo() {
-	if (editor.multiplayer && editor.multiplayer->active()) return editor.multiplayer->undo();
+	if (editor.multiplayer && editor.multiplayer->active()) {
+		return editor.multiplayer->undo();
+	}
 	if (current > 0) {
 		BatchAction* batch = actions[current - 1];
 		if (!batch->undo()) {
@@ -947,7 +951,9 @@ bool ActionQueue::undo() {
 }
 
 bool ActionQueue::redo() {
-	if (editor.multiplayer && editor.multiplayer->active()) return editor.multiplayer->redo();
+	if (editor.multiplayer && editor.multiplayer->active()) {
+		return editor.multiplayer->redo();
+	}
 	if (current < actions.size()) {
 		BatchAction* batch = actions[current];
 		if (!batch->redo()) {

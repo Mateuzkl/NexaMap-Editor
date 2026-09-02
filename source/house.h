@@ -63,7 +63,9 @@ public:
 	size_t tileCount() const {
 		return tiles.size();
 	}
-	const PositionList& getTilePositions() const { return tiles; }
+	const PositionList& getTilePositions() const {
+		return tiles;
+	}
 	std::string getDescription() const;
 	HouseSnapshot getSnapshot() const;
 	void applySnapshot(const HouseSnapshot& snapshot);

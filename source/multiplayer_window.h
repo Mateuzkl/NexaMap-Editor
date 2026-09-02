@@ -7,20 +7,23 @@
 #include "multiplayer_session.h"
 class MultiplayerWindow final : public wxFrame {
 public:
-    MultiplayerWindow(wxWindow* parent, MultiplayerSession& session);
-    ~MultiplayerWindow() override;
-    void update();
-    void detach() { session = nullptr; }
-    static bool configure(wxWindow* parent, bool host, MultiplayerSession::Options& options);
+	MultiplayerWindow(wxWindow* parent, MultiplayerSession& session);
+	~MultiplayerWindow() override;
+	void update();
+	void detach() {
+		session = nullptr;
+	}
+	static bool configure(wxWindow* parent, bool host, MultiplayerSession::Options& options);
+
 private:
-    MultiplayerSession* session;
-    wxListCtrl* players;
-    wxListCtrl* approvals;
-    wxTextCtrl* chat;
-    wxTextCtrl* input;
-    wxStaticText* diagnostics;
-    std::string displayedLog;
-    uint64_t selectedApproval() const;
-    uint32_t selectedPlayer() const;
+	MultiplayerSession* session;
+	wxListCtrl* players;
+	wxListCtrl* approvals;
+	wxTextCtrl* chat;
+	wxTextCtrl* input;
+	wxStaticText* diagnostics;
+	std::string displayedLog;
+	uint64_t selectedApproval() const;
+	uint32_t selectedPlayer() const;
 };
 #endif
