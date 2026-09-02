@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "favorites_resources.h"
 
 #include "settings.h"
 #include "brush.h"
@@ -69,6 +70,15 @@ CreaturePalettePanel::CreaturePalettePanel(wxWindow* parent, wxWindowID id) :
 	sidesizer->Add(creatureNameSizer, 0, wxEXPAND);
 
 	creature_list = newd wxCheckListBox(this, PALETTE_CREATURE_LISTBOX, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE | wxLB_NEEDED_SB);
+	creature_list->Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent& event) {
+		if (!FavoriteResources::IsCurrentPalette(this)) {
+			return;
+		}
+		const int index = creature_list->HitTest(event.GetPosition());
+		if (index != wxNOT_FOUND) {
+			FavoriteResources::Popup(creature_list, GetCreatureBrush(index));
+		}
+	});
 	sidesizer->Add(creature_list, 1, wxEXPAND);
 	topsizer->Add(sidesizer, 1, wxEXPAND);
 
@@ -466,8 +476,9 @@ void CreaturePalettePanel::RefreshCreatureList(const std::string& preferredSelec
 	const std::string searchText = GetSearchText();
 	if (!searchText.empty()) {
 		brushes.erase(std::remove_if(brushes.begin(), brushes.end(), [&searchText](CreatureBrush* brush) {
-			return as_lower_str(brush->getName()).find(searchText) == std::string::npos;
-		}), brushes.end());
+						  return as_lower_str(brush->getName()).find(searchText) == std::string::npos;
+					  }),
+					  brushes.end());
 	}
 
 	sortBrushesByLowerName(brushes);

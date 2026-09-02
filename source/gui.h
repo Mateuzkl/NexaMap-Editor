@@ -37,6 +37,7 @@
 class BaseMap;
 class Map;
 class EditorResourceSession;
+class FavoritesManager;
 class CrossClientClipboard;
 
 enum class EditorClientVersionPolicy;
@@ -392,6 +393,8 @@ protected:
 public:
 	// Spawn a newd palette
 	PaletteWindow* NewPalette();
+	FavoritesManager& GetFavorites();
+	void RefreshFavorites();
 	// Bring this palette to the front (as the 'active' palette)
 	void ActivatePalette(PaletteWindow* p);
 	// Rebuild forces palette to reload the entire contents
@@ -464,6 +467,7 @@ protected:
 	//=========================================================================
 	typedef std::list<PaletteWindow*> PaletteList;
 	PaletteList palettes;
+	std::unique_ptr<FavoritesManager> favorites;
 
 	wxGLContext* OGLContext;
 

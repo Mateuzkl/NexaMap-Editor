@@ -1543,27 +1543,43 @@ void GameSprite::unloadDC() {
 	dc[SPRITE_SIZE_32x32] = nullptr;
 }
 
-bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync) {
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit) {
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
-	if (pixelWidth <= 0 || pixelHeight <= 0 || layers == 0) {
+	if (pixelWidth <= 0 || pixelHeight <= 0 || layers == 0 || (outfit && (pattern_x == 0 || pattern_y == 0))) {
 		pixels.clear();
 		return false;
 	}
 
 	pixels.assign(static_cast<size_t>(pixelWidth) * pixelHeight * 4, 0);
 	std::vector<uint8_t> tilePixels(SPRITE_PIXELS_SIZE * 4);
-	for (uint8_t layer = 0; layer < layers; ++layer) {
+	const uint8_t previewLayers = outfit ? pattern_y : layers;
+	for (uint8_t layer = 0; layer < previewLayers; ++layer) {
+		if (outfit && layer > 0 && (layer > 8 || !(outfit->lookAddon & (1u << (layer - 1))))) {
+			continue;
+		}
 		for (uint8_t tileX = 0; tileX < width; ++tileX) {
 			for (uint8_t tileY = 0; tileY < height; ++tileY) {
-				const int index = getIndex(tileX, tileY, layer, 0, 0, 0, 0);
+				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, outfit ? std::min(2, static_cast<int>(pattern_x) - 1) : 0, outfit ? layer : 0, 0, 0);
 				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
 					continue;
 				}
 
 				NormalImage* image = spriteList[index];
-				if (image->fromAssets) {
+				if (outfit && layers > 1) {
+					const size_t templateIndex = static_cast<size_t>(index) + height * width;
+					if (templateIndex >= spriteList.size() || !spriteList[templateIndex]) {
+						pixels.clear();
+						return false;
+					}
+					std::unique_ptr<uint8_t[]> rgba(getTemplateImage(index, *outfit)->getRGBAData());
+					if (!rgba) {
+						pixels.clear();
+						return false;
+					}
+					std::copy_n(rgba.get(), tilePixels.size(), tilePixels.begin());
+				} else if (image->fromAssets) {
 					std::vector<uint8_t> sourcePixels;
 					ClientSpriteSize sourceSize;
 					bool imagePending = false;

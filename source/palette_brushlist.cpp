@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "favorites_resources.h"
 
 #include "palette_brushlist.h"
 #include "gui.h"
@@ -562,6 +563,15 @@ BrushListBox::BrushListBox(wxWindow* parent, const TilesetCategory* tileset) :
 	SetForegroundColour(Theme::Get(Theme::Role::Text));
 	SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
 	SetItemCount(tileset->size());
+	Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent& event) {
+		if (!FavoriteResources::IsCurrentPalette(this)) {
+			return;
+		}
+		const int index = VirtualHitTest(event.GetY());
+		if (index != wxNOT_FOUND && static_cast<size_t>(index) < this->tileset->size()) {
+			FavoriteResources::Popup(this, this->tileset->brushlist[index]);
+		}
+	});
 }
 
 BrushListBox::~BrushListBox() {

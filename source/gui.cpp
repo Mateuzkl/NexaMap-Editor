@@ -23,6 +23,8 @@
 #include <utility>
 
 #include "gui.h"
+#include "favorites_manager.h"
+#include "favorites_resources.h"
 #include "autoborder_preview.h"
 #include "main_menubar.h"
 #include "multiplayer_session.h"
@@ -799,6 +801,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	g_materials.createOtherTileset();
 
 	g_gui.DestroyLoadBar();
+	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
 	return true;
 }
 
@@ -897,10 +900,12 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	g_materials.createOtherTileset();
 	wxLogMessage("Canary/Crystal: dedicated data load completed.");
 	DestroyLoadBar();
+	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
 	return true;
 }
 
 void GUI::UnloadVersion() {
+	GetActiveEditorResourceSession()->favoritesContext.clear();
 	UnnamedRenderingLock();
 	DestroyIngamePreview();
 	gfx.clear();
@@ -1462,6 +1467,24 @@ PaletteWindow* GUI::GetPalette() {
 
 PaletteWindow* GUI::NewPalette() {
 	return CreatePalette();
+}
+
+FavoritesManager& GUI::GetFavorites() {
+	if (!favorites) {
+		favorites = std::make_unique<FavoritesManager>(std::filesystem::u8path(GetLocalDataDirectory().ToStdString(wxConvUTF8)) / "favorites.json");
+		std::string error;
+		favorites->load(error);
+		if (!error.empty()) {
+			wxLogWarning("Favorites: %s", wxString::FromUTF8(error));
+		}
+	}
+	return *favorites;
+}
+
+void GUI::RefreshFavorites() {
+	for (auto* palette : palettes) {
+		palette->RefreshFavorites();
+	}
 }
 
 void GUI::RefreshPalettes(Map* m, bool usedefault, bool selectBrush) {

@@ -239,6 +239,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
 	MAKE_ACTION(SHOW_HOTKEYS, wxITEM_NORMAL, OnShowHotkeys);
 	MAKE_ACTION(COMMAND_PALETTE, wxITEM_NORMAL, OnCommandPalette);
+	MAKE_ACTION(SHOW_FAVORITES, wxITEM_NORMAL, OnShowFavorites);
 
 	// A deleter, this way the frame does not need
 	// to bother deleting us.
@@ -403,6 +404,7 @@ void MainMenuBar::Update() {
 	}
 
 	bool loaded = g_gui.IsVersionLoaded();
+	EnableItem(SHOW_FAVORITES, loaded);
 	bool has_map = editor != nullptr;
 	bool has_selection = editor && editor->hasSelection();
 	bool is_host = has_map;
@@ -1179,6 +1181,10 @@ void MainMenuBar::OnAbout(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnShowHotkeys(wxCommandEvent& WXUNUSED(event)) {
 	g_hotkey_manager.ShowHotkeyDialog(frame, this);
+}
+
+void MainMenuBar::OnShowFavorites(wxCommandEvent&) {
+	g_gui.SelectPalettePage(TILESET_FAVORITES);
 }
 
 void MainMenuBar::OnCommandPalette(wxCommandEvent& WXUNUSED(event)) {

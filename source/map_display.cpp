@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "favorites_resources.h"
 #include "multiplayer_session.h"
 
 #include <cstdlib>
@@ -1704,7 +1705,7 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event) {
 		// Nothing
 	}
 
-	popup_menu->Update();
+	popup_menu->Update(editor.map.getTile(mouse_map_x, mouse_map_y, floor), this);
 	PopupMenu(popup_menu);
 
 	editor.actionQueue->resetTimer();
@@ -2797,12 +2798,11 @@ MapPopupMenu::~MapPopupMenu() {
 	////
 }
 
-void MapPopupMenu::Update() {
+void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 	// Clear the menu of all items
 	while (GetMenuItemCount() != 0) {
 		wxMenuItem* m_item = FindItemByPosition(0);
-		// If you add a submenu, this won't delete it.
-		Delete(m_item);
+		Destroy(m_item); // Includes submenus and their per-popup event bindings.
 	}
 
 	bool anything_selected = editor.selection.size() != 0;
@@ -2821,6 +2821,42 @@ void MapPopupMenu::Update() {
 
 	wxMenuItem* deleteItem = Append(MAP_POPUP_MENU_DELETE, "&Delete\tDEL", "Removes all seleceted items");
 	deleteItem->Enable(anything_selected);
+	if (cursorTile && !FavoriteResources::ActiveContext().empty()) {
+		auto favoritesMenu = std::make_unique<wxMenu>();
+		const auto appendItem = [&](Item* item, const wxString& position) {
+			if (!item) {
+				return;
+			}
+			// Prefer the item's registered resource brush, then doodad, then RAW.
+			// No attributes of this placed instance are copied to the favorite.
+			auto entry = FavoriteResources::FromBrush(item->getBrush());
+			if (!entry) {
+				entry = FavoriteResources::FromBrush(item->getDoodadBrush());
+			}
+			if (!entry) {
+				entry = FavoriteResources::FromBrush(item->getRAWBrush());
+			}
+			if (entry) {
+				const wxString label = position + ": " + wxString::FromUTF8(entry->displayName)
+					+ wxString::Format(" [ID %u]", item->getID()) + (entry->kind == FavoriteKind::Item ? " (Item)" : " (Brush)");
+				FavoriteResources::AppendMenu(*favoritesMenu, canvas, *entry, label);
+			}
+		};
+		appendItem(cursorTile->ground, "Ground");
+		for (size_t index = 0; index < cursorTile->items.size(); ++index) {
+			Item* item = cursorTile->items[index];
+			appendItem(item, wxString::Format(item->isBorder() ? "Border %zu" : "Item %zu", index + 1));
+		}
+		if (cursorTile->creature) {
+			if (const auto entry = FavoriteResources::FromBrush(cursorTile->creature->getBrush())) {
+				FavoriteResources::AppendMenu(*favoritesMenu, canvas, *entry, "Creature: " + wxString::FromUTF8(entry->displayName));
+			}
+		}
+		if (favoritesMenu->GetMenuItemCount()) {
+			AppendSeparator();
+			AppendSubMenu(favoritesMenu.release(), "Favorites", "Add or remove the indicated resource under the cursor");
+		}
+	}
 
 	if (anything_selected) {
 		if (editor.selection.size() == 1) {

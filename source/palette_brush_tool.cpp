@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "favorites_resources.h"
 
 #include "palette_brush_tool.h"
 #include "gui.h"
@@ -464,6 +465,7 @@ BrushButton::BrushButton(wxWindow* parent, Brush* _brush, RenderSize sz, uint32_
 	ASSERT(brush);
 	SetSprite(brush->getLookID());
 	SetToolTip(wxstr(brush->getName()));
+	Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent&) { FavoriteResources::Popup(this, brush); });
 }
 
 BrushButton::~BrushButton() {

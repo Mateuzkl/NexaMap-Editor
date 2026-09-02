@@ -104,6 +104,12 @@ else()
 endif()
 
 if(BUILD_TESTING)
+	add_executable(favorites_manager_tests tests/favorites_manager_tests.cpp source/favorites_manager.cpp)
+	target_include_directories(favorites_manager_tests PRIVATE source)
+	target_link_libraries(favorites_manager_tests PRIVATE nlohmann_json::nlohmann_json)
+	target_compile_features(favorites_manager_tests PRIVATE cxx_std_20)
+	add_test(NAME favorites_manager_tests COMMAND favorites_manager_tests)
+
 	add_executable(multiplayer_protocol_tests tests/multiplayer_protocol_tests.cpp source/multiplayer_protocol.cpp source/multiplayer_crypto.cpp)
 	target_include_directories(multiplayer_protocol_tests PRIVATE source)
 	target_compile_features(multiplayer_protocol_tests PRIVATE cxx_std_20)

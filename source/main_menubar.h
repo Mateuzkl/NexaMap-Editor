@@ -187,6 +187,7 @@ namespace MenuBar {
 		MULTIPLAYER_LOCK_SELECTION,
 		MULTIPLAYER_UNLOCK,
 		COMMAND_PALETTE,
+		SHOW_FAVORITES,
 	};
 }
 
@@ -345,6 +346,7 @@ public:
 	void OnAbout(wxCommandEvent& event);
 	void OnShowHotkeys(wxCommandEvent& event);
 	void OnCommandPalette(wxCommandEvent& event);
+	void OnShowFavorites(wxCommandEvent& event);
 
 	// Access actions map for hotkey discovery
 	const std::map<std::string, MenuBar::Action*>& GetActions() const {

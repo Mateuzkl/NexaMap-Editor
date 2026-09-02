@@ -29,6 +29,9 @@
 #include "palette_waypoints.h"
 #include "palette_zones.h"
 #include "palette_saved_terrain.h"
+#include "palette_favorites.h"
+#include "favorites_resources.h"
+#include "editor_resource_session.h"
 
 #include "map.h"
 
@@ -56,6 +59,8 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	zones_palette(nullptr),
 	saved_terrain_palette(nullptr),
 	raw_palette(nullptr) {
+	resource_session = GetActiveEditorResourceSession();
+	resource_context = FavoriteResources::ActiveContext();
 	SetMinSize(wxSize(225, 250));
 
 	// Create choicebook
@@ -90,6 +95,8 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 	raw_palette = static_cast<BrushPalettePanel*>(CreateRAWPalette(choicebook, tilesets));
 	choicebook->AddPage(raw_palette, raw_palette->GetName());
+	favorites_palette = new FavoritesPalettePanel(choicebook);
+	choicebook->AddPage(favorites_palette, favorites_palette->GetName());
 
 	// Setup sizers
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
@@ -105,6 +112,16 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 PaletteWindow::~PaletteWindow() {
 	////
+}
+
+bool PaletteWindow::HasCurrentResources() const {
+	return resource_session.lock() == GetActiveEditorResourceSession() && resource_context == FavoriteResources::ActiveContext() && !resource_context.empty();
+}
+
+void PaletteWindow::RefreshFavorites() {
+	if (favorites_palette && HasCurrentResources()) {
+		favorites_palette->RefreshFavorites();
+	}
 }
 
 PalettePanel* PaletteWindow::CreateTerrainPalette(wxWindow* parent, const TilesetContainer& tilesets) {
@@ -338,6 +355,12 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 	}
 
 	switch (primary) {
+		case TILESET_FAVORITES:
+			if (favorites_palette && favorites_palette->SelectBrush(whatbrush)) {
+				SelectPage(TILESET_FAVORITES);
+				return true;
+			}
+			break;
 		case TILESET_TERRAIN: {
 			// This is already searched first
 			break;
@@ -458,6 +481,9 @@ void PaletteWindow::OnUpdateBrushSize(BrushShape shape, int size) {
 }
 
 void PaletteWindow::OnUpdate(Map* map) {
+	if (favorites_palette) {
+		favorites_palette->OnUpdate();
+	}
 	if (creature_palette) {
 		creature_palette->OnUpdate();
 	}

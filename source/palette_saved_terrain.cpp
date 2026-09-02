@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "favorites_resources.h"
 
 #include "palette_saved_terrain.h"
 
@@ -89,6 +90,16 @@ SavedTerrainPalettePanel::SavedTerrainPalettePanel(wxWindow* parent, wxWindowID 
 
 	stamp_list = newd wxListCtrl(this, PALETTE_SAVED_TERRAIN_LISTBOX, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_NO_HEADER | wxLC_VRULES);
 	stamp_list->InsertColumn(0, "Name", wxLIST_FORMAT_LEFT, 180);
+	stamp_list->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, [this](wxListEvent& event) {
+		if (!FavoriteResources::IsCurrentPalette(this) || event.GetIndex() < 0) {
+			return;
+		}
+		if (const auto entry = FavoriteResources::FromStamp(stamp_list->GetItemText(event.GetIndex()).ToStdString(wxConvUTF8))) {
+			wxMenu menu;
+			FavoriteResources::AppendMenu(menu, this, *entry);
+			PopupMenu(&menu);
+		}
+	});
 	sidesizer->Add(stamp_list, 1, wxEXPAND);
 
 	auto* row1 = newd wxBoxSizer(wxHORIZONTAL);
@@ -191,6 +202,10 @@ void SavedTerrainPalettePanel::OnClickSaveFromSelection(wxCommandEvent&) {
 
 bool SavedTerrainPalettePanel::placeSelectedStamp() {
 	const wxString name = getSelectedName();
+	return PlaceSavedTerrain(this, name);
+}
+
+bool PlaceSavedTerrain(wxWindow* parent, const wxString& name) {
 	if (name.empty()) {
 		return false;
 	}
@@ -202,7 +217,7 @@ bool SavedTerrainPalettePanel::placeSelectedStamp() {
 	TerrainStamp stamp;
 	std::string error;
 	if (!TerrainStampLibrary::Load(nstr(name), stamp, error)) {
-		wxMessageBox(wxstr(error), "Place Terrain", wxOK | wxICON_ERROR, this);
+		wxMessageBox(wxstr(error), "Place Terrain", wxOK | wxICON_ERROR, parent);
 		return false;
 	}
 
@@ -215,7 +230,7 @@ bool SavedTerrainPalettePanel::placeSelectedStamp() {
 			),
 			"Place Terrain",
 			wxYES_NO | wxICON_WARNING,
-			this
+			parent
 		);
 		if (answer != wxYES) {
 			return false;
@@ -223,7 +238,7 @@ bool SavedTerrainPalettePanel::placeSelectedStamp() {
 	}
 
 	if (!stamp.LoadIntoCopyBuffer(g_gui.copybuffer)) {
-		wxMessageBox("Failed to load stamp into the paste buffer.", "Place Terrain", wxOK | wxICON_ERROR, this);
+		wxMessageBox("Failed to load stamp into the paste buffer.", "Place Terrain", wxOK | wxICON_ERROR, parent);
 		return false;
 	}
 
@@ -253,6 +268,7 @@ void SavedTerrainPalettePanel::OnClickRename(wxCommandEvent&) {
 		return;
 	}
 	ReloadList();
+	g_gui.RefreshFavorites();
 }
 
 void SavedTerrainPalettePanel::OnClickDelete(wxCommandEvent&) {
@@ -275,6 +291,7 @@ void SavedTerrainPalettePanel::OnClickDelete(wxCommandEvent&) {
 		return;
 	}
 	ReloadList();
+	g_gui.RefreshFavorites();
 }
 
 void SavedTerrainPalettePanel::OnClickImport(wxCommandEvent&) {

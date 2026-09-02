@@ -38,6 +38,9 @@ ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.h
 ${CMAKE_CURRENT_LIST_DIR}/file_transaction.h
+${CMAKE_CURRENT_LIST_DIR}/favorites_manager.h
+${CMAKE_CURRENT_LIST_DIR}/favorites_resources.h
+${CMAKE_CURRENT_LIST_DIR}/palette_favorites.h
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.h
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.h
 ${CMAKE_CURRENT_LIST_DIR}/post_process_renderer.h
@@ -210,6 +213,9 @@ ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gui.cpp
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.cpp
+${CMAKE_CURRENT_LIST_DIR}/favorites_manager.cpp
+${CMAKE_CURRENT_LIST_DIR}/favorites_resources.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_favorites.cpp
 ${CMAKE_CURRENT_LIST_DIR}/quick_command_palette.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house.cpp

@@ -52,5 +52,6 @@ protected:
 
 // Shared entry point used by palette and map context menu.
 bool PromptAndSaveTerrainFromSelection(wxWindow* parent);
+bool PlaceSavedTerrain(wxWindow* parent, const wxString& name);
 
 #endif

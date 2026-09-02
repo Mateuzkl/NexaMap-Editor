@@ -236,7 +236,7 @@ public:
 	MapPopupMenu(Editor& editor);
 	~MapPopupMenu() override;
 
-	void Update();
+	void Update(Tile* cursorTile, wxWindow* canvas);
 
 protected:
 	Editor& editor;

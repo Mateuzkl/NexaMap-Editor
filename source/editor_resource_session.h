@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 class Brush;
 class BaseMap;
@@ -28,10 +29,14 @@ public:
 	EditorResourceSession& operator=(const EditorResourceSession&) = delete;
 
 	void swapWithGlobals();
+	const std::string& getFavoritesContext() const {
+		return favoritesContext;
+	}
 
 private:
 	struct Storage;
 	std::unique_ptr<Storage> storage;
+	std::string favoritesContext;
 
 	ClientVersionID loadedVersion = CLIENT_VERSION_NONE;
 	bool canaryCrystalAssetsLoaded = false;

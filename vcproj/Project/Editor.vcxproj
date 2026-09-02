@@ -418,6 +418,15 @@
     <ClInclude Include="..\..\source\hotkey_manager.h" />
     <ClCompile Include="..\..\source\hotkey_manager.cpp" />
     <ClInclude Include="..\..\source\quick_command_palette.h" />
+    <ClInclude Include="..\..\source\favorites_manager.h" />
+    <ClInclude Include="..\..\source\favorites_resources.h" />
+    <ClInclude Include="..\..\source\palette_favorites.h" />
+    <ClCompile Include="..\..\source\favorites_resources.cpp" />
+    <ClCompile Include="..\..\source\palette_favorites.cpp" />
+    <ClCompile Include="..\..\source\favorites_manager.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
     <ClCompile Include="..\..\source\quick_command_palette.cpp" />
     <ClInclude Include="..\..\source\main_menubar.h" />
     <ClCompile Include="..\..\source\main_menubar.cpp" />
