@@ -222,6 +222,9 @@
     <ClInclude Include="..\..\source\map_region.h">
       <Filter>objects</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\map_chunk_revision.h">
+      <Filter>objects</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\object_pool.h">
       <Filter>objects</Filter>
     </ClInclude>

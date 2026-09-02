@@ -349,6 +349,7 @@
     <ClCompile Include="..\..\source\house_exit_brush.cpp" />
     <ClInclude Include="..\..\source\map_allocator.h" />
     <ClInclude Include="..\..\source\map_region.h" />
+    <ClInclude Include="..\..\source\map_chunk_revision.h" />
     <ClCompile Include="..\..\source\map_region.cpp" />
     <ClInclude Include="..\..\source\object_pool.h" />
     <ClCompile Include="..\..\source\object_pool.cpp" />

@@ -104,6 +104,11 @@ else()
 endif()
 
 if(BUILD_TESTING)
+	add_executable(map_chunk_revision_tests tests/map_chunk_revision_tests.cpp)
+	target_include_directories(map_chunk_revision_tests PRIVATE source)
+	target_compile_features(map_chunk_revision_tests PRIVATE cxx_std_20)
+	add_test(NAME map_chunk_revision_tests COMMAND map_chunk_revision_tests)
+
 	add_executable(favorites_manager_tests tests/favorites_manager_tests.cpp source/favorites_manager.cpp)
 	target_include_directories(favorites_manager_tests PRIVATE source)
 	target_link_libraries(favorites_manager_tests PRIVATE nlohmann_json::nlohmann_json)

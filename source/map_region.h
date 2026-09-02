@@ -19,6 +19,7 @@
 #define RME_MAP_REGION_H
 
 #include "position.h"
+#include "map_chunk_revision.h"
 
 class Tile;
 class Floor;
@@ -40,8 +41,13 @@ protected:
 	size_t waypoint_count;
 	size_t town_count;
 	HouseExitList* house_exits; // Any house exits pointing here
+	Floor* owningFloor = nullptr; // Non-owning: this location is embedded in Floor.
 
 public:
+	void markRenderChunkChanged(MapChunkChange change = MapChunkChange::Content);
+	void markTileReplacement(const Tile* oldTile, const Tile* newTile, MapChunkChange change = MapChunkChange::Content);
+	void markInstalledTileChanged(const Tile* candidate, MapChunkChange change);
+
 	// Access tile
 	// Can't set directly since that does not update tile count
 	Tile* get() {
@@ -73,27 +79,33 @@ public:
 	}
 	void increaseSpawnCount() {
 		spawn_count++;
+		markRenderChunkChanged(MapChunkChange::Presentation);
 	}
 	void decreaseSpawnCount() {
 		spawn_count--;
+		markRenderChunkChanged(MapChunkChange::Presentation);
 	}
 	size_t getWaypointCount() const {
 		return waypoint_count;
 	}
 	void increaseWaypointCount() {
 		waypoint_count++;
+		markRenderChunkChanged(MapChunkChange::Presentation);
 	}
 	void decreaseWaypointCount() {
 		waypoint_count--;
+		markRenderChunkChanged(MapChunkChange::Presentation);
 	}
 	size_t getTownCount() const {
 		return town_count;
 	}
 	void increaseTownCount() {
 		town_count++;
+		markRenderChunkChanged(MapChunkChange::Presentation);
 	}
 	void decreaseTownCount() {
 		town_count--;
+		markRenderChunkChanged(MapChunkChange::Presentation);
 	}
 	HouseExitList* createHouseExits() {
 		if (house_exits) {
@@ -118,7 +130,17 @@ public:
 	static void* operator new(size_t size, const char* file, int line);
 	static void operator delete(void* ptr, const char* file, int line) noexcept;
 
-	Floor(int x, int y, int z);
+	Floor(int x, int y, int z, MapChunkRevisionTracker& tracker);
+	MapChunkRevision getRenderRevision() const {
+		return tracker.read(renderRevision);
+	}
+
+private:
+	MapChunkRevisionTracker& tracker;
+	MapChunkRevision renderRevision;
+	friend class TileLocation;
+
+public:
 	TileLocation locs[MAP_LAYERS];
 };
 
@@ -137,7 +159,7 @@ public:
 	// Coordinates are NOT relative
 	TileLocation* createTile(int x, int y, int z);
 	TileLocation* getTile(int x, int y, int z);
-	Tile* setTile(int x, int y, int z, Tile* tile);
+	Tile* setTile(int x, int y, int z, Tile* tile, MapChunkChange change = MapChunkChange::Content);
 
 	Floor* createFloor(int x, int y, int z);
 	Floor* getFloor(uint32_t z) {

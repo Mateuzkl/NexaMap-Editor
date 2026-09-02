@@ -28,6 +28,9 @@
 #include <memory>
 #include "gl_renderer.h"
 #include "minimap_page_cache.h"
+#include "map_chunk_revision.h"
+
+class EditorResourceSession;
 
 class GameSprite;
 
@@ -274,6 +277,8 @@ protected:
 	double last_scene_ms = 0.0;
 	size_t visible_tile_count = 0;
 	size_t visible_item_count = 0;
+	MapChunkRevisionObserver chunk_revision_observer;
+	std::weak_ptr<EditorResourceSession> chunk_observed_session;
 
 #ifdef __WINDOWS__
 	ULARGE_INTEGER last_cpu_time;

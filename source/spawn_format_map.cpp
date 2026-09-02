@@ -72,6 +72,7 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 	if (!ValidateBeforeApply(map, document, warnings)) {
 		return false;
 	}
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 
 	for (const SpawnAreaData& area : document.areas) {
 		const Position center(area.centerX, area.centerY, area.centerZ);
@@ -119,6 +120,7 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 					type = g_creatures.addMissingCreatureType(primary.name, primary.isNpc);
 				}
 				creatureTile->creature = newd Creature(type);
+				creatureTile->markRenderChunkChanged();
 				creatureTile->creature->setSpawnType(primary.isNpc);
 				creatureTile->creature->setSpawnDirection(
 					static_cast<Direction>(std::clamp(entry.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),

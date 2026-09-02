@@ -47,8 +47,8 @@ public:
 	}
 
 	//
-	static Floor* allocateFloor(int x, int y, int z) {
-		return newd Floor(x, y, z);
+	static Floor* allocateFloor(int x, int y, int z, MapChunkRevisionTracker& tracker) {
+		return newd Floor(x, y, z, tracker);
 	}
 	static void freeFloor(Floor* f) {
 		delete f;

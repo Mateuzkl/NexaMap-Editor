@@ -40,6 +40,7 @@
 #include <iterator>
 
 #include "editor.h"
+#include "editor_resource_session.h"
 #include "autoborder_preview.h"
 #include "gui.h"
 #include "sprites.h"
@@ -577,6 +578,18 @@ inline int getFloorAdjustment(int floor) {
 }
 
 void MapDrawer::DrawMap() {
+	// Observe the existing traversal only when the HUD is enabled. No culling,
+	// ordering, FBO invalidation or draw decisions depend on these revisions.
+	if (options.show_performance_stats && !far_zoom_mode) {
+		const auto session = GetActiveEditorResourceSession();
+		if (chunk_observed_session.lock() != session) {
+			chunk_revision_observer.reset();
+			chunk_observed_session = session;
+		}
+		chunk_revision_observer.beginPass();
+	} else {
+		chunk_revision_observer.reset();
+	}
 	Brush* brush = g_gui.GetCurrentBrush();
 	if (!far_zoom_mode) {
 		visible_tile_count = 0;
@@ -639,6 +652,12 @@ void MapDrawer::DrawMap() {
 					QTreeNode* nd = editor.map.getLeaf(nd_map_x, nd_map_y);
 					if (!nd) {
 						continue;
+					}
+					if (options.show_performance_stats) {
+						if (const Floor* chunk = nd->getFloor(map_z)) {
+							const Position origin = chunk->locs[0].getPosition();
+							chunk_revision_observer.observe(MakeMapChunkKey(origin.x, origin.y, origin.z), chunk->getRenderRevision());
+						}
 					}
 
 					for (int map_x = 0; map_x < 4; ++map_x) {
@@ -2660,8 +2679,8 @@ void MapDrawer::DrawPerformanceStats() {
 	glPushMatrix();
 	glLoadIdentity();
 
-	int width = 240;
-	int height = 232;
+	int width = 330;
+	int height = 312;
 	int margin = 10;
 	int x = std::max(margin, screensize_x - width - margin);
 	int y = margin;
@@ -2754,6 +2773,23 @@ void MapDrawer::DrawPerformanceStats() {
 	drawText(text_x, text_y + 192, 0.7f, 0.7f, 0.7f, buf);
 	snprintf(buf, sizeof(buf), "Stream: %zu KB O/F:%zu/%zu", batchStats.streamBytes / 1024, batchStats.bufferOrphans, batchStats.mappingFallbacks);
 	drawText(text_x, text_y + 208, 0.7f, 0.7f, 0.7f, buf);
+
+	const auto& chunks = chunk_revision_observer.getStats();
+	if (far_zoom_mode) {
+		snprintf(buf, sizeof(buf), "Chunks: not sampled (minimap)");
+	} else {
+		snprintf(buf, sizeof(buf), "Last chunks V/N/C: %zu/%zu/%zu", chunks.visible, chunks.firstSeen, chunks.contentChanged);
+	}
+	drawText(text_x, text_y + 224, 0.55f, 0.75f, 1.0f, buf);
+	snprintf(buf, sizeof(buf), "Last chunks P/S: %zu/%zu", chunks.presentationChanged, chunks.unchanged);
+	drawText(text_x, text_y + 240, 0.55f, 0.75f, 1.0f, buf);
+	const auto& revisions = editor.map.getChunkRevisionTracker().getStats();
+	snprintf(buf, sizeof(buf), "Marks C/P: %llu/%llu", static_cast<unsigned long long>(revisions.contentMarks), static_cast<unsigned long long>(revisions.presentationMarks));
+	drawText(text_x, text_y + 256, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Revisions C/P: %llu/%llu", static_cast<unsigned long long>(revisions.contentChanges), static_cast<unsigned long long>(revisions.presentationChanges));
+	drawText(text_x, text_y + 272, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Coalesced: %llu", static_cast<unsigned long long>(revisions.coalescedMarks));
+	drawText(text_x, text_y + 288, 0.7f, 0.7f, 0.7f, buf);
 
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);

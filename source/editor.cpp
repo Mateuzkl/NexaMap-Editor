@@ -1002,6 +1002,7 @@ void Editor::randomizeSelection() {
 }
 
 void Editor::randomizeMap(bool showdialog) {
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 	if (showdialog) {
 		g_gui.CreateLoadBar("Randomizing map...");
 	}

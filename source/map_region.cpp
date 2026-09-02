@@ -51,6 +51,24 @@ bool TileLocation::empty() const {
 	return size() == 0;
 }
 
+void TileLocation::markRenderChunkChanged(MapChunkChange change) {
+	if (owningFloor) {
+		owningFloor->tracker.mark(owningFloor->renderRevision, change);
+	}
+}
+
+void TileLocation::markInstalledTileChanged(const Tile* candidate, MapChunkChange change) {
+	if (owningFloor) {
+		owningFloor->tracker.markIfInstalled(owningFloor->renderRevision, static_cast<const Tile*>(tile), candidate, change);
+	}
+}
+
+void TileLocation::markTileReplacement(const Tile* oldTile, const Tile* newTile, MapChunkChange change) {
+	if (owningFloor) {
+		owningFloor->tracker.markReplacement(owningFloor->renderRevision, oldTile, newTile, change);
+	}
+}
+
 //**************** Floor **********************
 
 void* Floor::operator new(size_t size) {
@@ -69,11 +87,13 @@ void Floor::operator delete(void* ptr, const char*, int) noexcept {
 	rme::deallocatePooledObject(ptr);
 }
 
-Floor::Floor(int sx, int sy, int z) {
+Floor::Floor(int sx, int sy, int z, MapChunkRevisionTracker& tracker) :
+	tracker(tracker) {
 	sx = sx & ~3;
 	sy = sy & ~3;
 
 	for (int i = 0; i < MAP_LAYERS; ++i) {
+		locs[i].owningFloor = this;
 		locs[i].position.x = sx + (i >> 2);
 		locs[i].position.y = sy + (i & 3);
 		locs[i].position.z = z;
@@ -111,7 +131,7 @@ QTreeNode* QTreeNode::getLeaf(int x, int y) {
 		if (node->isLeaf) {
 			return node;
 		} else {
-			uint32_t const index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
+			const uint32_t index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
 			if (node->child[index]) {
 				node = node->child[index];
 				cx <<= 2;
@@ -129,7 +149,7 @@ QTreeNode* QTreeNode::getLeafForce(int x, int y) {
 	uint32_t cx = x, cy = y;
 	int level = 6;
 	while (node) {
-		uint32_t const index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
+		const uint32_t index = ((cx & 0xC000) >> 14) | ((cy & 0xC000) >> 12);
 
 		QTreeNode*& qt = node->child[index];
 		if (qt) {
@@ -158,7 +178,7 @@ QTreeNode* QTreeNode::getLeafForce(int x, int y) {
 Floor* QTreeNode::createFloor(int x, int y, int z) {
 	ASSERT(isLeaf);
 	if (!array[z]) {
-		array[z] = newd Floor(x, y, z);
+		array[z] = newd Floor(x, y, z, map.getChunkRevisionTracker());
 	}
 	return array[z];
 }
@@ -226,16 +246,17 @@ TileLocation* QTreeNode::createTile(int x, int y, int z) {
 	return &f->locs[(x & 3) * 4 + (y & 3)];
 }
 
-Tile* QTreeNode::setTile(int x, int y, int z, Tile* newtile) {
+Tile* QTreeNode::setTile(int x, int y, int z, Tile* newtile, MapChunkChange change) {
 	ASSERT(isLeaf);
 	Floor* f = createFloor(x, y, z);
 
-	int const offset_x = x & 3;
-	int const offset_y = y & 3;
+	const int offset_x = x & 3;
+	const int offset_y = y & 3;
 
 	TileLocation* tmp = &f->locs[offset_x * 4 + offset_y];
 	Tile* oldtile = tmp->tile;
 	tmp->tile = newtile;
+	tmp->markTileReplacement(oldtile, newtile, change);
 
 	if (newtile && !oldtile) {
 		++map.tilecount;
@@ -245,4 +266,3 @@ Tile* QTreeNode::setTile(int x, int y, int z, Tile* newtile) {
 
 	return oldtile;
 }
-

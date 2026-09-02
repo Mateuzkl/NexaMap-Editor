@@ -310,6 +310,8 @@ bool Action::commit() {
 		return false;
 	}
 
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
+	const MapChunkChange chunkChange = type == ACTION_SELECT ? MapChunkChange::Presentation : MapChunkChange::Content;
 	editor.selection.start(Selection::INTERNAL);
 	ChangeList::const_iterator it = changes.begin();
 	while (it != changes.end()) {
@@ -321,10 +323,10 @@ bool Action::commit() {
 				ASSERT(newtile);
 				Position pos = newtile->getPosition();
 
-				Tile* oldtile = editor.map.swapTile(pos, newtile);
+				Tile* oldtile = editor.map.swapTile(pos, newtile, chunkChange);
 				TileLocation* location = newtile->getLocation();
 
-				newtile->update();
+				newtile->update(chunkChange);
 
 				// std::cout << "\tSwitched tile at " << pos.x << ";" << pos.y << ";" << pos.z << " from " << (void*)oldtile << " to " << *data <<  std::endl;
 				if (newtile->isSelected()) {
@@ -460,6 +462,8 @@ bool Action::undo() {
 		return false;
 	}
 
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
+	const MapChunkChange chunkChange = type == ACTION_SELECT ? MapChunkChange::Presentation : MapChunkChange::Content;
 	editor.selection.start(Selection::INTERNAL);
 	auto it = changes.rbegin();
 
@@ -472,7 +476,7 @@ bool Action::undo() {
 				ASSERT(oldtile);
 				Position pos = oldtile->getPosition();
 
-				Tile* newtile = editor.map.swapTile(pos, oldtile);
+				Tile* newtile = editor.map.swapTile(pos, oldtile, chunkChange);
 
 				if (oldtile->isSelected()) {
 					editor.selection.addInternal(oldtile);
@@ -673,6 +677,7 @@ void BatchAction::rollback() {
 }
 
 bool BatchAction::commit() {
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
 	std::vector<Action*> committedActions;
 	for (Action* action : batch) {
 		if (action && !action->isCommited()) {
@@ -771,6 +776,7 @@ bool BatchAction::canRedoHouseChanges() const {
 }
 
 bool BatchAction::undo() {
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
 	if (!canUndoHouseChanges()) {
 		return false;
 	}
@@ -791,6 +797,7 @@ bool BatchAction::undo() {
 }
 
 bool BatchAction::redo() {
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
 	if (!canRedoHouseChanges()) {
 		return false;
 	}
