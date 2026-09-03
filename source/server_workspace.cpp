@@ -6,12 +6,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <deque>
 #include <fstream>
 #include <initializer_list>
 #include <iostream>
 #include <optional>
 #include <regex>
+#include <string_view>
 #include <system_error>
 #include <unordered_set>
 
@@ -23,8 +25,20 @@ namespace {
 		return std::string(utf8.begin(), utf8.end());
 	}
 
+	bool VerboseServerScan() {
+		static const bool enabled = [] {
+			const char* value = std::getenv("NEXAMAP_SERVER_SCAN_TRACE");
+			return value && value[0] != '\0' && std::string_view(value) != "0";
+		}();
+		return enabled;
+	}
+
 	void TraceServerScan(const ServerDetectionOptions& options, const char* stage, const std::filesystem::path& path = {}) {
 		if (!options.diagnosticLogging) {
+			return;
+		}
+		const std::string_view stageName(stage);
+		if (!VerboseServerScan() && (stageName == "Scanning resource directory" || stageName == "Scanning map directory" || stageName == "Detecting map server profile")) {
 			return;
 		}
 		std::cerr << "[server-scan] " << stage;

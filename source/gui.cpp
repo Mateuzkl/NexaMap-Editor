@@ -615,6 +615,9 @@ void GUI::FinalizeResourceSessionActivation() {
 }
 
 void GUI::ShowNewMapTabDialog() {
+	if (ShouldSuppressNewTabRequests()) {
+		return;
+	}
 	NewMapTabDialog dialog(root);
 	if (dialog.ShowModal() != wxID_OK) {
 		return;
@@ -800,7 +803,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	g_brushes.init();
 	g_materials.createOtherTileset();
 
-	g_gui.DestroyLoadBar();
+	g_gui.SetLoadDone(100, "Classic resources ready.");
 	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
 	return true;
 }
@@ -899,7 +902,7 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	wxLogMessage("Canary/Crystal: building item and creature palettes.");
 	g_materials.createOtherTileset();
 	wxLogMessage("Canary/Crystal: dedicated data load completed.");
-	DestroyLoadBar();
+	SetLoadDone(100, "Canary/Crystal palettes ready.");
 	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
 	return true;
 }
@@ -1277,12 +1280,15 @@ void GUI::CloseCurrentEditor() {
 }
 
 bool GUI::CloseAllEditors(bool querySave) {
+	const bool wasClosingAllEditors = closingAllEditors;
+	closingAllEditors = true;
 	for (int i = 0; i < tabbook->GetTabCount(); ++i) {
 		auto* mapTab = dynamic_cast<MapTab*>(tabbook->GetTab(i));
 		if (mapTab) {
 			if (querySave && mapTab->IsUniqueReference() && mapTab->GetMap() && mapTab->GetMap()->hasChanged()) {
 				tabbook->SetFocusedTab(i);
 				if (!root->DoQuerySave(false)) {
+					closingAllEditors = wasClosingAllEditors;
 					return false;
 				} else {
 					RefreshPalettes();
@@ -1296,6 +1302,7 @@ bool GUI::CloseAllEditors(bool querySave) {
 	if (root) {
 		root->UpdateMenubar();
 	}
+	closingAllEditors = wasClosingAllEditors;
 	return true;
 }
 
@@ -1819,15 +1826,18 @@ void GUI::DestroyLoadBar() {
 	}
 
 	destroyPending = false;
-	progressBar->Show(false);
-
 	currentProgress = -1;
 	progressUpdating = false;
 
-	progressBar->Destroy();
+	// The native Windows progress dialog cannot be hidden. Destroy() defers
+	// destruction, leaving its owner disabled while the caller creates/focuses
+	// the next dialog or map tab. Update() has returned here (guarded above),
+	// so destroy synchronously to restore the owner before continuing.
+	wxProgressDialog* completedProgress = progressBar;
 	progressBar = nullptr;
+	delete completedProgress;
 
-	if (root) {
+	if (root && !closingApplication) {
 		if (root->IsActive()) {
 			root->Raise();
 		} else {
@@ -1837,6 +1847,9 @@ void GUI::DestroyLoadBar() {
 }
 
 void GUI::ShowWelcomeDialog(const wxBitmap& icon) {
+	if (closingApplication) {
+		return;
+	}
 	std::vector<wxString> recent_files = root->GetRecentFiles();
 	welcomeDialog = newd WelcomeDialog(__W_RME_APPLICATION_NAME__, "Version " + __W_RME_VERSION__, FROM_DIP(root, wxSize(1000, 650)), icon, recent_files);
 	welcomeDialog->Bind(wxEVT_CLOSE_WINDOW, &GUI::OnWelcomeDialogClosed, this);
@@ -1867,6 +1880,9 @@ void GUI::OnWelcomeDialogClosed(wxCloseEvent& event) {
 }
 
 void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
+	if (closingApplication) {
+		return;
+	}
 	auto loadWorkspace = [&]() {
 		wxString error;
 		wxArrayString warnings;

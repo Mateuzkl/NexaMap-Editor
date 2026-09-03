@@ -54,7 +54,7 @@ MapTabbook::~MapTabbook() {
 }
 
 void MapTabbook::CycleTab(bool forward) {
-	if (!notebook) {
+	if (!notebook || g_gui.ShouldSuppressNewTabRequests()) {
 		return;
 	}
 
@@ -82,6 +82,10 @@ void MapTabbook::OnNotebookPageChanging(wxAuiNotebookEvent& evt) {
 		evt.Skip();
 		return;
 	}
+	if (g_gui.IsApplicationClosing()) {
+		evt.Skip();
+		return;
+	}
 	const int newSelection = evt.GetSelection();
 	if (addPage && newSelection == static_cast<int>(notebook->GetPageIndex(addPage))) {
 		evt.Veto();
@@ -96,6 +100,10 @@ void MapTabbook::OnNotebookPageChanging(wxAuiNotebookEvent& evt) {
 }
 
 void MapTabbook::OnNotebookPageClose(wxAuiNotebookEvent& evt) {
+	if (g_gui.IsApplicationClosing()) {
+		evt.Skip();
+		return;
+	}
 	if (addPage && evt.GetInt() == static_cast<int>(notebook->GetPageIndex(addPage))) {
 		evt.Veto();
 		return;
@@ -112,6 +120,10 @@ void MapTabbook::OnNotebookPageClose(wxAuiNotebookEvent& evt) {
 
 void MapTabbook::OnNotebookPageChanged(wxAuiNotebookEvent& evt) {
 	if (initializing) {
+		evt.Skip();
+		return;
+	}
+	if (g_gui.IsApplicationClosing()) {
 		evt.Skip();
 		return;
 	}
@@ -153,6 +165,9 @@ void MapTabbook::OnNotebookPageChanged(wxAuiNotebookEvent& evt) {
 }
 
 void MapTabbook::OnNotebookLeftDown(wxMouseEvent& evt) {
+	if (g_gui.ShouldSuppressNewTabRequests()) {
+		return;
+	}
 	auto* tabControl = dynamic_cast<wxAuiTabCtrl*>(evt.GetEventObject());
 	const wxWindow* clickedPage = tabControl ? tabControl->TabHitTest(evt.GetPosition()).window : nullptr;
 	if (addPage && clickedPage == addPage) {
@@ -163,13 +178,13 @@ void MapTabbook::OnNotebookLeftDown(wxMouseEvent& evt) {
 }
 
 void MapTabbook::RequestNewMapTab() {
-	if (newTabDialogPending) {
+	if (newTabDialogPending || g_gui.ShouldSuppressNewTabRequests()) {
 		return;
 	}
 	newTabDialogPending = true;
 	CallAfter([this] {
 		newTabDialogPending = false;
-		if (notebook) {
+		if (notebook && !g_gui.ShouldSuppressNewTabRequests()) {
 			g_gui.ShowNewMapTabDialog();
 		}
 	});

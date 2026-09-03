@@ -218,6 +218,8 @@ GraphicManager::~GraphicManager() {
 
 void GraphicManager::swap(GraphicManager& other) noexcept {
 	using std::swap;
+	swap(resourceIdentity, other.resourceIdentity);
+	swap(atlas_page_epochs, other.atlas_page_epochs);
 	swap(client_version, other.client_version);
 	swap(unloaded, other.unloaded);
 	swap(spritefile, other.spritefile);
@@ -325,6 +327,7 @@ bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 			atlas_textures.push_back(tex);
+			atlas_page_epochs.replace(tex);
 			atlas_page_last_use.push_back(++atlas_access_counter);
 			atlas_page_last_frame.push_back(atlas_frame_active ? atlas_frame_counter : 0);
 			atlas_count = 0;
@@ -396,6 +399,7 @@ bool GraphicManager::recycleAtlasPage() {
 	loaded_textures = std::max(0, loaded_textures - invalidated);
 
 	GLRenderer::invalidateTexture(victimTexture);
+	atlas_page_epochs.replace(victimTexture);
 	glBindTexture(GL_TEXTURE_2D, victimTexture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
@@ -412,6 +416,15 @@ bool GraphicManager::recycleAtlasPage() {
 	}
 	atlas_count = 0;
 	atlas_allocation_failure_logged = false;
+	return true;
+}
+
+bool GraphicManager::retainAtlasPage(AtlasPageToken token) {
+	if (!atlas_page_epochs.contains(token)) {
+		return false;
+	}
+	// Prevent recycling while queued persistent draws still reference this page.
+	touchAtlasPage(token.texture);
 	return true;
 }
 
@@ -508,6 +521,8 @@ void GraphicManager::markTextureMissing() noexcept {
 }
 
 void GraphicManager::clear(bool clearPreloader) {
+	resourceIdentity = CreateSessionId();
+	atlas_page_epochs.clear();
 	if (clearPreloader) {
 		g_spritePreloader.clear();
 	}
@@ -790,6 +805,7 @@ bool GraphicManager::loadOTFI(const FileName& filename, wxString& error, wxArray
 }
 
 bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& error, wxArrayString& warnings) {
+	resourceIdentity = CreateSessionId();
 	// items.otb has most of the info we need. This only loads the GameSprite metadata
 	FileReadHandle file(nstr(datafile.GetFullPath()));
 
@@ -939,6 +955,7 @@ bool GraphicManager::loadAppearanceSprite(
 	wxArrayString& warnings
 ) {
 	using namespace rme::protobuf::appearances;
+	resourceIdentity = CreateSessionId();
 
 	const FrameGroup* frameGroup = nullptr;
 	for (const FrameGroup& candidate : appearance.frame_group()) {
@@ -1735,16 +1752,31 @@ GLuint GameSprite::getHardwareID(int _x, int _y, int _layer, int _count, int _pa
 }
 
 GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _layer, int _count, int _pattern_x, int _pattern_y, int _pattern_z, int _frame) {
+	return getSpriteTexByIndex(getItemImageIndex(_x, _y, _layer, _count, _pattern_x, _pattern_y, _frame));
+}
+
+uint32_t GameSprite::getItemImageIndex(int _x, int _y, int _layer, int _count, int _pattern_x, int _pattern_y, int _frame) const {
 	uint32_t v;
 	if (_count >= 0 && height <= 1 && width <= 1) {
 		v = _count;
 	} else {
 		v = ((((((_frame)*pattern_y + _pattern_y) * pattern_x + _pattern_x) * layers + _layer) * height + _y) * width + _x);
 	}
+	if (numsprites == 0) {
+		return 0;
+	}
 	if (v >= numsprites) {
 		v = (numsprites == 1) ? 0 : (v % numsprites);
 	}
+	return v;
+}
+
+GameSprite::SpriteTex GameSprite::getSpriteTexByIndex(uint32_t v) {
 	SpriteTex st;
+	if (v >= spriteList.size()) {
+		g_gui.gfx.markTextureMissing();
+		return st;
+	}
 	st.texture = spriteList[v]->getHardwareID();
 	if (st.texture == 0) {
 		g_gui.gfx.markTextureMissing();

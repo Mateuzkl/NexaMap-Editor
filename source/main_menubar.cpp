@@ -188,6 +188,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SHOW_PATHING, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_TOOLTIPS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_PERFORMANCE_STATS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(USE_CPU_GEOMETRY_CACHE, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(USE_GPU_GROUND_CACHE, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_PREVIEW, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_AUTOBORDER_PREVIEW, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_WALL_HOOKS, wxITEM_CHECK, OnChangeViewSettings);
@@ -591,6 +593,8 @@ void MainMenuBar::LoadValues() {
 	CheckItem(SHOW_PATHING, g_settings.getBoolean(Config::SHOW_BLOCKING));
 	CheckItem(SHOW_TOOLTIPS, g_settings.getBoolean(Config::SHOW_TOOLTIPS));
 	CheckItem(SHOW_PERFORMANCE_STATS, g_settings.getBoolean(Config::SHOW_PERFORMANCE_STATS));
+	CheckItem(USE_CPU_GEOMETRY_CACHE, g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE));
+	CheckItem(USE_GPU_GROUND_CACHE, g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE));
 	CheckItem(SHOW_PREVIEW, g_settings.getBoolean(Config::SHOW_PREVIEW));
 	CheckItem(SHOW_AUTOBORDER_PREVIEW, g_settings.getBoolean(Config::SHOW_AUTOBORDER_PREVIEW));
 	CheckItem(SHOW_WALL_HOOKS, g_settings.getBoolean(Config::SHOW_WALL_HOOKS));
@@ -1202,8 +1206,10 @@ void MainMenuBar::OnCommandPalette(wxCommandEvent& WXUNUSED(event)) {
 	} // Destroy the palette before a command can open another modal dialog.
 
 	if (MapTab* tab = g_gui.GetCurrentMapTab()) {
-		tab->GetCanvas()->SetFocus();
-	} else if (previousFocus && previousFocus->CanBeFocused()) {
+		if (tab->GetCanvas()->IsShownOnScreen() && tab->GetCanvas()->CanBeFocused()) {
+			tab->GetCanvas()->SetFocus();
+		}
+	} else if (previousFocus && previousFocus->IsShownOnScreen() && previousFocus->CanBeFocused()) {
 		previousFocus->SetFocus();
 	}
 	if (!selected) {
@@ -2408,6 +2414,8 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event) {
 	g_settings.setInteger(Config::HIGHLIGHT_ITEMS, IsItemChecked(MenuBar::HIGHLIGHT_ITEMS));
 	g_settings.setInteger(Config::HIGHLIGHT_LOCKED_DOORS, IsItemChecked(MenuBar::HIGHLIGHT_LOCKED_DOORS));
 	g_settings.setInteger(Config::SHOW_PERFORMANCE_STATS, IsItemChecked(MenuBar::SHOW_PERFORMANCE_STATS));
+	g_settings.setInteger(Config::USE_CPU_GEOMETRY_CACHE, IsItemChecked(MenuBar::USE_CPU_GEOMETRY_CACHE));
+	g_settings.setInteger(Config::USE_GPU_GROUND_CACHE, IsItemChecked(MenuBar::USE_GPU_GROUND_CACHE));
 	g_settings.setInteger(Config::SHOW_BLOCKING, IsItemChecked(MenuBar::SHOW_PATHING));
 	g_settings.setInteger(Config::SHOW_TOOLTIPS, IsItemChecked(MenuBar::SHOW_TOOLTIPS));
 	g_settings.setInteger(Config::SHOW_PREVIEW, IsItemChecked(MenuBar::SHOW_PREVIEW));

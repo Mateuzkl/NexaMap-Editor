@@ -350,6 +350,10 @@
     <ClInclude Include="..\..\source\map_allocator.h" />
     <ClInclude Include="..\..\source\map_region.h" />
     <ClInclude Include="..\..\source\map_chunk_revision.h" />
+    <ClInclude Include="..\..\source\map_chunk_geometry_cache.h" />
+    <ClInclude Include="..\..\source\map_chunk_render_cache.h" />
+    <ClInclude Include="..\..\source\atlas_page_epochs.h" />
+    <ClCompile Include="..\..\source\map_chunk_render_cache.cpp" />
     <ClCompile Include="..\..\source\map_region.cpp" />
     <ClInclude Include="..\..\source\object_pool.h" />
     <ClCompile Include="..\..\source\object_pool.cpp" />

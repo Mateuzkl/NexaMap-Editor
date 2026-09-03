@@ -51,6 +51,9 @@ static void* rmeGetGLProc(const char* name) {
 std::vector<GLRenderer*> GLRenderer::s_instances;
 
 GLRenderer::~GLRenderer() {
+	if (retainedVAO != 0) {
+		glDeleteVertexArrays(1, &retainedVAO);
+	}
 	destroyFBO();
 	postProcessRenderer.release();
 
@@ -96,12 +99,14 @@ layout(location=0) in vec2 aPos;
 layout(location=1) in vec2 aUV;
 layout(location=2) in vec4 aColor;
 uniform mat4 uProjection;
+uniform vec2 uOffset;
+uniform vec4 uTint;
 out vec2 vUV;
 out vec4 vColor;
 void main(){
-	gl_Position = uProjection * vec4(aPos, 0.0, 1.0);
+	gl_Position = uProjection * vec4(aPos + uOffset, 0.0, 1.0);
 	vUV = aUV;
-	vColor = aColor;
+	vColor = aColor * uTint;
 }
 )";
 
@@ -195,6 +200,9 @@ void GLRenderer::init() {
 	loc_useTexture = glGetUniformLocation(program, "uUseTexture");
 	loc_texture = glGetUniformLocation(program, "uTexture");
 	loc_stipple = glGetUniformLocation(program, "uStipple");
+	loc_offset = glGetUniformLocation(program, "uOffset");
+	loc_tint = glGetUniformLocation(program, "uTint");
+	glGenVertexArrays(1, &retainedVAO);
 
 	glGenVertexArrays(1, &vao);
 	glGenBuffers(1, &vbo);
@@ -256,6 +264,8 @@ void GLRenderer::bindProgram() {
 	}
 	glUseProgram(program);
 	m_programBound = true;
+	glUniform2f(loc_offset, 0, 0);
+	glUniform4f(loc_tint, 1, 1, 1, 1);
 }
 
 void GLRenderer::bindState() {
@@ -285,6 +295,7 @@ void GLRenderer::flushAndUnbind() {
 }
 
 void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
+	flushBatch();
 	std::array<float, 16> m {};
 	m[0] = 2.0f / (right - left);
 	m[5] = 2.0f / (top - bottom);
@@ -315,6 +326,7 @@ void GLRenderer::ensureQuadIndices(size_t quadCount) {
 }
 
 void GLRenderer::flushBatch() {
+	flushRetained();
 	if (batch.empty() || !initialized) {
 		return;
 	}
@@ -385,6 +397,7 @@ void GLRenderer::flushBatch() {
 }
 
 void GLRenderer::pushQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2, const Vertex& v3) {
+	flushRetained();
 	if (batch.size() + 4 > STREAM_VBO_CAPACITY) {
 		flushBatch();
 	}
@@ -393,6 +406,90 @@ void GLRenderer::pushQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2, 
 	batch.push_back(v2);
 	batch.push_back(v3);
 	++frameStats.quads;
+}
+
+bool GLRenderer::uploadRetainedQuads(GLuint& buffer, size_t& capacityBytes, const std::vector<Vertex>& vertices) {
+	if (!initialized || vertices.empty() || vertices.size() % 4 != 0) {
+		return false;
+	}
+	flushBatch();
+	if (!buffer) {
+		glGenBuffers(1, &buffer);
+	}
+	if (!buffer) {
+		return false;
+	}
+	glBindBuffer(GL_ARRAY_BUFFER, buffer);
+	const size_t bytes = vertices.size() * sizeof(Vertex);
+	if (bytes > capacityBytes) {
+		glBufferData(GL_ARRAY_BUFFER, bytes, vertices.data(), GL_STATIC_DRAW);
+		capacityBytes = bytes;
+	} else {
+		glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, vertices.data());
+	}
+	const GLenum error = glGetError();
+	if (error != GL_NO_ERROR) {
+		wxLogWarning("Persistent ground upload failed (GL 0x%X); using the streaming renderer.", static_cast<unsigned>(error));
+		releaseRetainedQuads(buffer);
+		capacityBytes = 0;
+		return false;
+	}
+	return true;
+}
+
+void GLRenderer::releaseRetainedQuads(GLuint& buffer) {
+	if (buffer) {
+		flushBatch();
+		glDeleteBuffers(1, &buffer);
+		buffer = 0;
+	}
+}
+
+bool GLRenderer::drawRetainedQuad(GLuint buffer, size_t quad, GLuint texture, float offsetX, float offsetY, const GLColor& color) {
+	if (!initialized || !buffer || !texture) {
+		return false;
+	}
+	if (!batch.empty()) {
+		flushBatch();
+	}
+	if (retainedDraw.count && (retainedDraw.buffer != buffer || retainedDraw.texture != texture || retainedDraw.first + retainedDraw.count != quad || retainedDraw.x != offsetX || retainedDraw.y != offsetY || retainedDraw.color != color)) {
+		flushRetained();
+	}
+	if (!retainedDraw.count) {
+		retainedDraw = { buffer, texture, quad, 0, offsetX, offsetY, color };
+	}
+	++retainedDraw.count;
+	++frameStats.quads;
+	return true;
+}
+
+void GLRenderer::flushRetained() {
+	if (!retainedDraw.count || !initialized) {
+		return;
+	}
+	bindProgram();
+	glBindVertexArray(retainedVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, retainedDraw.buffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, streamEBO);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, x)));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, u)));
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, r)));
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, retainedDraw.texture);
+	glUniform1i(loc_useTexture, 1);
+	glUniform1i(loc_texture, 0);
+	glUniform2f(loc_offset, retainedDraw.x, retainedDraw.y);
+	glUniform4f(loc_tint, retainedDraw.color.r / 255.f, retainedDraw.color.g / 255.f, retainedDraw.color.b / 255.f, retainedDraw.color.a / 255.f);
+	glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(retainedDraw.count * 6), GL_UNSIGNED_INT, reinterpret_cast<void*>(retainedDraw.first * 6 * sizeof(GLuint)));
+	++frameStats.drawCalls;
+	++frameStats.textureBindings;
+	retainedDraw = {};
+	// Live geometry and overlays use the same program with identity transforms.
+	glUniform2f(loc_offset, 0, 0);
+	glUniform4f(loc_tint, 1, 1, 1, 1);
 }
 
 void GLRenderer::drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor& color, float u0, float v0_, float u1, float v1_) {

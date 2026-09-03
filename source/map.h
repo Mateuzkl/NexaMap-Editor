@@ -350,6 +350,7 @@ inline long long remove_if_TileOnMap(Map& map, RemoveIfType& remove_if) {
 
 template <typename RemoveIfType>
 inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedOnly) {
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 	int64_t done = 0;
 	int64_t removed = 0;
 
@@ -368,6 +369,7 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 			if (condition(map, tile->ground, removed, done)) {
 				delete tile->ground;
 				tile->ground = nullptr;
+				tile->markRenderChunkChanged();
 				++removed;
 			}
 		}
@@ -377,6 +379,7 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 			if (condition(map, item, removed, done)) {
 				iit = tile->items.erase(iit);
 				delete item;
+				tile->markRenderChunkChanged();
 				++removed;
 			} else {
 				++iit;
@@ -389,6 +392,7 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 
 template <typename RemoveIfType>
 inline int64_t RemoveItemDuplicateOnMap(Map& map, RemoveIfType& condition, bool selectedOnly) {
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 	int64_t done = 0;
 	int64_t removed = 0;
 
@@ -410,6 +414,7 @@ inline int64_t RemoveItemDuplicateOnMap(Map& map, RemoveIfType& condition, bool 
 			if (duplicated && condition(map, tile, item, removed, done)) {
 				iit = tile->items.erase(iit);
 				delete item;
+				tile->markRenderChunkChanged();
 				++removed;
 			} else {
 				++iit;

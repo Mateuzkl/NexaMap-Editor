@@ -18,6 +18,7 @@ struct GLColor {
 	uint8_t g;
 	uint8_t b;
 	uint8_t a;
+	bool operator==(const GLColor&) const = default;
 };
 
 struct GLRenderBatchStats {
@@ -31,6 +32,15 @@ struct GLRenderBatchStats {
 
 class GLRenderer {
 public:
+	struct Vertex {
+		float x, y, u, v;
+		uint8_t r, g, b, a;
+	};
+	// Buffers belong to the calling view; these methods share the existing
+	// shader, vertex layout, and immutable quad EBO. Call with its GL context.
+	bool uploadRetainedQuads(GLuint& buffer, size_t& capacityBytes, const std::vector<Vertex>& vertices);
+	void releaseRetainedQuads(GLuint& buffer);
+	bool drawRetainedQuad(GLuint buffer, size_t quad, GLuint texture, float offsetX, float offsetY, const GLColor& color);
 	~GLRenderer();
 
 	void init();
@@ -88,6 +98,16 @@ private:
 	GLint loc_useTexture = -1;
 	GLint loc_texture = -1;
 	GLint loc_stipple = -1;
+	GLint loc_offset = -1;
+	GLint loc_tint = -1;
+	GLuint retainedVAO = 0;
+	struct RetainedDraw {
+		GLuint buffer = 0, texture = 0;
+		size_t first = 0, count = 0;
+		float x = 0, y = 0;
+		GLColor color {};
+	} retainedDraw;
+	void flushRetained();
 
 	// Orphaned ring-buffered vertex stream with a static quad index buffer.
 	static constexpr size_t STREAM_VBO_CAPACITY = 64 * 1024; // vertices
@@ -99,17 +119,6 @@ private:
 	std::vector<GLuint> indexScratch; // reusable local index pattern
 	GLRenderBatchStats frameStats;
 	bool mappingFallbackLogged = false;
-
-	struct Vertex {
-		float x;
-		float y;
-		float u;
-		float v;
-		uint8_t r;
-		uint8_t g;
-		uint8_t b;
-		uint8_t a;
-	};
 
 	std::vector<Vertex> batch; // 4 vertices per quad
 	GLuint current_texture = 0;

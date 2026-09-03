@@ -38,6 +38,8 @@
 #include <chrono>
 #include <cmath>
 #include <iterator>
+#include <filesystem>
+#include <locale>
 
 #include "editor.h"
 #include "editor_resource_session.h"
@@ -245,6 +247,16 @@ MapDrawer::MapDrawer(MapCanvas* canvas) :
 {
 	light_drawer = std::make_shared<LightDrawer>();
 	perf_update_timer.Start();
+	wxString trace;
+	if (wxGetEnv("NEXAMAP_CPU_CACHE_TRACE", &trace) && trace == "1") {
+		const auto path = std::filesystem::u8path(g_gui.GetLocalDataDirectory().ToStdString(wxConvUTF8)) / ("cpu-chunks-" + std::to_string(wxGetProcessId()) + "-" + std::to_string(editor.map.getSessionId()) + ".csv");
+		geometry_trace.open(path);
+		if (geometry_trace) {
+			geometry_trace.imbue(std::locale::classic());
+			geometry_trace << "sample,map,resources,cache_requested,cache_active,scene_drawn,ingame,width,height,zoom,scroll_x,scroll_y,floor,tiles,items,visible_chunks,hits,misses,rebuilds,resident_quads,payload_bytes,replayed_quads,build_ms,lookup_ms,ground_submit_ms,scene_cpu_ms,frame_submit_ms,frame_interval_ms,cpu_percent,draw_calls,texture_bindings,stream_bytes,content_changes,presentation_changes,gpu_requested,gpu_active,gpu_visible,gpu_hits,gpu_misses,gpu_created,gpu_rebuilt,gpu_evicted,gpu_fallback,gpu_replayed_quads,gpu_chunks,gpu_bytes,gpu_uploaded_bytes,gpu_uploaded_total\n";
+			std::cout << "[cpu-cache] CSV in user data directory: " << path.filename().string() << std::endl;
+		}
+	}
 }
 
 MapDrawer::~MapDrawer() {
@@ -292,6 +304,11 @@ void MapDrawer::SetupVars() {
 }
 
 void MapDrawer::SetupGL() {
+	frame_started = std::chrono::steady_clock::now();
+	frame_interval_ms = previous_frame_started.time_since_epoch().count() == 0 ? 0.0 : std::chrono::duration<double, std::milli>(frame_started - previous_frame_started).count();
+	previous_frame_started = frame_started;
+	frame_started_valid = true;
+	scene_drawn_this_frame = false;
 	glViewport(0, 0, screensize_x, screensize_y);
 
 	// Enable 2D mode
@@ -316,6 +333,10 @@ void MapDrawer::SetupGL() {
 
 void MapDrawer::Release() {
 	renderer->endFrame();
+	if (frame_started_valid) {
+		TraceGeometryFrame();
+		frame_started_valid = false;
+	}
 
 	tooltips.clear();
 
@@ -331,6 +352,7 @@ void MapDrawer::Release() {
 }
 
 void MapDrawer::DrawScene() {
+	scene_drawn_this_frame = true;
 	const auto started = std::chrono::steady_clock::now();
 	DrawBackground();
 	DrawMap();
@@ -578,6 +600,17 @@ inline int getFloorAdjustment(int floor) {
 }
 
 void MapDrawer::DrawMap() {
+	const bool gpuRequested = g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE);
+	const bool cpuRequested = g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) || gpuRequested;
+	cpu_geometry_enabled = cpuRequested && !far_zoom_mode && !options.isOnlyColors();
+	gpu_ground_enabled = gpuRequested && cpu_geometry_enabled;
+	chunk_render_cache.beginPass(editor.map.getSessionId(), g_gui.gfx.getResourceIdentity(), gpuRequested);
+	ground_draw_ms = 0;
+	if (cpuRequested) {
+		chunk_geometry_cache.beginPass(editor.map.getSessionId(), g_gui.gfx.getResourceIdentity(), options.show_performance_stats || geometry_trace.is_open());
+	} else {
+		chunk_geometry_cache.clear();
+	}
 	// Observe the existing traversal only when the HUD is enabled. No culling,
 	// ordering, FBO invalidation or draw decisions depend on these revisions.
 	if (options.show_performance_stats && !far_zoom_mode) {
@@ -660,10 +693,32 @@ void MapDrawer::DrawMap() {
 						}
 					}
 
+					const MapChunkGeometry* geometry = nullptr;
+					const MapChunkRenderCache::Entry* gpuChunk = nullptr;
+					if (cpu_geometry_enabled) {
+						if (const Floor* chunk = nd->getFloor(map_z)) {
+							const Position origin = chunk->locs[0].getPosition();
+							geometry = &chunk_geometry_cache.get(MakeMapChunkKey(origin.x, origin.y, origin.z), chunk->getRenderRevision().content, [&] { return BuildChunkGeometry(*chunk); });
+							if (gpu_ground_enabled) {
+								gpuChunk = chunk_render_cache.prepare(
+									MakeMapChunkKey(origin.x, origin.y, origin.z), chunk->getRenderRevision().content, *geometry,
+									[](const MapChunkGroundQuad& quad) {
+										GameSprite* sprite = g_items[quad.itemId].sprite;
+										if (!sprite) {
+											return ChunkAtlasSprite {};
+										}
+										const auto st = sprite->getSpriteTexByIndex(quad.imageIndex);
+										return ChunkAtlasSprite { g_gui.gfx.getAtlasPageToken(st.texture), st.u0, st.v0, st.u1, st.v1 };
+									},
+									[](AtlasPageToken token) { return g_gui.gfx.retainAtlasPage(token); }
+								);
+							}
+						}
+					}
 					for (int map_x = 0; map_x < 4; ++map_x) {
 						for (int map_y = 0; map_y < 4; ++map_y) {
 							TileLocation* location = nd->getTile(map_x, map_y, map_z);
-							DrawTile(location);
+							DrawTile(location, geometry ? &geometry->grounds[map_x * 4 + map_y] : nullptr, gpuChunk, map_x * 4 + map_y);
 							// draw light, but only if not zoomed too far
 							if (location && options.isDrawLight()) {
 								AddLight(location);
@@ -1914,7 +1969,65 @@ void MapDrawer::WriteTooltip(Waypoint* waypoint, std::ostringstream& stream) {
 	stream << "Waypoint: " << waypoint->name << "\n";
 }
 
-void MapDrawer::DrawTile(TileLocation* location) {
+MapChunkGeometry MapDrawer::BuildChunkGeometry(const Floor& chunk) const {
+	MapChunkGeometry geometry;
+	for (size_t index = 0; index < geometry.grounds.size(); ++index) {
+		const Tile* tile = chunk.locs[index].get();
+		if (!tile || !tile->ground) {
+			continue;
+		}
+		const Item& ground = *tile->ground;
+		const ItemType& type = g_items[ground.getID()];
+		GameSprite* sprite = type.sprite;
+		// The rest of BlitItem (special squares, item-dependent patterns,
+		// multi-part completeness, podiums and indicators) remains live.
+		if (!type.isGroundTile() || type.isMetaItem() || type.pickupable || type.stackable || type.isSplash() || type.isFluidContainer() || type.isHangable || type.isPodium() || type.isDoor() || type.hookSouth || type.hookEast || !sprite) {
+			continue;
+		}
+		if (sprite->width != 1 || sprite->height != 1 || sprite->layers != 1 || sprite->frames != 1 || sprite->animator || sprite->pattern_x == 0 || sprite->pattern_y == 0 || sprite->pattern_z == 0 || sprite->numsprites == 0 || ground.getLight().intensity != 0) {
+			continue;
+		}
+		const auto clientId = type.clientID;
+		if (clientId == 469 || clientId == 470 || clientId == 17970 || clientId == 20028 || clientId == 34168 || clientId == 2187 || (clientId >= 39092 && clientId <= 39100) || clientId == 39236 || clientId == 39367 || clientId == 39368) {
+			continue;
+		}
+		const Position& pos = tile->getPosition();
+		const auto offset = sprite->getDrawOffset();
+		geometry.grounds[index] = { -offset.first, -offset.second, sprite->getDrawHeight(), sprite->getItemImageIndex(0, 0, 0, -1, pos.x % sprite->pattern_x, pos.y % sprite->pattern_y, 0), ground.getID() };
+		++geometry.quadCount;
+	}
+	return geometry;
+}
+
+bool MapDrawer::BlitCachedGround(int& x, int& y, Item& ground, const MapChunkGroundQuad& quad, int red, int green, int blue, const MapChunkRenderCache::Entry* gpuChunk, size_t slot) {
+	if (quad.itemId == 0 || ground.getID() != quad.itemId || ground.isSelected() || ground.getFrame() != 0) {
+		return false;
+	}
+	if (gpuChunk && chunk_render_cache.draw(*gpuChunk, slot, x, y, { uint8_t(red), uint8_t(green), uint8_t(blue), 255 })) {
+		x -= quad.elevation;
+		y -= quad.elevation;
+		ground.setLastReadyFrame(0);
+		chunk_geometry_cache.recordReplay();
+		return true;
+	}
+	GameSprite* sprite = g_items[quad.itemId].sprite;
+	if (!sprite) {
+		return false;
+	}
+	const int screenX = x + quad.offsetX, screenY = y + quad.offsetY;
+	// Elevation advances even when an atlas upload is deferred, like BlitItem.
+	x -= quad.elevation;
+	y -= quad.elevation;
+	const auto texture = sprite->getSpriteTexByIndex(quad.imageIndex);
+	if (texture.texture != 0) {
+		ground.setLastReadyFrame(0);
+		glBlitTexture(screenX, screenY, texture.texture, red, green, blue, 255, false, texture.u0, texture.v0, texture.u1, texture.v1);
+		chunk_geometry_cache.recordReplay();
+	}
+	return true;
+}
+
+void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groundQuad, const MapChunkRenderCache::Entry* gpuChunk, size_t slot) {
 	RME_PROFILE_SCOPE("MapDrawer::DrawTile");
 	if (!location) {
 		return;
@@ -2039,7 +2152,14 @@ void MapDrawer::DrawTile(TileLocation* location) {
 				tile->ground->animate();
 			}
 
-			BlitItem(draw_x, draw_y, tile, tile->ground, false, r, g, b);
+			const bool measureGround = options.show_performance_stats || geometry_trace.is_open();
+			const auto groundStart = measureGround ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point {};
+			if (!groundQuad || !BlitCachedGround(draw_x, draw_y, *tile->ground, *groundQuad, r, g, b, gpuChunk, slot)) {
+				BlitItem(draw_x, draw_y, tile, tile->ground, false, r, g, b);
+			}
+			if (measureGround) {
+				ground_draw_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - groundStart).count();
+			}
 		} else if (options.always_show_zones && (r != 255 || g != 255 || b != 255)) {
 			DrawRawBrush(draw_x, draw_y, &g_items[SPRITE_ZONE], r, g, b, 60);
 		}
@@ -2679,8 +2799,9 @@ void MapDrawer::DrawPerformanceStats() {
 	glPushMatrix();
 	glLoadIdentity();
 
-	int width = 330;
-	int height = 312;
+	const bool twoColumns = screensize_x >= 680;
+	int width = twoColumns ? 660 : 330;
+	int height = twoColumns ? 312 : 568;
 	int margin = 10;
 	int x = std::max(margin, screensize_x - width - margin);
 	int y = margin;
@@ -2791,9 +2912,70 @@ void MapDrawer::DrawPerformanceStats() {
 	snprintf(buf, sizeof(buf), "Coalesced: %llu", static_cast<unsigned long long>(revisions.coalescedMarks));
 	drawText(text_x, text_y + 288, 0.7f, 0.7f, 0.7f, buf);
 
+	const int cpuX = twoColumns ? text_x + 330 : text_x;
+	const int cpuY = twoColumns ? text_y : text_y + 304;
+	const auto& cpu = chunk_geometry_cache.getStats();
+	const bool requested = g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) || g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE);
+	drawText(cpuX, cpuY, 0.55f, 0.9f, 0.65f, requested ? (cpu_geometry_enabled ? "CPU ground cache: ON" : "CPU ground cache: bypass") : "CPU ground cache: OFF");
+	snprintf(buf, sizeof(buf), "Last CPU V/H/M: %zu/%zu/%zu", cpu.visible, cpu.hits, cpu.misses);
+	drawText(cpuX, cpuY + 16, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Rebuilds: %zu Replay Q: %zu", cpu.rebuilds, cpu.replayedQuads);
+	drawText(cpuX, cpuY + 32, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Resident Q/V: %zu/%zu", chunk_geometry_cache.getQuadCount(), chunk_geometry_cache.getQuadCount() * 4);
+	drawText(cpuX, cpuY + 48, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "CPU payload: %.1f KB", chunk_geometry_cache.getGeometryBytes() / 1024.0);
+	drawText(cpuX, cpuY + 64, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Build: %.3fms", cpu.buildMs);
+	drawText(cpuX, cpuY + 80, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Lookup: %.3fms", cpu.lookupMs);
+	drawText(cpuX, cpuY + 96, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Ground CPU: %.3fms", ground_draw_ms);
+	drawText(cpuX, cpuY + 112, 0.7f, 0.7f, 0.7f, buf);
+	drawText(cpuX, cpuY + 128, 0.7f, 0.7f, 0.7f, "Static 1x1 grounds; live atlas UV");
+	const auto& gpuCache = chunk_render_cache.getStats();
+	drawText(cpuX, cpuY + 152, 0.55f, 0.9f, 0.65f, g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE) ? (gpu_ground_enabled ? "GPU ground cache: ON" : "GPU ground cache: bypass") : "GPU ground cache: OFF");
+	snprintf(buf, sizeof(buf), "GPU V/H/M: %zu/%zu/%zu", gpuCache.visible, gpuCache.hits, gpuCache.misses);
+	drawText(cpuX, cpuY + 168, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "New/Rebuild/Evict: %zu/%zu/%zu", gpuCache.created, gpuCache.rebuilt, gpuCache.evicted);
+	drawText(cpuX, cpuY + 184, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "GPU chunks: %zu / %.1f KB", chunk_render_cache.getChunkCount(), chunk_render_cache.getMemoryBytes() / 1024.0);
+	drawText(cpuX, cpuY + 200, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Upload: %.1f KB Total: %.1f MB", gpuCache.uploadedBytes / 1024.0, chunk_render_cache.getUploadedTotal() / (1024.0 * 1024.0));
+	drawText(cpuX, cpuY + 216, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "GPU Q: %zu Fallback: %zu", gpuCache.replayedQuads, gpuCache.fallback);
+	drawText(cpuX, cpuY + 232, 0.7f, 0.7f, 0.7f, buf);
+
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
 	renderer->setOrtho(0.0f, static_cast<float>(screensize_x) * zoom, static_cast<float>(screensize_y) * zoom, 0.0f);
+}
+
+void MapDrawer::TraceGeometryFrame() {
+	if (!geometry_trace.is_open()) {
+		return;
+	}
+	const double submitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_started).count();
+	const auto& cpu = chunk_geometry_cache.getStats();
+	const auto& gpu = renderer->getFrameStats();
+	const auto& revision = editor.map.getChunkRevisionTracker().getStats();
+	const auto& persistent = chunk_render_cache.getStats();
+	geometry_trace << ++geometry_trace_rows << ',' << editor.map.getSessionId() << ',' << g_gui.gfx.getResourceIdentity() << ','
+				   << g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) << ',' << cpu_geometry_enabled << ',' << scene_drawn_this_frame << ','
+				   << options.ingame << ',' << screensize_x << ',' << screensize_y << ','
+				   << zoom << ',' << view_scroll_x << ',' << view_scroll_y << ',' << floor << ',' << visible_tile_count << ',' << visible_item_count << ','
+				   << cpu.visible << ',' << cpu.hits << ',' << cpu.misses << ',' << cpu.rebuilds << ',' << chunk_geometry_cache.getQuadCount() << ','
+				   << chunk_geometry_cache.getGeometryBytes() << ',' << cpu.replayedQuads << ',' << cpu.buildMs << ',' << cpu.lookupMs << ',' << ground_draw_ms << ','
+				   << last_scene_ms << ',' << submitMs << ',' << frame_interval_ms << ',' << current_cpu << ',' << gpu.drawCalls << ',' << gpu.textureBindings << ','
+				   << gpu.streamBytes << ',' << revision.contentChanges << ',' << revision.presentationChanges << ','
+				   << g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE) << ',' << gpu_ground_enabled << ',' << persistent.visible << ',' << persistent.hits << ',' << persistent.misses << ','
+				   << persistent.created << ',' << persistent.rebuilt << ',' << persistent.evicted << ',' << persistent.fallback << ',' << persistent.replayedQuads << ','
+				   << chunk_render_cache.getChunkCount() << ',' << chunk_render_cache.getMemoryBytes() << ',' << persistent.uploadedBytes << ',' << chunk_render_cache.getUploadedTotal() << '\n';
+	if (geometry_trace_rows % 30 == 0) {
+		geometry_trace.flush();
+	}
+	if (geometry_trace_rows >= 6000) {
+		geometry_trace.close();
+	}
 }

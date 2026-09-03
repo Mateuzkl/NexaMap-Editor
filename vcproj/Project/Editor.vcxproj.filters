@@ -225,6 +225,15 @@
     <ClInclude Include="..\..\source\map_chunk_revision.h">
       <Filter>objects</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\map_chunk_geometry_cache.h">
+      <Filter>objects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\map_chunk_render_cache.h">
+      <Filter>objects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\atlas_page_epochs.h">
+      <Filter>objects</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\object_pool.h">
       <Filter>objects</Filter>
     </ClInclude>
@@ -547,6 +556,9 @@
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\map_display.cpp">
+      <Filter>gui\map window</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\map_chunk_render_cache.cpp">
       <Filter>gui\map window</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\map_drawer.cpp">

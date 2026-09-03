@@ -223,8 +223,16 @@ QuickCommandPalette::QuickCommandPalette(wxWindow* parent, const HotkeyManager& 
 				break;
 		}
 	});
-	Bind(wxEVT_INIT_DIALOG, [this](wxInitDialogEvent& event) {
-		search_->SetFocus();
+	Bind(wxEVT_SHOW, [this](wxShowEvent& event) {
+		// INIT_DIALOG runs before the native dialog is visible. Windows can
+		// reject SetFocus there with ERROR_INVALID_PARAMETER.
+		if (event.IsShown()) {
+			CallAfter([this] {
+				if (!IsBeingDeleted() && IsShownOnScreen() && search_->CanBeFocused()) {
+					search_->SetFocus();
+				}
+			});
+		}
 		event.Skip();
 	});
 	Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) {

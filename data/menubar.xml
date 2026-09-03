@@ -261,6 +261,8 @@
 	</menu>
 	-->
 	<menu name="Experimental">
+		<item name="Persistent GPU Ground Cache" action="USE_GPU_GROUND_CACHE" help="Reuse static ground VBOs per chunk with atlas generation checks. Experimental; OFF by default."/>
+		<item name="CPU Ground Geometry Cache" action="USE_CPU_GEOMETRY_CACHE" help="Reuse static ground geometry on the CPU. Experimental; toggle for OFF/ON comparison."/>
 		<item name="Fog in light view" hotkey="" action="EXPERIMENTAL_FOG" help="Apply fog filter to light effect."/>
 	</menu>
 	<menu name="Hotkeys">

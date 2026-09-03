@@ -18,6 +18,9 @@
 #ifndef RME_GRAPHICS_H_
 #define RME_GRAPHICS_H_
 
+#include "session_id.h"
+#include "atlas_page_epochs.h"
+
 #include "outfit.h"
 #include "common.h"
 #include <chrono>
@@ -115,6 +118,8 @@ public:
 		float v1 = 1.f;
 	};
 	SpriteTex getSpriteTex(int _x, int _y, int _layer, int _subtype, int _pattern_x, int _pattern_y, int _pattern_z, int _frame);
+	uint32_t getItemImageIndex(int x, int y, int layer, int count, int patternX, int patternY, int frame) const;
+	SpriteTex getSpriteTexByIndex(uint32_t index);
 	SpriteTex getSpriteTex(int _x, int _y, int _dir, int _addon, int _pattern_z, const Outfit& _outfit, int _frame);
 	void DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width = -1, int height = -1) override;
 
@@ -346,6 +351,11 @@ public:
 	void cleanSoftwareSprites();
 	void swap(GraphicManager& other) noexcept;
 	void activateSpritePreloader();
+	// CPU sprite definitions, not an atlas epoch. This identity travels with
+	// the resource storage and changes when definitions are cleared/reloaded.
+	SessionId getResourceIdentity() const noexcept {
+		return resourceIdentity;
+	}
 
 	Sprite* getSprite(int id);
 	GameSprite* getCreatureSprite(int id);
@@ -405,6 +415,10 @@ public:
 
 	// Sprite atlas: packs 32x32 sprites into large pages so they can be batched.
 	bool allocAtlasSlot(GLuint& outTex, int& outX, int& outY);
+	AtlasPageToken getAtlasPageToken(GLuint texture) const {
+		return atlas_page_epochs.get(texture);
+	}
+	bool retainAtlasPage(AtlasPageToken token);
 	int getAtlasSize() const {
 		return atlas_size;
 	}
@@ -429,6 +443,7 @@ public:
 
 private:
 	bool unloaded;
+	SessionId resourceIdentity = CreateSessionId();
 	// This is used if memcaching is NOT on
 	std::string spritefile;
 	std::unique_ptr<FileReadHandle> sprite_file_handle;
@@ -474,6 +489,7 @@ private:
 	bool texture_upload_attempt_active = false;
 
 	std::vector<GLuint> atlas_textures;
+	AtlasPageEpochs atlas_page_epochs;
 	std::vector<uint64_t> atlas_page_last_use;
 	std::vector<uint64_t> atlas_page_last_frame;
 	uint64_t atlas_access_counter = 0;

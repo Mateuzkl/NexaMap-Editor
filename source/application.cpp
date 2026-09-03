@@ -573,6 +573,7 @@ void Application::FixVersionDiscrapencies() {
 }
 
 void Application::Unload() {
+	g_gui.SetApplicationClosing(true);
 	g_gui.CloseAllEditors();
 	g_gui.UnloadVersion();
 	g_gui.SaveHotkeys();
@@ -899,6 +900,13 @@ bool MainFrame::LoadMap(const FileName& name) {
 
 void MainFrame::OnExit(wxCloseEvent& event) {
 	// clicking 'x' button
+	if (g_gui.IsApplicationClosing()) {
+		if (event.CanVeto()) {
+			event.Veto();
+		}
+		return;
+	}
+	g_gui.SetApplicationClosing(true);
 
 	// Ask to save changed maps before starting the normal destruction sequence.
 	std::set<Map*> prompted;
@@ -912,6 +920,7 @@ void MainFrame::OnExit(wxCloseEvent& event) {
 		g_gui.tabbook->SetFocusedTab(i);
 		if (!DoQuerySave(false)) {
 			if (event.CanVeto()) {
+				g_gui.SetApplicationClosing(false);
 				event.Veto();
 				return;
 			}

@@ -162,6 +162,15 @@ public:
 	void ShowWelcomeDialog(const wxBitmap& icon);
 	void FinishWelcomeDialog(bool showMainWindow = true);
 	bool IsWelcomeDialogShown();
+	void SetApplicationClosing(bool closing) noexcept {
+		closingApplication = closing;
+	}
+	bool IsApplicationClosing() const noexcept {
+		return closingApplication;
+	}
+	bool ShouldSuppressNewTabRequests() const noexcept {
+		return closingApplication || closingAllEditors;
+	}
 
 	/**
 	 * Destroys (hides) the current loading bar.
@@ -514,6 +523,8 @@ protected:
 	bool progressUpdating = false;
 	bool destroyPending = false;
 	bool resourceSessionUiPending = false;
+	bool closingApplication = false;
+	bool closingAllEditors = false;
 	std::unique_ptr<CrossClientClipboard> crossClientClipboard;
 
 	int disabled_counter;

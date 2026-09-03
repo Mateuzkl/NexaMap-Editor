@@ -26,9 +26,12 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <fstream>
 #include "gl_renderer.h"
 #include "minimap_page_cache.h"
 #include "map_chunk_revision.h"
+#include "map_chunk_geometry_cache.h"
+#include "map_chunk_render_cache.h"
 
 class EditorResourceSession;
 
@@ -221,6 +224,18 @@ class MapDrawer {
 	std::shared_ptr<LightDrawer> light_drawer;
 	std::unique_ptr<GLRenderer> renderer = std::make_unique<GLRenderer>();
 	MinimapPageCache minimap_page_cache;
+	MapChunkGeometryCache chunk_geometry_cache;
+	MapChunkRenderCache chunk_render_cache { *renderer };
+	bool gpu_ground_enabled = false;
+	bool cpu_geometry_enabled = false;
+	double ground_draw_ms = 0;
+	std::ofstream geometry_trace;
+	size_t geometry_trace_rows = 0;
+	std::chrono::steady_clock::time_point frame_started;
+	std::chrono::steady_clock::time_point previous_frame_started;
+	double frame_interval_ms = 0;
+	bool scene_drawn_this_frame = false;
+	bool frame_started_valid = false;
 
 	float zoom;
 
@@ -350,7 +365,9 @@ protected:
 	void BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red = 255, int green = 255, int blue = 255, int alpha = 255, int animationFrame = 0);
 	void BlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size = 0);
 	void DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha);
-	void DrawTile(TileLocation* tile);
+	void DrawTile(TileLocation* tile, const MapChunkGroundQuad* groundQuad = nullptr, const MapChunkRenderCache::Entry* gpuChunk = nullptr, size_t slot = 0);
+	MapChunkGeometry BuildChunkGeometry(const Floor& chunk) const;
+	bool BlitCachedGround(int& x, int& y, Item& ground, const MapChunkGroundQuad& quad, int red, int green, int blue, const MapChunkRenderCache::Entry* gpuChunk, size_t slot);
 	void DrawBrushIndicator(int x, int y, Brush* brush, uint8_t r, uint8_t g, uint8_t b);
 	void DrawHookIndicator(int x, int y, const ItemType& type);
 	void DrawIndicator(int x, int y, int indicator, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
@@ -361,6 +378,7 @@ protected:
 	void UpdateRAMUsage();
 	void UpdateCPUUsage();
 	void AddLight(TileLocation* location);
+	void TraceGeometryFrame();
 
 	enum BrushColor {
 		COLOR_BRUSH,

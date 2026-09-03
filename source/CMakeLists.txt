@@ -82,6 +82,9 @@ ${CMAKE_CURRENT_LIST_DIR}/map_display.h
 ${CMAKE_CURRENT_LIST_DIR}/map_drawer.h
 ${CMAKE_CURRENT_LIST_DIR}/map_region.h
 ${CMAKE_CURRENT_LIST_DIR}/map_chunk_revision.h
+${CMAKE_CURRENT_LIST_DIR}/map_chunk_geometry_cache.h
+${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.h
+${CMAKE_CURRENT_LIST_DIR}/atlas_page_epochs.h
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.h
 ${CMAKE_CURRENT_LIST_DIR}/map_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
@@ -209,6 +212,7 @@ ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/post_process_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gui.cpp
