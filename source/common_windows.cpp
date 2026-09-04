@@ -1103,6 +1103,7 @@ FindDialogListBox::FindDialogListBox(wxWindow* parent, wxWindowID id) :
 	SetBackgroundColour(Theme::Get(Theme::Role::Background));
 	SetForegroundColour(Theme::Get(Theme::Role::Text));
 	Clear();
+	Connect(wxEVT_LEFT_DCLICK, wxMouseEventHandler(FindDialogListBox::OnDoubleClick), nullptr, this);
 }
 
 FindDialogListBox::~FindDialogListBox() {
@@ -1167,6 +1168,21 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 
 wxCoord FindDialogListBox::OnMeasureItem(size_t n) const {
 	return 32;
+}
+
+void FindDialogListBox::OnDoubleClick(wxMouseEvent& WXUNUSED(event)) {
+	if (no_matches || cleared) {
+		return;
+	}
+
+	ssize_t n = GetSelection();
+	if (n != wxNOT_FOUND) {
+		wxWindow* parent = GetParent();
+		if (parent) {
+			wxCommandEvent event(wxEVT_COMMAND_BUTTON_CLICKED, wxID_OK);
+			parent->GetEventHandler()->AddPendingEvent(event);
+		}
+	}
 }
 
 // ============================================================================

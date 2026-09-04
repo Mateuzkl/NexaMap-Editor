@@ -329,9 +329,10 @@ void FindItemDialog::RefreshContentsInternal() {
 			items_list->AddBrush(raw_brush);
 		}
 	} else if (selection == SearchMode::Names) {
-		std::string search_string = as_lower_str(nstr(name_text_input->GetValue()));
+		wxString search_string = name_text_input->GetValue().Lower();
 		if (search_string.size() >= 2) {
-			for (int id = 100; id <= g_items.getMaxID(); ++id) {
+			size_t maxID = g_items.getMaxID();
+			for (int id = 100; id <= maxID; ++id) {
 				ItemType& item = g_items.getItemType(id);
 				if (item.id == 0) {
 					continue;
@@ -346,7 +347,8 @@ void FindItemDialog::RefreshContentsInternal() {
 					continue;
 				}
 
-				if (as_lower_str(raw_brush->getName()).find(search_string) == std::string::npos) {
+				wxString item_name = wxstr(raw_brush->getName()).Lower();
+				if (item_name.Find(search_string) == wxNOT_FOUND) {
 					continue;
 				}
 
@@ -427,7 +429,7 @@ void FindItemDialog::OnClientIdChange(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void FindItemDialog::OnText(wxCommandEvent& WXUNUSED(event)) {
-	input_timer.Start(800, true);
+	input_timer.Start(300, true);
 }
 
 void FindItemDialog::OnTypeChange(wxCommandEvent& WXUNUSED(event)) {
