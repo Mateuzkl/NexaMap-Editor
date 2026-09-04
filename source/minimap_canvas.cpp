@@ -6,6 +6,7 @@
 #include "graphics.h"
 #include "gui.h"
 #include "map.h"
+#include "map_region.h"
 #include "map_display.h"
 #include "map_tab.h"
 #include "minimap_style.h"
@@ -20,13 +21,16 @@
 namespace {
 	constexpr std::array<double, 5> ZoomFactors = { 0.25, 0.5, 1.0, 2.0, 4.0 };
 	constexpr std::array<int, 5> ZoomPercents = { 25, 50, 100, 200, 400 };
+	constexpr uint64_t SpecialChunkRetentionPasses = 4;
 }
 
 MinimapCanvas::MinimapCanvas(wxWindow* parent) :
 	wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE | wxWANTS_CHARS) {
 	SetMinSize(FROM_DIP(parent, wxSize(110, 100)));
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
-	SetToolTip("Click or drag to navigate. Use the mouse wheel to zoom.");
+	navigationTooltip_ = "Click or drag to navigate. Use the mouse wheel to zoom.";
+	displayedTooltip_ = navigationTooltip_;
+	SetToolTip(navigationTooltip_);
 	for (size_t index = 0; index < pens_.size(); ++index) {
 		const wxColour colour(minimap_color[index].red, minimap_color[index].green, minimap_color[index].blue);
 		pens_[index] = wxPen(colour);
@@ -39,6 +43,7 @@ MinimapCanvas::MinimapCanvas(wxWindow* parent) :
 	Bind(wxEVT_LEFT_DOWN, &MinimapCanvas::OnLeftDown, this);
 	Bind(wxEVT_LEFT_UP, &MinimapCanvas::OnLeftUp, this);
 	Bind(wxEVT_MOTION, &MinimapCanvas::OnMotion, this);
+	Bind(wxEVT_LEAVE_WINDOW, &MinimapCanvas::OnMouseLeave, this);
 	Bind(wxEVT_MOUSE_CAPTURE_LOST, &MinimapCanvas::OnCaptureLost, this);
 	Bind(wxEVT_MOUSEWHEEL, &MinimapCanvas::OnMouseWheel, this);
 	Bind(wxEVT_KEY_DOWN, &MinimapCanvas::OnKeyDown, this);
@@ -80,6 +85,42 @@ bool MinimapCanvas::IsCompassVisible() const {
 	return compassVisible_;
 }
 
+void MinimapCanvas::SetControlsVisible(bool visible) {
+	if (controlsVisible_ == visible) {
+		return;
+	}
+	controlsVisible_ = visible;
+	InvalidateMap();
+}
+
+void MinimapCanvas::SetShowActionIds(bool visible) {
+	if (showActionIds_ == visible) {
+		return;
+	}
+	showActionIds_ = visible;
+	visibleSpecialMarkers_.clear();
+	ResetSpecialMarkerTooltip();
+	Refresh(false);
+}
+
+bool MinimapCanvas::IsShowingActionIds() const {
+	return showActionIds_;
+}
+
+void MinimapCanvas::SetShowUniqueIds(bool visible) {
+	if (showUniqueIds_ == visible) {
+		return;
+	}
+	showUniqueIds_ = visible;
+	visibleSpecialMarkers_.clear();
+	ResetSpecialMarkerTooltip();
+	Refresh(false);
+}
+
+bool MinimapCanvas::IsShowingUniqueIds() const {
+	return showUniqueIds_;
+}
+
 void MinimapCanvas::CenterOnEditor() {
 	InvalidateMap();
 	NotifyStateChanged();
@@ -114,6 +155,8 @@ void MinimapCanvas::OnPaint(wxPaintEvent&) {
 	MapTab* tab = g_gui.GetCurrentMapTab();
 	MapCanvas* mapCanvas = tab ? tab->GetCanvas() : nullptr;
 	if (!editor || !mapCanvas || !g_gui.IsRenderingEnabled() || mapRect.width <= 2 || mapRect.height <= 2) {
+		visibleSpecialMarkers_.clear();
+		ResetSpecialMarkerTooltip();
 		DrawEmptyState(dc);
 		return;
 	}
@@ -131,7 +174,9 @@ void MinimapCanvas::OnPaint(wxPaintEvent&) {
 	dc.SetPen(wxPen(colours.border, FROM_DIP(this, 1)));
 	dc.DrawRoundedRectangle(mapRect, FROM_DIP(this, 6));
 	DrawViewport(dc, *mapCanvas, mapRect, centerX, centerY, floor);
-	if (compassVisible_ && mapRect.width >= FROM_DIP(this, 110) && mapRect.height >= FROM_DIP(this, 100)) {
+	UpdateSpecialMarkers(*editor, mapRect, floor);
+	DrawSpecialMarkers(dc, mapRect);
+	if (compassVisible_ && GetClientSize().x >= FROM_DIP(this, 110) && GetClientSize().y >= FROM_DIP(this, 100)) {
 		DrawCompass(dc, mapRect);
 	}
 }
@@ -148,15 +193,21 @@ void MinimapCanvas::OnLeftDown(wxMouseEvent& event) {
 	if (!g_gui.IsEditorOpen() || !GetMapRect().Contains(event.GetPosition())) {
 		return;
 	}
+	const int specialMarker = FindSpecialMarker(event.GetPosition());
 	dragging_ = true;
 	SetFocus();
 	if (!HasCapture()) {
 		CaptureMouse();
 	}
-	NavigateAt(event.GetPosition());
+	if (specialMarker >= 0) {
+		const VisibleSpecialMarker& marker = visibleSpecialMarkers_[specialMarker];
+		NavigateTo(marker.x, marker.y, marker.floor);
+	} else {
+		NavigateAt(event.GetPosition());
+	}
 }
 
-void MinimapCanvas::OnLeftUp(wxMouseEvent& event) {
+void MinimapCanvas::OnLeftUp(wxMouseEvent&) {
 	if (!dragging_) {
 		return;
 	}
@@ -164,15 +215,19 @@ void MinimapCanvas::OnLeftUp(wxMouseEvent& event) {
 	if (HasCapture()) {
 		ReleaseMouse();
 	}
-	if (GetMapRect().Contains(event.GetPosition())) {
-		NavigateAt(event.GetPosition());
-	}
 }
 
 void MinimapCanvas::OnMotion(wxMouseEvent& event) {
 	if (dragging_ && event.Dragging() && event.LeftIsDown()) {
 		NavigateAt(event.GetPosition());
+		return;
 	}
+	UpdateSpecialMarkerTooltip(event.GetPosition());
+}
+
+void MinimapCanvas::OnMouseLeave(wxMouseEvent& event) {
+	ResetSpecialMarkerTooltip();
+	event.Skip();
 }
 
 void MinimapCanvas::OnCaptureLost(wxMouseCaptureLostEvent&) {
@@ -211,7 +266,13 @@ void MinimapCanvas::OnContextMenu(wxContextMenuEvent&) {
 
 wxRect MinimapCanvas::GetMapRect() const {
 	wxRect rect = GetClientRect();
-	rect.Deflate(FROM_DIP(this, 6));
+	const int sideMargin = FROM_DIP(this, controlsVisible_ ? 36 : (compassVisible_ ? 27 : 6));
+	const int topMargin = FROM_DIP(this, compassVisible_ ? 25 : 6);
+	const int bottomMargin = FROM_DIP(this, controlsVisible_ ? 36 : (compassVisible_ ? 25 : 6));
+	rect.x += sideMargin;
+	rect.y += topMargin;
+	rect.width -= sideMargin * 2;
+	rect.height -= topMargin + bottomMargin;
 	if (rect.width < 0) {
 		rect.width = 0;
 	}
@@ -226,13 +287,13 @@ double MinimapCanvas::GetPixelsPerTile() const {
 }
 
 void MinimapCanvas::EnsureMapBitmap(Editor& editor, MapCanvas&, const wxRect& mapRect, int centerX, int centerY, int floor) {
-	const uintptr_t editorIdentity = reinterpret_cast<uintptr_t>(&editor);
-	if (!mapDirty_ && mapBitmap_.IsOk() && cachedEditorIdentity_ == editorIdentity && cachedFloor_ == floor
+	const uint64_t mapSessionId = editor.map.getSessionId();
+	if (!mapDirty_ && mapBitmap_.IsOk() && cachedMapSessionId_ == mapSessionId && cachedFloor_ == floor
 		&& cachedCenterX_ == centerX && cachedCenterY_ == centerY && cachedWidth_ == mapRect.width && cachedHeight_ == mapRect.height) {
 		return;
 	}
 
-	cachedEditorIdentity_ = editorIdentity;
+	cachedMapSessionId_ = mapSessionId;
 	cachedFloor_ = floor;
 	cachedCenterX_ = centerX;
 	cachedCenterY_ = centerY;
@@ -349,28 +410,165 @@ void MinimapCanvas::DrawViewport(wxDC& dc, MapCanvas& mapCanvas, const wxRect& m
 	dc.DestroyClippingRegion();
 }
 
+void MinimapCanvas::UpdateSpecialMarkers(Editor& editor, const wxRect& mapRect, int floor) {
+	visibleSpecialMarkers_.clear();
+	if (!showActionIds_ && !showUniqueIds_) {
+		return;
+	}
+
+	const uint64_t mapSessionId = editor.map.getSessionId();
+	if (specialMapSessionId_ != mapSessionId) {
+		specialChunks_.clear();
+		specialMapSessionId_ = mapSessionId;
+		specialMarkerPass_ = 0;
+		ResetSpecialMarkerTooltip();
+	}
+	++specialMarkerPass_;
+
+	const double pixelsPerTile = GetPixelsPerTile();
+	const int firstX = std::max(0, renderedStartX_);
+	const int firstY = std::max(0, renderedStartY_);
+	const int lastX = std::min(editor.map.getWidth(), renderedStartX_ + static_cast<int>(std::ceil(mapRect.width / pixelsPerTile)));
+	const int lastY = std::min(editor.map.getHeight(), renderedStartY_ + static_cast<int>(std::ceil(mapRect.height / pixelsPerTile)));
+	if (firstX > lastX || firstY > lastY || floor < 0 || floor >= MAP_LAYERS) {
+		return;
+	}
+
+	const int firstChunkX = firstX & ~3;
+	const int firstChunkY = firstY & ~3;
+	for (int chunkX = firstChunkX; chunkX <= lastX; chunkX += 4) {
+		for (int chunkY = firstChunkY; chunkY <= lastY; chunkY += 4) {
+			QTreeNode* leaf = editor.map.getLeaf(chunkX, chunkY);
+			Floor* floorData = leaf ? leaf->getFloor(static_cast<uint32_t>(floor)) : nullptr;
+			const bool hasFloor = floorData != nullptr;
+			const MapChunkRevision revision = hasFloor ? floorData->getRenderRevision() : MapChunkRevision {};
+			const uint32_t key = MakeMapChunkKey(static_cast<uint16_t>(chunkX), static_cast<uint16_t>(chunkY), static_cast<uint8_t>(floor));
+			auto found = specialChunks_.find(key);
+			if (found == specialChunks_.end() || found->second.hasFloor != hasFloor || found->second.revision.content != revision.content) {
+				ScanSpecialChunk(floorData, chunkX, chunkY, floor, revision);
+				found = specialChunks_.find(key);
+			}
+			CachedSpecialChunk& chunk = found->second;
+			chunk.lastVisiblePass = specialMarkerPass_;
+			for (const CachedSpecialMarker& cachedMarker : chunk.markers) {
+				VisibleSpecialMarker marker;
+				marker.x = cachedMarker.x;
+				marker.y = cachedMarker.y;
+				marker.floor = cachedMarker.floor;
+				for (const SpecialItemData& item : cachedMarker.items) {
+					marker.hasVisibleActionId |= showActionIds_ && item.actionId != 0;
+					marker.hasVisibleUniqueId |= showUniqueIds_ && item.uniqueId != 0;
+					if ((showActionIds_ && item.actionId != 0) || (showUniqueIds_ && item.uniqueId != 0)) {
+						marker.items.push_back(item);
+					}
+				}
+				if (!marker.items.empty()) {
+					visibleSpecialMarkers_.push_back(std::move(marker));
+				}
+			}
+		}
+	}
+
+	for (auto it = specialChunks_.begin(); it != specialChunks_.end();) {
+		if (specialMarkerPass_ - it->second.lastVisiblePass > SpecialChunkRetentionPasses) {
+			it = specialChunks_.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+void MinimapCanvas::ScanSpecialChunk(Floor* floorData, int chunkX, int chunkY, int floor, const MapChunkRevision& revision) {
+	const uint32_t key = MakeMapChunkKey(static_cast<uint16_t>(chunkX), static_cast<uint16_t>(chunkY), static_cast<uint8_t>(floor));
+	CachedSpecialChunk& chunk = specialChunks_[key];
+	chunk.revision = revision;
+	chunk.hasFloor = floorData != nullptr;
+	chunk.markers.clear();
+	if (!floorData) {
+		return;
+	}
+
+	for (const TileLocation& location : floorData->locs) {
+		const Tile* tile = location.get();
+		if (!tile) {
+			continue;
+		}
+		CachedSpecialMarker marker;
+		marker.x = location.getX();
+		marker.y = location.getY();
+		marker.floor = location.getZ();
+		const auto inspectItem = [&marker](const Item* item) {
+			if (!item) {
+				return;
+			}
+			const uint16_t actionId = item->getActionID();
+			const uint16_t uniqueId = item->getUniqueID();
+			if (actionId == 0 && uniqueId == 0) {
+				return;
+			}
+			marker.items.push_back({ item->getID(), actionId, uniqueId });
+		};
+		inspectItem(tile->ground);
+		for (const Item* item : tile->items) {
+			inspectItem(item);
+		}
+		if (!marker.items.empty()) {
+			chunk.markers.push_back(std::move(marker));
+		}
+	}
+}
+
+void MinimapCanvas::DrawSpecialMarkers(wxDC& dc, const wxRect& mapRect) {
+	if (visibleSpecialMarkers_.empty()) {
+		return;
+	}
+	const MinimapColours colours = MinimapStyle::GetColours();
+	const double pixelsPerTile = GetPixelsPerTile();
+	dc.SetClippingRegion(mapRect);
+	dc.SetFont(wxFontInfo(std::max(7, GetFont().GetPointSize() - 2)).Bold());
+	for (VisibleSpecialMarker& marker : visibleSpecialMarkers_) {
+		const wxString label = marker.hasVisibleActionId && marker.hasVisibleUniqueId ? "A/U" : (marker.hasVisibleActionId ? "A" : "U");
+		const wxSize textSize = dc.GetTextExtent(label);
+		const int width = std::max(FROM_DIP(this, label == "A/U" ? 25 : 18), textSize.x + FROM_DIP(this, 8));
+		const int height = std::max(FROM_DIP(this, 16), textSize.y + FROM_DIP(this, 4));
+		const int tileCenterX = mapRect.x + static_cast<int>(std::round((marker.x + 0.5 - renderedStartX_) * pixelsPerTile));
+		const int tileCenterY = mapRect.y + static_cast<int>(std::round((marker.y + 0.5 - renderedStartY_) * pixelsPerTile));
+		marker.hitBounds = wxRect(tileCenterX - width / 2, tileCenterY - height / 2, width, height);
+		const wxColour markerColour = marker.hasVisibleActionId && !marker.hasVisibleUniqueId ? colours.viewport : colours.accent;
+		dc.SetBrush(wxBrush(colours.panel));
+		dc.SetPen(wxPen(markerColour, FROM_DIP(this, 1)));
+		dc.DrawRoundedRectangle(marker.hitBounds, FROM_DIP(this, 4));
+		dc.SetTextForeground(markerColour);
+		dc.DrawText(label, marker.hitBounds.x + (marker.hitBounds.width - textSize.x) / 2, marker.hitBounds.y + (marker.hitBounds.height - textSize.y) / 2);
+	}
+	dc.DestroyClippingRegion();
+}
+
 void MinimapCanvas::DrawCompass(wxDC& dc, const wxRect& mapRect) const {
 	const MinimapColours colours = MinimapStyle::GetColours();
-	const int radius = FROM_DIP(this, 16);
-	const int centerX = mapRect.GetRight() - radius - FROM_DIP(this, 8);
-	const int centerY = mapRect.y + radius + FROM_DIP(this, 8);
-	dc.SetBrush(wxBrush(colours.panel));
-	dc.SetPen(wxPen(colours.border, FROM_DIP(this, 1)));
-	dc.DrawCircle(centerX, centerY, radius);
-
-	wxPoint north[] = {
-		wxPoint(centerX, centerY - FROM_DIP(this, 10)),
-		wxPoint(centerX - FROM_DIP(this, 4), centerY + FROM_DIP(this, 3)),
-		wxPoint(centerX, centerY + FROM_DIP(this, 1)),
-		wxPoint(centerX + FROM_DIP(this, 4), centerY + FROM_DIP(this, 3)),
-	};
-	dc.SetBrush(wxBrush(colours.accent));
-	dc.SetPen(*wxTRANSPARENT_PEN);
-	dc.DrawPolygon(4, north);
-	dc.SetTextForeground(colours.text);
 	dc.SetFont(wxFontInfo(std::max(7, GetFont().GetPointSize() - 2)).Bold());
-	const wxSize labelSize = dc.GetTextExtent("N");
-	dc.DrawText("N", centerX - labelSize.x / 2, centerY - radius - labelSize.y + FROM_DIP(this, 1));
+	const auto drawDirection = [&](const wxString& label, int centerX, int centerY, bool primary) {
+		const wxSize textSize = dc.GetTextExtent(label);
+		const int paddingX = FROM_DIP(this, 5);
+		const int paddingY = FROM_DIP(this, 2);
+		const wxRect badge(
+			centerX - textSize.x / 2 - paddingX,
+			centerY - textSize.y / 2 - paddingY,
+			textSize.x + paddingX * 2,
+			textSize.y + paddingY * 2
+		);
+		dc.SetBrush(wxBrush(primary ? colours.accentSoft : colours.raised));
+		dc.SetPen(wxPen(primary ? colours.accent : colours.border, FROM_DIP(this, 1)));
+		dc.DrawRoundedRectangle(badge, FROM_DIP(this, 4));
+		dc.SetTextForeground(primary ? colours.accent : colours.textSubtle);
+		dc.DrawText(label, centerX - textSize.x / 2, centerY - textSize.y / 2);
+	};
+
+	const wxRect client = GetClientRect();
+	drawDirection("N", mapRect.x + mapRect.width / 2, std::max(FROM_DIP(this, 10), mapRect.y / 2), true);
+	drawDirection("W", std::max(FROM_DIP(this, 10), mapRect.x / 2), mapRect.y + mapRect.height / 2, false);
+	drawDirection("E", std::min(client.GetRight() - FROM_DIP(this, 10), mapRect.GetRight() + (client.GetRight() - mapRect.GetRight()) / 2), mapRect.y + mapRect.height / 2, false);
+	drawDirection("S", mapRect.x + mapRect.width / 2, std::min(client.GetBottom() - FROM_DIP(this, 10), mapRect.GetBottom() + (client.GetBottom() - mapRect.GetBottom()) / 2), false);
 }
 
 void MinimapCanvas::DrawEmptyState(wxDC& dc) const {
@@ -410,6 +608,49 @@ void MinimapCanvas::DrawEmptyState(wxDC& dc) const {
 	}
 }
 
+int MinimapCanvas::FindSpecialMarker(const wxPoint& point) const {
+	for (size_t index = visibleSpecialMarkers_.size(); index > 0; --index) {
+		if (visibleSpecialMarkers_[index - 1].hitBounds.Contains(point)) {
+			return static_cast<int>(index - 1);
+		}
+	}
+	return -1;
+}
+
+wxString MinimapCanvas::BuildSpecialMarkerTooltip(size_t markerIndex) const {
+	if (markerIndex >= visibleSpecialMarkers_.size()) {
+		return navigationTooltip_;
+	}
+	const VisibleSpecialMarker& marker = visibleSpecialMarkers_[markerIndex];
+	wxString tooltip = wxString::Format("Position: %d, %d, %d", marker.x, marker.y, marker.floor);
+	for (size_t index = 0; index < marker.items.size(); ++index) {
+		const SpecialItemData& item = marker.items[index];
+		tooltip += index == 0 ? "\n" : "\n----------------\n";
+		tooltip += wxString::Format("Item ID: %u\n", static_cast<unsigned int>(item.itemId));
+		tooltip += item.actionId != 0 ? wxString::Format("ActionID: %u\n", static_cast<unsigned int>(item.actionId)) : wxString("ActionID: -\n");
+		tooltip += item.uniqueId != 0 ? wxString::Format("UniqueID: %u", static_cast<unsigned int>(item.uniqueId)) : wxString("UniqueID: -");
+	}
+	return tooltip;
+}
+
+void MinimapCanvas::UpdateSpecialMarkerTooltip(const wxPoint& point) {
+	const int markerIndex = FindSpecialMarker(point);
+	const wxString tooltip = markerIndex >= 0 ? BuildSpecialMarkerTooltip(static_cast<size_t>(markerIndex)) : navigationTooltip_;
+	if (tooltip == displayedTooltip_) {
+		return;
+	}
+	displayedTooltip_ = tooltip;
+	SetToolTip(displayedTooltip_);
+}
+
+void MinimapCanvas::ResetSpecialMarkerTooltip() {
+	if (displayedTooltip_ == navigationTooltip_) {
+		return;
+	}
+	displayedTooltip_ = navigationTooltip_;
+	SetToolTip(navigationTooltip_);
+}
+
 void MinimapCanvas::NavigateAt(const wxPoint& point) {
 	Editor* editor = g_gui.GetCurrentEditor();
 	MapTab* tab = g_gui.GetCurrentMapTab();
@@ -423,7 +664,11 @@ void MinimapCanvas::NavigateAt(const wxPoint& point) {
 	const double pixelsPerTile = GetPixelsPerTile();
 	const int mapX = std::clamp(renderedStartX_ + static_cast<int>((point.x - mapRect.x) / pixelsPerTile), 0, editor->map.getWidth());
 	const int mapY = std::clamp(renderedStartY_ + static_cast<int>((point.y - mapRect.y) / pixelsPerTile), 0, editor->map.getHeight());
-	g_gui.SetScreenCenterPosition(Position(mapX, mapY, tab->GetCanvas()->GetFloor()), true);
+	NavigateTo(mapX, mapY, tab->GetCanvas()->GetFloor());
+}
+
+void MinimapCanvas::NavigateTo(int x, int y, int floor) {
+	g_gui.SetScreenCenterPosition(Position(x, y, floor), true);
 	mapDirty_ = true;
 	g_gui.RefreshView();
 	Refresh(false);

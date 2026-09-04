@@ -53,38 +53,19 @@ void MinimapWindow::BuildLayout() {
 	titleBlock->Add(title, 0, wxBOTTOM, FROM_DIP(this, 2));
 	titleBlock->Add(coordinateLabel_, 0, wxEXPAND);
 	headerSizer->Add(titleBlock, 1, wxALIGN_CENTER_VERTICAL | wxLEFT, FROM_DIP(this, 10));
+	centerButton_ = newd MinimapToolButton(headerPanel_, MinimapGlyph::Center, "Center on the editor view", wxSize(28, 28));
+	headerSizer->Add(centerButton_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 4));
 	optionsButton_ = newd MinimapToolButton(headerPanel_, MinimapGlyph::Options, "Minimap display options", wxSize(28, 28));
 	headerSizer->Add(optionsButton_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 6));
 	headerPanel_->SetSizer(headerSizer);
 	rootSizer->Add(headerPanel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 6));
 
-	auto* contentSizer = newd wxBoxSizer(wxHORIZONTAL);
 	canvas_ = newd MinimapCanvas(this);
-	contentSizer->Add(canvas_, 1, wxEXPAND);
-
-	navigationPanel_ = newd wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
-	auto* navigationSizer = newd wxBoxSizer(wxVERTICAL);
-	floorUpButton_ = newd MinimapToolButton(navigationPanel_, MinimapGlyph::FloorUp, "Level up (Page Up)");
-	floorLabel_ = newd wxStaticText(navigationPanel_, wxID_ANY, "F 7", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
-	floorLabel_->SetMinSize(FROM_DIP(this, wxSize(30, 18)));
-	floorDownButton_ = newd MinimapToolButton(navigationPanel_, MinimapGlyph::FloorDown, "Level down (Page Down)");
-	zoomInButton_ = newd MinimapToolButton(navigationPanel_, MinimapGlyph::ZoomIn, "Zoom in (mouse wheel up)");
-	zoomLabel_ = newd wxStaticText(navigationPanel_, wxID_ANY, "100%", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
-	zoomLabel_->SetMinSize(FROM_DIP(this, wxSize(34, 18)));
-	zoomOutButton_ = newd MinimapToolButton(navigationPanel_, MinimapGlyph::ZoomOut, "Zoom out (mouse wheel down)");
-	centerButton_ = newd MinimapToolButton(navigationPanel_, MinimapGlyph::Center, "Center on the editor view");
-
-	navigationSizer->Add(floorUpButton_, 0, wxALIGN_CENTER | wxBOTTOM, FROM_DIP(this, 3));
-	navigationSizer->Add(floorLabel_, 0, wxALIGN_CENTER | wxBOTTOM, FROM_DIP(this, 3));
-	navigationSizer->Add(floorDownButton_, 0, wxALIGN_CENTER);
-	navigationSizer->AddStretchSpacer();
-	navigationSizer->Add(zoomInButton_, 0, wxALIGN_CENTER | wxBOTTOM, FROM_DIP(this, 3));
-	navigationSizer->Add(zoomLabel_, 0, wxALIGN_CENTER | wxBOTTOM, FROM_DIP(this, 3));
-	navigationSizer->Add(zoomOutButton_, 0, wxALIGN_CENTER | wxBOTTOM, FROM_DIP(this, 5));
-	navigationSizer->Add(centerButton_, 0, wxALIGN_CENTER);
-	navigationPanel_->SetSizer(navigationSizer);
-	contentSizer->Add(navigationPanel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 6));
-	rootSizer->Add(contentSizer, 1, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 6));
+	floorUpButton_ = newd MinimapToolButton(canvas_, MinimapGlyph::FloorUp, "Level up (Page Up)", wxSize(26, 26));
+	floorDownButton_ = newd MinimapToolButton(canvas_, MinimapGlyph::FloorDown, "Level down (Page Down)", wxSize(26, 26));
+	zoomInButton_ = newd MinimapToolButton(canvas_, MinimapGlyph::ZoomIn, "Zoom in (mouse wheel up)", wxSize(26, 26));
+	zoomOutButton_ = newd MinimapToolButton(canvas_, MinimapGlyph::ZoomOut, "Zoom out (mouse wheel down)", wxSize(26, 26));
+	rootSizer->Add(canvas_, 1, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 6));
 
 	goPanel_ = newd wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
 	auto* goSizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -96,6 +77,7 @@ void MinimapWindow::BuildLayout() {
 	goPanel_->SetSizer(goSizer);
 	rootSizer->Add(goPanel_, 0, wxEXPAND | wxALL, FROM_DIP(this, 6));
 	SetSizer(rootSizer);
+	canvas_->Bind(wxEVT_SIZE, &MinimapWindow::OnCanvasSize, this);
 
 	optionsButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ShowOptionsMenu(); });
 	floorUpButton_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
@@ -128,16 +110,11 @@ void MinimapWindow::ApplyTheme() {
 	const MinimapColours colours = MinimapStyle::GetColours();
 	SetBackgroundColour(colours.panel);
 	headerPanel_->SetBackgroundColour(colours.header);
-	navigationPanel_->SetBackgroundColour(colours.panel);
 	goPanel_->SetBackgroundColour(colours.panel);
 	for (wxWindow* child : headerPanel_->GetChildren()) {
 		child->SetBackgroundColour(colours.header);
 		child->SetForegroundColour(child == coordinateLabel_ ? colours.textSubtle : colours.text);
 	}
-	floorLabel_->SetBackgroundColour(colours.panel);
-	floorLabel_->SetForegroundColour(colours.textSubtle);
-	zoomLabel_->SetBackgroundColour(colours.panel);
-	zoomLabel_->SetForegroundColour(colours.textSubtle);
 	goToInput_->SetBackgroundColour(colours.canvas);
 	goToInput_->SetForegroundColour(inputHasError_ ? wxColour(220, 74, 74) : colours.text);
 	goToInput_->SetHint(inputHasError_ ? "Use x:y:z, center, or cursor" : "Go to x:y:z, center, or cursor...");
@@ -150,9 +127,7 @@ void MinimapWindow::UpdateState() {
 	int y = 0;
 	int z = 0;
 	const bool hasMap = canvas_->GetEditorCenter(x, y, z);
-	coordinateLabel_->SetLabel(hasMap ? wxString::Format("X %d  |  Y %d  |  Z %d", x, y, z) : wxString("NO ACTIVE MAP"));
-	floorLabel_->SetLabel(hasMap ? wxString::Format("F %d", z) : wxString("F -"));
-	zoomLabel_->SetLabel(wxString::Format("%d%%", canvas_->GetZoomPercent()));
+	coordinateLabel_->SetLabel(hasMap ? wxString::Format("X %d  |  Y %d  |  Z %d  |  %d%%", x, y, z, canvas_->GetZoomPercent()) : wxString("NO ACTIVE MAP"));
 	floorUpButton_->Enable(hasMap && z > 0);
 	floorDownButton_->Enable(hasMap && z < MAP_MAX_LAYER);
 	zoomInButton_->Enable(hasMap && canvas_->GetZoomLevel() < 4);
@@ -164,12 +139,37 @@ void MinimapWindow::UpdateState() {
 }
 
 void MinimapWindow::UpdateControlsVisibility() {
-	navigationPanel_->Show(showControls_);
+	for (MinimapToolButton* button : { floorUpButton_, floorDownButton_, zoomInButton_, zoomOutButton_, centerButton_ }) {
+		button->Show(showControls_);
+	}
 	goPanel_->Show(showControls_);
+	canvas_->SetControlsVisible(showControls_);
 	optionsButton_->SetSelected(!showControls_);
 	g_settings.setInteger(Config::MINIMAP_SHOW_CONTROLS, showControls_ ? 1 : 0);
 	Layout();
+	PositionOverlayControls();
 	canvas_->InvalidateMap();
+}
+
+void MinimapWindow::PositionOverlayControls() {
+	if (!canvas_ || !showControls_) {
+		return;
+	}
+	const wxSize canvasSize = canvas_->GetClientSize();
+	const int edge = FROM_DIP(canvas_, 7);
+	const int gap = FROM_DIP(canvas_, 3);
+	const wxSize floorSize = floorUpButton_->GetSize();
+	const wxSize zoomSize = zoomInButton_->GetSize();
+	if (canvasSize.x <= floorSize.x + zoomSize.x + edge * 2 || canvasSize.y <= floorSize.y * 2 + gap + edge * 2) {
+		return;
+	}
+	floorUpButton_->Move(edge, canvasSize.y - edge - floorSize.y * 2 - gap);
+	floorDownButton_->Move(edge, canvasSize.y - edge - floorSize.y);
+	zoomInButton_->Move(canvasSize.x - edge - zoomSize.x * 2 - gap, canvasSize.y - edge - zoomSize.y);
+	zoomOutButton_->Move(canvasSize.x - edge - zoomSize.x, canvasSize.y - edge - zoomSize.y);
+	for (MinimapToolButton* button : { floorUpButton_, floorDownButton_, zoomInButton_, zoomOutButton_ }) {
+		button->Raise();
+	}
 }
 
 void MinimapWindow::DelayedUpdate() {
@@ -241,10 +241,15 @@ void MinimapWindow::ShowOptionsMenu() {
 	const int controlsId = wxWindow::NewControlId();
 	const int compassId = wxWindow::NewControlId();
 	const int viewBoxId = wxWindow::NewControlId();
+	const int actionIdsId = wxWindow::NewControlId();
+	const int uniqueIdsId = wxWindow::NewControlId();
 	menu.AppendCheckItem(controlsId, "Show navigation controls")->Check(showControls_);
 	menu.AppendCheckItem(compassId, "Show compass")->Check(canvas_->IsCompassVisible());
 	menu.AppendCheckItem(viewBoxId, "Show current viewport")->Check(g_settings.getBoolean(Config::MINIMAP_VIEW_BOX));
-	menu.Bind(wxEVT_MENU, [this, controlsId, compassId, viewBoxId](wxCommandEvent& event) {
+	menu.AppendSeparator();
+	menu.AppendCheckItem(actionIdsId, "Show Action IDs")->Check(canvas_->IsShowingActionIds());
+	menu.AppendCheckItem(uniqueIdsId, "Show Unique IDs")->Check(canvas_->IsShowingUniqueIds());
+	menu.Bind(wxEVT_MENU, [this, controlsId, compassId, viewBoxId, actionIdsId, uniqueIdsId](wxCommandEvent& event) {
 		if (event.GetId() == controlsId) {
 			showControls_ = !showControls_;
 			UpdateControlsVisibility();
@@ -254,6 +259,10 @@ void MinimapWindow::ShowOptionsMenu() {
 		} else if (event.GetId() == viewBoxId) {
 			g_settings.setInteger(Config::MINIMAP_VIEW_BOX, g_settings.getBoolean(Config::MINIMAP_VIEW_BOX) ? 0 : 1);
 			canvas_->Refresh(false);
+		} else if (event.GetId() == actionIdsId) {
+			canvas_->SetShowActionIds(!canvas_->IsShowingActionIds());
+		} else if (event.GetId() == uniqueIdsId) {
+			canvas_->SetShowUniqueIds(!canvas_->IsShowingUniqueIds());
 		}
 	});
 	PopupMenu(&menu, optionsButton_->GetPosition() + wxPoint(0, optionsButton_->GetSize().y));
@@ -277,7 +286,14 @@ void MinimapWindow::OnDelayedUpdate(wxTimerEvent&) {
 }
 
 void MinimapWindow::OnSize(wxSizeEvent& event) {
+	Layout();
+	PositionOverlayControls();
 	canvas_->InvalidateMap();
+	event.Skip();
+}
+
+void MinimapWindow::OnCanvasSize(wxSizeEvent& event) {
+	PositionOverlayControls();
 	event.Skip();
 }
 

@@ -18,6 +18,7 @@ private:
 	void ApplyTheme();
 	void UpdateState();
 	void UpdateControlsVisibility();
+	void PositionOverlayControls();
 	void NavigateToInput();
 	bool ParsePosition(const wxString& value, Position& position) const;
 	void ShowOptionsMenu();
@@ -26,15 +27,13 @@ private:
 	void OnClose(wxCloseEvent& event);
 	void OnDelayedUpdate(wxTimerEvent& event);
 	void OnSize(wxSizeEvent& event);
+	void OnCanvasSize(wxSizeEvent& event);
 	void OnSystemColourChanged(wxSysColourChangedEvent& event);
 
 	wxTimer updateTimer_;
 	wxPanel* headerPanel_ = nullptr;
-	wxPanel* navigationPanel_ = nullptr;
 	wxPanel* goPanel_ = nullptr;
 	wxStaticText* coordinateLabel_ = nullptr;
-	wxStaticText* floorLabel_ = nullptr;
-	wxStaticText* zoomLabel_ = nullptr;
 	wxTextCtrl* goToInput_ = nullptr;
 	MinimapCanvas* canvas_ = nullptr;
 	MinimapToolButton* floorUpButton_ = nullptr;

@@ -85,23 +85,21 @@ void MinimapToolButton::OnPaint(wxPaintEvent&) {
 }
 
 void MinimapToolButton::DrawGlyph(wxDC& dc, const wxRect& bounds, const wxColour& colour) const {
-	const int unit = FROM_DIP(this, 1);
 	const int centerX = bounds.x + bounds.width / 2;
 	const int centerY = bounds.y + bounds.height / 2;
-	const int radius = std::max(FROM_DIP(this, 4), std::min(bounds.width, bounds.height) / 5);
 	dc.SetBrush(*wxTRANSPARENT_BRUSH);
 	dc.SetPen(wxPen(colour, std::max(1, FROM_DIP(this, 2)), wxPENSTYLE_SOLID));
 
 	switch (glyph_) {
 		case MinimapGlyph::ZoomIn:
-		case MinimapGlyph::ZoomOut:
-			dc.DrawCircle(centerX - unit, centerY - unit, radius);
-			dc.DrawLine(centerX + radius - unit, centerY + radius - unit, centerX + radius + FROM_DIP(this, 4), centerY + radius + FROM_DIP(this, 4));
-			dc.DrawLine(centerX - radius / 2 - unit, centerY - unit, centerX + radius / 2 - unit, centerY - unit);
-			if (glyph_ == MinimapGlyph::ZoomIn) {
-				dc.DrawLine(centerX - unit, centerY - radius / 2 - unit, centerX - unit, centerY + radius / 2 - unit);
-			}
+		case MinimapGlyph::ZoomOut: {
+			const wxString label = glyph_ == MinimapGlyph::ZoomIn ? wxString("+") : wxString::FromUTF8("\xE2\x88\x92");
+			dc.SetFont(wxFontInfo(std::max(10, GetFont().GetPointSize() + 1)).Bold());
+			dc.SetTextForeground(colour);
+			const wxSize textSize = dc.GetTextExtent(label);
+			dc.DrawText(label, centerX - textSize.x / 2, centerY - textSize.y / 2);
 			break;
+		}
 		case MinimapGlyph::Center: {
 			const int edge = FROM_DIP(this, 7);
 			const int arm = FROM_DIP(this, 4);
@@ -119,11 +117,11 @@ void MinimapToolButton::DrawGlyph(wxDC& dc, const wxRect& bounds, const wxColour
 		}
 		case MinimapGlyph::FloorUp:
 		case MinimapGlyph::FloorDown: {
-			const int direction = glyph_ == MinimapGlyph::FloorUp ? -1 : 1;
-			const int y = centerY + direction * FROM_DIP(this, 3);
-			dc.DrawLine(centerX - FROM_DIP(this, 6), y - direction * FROM_DIP(this, 1), centerX, y + direction * FROM_DIP(this, 5));
-			dc.DrawLine(centerX, y + direction * FROM_DIP(this, 5), centerX + FROM_DIP(this, 6), y - direction * FROM_DIP(this, 1));
-			dc.DrawLine(centerX - FROM_DIP(this, 5), centerY - direction * FROM_DIP(this, 6), centerX + FROM_DIP(this, 5), centerY - direction * FROM_DIP(this, 6));
+			const wxString label = glyph_ == MinimapGlyph::FloorUp ? "U" : "D";
+			dc.SetFont(wxFontInfo(std::max(8, GetFont().GetPointSize() - 1)).Bold());
+			dc.SetTextForeground(colour);
+			const wxSize textSize = dc.GetTextExtent(label);
+			dc.DrawText(label, centerX - textSize.x / 2, centerY - textSize.y / 2);
 			break;
 		}
 		case MinimapGlyph::Options:
