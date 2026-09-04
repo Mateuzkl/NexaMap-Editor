@@ -175,6 +175,7 @@
 		<item name="Extended house shader" hotkey="" action="EXT_HOUSE_SHADER" help="Draw house brush on walls and items."/>
 		<separator/>
 		<item name="Show tooltips" hotkey="Y" action="SHOW_TOOLTIPS" help="Show tooltips."/>
+		<item name="Show container preview" hotkey="" action="SHOW_CONTAINER_PREVIEW" help="Show a visual preview of container contents when hovering over containers."/>
 		<item name="Show grid" hotkey="Shift+G" action="SHOW_GRID" help="Shows a grid over all items."/>
 		<item name="Show client box" hotkey="Shift+I" action="SHOW_INGAME_BOX" help="Shadows out areas not visible ingame (from the center of the screen)."/>
 		<separator/>
