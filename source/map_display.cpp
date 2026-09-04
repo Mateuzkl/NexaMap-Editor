@@ -215,6 +215,9 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool in
 	dragging(false),
 	boundbox_selection(false),
 	screendragging(false),
+	space_held(false),
+	space_had_click(false),
+	space_dragging(false),
 	drawing(false),
 	dragging_draw(false),
 	replace_dragging(false),
@@ -659,9 +662,32 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 	if (ingamePreview) {
 		return;
 	}
-	if (screendragging) {
-		static_cast<MapWindow*>(GetParent())->ScrollRelative(int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (event.GetX() - cursor_x)), int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (event.GetY() - cursor_y)));
-		RefreshViewport();
+	if (space_dragging) {
+		if (!wxGetKeyState(WXK_SPACE)) {
+			space_dragging = false;
+			space_held = false;
+			SetCursor(wxCursor(wxCURSOR_ARROW));
+		} else {
+			static_cast<MapWindow*>(GetParent())->ScrollRelative(int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (cursor_x - event.GetX())), int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (cursor_y - event.GetY())));
+			cursor_x = event.GetX();
+			cursor_y = event.GetY();
+			wxGLCanvas::Update();
+			return;
+		}
+	}
+
+	if (wxGetKeyState(WXK_SPACE)) {
+		if (!space_held) {
+			space_held = true;
+			space_had_click = false;
+		}
+		SetCursor(wxCursor(wxCURSOR_HAND));
+	} else {
+		if (space_held) {
+			space_held = false;
+			space_had_click = false;
+		}
+		SetCursor(wxCursor(wxCURSOR_ARROW));
 	}
 
 	cursor_x = event.GetX();
@@ -807,6 +833,10 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
 	if (ingamePreview) {
 		return;
 	}
+	if (space_dragging) {
+		space_dragging = false;
+		return;
+	}
 	OnMouseActionRelease(event);
 }
 
@@ -819,6 +849,13 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent& event) {
 	}
 	if (ingamePreview) {
 		SetFocus();
+		return;
+	}
+	if (space_held) {
+		space_had_click = true;
+		space_dragging = true;
+		last_mmb_click_x = event.GetX();
+		last_mmb_click_y = event.GetY();
 		return;
 	}
 	OnMouseActionClick(event);
@@ -1810,6 +1847,18 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 		event.Skip();
 		return;
 	}
+	if (event.GetKeyCode() == WXK_SPACE) {
+		if (event.ControlDown()) {
+			g_gui.FillDoodadPreviewBuffer();
+			g_gui.RefreshView();
+			return;
+		}
+		if (!space_held) {
+			space_held = true;
+			space_had_click = false;
+		}
+		return;
+	}
 	if (event.GetKeyCode() == WXK_ALT) {
 		UpdateAutoborderPreview(true);
 		Refresh();
@@ -1957,15 +2006,6 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 			Refresh();
 			break;
 		}
-		case WXK_SPACE: { // Utility keys
-			if (event.ControlDown()) {
-				g_gui.FillDoodadPreviewBuffer();
-				g_gui.RefreshView();
-			} else {
-				g_gui.SwitchMode();
-			}
-			break;
-		}
 		case WXK_TAB: { // Tab switch
 			if (event.ShiftDown()) {
 				g_gui.CycleTab(false);
@@ -2091,6 +2131,17 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 void MapCanvas::OnKeyUp(wxKeyEvent& event) {
 	if (ingamePreview) {
+		return;
+	}
+	if (event.GetKeyCode() == WXK_SPACE) {
+		if (!space_had_click) {
+			g_gui.SwitchMode();
+		}
+		space_held = false;
+		space_had_click = false;
+		space_dragging = false;
+		SetCursor(wxCursor(wxCURSOR_ARROW));
+		SetFocus();
 		return;
 	}
 	keyCode = WXK_NONE;

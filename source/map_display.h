@@ -188,6 +188,9 @@ private:
 	bool dragging;
 	bool boundbox_selection;
 	bool screendragging;
+	bool space_held;
+	bool space_had_click;
+	bool space_dragging;
 	bool isPasting() const;
 	bool drawing;
 	bool dragging_draw;
