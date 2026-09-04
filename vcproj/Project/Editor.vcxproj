@@ -440,8 +440,12 @@
     <ClInclude Include="..\..\source\new_map_tab_dialog.h" />
     <ClCompile Include="..\..\source\new_map_tab_dialog.cpp" />
     <ClInclude Include="..\..\source\minimap_window.h" />
+    <ClInclude Include="..\..\source\minimap_canvas.h" />
+    <ClInclude Include="..\..\source\minimap_style.h" />
     <ClInclude Include="..\..\source\minimap_page_cache.h" />
     <ClCompile Include="..\..\source\minimap_window.cpp" />
+    <ClCompile Include="..\..\source\minimap_canvas.cpp" />
+    <ClCompile Include="..\..\source\minimap_style.cpp" />
     <ClCompile Include="..\..\source\minimap_page_cache.cpp" />
     <ClInclude Include="..\..\source\process_com.h" />
     <ClCompile Include="..\..\source\process_com.cpp" />

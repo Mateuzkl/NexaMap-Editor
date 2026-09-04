@@ -1388,6 +1388,12 @@ void GUI::LoadPerspective() {
 			}
 
 			wxAuiPaneInfo& info = aui_manager->GetPane(minimap);
+			info.Name("Minimap")
+				.Caption("Minimap")
+				.Dockable(true)
+				.Floatable(true)
+				.CloseButton(true)
+				.MinSize(FROM_DIP(root, wxSize(190, 180)));
 			if (info.IsFloatable()) {
 				bool offscreen = true;
 				for (uint32_t index = 0; index < wxDisplay::GetCount(); ++index) {
@@ -1427,7 +1433,7 @@ void GUI::SavePerspective() {
 	g_settings.setInteger(Config::WINDOW_WIDTH, root->GetSize().GetWidth());
 	g_settings.setInteger(Config::WINDOW_HEIGHT, root->GetSize().GetHeight());
 
-	g_settings.setInteger(Config::MINIMAP_VISIBLE, minimap ? 1 : 0);
+	g_settings.setInteger(Config::MINIMAP_VISIBLE, IsMinimapVisible() ? 1 : 0);
 	g_settings.setInteger(Config::INGAME_PREVIEW_VISIBLE, IsIngamePreviewVisible() ? 1 : 0);
 
 	wxString pinfo;
@@ -1598,7 +1604,18 @@ void GUI::CreateMinimap() {
 	} else {
 		minimap = newd MinimapWindow(root);
 		minimap->Show(true);
-		aui_manager->AddPane(minimap, wxAuiPaneInfo().Caption("Minimap"));
+		aui_manager->AddPane(
+			minimap,
+			wxAuiPaneInfo()
+				.Name("Minimap")
+				.Caption("Minimap")
+				.Right()
+				.Dockable(true)
+				.Floatable(true)
+				.CloseButton(true)
+				.BestSize(FROM_DIP(root, wxSize(300, 340)))
+				.MinSize(FROM_DIP(root, wxSize(190, 180)))
+		);
 	}
 	aui_manager->Update();
 }
@@ -1615,7 +1632,7 @@ void GUI::DestroyMinimap() {
 void GUI::UpdateMinimap(bool immediate) {
 	if (IsMinimapVisible()) {
 		if (immediate) {
-			minimap->Refresh();
+			minimap->RefreshMap(true);
 		} else {
 			minimap->DelayedUpdate();
 		}
