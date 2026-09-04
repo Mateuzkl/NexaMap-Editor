@@ -177,6 +177,7 @@ void DrawingOptions::SetDefault() {
 	highlight_locked_doors = true;
 	show_blocking = false;
 	show_tooltips = false;
+	show_container_preview = true;
 	show_performance_stats = false;
 	show_as_minimap = false;
 	show_only_colors = false;
@@ -213,6 +214,7 @@ void DrawingOptions::SetIngame() {
 	highlight_locked_doors = false;
 	show_blocking = false;
 	show_tooltips = false;
+	show_container_preview = false;
 	show_performance_stats = false;
 	show_as_minimap = false;
 	show_only_colors = false;
@@ -339,6 +341,7 @@ void MapDrawer::Release() {
 	}
 
 	tooltips.clear();
+	containerPreviews.clear();
 
 	if (light_drawer) {
 		light_drawer->clear();
@@ -420,6 +423,11 @@ void MapDrawer::DrawOverlays() {
 	}
 	if (options.show_tooltips && !medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
 		DrawTooltips();
+	}
+	if (options.show_container_preview && !medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
+		for (const auto& preview : containerPreviews) {
+			DrawContainerPreview(preview.x, preview.y, preview);
+		}
 	}
 	for (int map_z = start_z; map_z >= superend_z; --map_z) {
 		DrawPositionIndicator(map_z);
@@ -1924,7 +1932,8 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	}
 
 	auto* tp = dynamic_cast<Teleport*>(item);
-	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty()) {
+	auto* container = dynamic_cast<Container*>(item);
+	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty() && !container) {
 		return;
 	}
 
@@ -1959,6 +1968,19 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	if (tp) {
 		Position dest = tp->getDestination();
 		stream << "Destination: " << dest.x << ", " << dest.y << ", " << dest.z << "\n";
+	}
+	if (container && container->getItemCount() > 0) {
+		stream << "Contents (" << container->getItemCount() << "/" << container->getVolume() << "):\n";
+		for (size_t i = 0; i < container->getItemCount(); ++i) {
+			Item* subItem = container->getItem(i);
+			if (subItem) {
+				stream << "  " << g_items[subItem->getID()].name;
+				if (subItem->getCount() > 1) {
+					stream << " (" << subItem->getCount() << ")";
+				}
+				stream << "\n";
+			}
+		}
 	}
 }
 
@@ -2177,15 +2199,47 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 				if (medium_zoom_mode && !(*it)->isBorder() && std::next(it) != tile->items.end()) {
 					continue;
 				}
-				// item tooltip
-				if (show_tooltips && map_z == floor) {
-					WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
-				}
+		// item tooltip
+			if (show_tooltips && map_z == floor) {
+				WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
+			}
 
-				// item animation
-				if (options.show_preview && zoom <= 2.0) {
-					(*it)->animate();
+			// Collect container preview data
+			if (options.show_container_preview && map_z == floor) {
+				if (auto* container = dynamic_cast<Container*>(*it)) {
+					if (container->getItemCount() > 0) {
+						std::vector<uint16_t> itemIds;
+						std::vector<uint16_t> counts;
+						for (size_t ci = 0; ci < container->getItemCount(); ++ci) {
+							Item* subItem = container->getItem(ci);
+							if (subItem) {
+								itemIds.push_back(subItem->getID());
+								counts.push_back(subItem->getCount());
+							}
+						}
+						int previewX = draw_x + TileSize / 2;
+						int previewY;
+						if (show_tooltips) {
+							previewY = draw_y - TileSize - 25;
+						} else {
+							previewY = draw_y - TileSize;
+						}
+						if (previewY < 0) {
+							previewY = draw_y + TileSize + 2;
+						}
+						if (previewY < 0) {
+							previewY = draw_y + TileSize + 4;
+						}
+						std::string containerName = g_items[(*it)->getID()].name;
+						containerPreviews.emplace_back(previewX, previewY, containerName, itemIds, counts);
+					}
 				}
+			}
+
+			// item animation
+			if (options.show_preview && zoom <= 2.0) {
+				(*it)->animate();
+			}
 
 				// item sprite
 				if ((*it)->isBorder()) {
@@ -2504,6 +2558,89 @@ void MapDrawer::MakeTooltip(int screenx, int screeny, const std::string& text, u
 
 	tooltips.emplace_back(screenx, screeny, text, r, g, b);
 	tooltips.back().checkLineEnding();
+}
+
+void MapDrawer::DrawContainerPreview(int screenx, int screeny, const ContainerPreview& preview) {
+	if (preview.itemIds.empty()) {
+		return;
+	}
+
+	const int maxCols = 6;
+	const float slotRatio = 0.35f;
+	const float borderRatio = 0.03f;
+	const float paddingRatio = 0.03f;
+
+	int itemCount = static_cast<int>(preview.itemIds.size());
+	int cols = std::min(itemCount, maxCols);
+	int rows = (itemCount + maxCols - 1) / maxCols;
+
+	float slotSize = TileSize * slotRatio;
+	float slotBorder = TileSize * borderRatio;
+	float padding = TileSize * paddingRatio;
+
+	float totalWidth = cols * (slotSize + slotBorder * 2) + padding * 2;
+	float totalHeight = rows * (slotSize + slotBorder * 2) + padding * 2;
+
+	float x = static_cast<float>(screenx) - totalWidth / 2.0f;
+	float y = static_cast<float>(screeny);
+
+	if (y < 0) {
+		y = static_cast<float>(screeny) + TileSize + 2.0f;
+	}
+	if (x < 0) {
+		x = 0;
+	}
+	if (x + totalWidth > screensize_x * zoom) {
+		x = screensize_x * zoom - totalWidth;
+	}
+
+	float bx = x;
+	float by = y;
+
+	const wxColour bg = Theme::Get(Theme::Role::TooltipBackground);
+	const wxColour borderClr = Theme::Get(Theme::Role::TooltipBorder);
+
+	renderer->drawColoredQuad(bx, by, totalWidth, totalHeight, { bg.Red(), bg.Green(), bg.Blue(), 230 });
+	renderer->drawRect(bx, by, totalWidth, totalHeight, { borderClr.Red(), borderClr.Green(), borderClr.Blue(), 255 }, 1.0f);
+
+	float gridStartX = bx + padding;
+	float gridStartY = by + padding;
+
+	for (int i = 0; i < itemCount; ++i) {
+		int col = i % maxCols;
+		int row = i / maxCols;
+
+		float slotX = gridStartX + col * (slotSize + slotBorder * 2);
+		float slotY = gridStartY + row * (slotSize + slotBorder * 2);
+
+		renderer->drawColoredQuad(slotX, slotY, slotSize + slotBorder * 2, slotSize + slotBorder * 2,
+			{ static_cast<uint8_t>(bg.Red() / 2), static_cast<uint8_t>(bg.Green() / 2), static_cast<uint8_t>(bg.Blue() / 2), 200 });
+		renderer->drawRect(slotX, slotY, slotSize + slotBorder * 2, slotSize + slotBorder * 2,
+			{ borderClr.Red(), borderClr.Green(), borderClr.Blue(), 180 }, 0.5f);
+
+		float iconX = slotX + slotBorder;
+		float iconY = slotY + slotBorder;
+
+		GameSprite* spr = g_items[preview.itemIds[i]].sprite;
+		if (spr) {
+			const auto st = spr->getSpriteTex(0, 0, 0, -1, 0, 0, 0, 0);
+			if (st.texture != 0) {
+				renderer->drawTexturedQuad(iconX, iconY, slotSize, slotSize, st.texture, { 255, 255, 255, 255 }, st.u0, st.v0, st.u1, st.v1);
+			}
+		}
+
+		if (preview.counts[i] > 1) {
+			renderer->flushAndUnbind();
+			const wxColour countColour = Theme::Get(Theme::Role::TooltipValue);
+			glColor4ub(countColour.Red(), countColour.Green(), countColour.Blue(), 255);
+			glRasterPos2f(iconX + slotSize - 6.0f, iconY + slotSize - 1.0f);
+			char countBuf[8];
+			snprintf(countBuf, sizeof(countBuf), "%d", preview.counts[i]);
+			for (const char* c = countBuf; *c != '\0'; ++c) {
+				drawBitmapChar(rme_bitmap_helvetica_12, *c);
+			}
+		}
+	}
 }
 
 void MapDrawer::AddLight(TileLocation* location) {

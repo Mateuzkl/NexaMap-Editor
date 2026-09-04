@@ -187,6 +187,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SHOW_HOUSES, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_PATHING, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_TOOLTIPS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_CONTAINER_PREVIEW, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_PERFORMANCE_STATS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(USE_CPU_GEOMETRY_CACHE, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(USE_GPU_GROUND_CACHE, wxITEM_CHECK, OnChangeViewSettings);
@@ -592,6 +593,7 @@ void MainMenuBar::LoadValues() {
 	CheckItem(SHOW_HOUSES, g_settings.getBoolean(Config::SHOW_HOUSES));
 	CheckItem(SHOW_PATHING, g_settings.getBoolean(Config::SHOW_BLOCKING));
 	CheckItem(SHOW_TOOLTIPS, g_settings.getBoolean(Config::SHOW_TOOLTIPS));
+	CheckItem(SHOW_CONTAINER_PREVIEW, g_settings.getBoolean(Config::SHOW_CONTAINER_PREVIEW));
 	CheckItem(SHOW_PERFORMANCE_STATS, g_settings.getBoolean(Config::SHOW_PERFORMANCE_STATS));
 	CheckItem(USE_CPU_GEOMETRY_CACHE, g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE));
 	CheckItem(USE_GPU_GROUND_CACHE, g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE));
@@ -2418,6 +2420,7 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event) {
 	g_settings.setInteger(Config::USE_GPU_GROUND_CACHE, IsItemChecked(MenuBar::USE_GPU_GROUND_CACHE));
 	g_settings.setInteger(Config::SHOW_BLOCKING, IsItemChecked(MenuBar::SHOW_PATHING));
 	g_settings.setInteger(Config::SHOW_TOOLTIPS, IsItemChecked(MenuBar::SHOW_TOOLTIPS));
+	g_settings.setInteger(Config::SHOW_CONTAINER_PREVIEW, IsItemChecked(MenuBar::SHOW_CONTAINER_PREVIEW));
 	g_settings.setInteger(Config::SHOW_PREVIEW, IsItemChecked(MenuBar::SHOW_PREVIEW));
 	g_settings.setInteger(Config::SHOW_AUTOBORDER_PREVIEW, IsItemChecked(MenuBar::SHOW_AUTOBORDER_PREVIEW));
 	g_settings.setInteger(Config::SHOW_WALL_HOOKS, IsItemChecked(MenuBar::SHOW_WALL_HOOKS));
