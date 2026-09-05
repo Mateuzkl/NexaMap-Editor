@@ -12,6 +12,7 @@
 #include <wx/textctrl.h>
 #include <wx/tokenzr.h>
 #include <wx/wupdlock.h>
+#include <wx/weakref.h>
 
 namespace {
 	wxString PaletteLabel(wxString label) {
@@ -227,9 +228,10 @@ QuickCommandPalette::QuickCommandPalette(wxWindow* parent, const HotkeyManager& 
 		// INIT_DIALOG runs before the native dialog is visible. Windows can
 		// reject SetFocus there with ERROR_INVALID_PARAMETER.
 		if (event.IsShown()) {
-			CallAfter([this] {
-				if (!IsBeingDeleted() && IsShownOnScreen() && search_->CanBeFocused()) {
-					search_->SetFocus();
+			wxWeakRef<QuickCommandPalette> weak(this);
+			CallAfter([weak] {
+				if (weak && !weak->IsBeingDeleted() && weak->IsShownOnScreen() && weak->search_->CanBeFocused()) {
+					weak->search_->SetFocus();
 				}
 			});
 		}

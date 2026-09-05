@@ -20,6 +20,7 @@
 #include "editor_tabs.h"
 #include "gui.h"
 #include "map_tab.h"
+#include <wx/weakref.h>
 
 EditorTab::EditorTab() {
 	;
@@ -182,9 +183,13 @@ void MapTabbook::RequestNewMapTab() {
 		return;
 	}
 	newTabDialogPending = true;
-	CallAfter([this] {
-		newTabDialogPending = false;
-		if (notebook && !g_gui.ShouldSuppressNewTabRequests()) {
+	wxWeakRef<MapTabbook> weak(this);
+	CallAfter([weak] {
+		if (!weak) {
+			return;
+		}
+		weak->newTabDialogPending = false;
+		if (weak->notebook && !g_gui.ShouldSuppressNewTabRequests()) {
 			g_gui.ShowNewMapTabDialog();
 		}
 	});

@@ -12,6 +12,7 @@
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/statline.h>
+#include <wx/weakref.h>
 
 #include "action.h"
 #include "editor.h"
@@ -369,12 +370,18 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 		if (editing_new_zone) {
 			event.Veto();
 			const long item = event.GetIndex();
-			CallAfter([this, item]() {
-				if (item >= 0 && item < zone_list->GetItemCount() && getSelectedName(zone_list, item).empty()) {
-					zone_list->DeleteItem(item);
+			wxWeakRef<ZonesPalettePanel> weak(this);
+			CallAfter([weak, item]() {
+				if (!weak) {
+					return;
 				}
-				selectZoneItem(g_gui.zone_brush->getZone());
-				updateControlStates();
+				if (item >= 0 && item < weak->zone_list->GetItemCount() && getSelectedName(weak->zone_list, item).empty()) {
+					weak->zone_list->DeleteItem(item);
+				}
+				if (g_gui.zone_brush) {
+					weak->selectZoneItem(g_gui.zone_brush->getZone());
+				}
+				weak->updateControlStates();
 			});
 		}
 		editing_new_zone = false;
@@ -391,12 +398,18 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 		g_gui.SetStatusText(!validName ? "Zone name cannot be empty." : "There already is a zone with this name.");
 		if (editing_new_zone) {
 			const long item = event.GetIndex();
-			CallAfter([this, item]() {
-				if (item >= 0 && item < zone_list->GetItemCount() && getSelectedName(zone_list, item).empty()) {
-					zone_list->DeleteItem(item);
+			wxWeakRef<ZonesPalettePanel> weak(this);
+			CallAfter([weak, item]() {
+				if (!weak) {
+					return;
 				}
-				selectZoneItem(g_gui.zone_brush->getZone());
-				updateControlStates();
+				if (item >= 0 && item < weak->zone_list->GetItemCount() && getSelectedName(weak->zone_list, item).empty()) {
+					weak->zone_list->DeleteItem(item);
+				}
+				if (g_gui.zone_brush) {
+					weak->selectZoneItem(g_gui.zone_brush->getZone());
+				}
+				weak->updateControlStates();
 			});
 		}
 		editing_new_zone = false;

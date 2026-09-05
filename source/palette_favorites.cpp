@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <wx/dcbuffer.h>
+#include <wx/weakref.h>
 
 class FavoritesPalettePanel::Grid : public wxScrolledWindow {
 public:
@@ -226,7 +227,16 @@ FavoritesPalettePanel::FavoritesPalettePanel(wxWindow* parent) :
 		g_gui.RefreshFavorites();
 	});
 	Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) { ApplyColours(); event.Skip(); });
-	Bind(wxEVT_DPI_CHANGED, [this](wxDPIChangedEvent& event) { previews_.clear(); CallAfter([this] { RefreshFavorites(); }); event.Skip(); });
+	Bind(wxEVT_DPI_CHANGED, [this](wxDPIChangedEvent& event) {
+		previews_.clear();
+		wxWeakRef<FavoritesPalettePanel> weak(this);
+		CallAfter([weak] {
+			if (weak) {
+				weak->RefreshFavorites();
+			}
+		});
+		event.Skip();
+	});
 	RefreshFavorites();
 }
 

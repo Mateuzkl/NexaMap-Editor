@@ -2453,9 +2453,6 @@ void MapCanvas::OnRotateItem(wxCommandEvent& WXUNUSED(event)) {
 	if (IsBeingDeleted() || !PopupCanEdit(editor)) {
 		return;
 	}
-	if (!PopupCanEdit(editor)) {
-		return;
-	}
 	Item* item = PopupSelectedItem(editor);
 	Tile* tile = PopupSelectedTile(editor);
 	if (!item || !tile || !(item->isRoteable())) {
@@ -2505,9 +2502,6 @@ void MapCanvas::OnCopyDestination(wxCommandEvent& WXUNUSED(event)) {
 
 void MapCanvas::OnSwitchDoor(wxCommandEvent& WXUNUSED(event)) {
 	if (IsBeingDeleted() || !PopupCanEdit(editor)) {
-		return;
-	}
-	if (!PopupCanEdit(editor)) {
 		return;
 	}
 	Item* item = PopupSelectedItem(editor);
