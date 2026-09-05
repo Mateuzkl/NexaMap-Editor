@@ -33,6 +33,7 @@ A modern native map editor for OpenTibia projects, focused on OTBM editing, Clie
 <br />
 
 [Repository](https://github.com/Mateuzkl/NexaMap-Editor) ·
+[Showcase](https://mateuzkl.github.io/NexaMap-Showcase/) ·
 [Issues](https://github.com/Mateuzkl/NexaMap-Editor/issues) ·
 [Pull Requests](https://github.com/Mateuzkl/NexaMap-Editor/pulls)
 
@@ -41,6 +42,8 @@ A modern native map editor for OpenTibia projects, focused on OTBM editing, Clie
 ---
 
 ## Overview
+
+Explore the [NexaMap Showcase](https://mateuzkl.github.io/NexaMap-Showcase/) for a visual Portuguese and English overview of the latest features, stability work, validation, and ways to help test the editor.
 
 **NexaMap Editor** is a native C++ desktop application for professional OpenTibia world development.
 

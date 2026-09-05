@@ -12,6 +12,7 @@
 	#include <openssl/rand.h>
 #endif
 #include <algorithm>
+#include <vector>
 
 namespace Multiplayer {
 #ifdef _WIN32
@@ -29,6 +30,29 @@ namespace Multiplayer {
 				}
 			}
 		};
+
+		NTSTATUS HashBufferWithBCrypt(BCRYPT_ALG_HANDLE algorithm, PUCHAR secret, ULONG secretSize, PUCHAR input, ULONG inputSize, PUCHAR output, ULONG outputSize) {
+			DWORD objectSize = 0;
+			DWORD bytesWritten = 0;
+			auto status = BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH, reinterpret_cast<PUCHAR>(&objectSize), sizeof(objectSize), &bytesWritten, 0);
+			if (status < 0) {
+				return status;
+			}
+
+			std::vector<UCHAR> hashObject(objectSize);
+			BCRYPT_HASH_HANDLE hash = nullptr;
+			status = BCryptCreateHash(algorithm, &hash, hashObject.data(), static_cast<ULONG>(hashObject.size()), secret, secretSize, 0);
+			if (status < 0) {
+				return status;
+			}
+
+			status = BCryptHashData(hash, input, inputSize, 0);
+			if (status >= 0) {
+				status = BCryptFinishHash(hash, output, outputSize, 0);
+			}
+			BCryptDestroyHash(hash);
+			return status;
+		}
 	}
 #endif
 	Identity randomIdentity() {
@@ -48,7 +72,7 @@ namespace Multiplayer {
 		Digest result;
 #ifdef _WIN32
 		Algorithm alg(0);
-		if (BCryptHash(alg.handle, nullptr, 0, const_cast<PUCHAR>(data.data()), static_cast<ULONG>(data.size()), result.data(), static_cast<ULONG>(result.size())) < 0) {
+		if (HashBufferWithBCrypt(alg.handle, nullptr, 0, const_cast<PUCHAR>(data.data()), static_cast<ULONG>(data.size()), result.data(), static_cast<ULONG>(result.size())) < 0) {
 			throw Error("SHA-256 failed.");
 		}
 #else
@@ -66,7 +90,7 @@ namespace Multiplayer {
 		if (BCryptDeriveKeyPBKDF2(alg.handle, reinterpret_cast<PUCHAR>(const_cast<char*>(password.data())), static_cast<ULONG>(password.size()), const_cast<PUCHAR>(session.data()), static_cast<ULONG>(session.size()), 100000, key.data(), static_cast<ULONG>(key.size()), 0) < 0) {
 			throw Error("Password key derivation failed.");
 		}
-		const auto status = BCryptHash(alg.handle, key.data(), static_cast<ULONG>(key.size()), const_cast<PUCHAR>(challenge.data()), static_cast<ULONG>(challenge.size()), result.data(), static_cast<ULONG>(result.size()));
+		const auto status = HashBufferWithBCrypt(alg.handle, key.data(), static_cast<ULONG>(key.size()), const_cast<PUCHAR>(challenge.data()), static_cast<ULONG>(challenge.size()), result.data(), static_cast<ULONG>(result.size()));
 		SecureZeroMemory(key.data(), key.size());
 		if (status < 0) {
 			throw Error("Authentication failed.");
