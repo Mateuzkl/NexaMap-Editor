@@ -647,6 +647,7 @@ int Application::OnRun() {
 }
 
 void Application::ShutdownServices() {
+	g_gui.DrainEditorDisposals();
 #ifdef _USE_PROCESS_COM
 	wxDELETE(m_proc_server);
 	wxDELETE(m_single_instance_checker);

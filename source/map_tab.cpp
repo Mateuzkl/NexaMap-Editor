@@ -27,16 +27,20 @@
 #include "map_display.h"
 #include "multiplayer_session.h"
 
-#include <thread>
+MapTab::InternalReference::InternalReference(std::unique_ptr<Editor> editor) :
+	editor(std::move(editor)), resourceSession(GetActiveEditorResourceSession()) { }
 
-MapTab::MapTab(MapTabbook* aui, Editor* editor) :
+MapTab::InternalReference::~InternalReference() {
+	// Socket/timer teardown must finish before handing pure map data to a worker.
+	editor->multiplayer.reset();
+	g_gui.DisposeEditor(std::move(editor));
+}
+
+MapTab::MapTab(MapTabbook* aui, std::unique_ptr<Editor> editor) :
 	EditorTab(),
 	MapWindow(aui, *editor),
-	aui(aui) {
-	iref = newd InternalReference;
-	iref->editor = editor;
-	iref->resourceSession = GetActiveEditorResourceSession();
-	iref->owner_count = 1;
+	aui(aui),
+	iref(std::make_shared<InternalReference>(std::move(editor))) {
 
 	aui->AddTab(this, true);
 	FitToMap();
@@ -47,7 +51,6 @@ MapTab::MapTab(const MapTab* other) :
 	MapWindow(other->aui, *other->iref->editor),
 	aui(other->aui),
 	iref(other->iref) {
-	iref->owner_count++;
 	aui->AddTab(this, true);
 	FitToMap();
 	int x, y;
@@ -56,28 +59,16 @@ MapTab::MapTab(const MapTab* other) :
 }
 
 MapTab::~MapTab() {
-	iref->owner_count--;
-	if (iref->owner_count <= 0) {
-		Editor* ed = iref->editor;
-		g_gui.ReleaseIngamePreviewEditor(ed);
-		// wx sockets, timers and session windows belong to the GUI thread.
-		ed->multiplayer.reset();
-		iref->editor = nullptr;
-		delete iref;
-
-		// Destroy the editor (and its large map) on a detached background
-		// thread so closing a tab never freezes the GUI thread.
-		std::thread([ed]() {
-			delete ed;
-#ifdef __linux__
-			malloc_trim(0);
-#endif
-		}).detach();
+	if (IsUniqueReference()) {
+		g_gui.ReleaseIngamePreviewEditor(iref->editor.get());
 	}
+	// wxPanel's base destructor runs AFTER iref's destruction. Release all
+	// canvases/dialogs now, while their Editor& and resource session still exist.
+	DestroyChildren();
 }
 
 bool MapTab::IsUniqueReference() const {
-	return iref->owner_count == 1;
+	return iref.use_count() == 1;
 }
 
 wxWindow* MapTab::GetWindow() const {

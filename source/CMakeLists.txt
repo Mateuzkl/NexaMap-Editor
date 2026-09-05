@@ -33,6 +33,7 @@ ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.h
 ${CMAKE_CURRENT_LIST_DIR}/definitions.h
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/editor.h
+${CMAKE_CURRENT_LIST_DIR}/editor_disposal.h
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
 ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h

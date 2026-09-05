@@ -64,7 +64,7 @@ private:
 	FlagBrush* nologBrush = nullptr;
 	FlagBrush* pvpBrush = nullptr;
 	ZoneBrush* zoneBrush = nullptr;
-	BaseMap* doodadBufferMap = nullptr;
+	std::unique_ptr<BaseMap> doodadBufferMap;
 
 	friend class GUI;
 };

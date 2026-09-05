@@ -39,6 +39,7 @@ class Map;
 class EditorResourceSession;
 class FavoritesManager;
 class CrossClientClipboard;
+class EditorDisposalQueue;
 
 enum class EditorClientVersionPolicy;
 class Editor;
@@ -184,6 +185,8 @@ public:
 	bool IsRenderingEnabled() const {
 		return disabled_counter == 0;
 	}
+	void DisposeEditor(std::unique_ptr<Editor> editor);
+	void DrainEditorDisposals();
 
 	void EnableHotkeys();
 	void DisableHotkeys();
@@ -446,7 +449,7 @@ public:
 	GraphicManager gfx;
 
 	BaseMap* secondary_map; // A buffer map
-	BaseMap* doodad_buffer_map; // The map in which doodads are temporarily stored
+	std::unique_ptr<BaseMap> doodad_buffer_map; // The map in which doodads are temporarily stored
 
 	//=========================================================================
 	// Brush references
@@ -528,6 +531,7 @@ protected:
 	bool closingApplication = false;
 	bool closingAllEditors = false;
 	std::unique_ptr<CrossClientClipboard> crossClientClipboard;
+	std::unique_ptr<EditorDisposalQueue> editorDisposals;
 
 	int disabled_counter;
 
@@ -536,7 +540,7 @@ protected:
 #ifdef NEXAMAP_MULTIPLAYER_TESTS
 	friend class CollectionsPaletteTests;
 #endif
-	friend MapTab::MapTab(MapTabbook*, Editor*);
+	friend MapTab::MapTab(MapTabbook*, std::unique_ptr<Editor>);
 	friend MapTab::MapTab(const MapTab*);
 };
 

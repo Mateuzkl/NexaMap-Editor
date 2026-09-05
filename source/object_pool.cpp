@@ -267,8 +267,9 @@ namespace {
 	};
 
 	SmallObjectPool& pooledObjectResource() {
-		// Intentionally kept alive for the process lifetime. Map objects can be
-		// destroyed from detached threads, so static destruction order is unsafe.
+		// Intentional process-lifetime slabs: global registries and buffers may
+		// still own pooled objects after the app's disposal queue has drained.
+		// Do not free this pool without accounting for those global owners too.
 		static auto* pool = new SmallObjectPool();
 		return *pool;
 	}

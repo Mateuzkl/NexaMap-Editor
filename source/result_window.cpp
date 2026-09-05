@@ -192,7 +192,7 @@ void SearchResultWindow::OnClickRemoveAll(wxCommandEvent& WXUNUSED(event)) {
 
 	Map& map = g_gui.GetCurrentMap();
 	Editor* editor = g_gui.GetCurrentEditor();
-	ActionQueue* history = editor->actionQueue;
+	ActionQueue* history = editor->actionQueue.get();
 	BatchAction* batch = history->createBatch(ACTION_DELETE_TILES);
 	Action* action = history->createAction(batch);
 
@@ -292,7 +292,7 @@ bool SearchResultWindow::RemoveDuplicateItem(ResultData* data, uint16_t amount) 
 	}
 
 	Editor* editor = g_gui.GetCurrentEditor();
-	ActionQueue* history = editor->actionQueue;
+	ActionQueue* history = editor->actionQueue.get();
 	BatchAction* batch = history->createBatch(ACTION_DELETE_TILES);
 	Action* action = history->createAction(batch);
 

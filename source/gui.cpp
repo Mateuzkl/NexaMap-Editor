@@ -30,6 +30,7 @@
 #include "multiplayer_session.h"
 
 #include "editor.h"
+#include "editor_disposal.h"
 #include "brush.h"
 #include "map.h"
 #include "materials.h"
@@ -210,14 +211,25 @@ GUI::GUI() :
 	custom_thickness_mod(0.0),
 	progressBar(nullptr),
 	disabled_counter(0) {
-	doodad_buffer_map = newd BaseMap();
+	doodad_buffer_map = std::make_unique<BaseMap>();
 	crossClientClipboard = std::make_unique<CrossClientClipboard>();
 }
 
 GUI::~GUI() {
-	delete doodad_buffer_map;
+	DrainEditorDisposals();
 	delete g_gui.aui_manager;
 	delete OGLContext;
+}
+
+void GUI::DisposeEditor(std::unique_ptr<Editor> editor) {
+	if (!editorDisposals) {
+		editorDisposals = std::make_unique<EditorDisposalQueue>();
+	}
+	editorDisposals->submit(std::move(editor));
+}
+
+void GUI::DrainEditorDisposals() {
+	editorDisposals.reset();
 }
 
 wxGLContext* GUI::GetGLContext(wxGLCanvas* win) {
@@ -582,7 +594,7 @@ bool GUI::ActivateResourceSession(const std::shared_ptr<EditorResourceSession>& 
 	SwapResourceSessionState(*session);
 	SetActiveEditorResourceSession(session);
 	if (!doodad_buffer_map) {
-		doodad_buffer_map = newd BaseMap();
+		doodad_buffer_map = std::make_unique<BaseMap>();
 	}
 
 	const WorkspaceClientSelection& client = g_workspace.getClient();
@@ -1026,17 +1038,17 @@ void GUI::FitViewToMap(MapTab* mt) {
 bool GUI::NewMap() {
 	FinishWelcomeDialog();
 
-	Editor* editor;
+	std::unique_ptr<Editor> editor;
 	try {
-		editor = newd Editor(copybuffer);
+		editor = std::make_unique<Editor>(copybuffer);
 	} catch (std::runtime_error& e) {
 		PopupDialog(root, "Error!", wxString(e.what(), wxConvUTF8), wxOK);
 		return false;
 	}
 
-	auto* mapTab = newd MapTab(tabbook, editor);
+	auto* mapTab = newd MapTab(tabbook, std::move(editor));
 	mapTab->OnSwitchEditorMode(mode);
-	editor->map.clearChanges();
+	mapTab->GetMap()->clearChanges();
 
 	SetStatusText("Created new map");
 	UpdateTitle();
@@ -1167,9 +1179,9 @@ bool GUI::LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy cl
 
 	const bool shouldReplaceEmptyEditor = replaceEmptyEditor && GetCurrentEditor() && !GetCurrentMap().hasChanged() && !GetCurrentMap().hasFile();
 
-	Editor* editor;
+	std::unique_ptr<Editor> editor;
 	try {
-		editor = newd Editor(copybuffer, fileName, clientVersionPolicy, readCodec, detachedDecodedView);
+		editor = std::make_unique<Editor>(copybuffer, fileName, clientVersionPolicy, readCodec, detachedDecodedView);
 	} catch (std::runtime_error& e) {
 		PopupDialog(root, "Error!", wxString(e.what(), wxConvUTF8), wxOK);
 		return false;
@@ -1178,7 +1190,7 @@ bool GUI::LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy cl
 		g_gui.CloseCurrentEditor();
 	}
 
-	auto* mapTab = newd MapTab(tabbook, editor);
+	auto* mapTab = newd MapTab(tabbook, std::move(editor));
 	mapTab->OnSwitchEditorMode(mode);
 
 	if (!detachedDecodedView) {
@@ -2318,7 +2330,7 @@ void GUI::SetDrawingMode(bool preserveSelection) {
 	}
 
 	if (current_brush && current_brush->isDoodad()) {
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	} else {
 		secondary_map = nullptr;
 	}
@@ -2331,7 +2343,7 @@ void GUI::SetBrushSizeInternal(int nz) {
 	if (nz != brush_size && current_brush && current_brush->isDoodad() && !current_brush->oneSizeFitsAll()) {
 		brush_size = nz;
 		FillDoodadPreviewBuffer();
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	} else {
 		brush_size = nz;
 	}
@@ -2353,7 +2365,7 @@ void GUI::SetBrushVariation(int nz) {
 		// Monkey!
 		brush_variation = nz;
 		FillDoodadPreviewBuffer();
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	}
 }
 
@@ -2362,7 +2374,7 @@ void GUI::SetBrushShape(BrushShape bs) {
 		// Donkey!
 		brush_shape = bs;
 		FillDoodadPreviewBuffer();
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	}
 	brush_shape = bs;
 
@@ -2553,7 +2565,7 @@ void GUI::SelectBrushInternal(Brush* brush) {
 	brush_variation = min(brush_variation, brush->getMaxVariation());
 	FillDoodadPreviewBuffer();
 	if (brush->isDoodad()) {
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	}
 
 	SetDrawingMode(current_brush->isZone());
@@ -2691,7 +2703,7 @@ void GUI::FillDoodadPreviewBuffer() {
 						tile = doodad_buffer_map->allocator(doodad_buffer_map->createTileL(pos));
 					}
 					int variation = GetBrushVariation();
-					brush->draw(doodad_buffer_map, tile, &variation);
+					brush->draw(doodad_buffer_map.get(), tile, &variation);
 					// std::cout << "\tpos: " << tile->getPosition() << std::endl;
 					doodad_buffer_map->setTile(tile->getPosition(), tile);
 					exit = true;
@@ -2725,7 +2737,7 @@ void GUI::FillDoodadPreviewBuffer() {
 		} else if (brush->hasSingleObjects(GetBrushVariation())) {
 			Tile* tile = doodad_buffer_map->allocator(doodad_buffer_map->createTileL(center_pos));
 			int variation = GetBrushVariation();
-			brush->draw(doodad_buffer_map, tile, &variation);
+			brush->draw(doodad_buffer_map.get(), tile, &variation);
 			doodad_buffer_map->setTile(center_pos, tile);
 		}
 	}

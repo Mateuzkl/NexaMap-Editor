@@ -45,9 +45,7 @@ namespace {
 EditorResourceSession::EditorResourceSession() :
 	storage(std::make_unique<Storage>()) { }
 
-EditorResourceSession::~EditorResourceSession() {
-	delete doodadBufferMap;
-}
+EditorResourceSession::~EditorResourceSession() = default;
 
 void EditorResourceSession::swapWithGlobals() {
 	g_spritePreloader.clear();

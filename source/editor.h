@@ -46,7 +46,7 @@ public:
 
 public:
 	// Public members
-	ActionQueue* actionQueue;
+	std::unique_ptr<ActionQueue> actionQueue;
 	Selection selection;
 	CopyBuffer& copybuffer;
 	GroundBrush* replace_brush;
