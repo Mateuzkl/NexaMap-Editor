@@ -8,6 +8,7 @@
 #include "gui.h"
 #include "map_window.h"
 #include "map_display.h"
+#include "map_drawer.h"
 #include "ingame_preview/ingame_preview_window.h"
 #include "ingame_preview/playtest_map.h"
 #include "ingame_preview/playtest_weather.h"
@@ -275,6 +276,37 @@ class PlaytestIntegrationTests {
 	}
 
 public:
+	static void rendererLifecycle() {
+		g_settings.setDefaults();
+		CopyBuffer buffer;
+		Editor editor(buffer, nullptr);
+		wxFrame frame(nullptr, wxID_ANY, "Hidden frame teardown validation");
+		auto view = std::make_unique<MapWindow>(&frame, editor, true);
+		auto* canvas = view->GetCanvas();
+		check(canvas->SetCurrent(*g_gui.GetGLContext(canvas)), "Map canvas GL context");
+		for (int cycle = 0; cycle < 100; ++cycle) {
+			GLint projection = 0, modelview = 0;
+			glGetIntegerv(GL_PROJECTION_STACK_DEPTH, &projection);
+			glGetIntegerv(GL_MODELVIEW_STACK_DEPTH, &modelview);
+			auto drawer = std::make_unique<MapDrawer>(canvas);
+			if (cycle % 3 != 0) {
+				drawer->SetupVars();
+				drawer->SetupGL();
+				drawer->getRenderer()->ensureFBO(64 + cycle, 64 + cycle);
+				if (cycle % 3 == 1) {
+					drawer->Release();
+					drawer->Release();
+				}
+			}
+			drawer.reset(); // Never begun, already ended, or interrupted frame.
+			GLint finalProjection = 0, finalModelview = 0;
+			glGetIntegerv(GL_PROJECTION_STACK_DEPTH, &finalProjection);
+			glGetIntegerv(GL_MODELVIEW_STACK_DEPTH, &finalModelview);
+			check(glGetError() == GL_NO_ERROR, "MapDrawer teardown produced an OpenGL error");
+			check(projection == finalProjection && modelview == finalModelview, "MapDrawer unbalanced matrix stacks");
+		}
+		std::cout << "PASS 100 MapDrawer lifecycles: unpainted, repeated Release, interrupted frame, resized FBO\n";
+	}
 	static void run() {
 		mapAdapter();
 		lifecycle();
@@ -283,4 +315,7 @@ public:
 };
 void RunPlaytestIntegrationTests() {
 	PlaytestIntegrationTests::run();
+}
+void RunRendererLifecycleTests() {
+	PlaytestIntegrationTests::rendererLifecycle();
 }

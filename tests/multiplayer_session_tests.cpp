@@ -265,11 +265,13 @@ public:
 void RunStartupValidationTests();
 void RunPlaytestIntegrationTests();
 void RunCollectionsPaletteTests();
+void RunRendererLifecycleTests();
 
 int RunMultiplayerSessionTests(int argc, char** argv) {
 	const bool startupValidation = argc > 1 && std::string(argv[1]) == "--startup-validation";
 	const bool playtestValidation = argc > 1 && std::string(argv[1]) == "--playtest-validation";
 	const bool collectionsValidation = argc > 1 && std::string(argv[1]) == "--collections-validation";
+	const bool rendererLifecycle = argc > 1 && std::string(argv[1]) == "--renderer-lifecycle-validation";
 	if (!wxEntryStart(argc, argv)) {
 		return 1;
 	}
@@ -284,7 +286,9 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 		wxEventLoop loop;
 		wxEventLoopActivator activate(&loop);
 		try {
-			if (collectionsValidation) {
+			if (rendererLifecycle) {
+				RunRendererLifecycleTests();
+			} else if (collectionsValidation) {
 				RunCollectionsPaletteTests();
 			} else if (playtestValidation) {
 				RunPlaytestIntegrationTests();

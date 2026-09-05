@@ -356,11 +356,14 @@ void MapDrawer::SetupGL() {
 }
 
 void MapDrawer::Release() {
-	renderer->endFrame();
-	if (frame_started_valid) {
-		TraceGeometryFrame();
-		frame_started_valid = false;
+	// The canvas also destroys drawers that were never painted or whose frame
+	// has already ended. Only a matching SetupGL owns matrix-stack entries.
+	if (!frame_started_valid) {
+		return;
 	}
+	renderer->endFrame();
+	TraceGeometryFrame();
+	frame_started_valid = false;
 
 	tooltips.clear();
 
