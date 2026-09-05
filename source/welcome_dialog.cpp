@@ -618,11 +618,11 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	communityText->SetBackgroundColour(background);
 	footerSizer->Add(communityText, 0, wxALIGN_RIGHT);
 	footerSizer->AddSpacer(FROM_DIP(this, 4));
-	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by  Mateuzkl,  Skyyzyy  and  SoyFabie");
+	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by  Mateuzkl,  Skyyzyy  and  SoyFabi");
 	creditText->SetFont(FontWithPointSize(GetFont(), std::max(11, GetFont().GetPointSize() + 1), true));
 	creditText->SetForegroundColour(wxColour(255, 211, 77));
 	creditText->SetBackgroundColour(background);
-	creditText->SetToolTip("NexaMap Editor developers: Mateuzkl, Skyyzyy and SoyFabie");
+	creditText->SetToolTip("NexaMap Editor developers: Mateuzkl, Skyyzyy and SoyFabi");
 	footerSizer->Add(creditText, 0, wxALIGN_RIGHT);
 	contentSizer->Add(footerSizer, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentPanel->SetSizer(contentSizer);

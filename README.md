@@ -509,7 +509,7 @@ NexaMap Editor is developed by:
 
 - [Mateuzkl](https://github.com/Mateuzkl)
 - [Skyyzyy](https://github.com/Skyyzyy)
-- [SoyFabie](https://github.com/SoyFabie)
+- [SoyFabi](https://github.com/soyfabi)
 
 Thanks to the OpenTibia mapping and development community and the upstream projects that made modern map-editor development possible.
 
