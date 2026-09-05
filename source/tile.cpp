@@ -158,6 +158,8 @@ void Tile::merge(Tile* other) {
 	if (!other) {
 		return;
 	}
+	markRenderChunkChanged();
+	other->markRenderChunkChanged();
 
 	if (other->isPZ()) {
 		setPZ(true);
@@ -262,6 +264,7 @@ void Tile::addItem(Item* item) {
 	if (!item) {
 		return;
 	}
+	markRenderChunkChanged();
 	if (item->isGroundTile()) {
 		// printf("ADDING GROUND\n");
 		delete ground;
@@ -317,6 +320,7 @@ void Tile::addLoadedItem(Item* item) {
 	if (!item) {
 		return;
 	}
+	markRenderChunkChanged();
 	if (item->isGroundTile()) {
 		delete ground;
 		ground = item;
@@ -342,6 +346,7 @@ void Tile::addLoadedItem(Item* item, const ItemType& type) {
 	if (!item) {
 		return;
 	}
+	markRenderChunkChanged();
 
 	const bool createsGroundEquivalent = !type.isGroundTile() && type.ground_equivalent != 0;
 
@@ -400,6 +405,7 @@ void Tile::select() {
 	if (size() == 0) {
 		return;
 	}
+	markRenderChunkChanged(MapChunkChange::Presentation);
 	if (ground) {
 		ground->select();
 	}
@@ -422,6 +428,7 @@ void Tile::select() {
 }
 
 void Tile::deselect() {
+	markRenderChunkChanged(MapChunkChange::Presentation);
 	if (ground) {
 		ground->deselect();
 	}
@@ -481,6 +488,9 @@ ItemVector Tile::popSelectedItems(bool ignoreTileSelected) {
 	}
 
 	statflags &= ~TILESTATE_SELECTED;
+	if (!pop_items.empty()) {
+		markRenderChunkChanged();
+	}
 	return pop_items;
 }
 
@@ -567,7 +577,8 @@ bool tilePositionVisualLessThan(const Tile* a, const Tile* b) {
 	return false;
 }
 
-void Tile::update() {
+void Tile::update(MapChunkChange change) {
+	markRenderChunkChanged(change);
 	statflags &= TILESTATE_MODIFIED;
 	minimapColor = INVALID_MINIMAP_COLOR;
 
@@ -630,6 +641,7 @@ void Tile::update() {
 }
 
 void Tile::borderize(BaseMap* parent) {
+	markRenderChunkChanged();
 	GroundBrush::doBorders(parent, this);
 }
 
@@ -637,6 +649,7 @@ void Tile::addBorderItem(Item* item) {
 	if (!item) {
 		return;
 	}
+	markRenderChunkChanged();
 	ASSERT(item->isBorder());
 	items.insert(items.begin(), item);
 }
@@ -656,6 +669,7 @@ void Tile::cleanBorders() {
 	it = items.begin();
 	while (it != items.end()) {
 		if ((*it)->isBorder()) {
+			markRenderChunkChanged();
 			delete *it;
 			it = items.erase(it);
 		} else {
@@ -666,6 +680,7 @@ void Tile::cleanBorders() {
 }
 
 void Tile::wallize(BaseMap* parent) {
+	markRenderChunkChanged();
 	WallBrush::doWalls(parent, this);
 }
 
@@ -723,6 +738,7 @@ void Tile::cleanWalls(bool dontdelete) {
 	it = items.begin();
 	while (it != items.end()) {
 		if ((*it)->isWall()) {
+			markRenderChunkChanged();
 			if (!dontdelete) {
 				delete *it;
 			}
@@ -739,6 +755,7 @@ void Tile::cleanWalls(WallBrush* wb) {
 	it = items.begin();
 	while (it != items.end()) {
 		if ((*it)->isWall() && wb->hasWall(*it)) {
+			markRenderChunkChanged();
 			delete *it;
 			it = items.erase(it);
 		} else {
@@ -748,14 +765,17 @@ void Tile::cleanWalls(WallBrush* wb) {
 }
 
 void Tile::tableize(BaseMap* parent) {
+	markRenderChunkChanged();
 	TableBrush::doTables(parent, this);
 }
 
 void Tile::carpetize(BaseMap* parent) {
+	markRenderChunkChanged();
 	CarpetBrush::doCarpets(parent, this);
 }
 
 void Tile::selectGround() {
+	markRenderChunkChanged(MapChunkChange::Presentation);
 	bool selected_ = false;
 	if (ground) {
 		ground->select();
@@ -779,6 +799,7 @@ void Tile::selectGround() {
 }
 
 void Tile::deselectGround() {
+	markRenderChunkChanged(MapChunkChange::Presentation);
 	if (ground) {
 		ground->deselect();
 	}
@@ -794,10 +815,13 @@ void Tile::deselectGround() {
 }
 
 void Tile::setHouse(const House* _house) {
-	house_id = (_house ? _house->getID() : 0);
+	setHouseID(_house ? _house->getID() : 0);
 }
 
 void Tile::setHouseID(uint32_t newHouseId) {
+	if (house_id != newHouseId) {
+		markRenderChunkChanged();
+	}
 	house_id = newHouseId;
 }
 
@@ -812,6 +836,7 @@ void Tile::addHouseExit(const House* h) {
 	HouseExitList* house_exits = location->createHouseExits();
 	if (std::find(house_exits->begin(), house_exits->end(), h->getID()) == house_exits->end()) {
 		house_exits->push_back(h->getID());
+		location->markRenderChunkChanged(MapChunkChange::Presentation);
 	}
 }
 
@@ -825,5 +850,9 @@ void Tile::removeHouseExit(const House* h) {
 		return;
 	}
 
+	const size_t previousSize = house_exits->size();
 	house_exits->erase(std::remove(house_exits->begin(), house_exits->end(), h->getID()), house_exits->end());
+	if (house_exits->size() != previousSize) {
+		location->markRenderChunkChanged(MapChunkChange::Presentation);
+	}
 }

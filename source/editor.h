@@ -28,6 +28,7 @@
 
 class BaseMap;
 class CopyBuffer;
+class MultiplayerSession;
 
 enum class EditorClientVersionPolicy {
 	DetectFromMap,
@@ -38,15 +39,19 @@ class Editor {
 public:
 	Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPolicy clientVersionPolicy = EditorClientVersionPolicy::DetectFromMap, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 	Editor(CopyBuffer& copybuffer);
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	Editor(CopyBuffer& copybuffer, std::nullptr_t);
+#endif
 	~Editor();
 
 public:
 	// Public members
-	ActionQueue* actionQueue;
+	std::unique_ptr<ActionQueue> actionQueue;
 	Selection selection;
 	CopyBuffer& copybuffer;
 	GroundBrush* replace_brush;
 	Map map; // The map that is being edited
+	std::unique_ptr<MultiplayerSession> multiplayer;
 
 public: // Functions
 	static bool CanEdit() {

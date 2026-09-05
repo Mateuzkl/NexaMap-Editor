@@ -167,6 +167,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 
 	auto* result_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Result"), wxVERTICAL);
 	items_list = newd FindDialogListBox(result_box_sizer->GetStaticBox(), wxID_ANY);
+	items_list->Bind(wxEVT_LISTBOX_DCLICK, &FindItemDialog::OnClickOK, this);
 	items_list->SetMinSize(wxSize(230, 512));
 	result_box_sizer->Add(items_list, 0, wxALL, 5);
 	box_sizer->Add(result_box_sizer, 1, wxALL | wxEXPAND, 5);
@@ -206,6 +207,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 }
 
 FindItemDialog::~FindItemDialog() {
+	input_timer.Stop();
 	// Disconnect Events
 	options_radio_box->Disconnect(wxEVT_COMMAND_RADIOBOX_SELECTED, wxCommandEventHandler(FindItemDialog::OnOptionChange), nullptr, this);
 	server_id_spin->Disconnect(wxEVT_COMMAND_SPINCTRL_UPDATED, wxCommandEventHandler(FindItemDialog::OnServerIdChange), nullptr, this);
@@ -231,6 +233,8 @@ FindItemDialog::~FindItemDialog() {
 	has_elevation->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), nullptr, this);
 	ignore_look->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), nullptr, this);
 	floor_change->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), nullptr, this);
+	invalid_item->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), nullptr, this);
+	items_list->Unbind(wxEVT_LISTBOX_DCLICK, &FindItemDialog::OnClickOK, this);
 }
 
 FindItemDialog::SearchMode FindItemDialog::getSearchMode() const {
@@ -280,7 +284,8 @@ void FindItemDialog::EnableProperties(bool enable) {
 }
 
 void FindItemDialog::RefreshContentsInternal() {
-	items_list->Clear();
+	input_timer.Stop();
+	std::vector<Brush*> matches;
 	ok_button->Enable(false);
 
 	auto selection = (SearchMode)options_radio_box->GetSelection();
@@ -296,11 +301,11 @@ void FindItemDialog::RefreshContentsInternal() {
 				if (only_pickupables) {
 					if (item.pickupable) {
 						found_search_results = true;
-						items_list->AddBrush(raw_brush);
+						matches.push_back(raw_brush);
 					}
 				} else {
 					found_search_results = true;
-					items_list->AddBrush(raw_brush);
+					matches.push_back(raw_brush);
 				}
 			}
 		}
@@ -326,12 +331,13 @@ void FindItemDialog::RefreshContentsInternal() {
 			}
 
 			found_search_results = true;
-			items_list->AddBrush(raw_brush);
+			matches.push_back(raw_brush);
 		}
 	} else if (selection == SearchMode::Names) {
-		std::string search_string = as_lower_str(nstr(name_text_input->GetValue()));
+		wxString search_string = name_text_input->GetValue().Lower();
 		if (search_string.size() >= 2) {
-			for (int id = 100; id <= g_items.getMaxID(); ++id) {
+			const int maxID = g_items.getMaxID();
+			for (int id = 100; id <= maxID; ++id) {
 				ItemType& item = g_items.getItemType(id);
 				if (item.id == 0) {
 					continue;
@@ -346,12 +352,13 @@ void FindItemDialog::RefreshContentsInternal() {
 					continue;
 				}
 
-				if (as_lower_str(raw_brush->getName()).find(search_string) == std::string::npos) {
+				wxString item_name = wxstr(raw_brush->getName()).Lower();
+				if (item_name.Find(search_string) == wxNOT_FOUND) {
 					continue;
 				}
 
 				found_search_results = true;
-				items_list->AddBrush(raw_brush);
+				matches.push_back(raw_brush);
 			}
 		}
 	} else if (selection == SearchMode::Types) {
@@ -377,7 +384,7 @@ void FindItemDialog::RefreshContentsInternal() {
 			}
 
 			found_search_results = true;
-			items_list->AddBrush(raw_brush);
+			matches.push_back(raw_brush);
 		}
 	} else if (selection == SearchMode::Properties) {
 		bool has_selected = (unpassable->GetValue() || unmovable->GetValue() || block_missiles->GetValue() || block_pathfinder->GetValue() || readable->GetValue() || writeable->GetValue() || pickupable->GetValue() || stackable->GetValue() || rotatable->GetValue() || hangable->GetValue() || hook_east->GetValue() || hook_south->GetValue() || has_elevation->GetValue() || ignore_look->GetValue() || floor_change->GetValue());
@@ -399,17 +406,18 @@ void FindItemDialog::RefreshContentsInternal() {
 				}
 
 				found_search_results = true;
-				items_list->AddBrush(raw_brush);
+				matches.push_back(raw_brush);
 			}
 		}
 	}
 
-	if (found_search_results) {
+	const bool has_matches = !matches.empty();
+	items_list->SetBrushes(std::move(matches));
+	items_list->Enable(true);
+	if (has_matches) {
 		items_list->SetSelection(0);
-		ok_button->Enable(true);
-	} else {
-		items_list->SetNoMatches();
 	}
+	ok_button->Enable(found_search_results);
 
 	items_list->Refresh();
 }
@@ -427,7 +435,10 @@ void FindItemDialog::OnClientIdChange(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void FindItemDialog::OnText(wxCommandEvent& WXUNUSED(event)) {
-	input_timer.Start(800, true);
+	// Old results must not be accepted while the next query is pending.
+	items_list->Enable(false);
+	ok_button->Enable(false);
+	input_timer.Start(300, true);
 }
 
 void FindItemDialog::OnTypeChange(wxCommandEvent& WXUNUSED(event)) {
@@ -443,6 +454,9 @@ void FindItemDialog::OnInputTimer(wxTimerEvent& WXUNUSED(event)) {
 }
 
 void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
+	if (input_timer.IsRunning() || !ok_button->IsEnabled()) {
+		return;
+	}
 	if (invalid_item->GetValue() && (SearchMode)options_radio_box->GetSelection() == SearchMode::ServerIDs && result_id != 0) {
 		EndModal(wxID_OK);
 		return;
@@ -459,5 +473,6 @@ void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void FindItemDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
+	input_timer.Stop();
 	EndModal(wxID_CANCEL);
 }

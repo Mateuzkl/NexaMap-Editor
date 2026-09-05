@@ -25,6 +25,8 @@
 #include "lua_parser.h"
 
 #include <wx/dir.h>
+#include <chrono>
+#include <iostream>
 
 CreatureDatabase g_creatures;
 
@@ -80,9 +82,10 @@ namespace {
 		return creatureType;
 	}
 
-	void addOrUpdateLuaCreature(CreatureMap& creatureMap, CreatureType* creatureType) {
+	void addOrUpdateLuaCreature(CreatureMap& creatureMap, CreatureType* creatureType, bool standard) {
 		auto iter = creatureMap.find(as_lower_str(creatureType->name));
 		if (iter == creatureMap.end()) {
+			creatureType->standard = standard;
 			creatureMap[as_lower_str(creatureType->name)] = creatureType;
 			return;
 		}
@@ -93,7 +96,7 @@ namespace {
 		*current = *creatureType;
 		current->brush = currentBrush;
 		current->in_other_tileset = inOtherTileset;
-		current->standard = false;
+		current->standard = standard;
 		current->missing = false;
 		delete creatureType;
 	}
@@ -319,6 +322,10 @@ void CreatureDatabase::clear() {
 	creature_map.clear();
 }
 
+void CreatureDatabase::swap(CreatureDatabase& other) noexcept {
+	creature_map.swap(other.creature_map);
+}
+
 CreatureType* CreatureDatabase::operator[](const std::string& name) {
 	auto iter = creature_map.find(as_lower_str(name));
 	if (iter != creature_map.end()) {
@@ -362,7 +369,12 @@ bool CreatureDatabase::hasMissing() const {
 	return false;
 }
 
-bool CreatureDatabase::loadFromXML(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings) {
+bool CreatureDatabase::loadFromXML(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings, const ImportProgress& progress) {
+	const auto started = std::chrono::steady_clock::now();
+	const wxString label = (standard ? "Loading " : "Loading user ") + filename.GetFullName();
+	if (progress) {
+		progress(label + "...");
+	}
 	pugi::xml_document doc;
 	pugi::xml_parse_result result = doc.load_file(filename.GetFullPath().mb_str());
 	if (!result) {
@@ -385,21 +397,50 @@ bool CreatureDatabase::loadFromXML(const FileName& filename, bool standard, wxSt
 		return false;
 	}
 
+	const size_t total = static_cast<size_t>(std::distance(node.begin(), node.end()));
+	size_t processed = 0;
+	size_t sharedCatalogNames = 0;
+	size_t identicalEntries = 0;
+	auto lastPump = started;
 	for (pugi::xml_node creatureNode = node.first_child(); creatureNode; creatureNode = creatureNode.next_sibling()) {
+		++processed;
+		const auto now = std::chrono::steady_clock::now();
+		if (progress && now - lastPump >= std::chrono::milliseconds(100)) {
+			progress(wxString::Format("%s: %zu / %zu entries", label, processed - 1, total));
+			lastPump = now;
+		}
 		if (as_lower_str(creatureNode.name()) != childName) {
 			continue;
 		}
 
-		CreatureType* creatureType = CreatureType::loadFromXML(creatureNode, warnings);
+		std::unique_ptr<CreatureType> creatureType(CreatureType::loadFromXML(creatureNode, warnings));
 		if (creatureType) {
 			creatureType->standard = standard;
-			if ((*this)[creatureType->name]) {
-				warnings.push_back("Duplicate creature type name \"" + wxstr(creatureType->name) + "\"! Discarding...");
-				delete creatureType;
+			if (const CreatureType* current = (*this)[creatureType->name]) {
+				if (!current->missing && current->isNpc == creatureType->isNpc && current->outfit == creatureType->outfit) {
+					++identicalEntries;
+				} else if (standard && current->standard && current->isNpc != creatureType->isNpc) {
+					// The bundled monster and NPC catalogs legitimately share names.
+					// The current name-based database keeps its first fallback; the
+					// active server Lua import still updates it afterwards in place.
+					++sharedCatalogNames;
+				} else {
+					warnings.push_back("Duplicate creature type name \"" + wxstr(creatureType->name) + "\" in " + filename.GetFullName() + ": conflicting definition; keeping the existing " + (current->isNpc ? "NPC" : "monster") + " definition.");
+				}
 			} else {
-				creature_map[as_lower_str(creatureType->name)] = creatureType;
+				const std::string key = as_lower_str(creatureType->name);
+				creature_map.emplace(key, creatureType.get());
+				creatureType.release();
 			}
 		}
+	}
+	if (sharedCatalogNames || identicalEntries) {
+		wxLogMessage("Creature catalog %s: %zu identical entries merged; %zu shared monster/NPC names kept with the first catalog definition. Active server imports take precedence.", filename.GetFullName(), identicalEntries, sharedCatalogNames);
+	}
+	if (progress) {
+		progress(wxString::Format("%s: %zu / %zu entries", label, processed, total));
+		std::clog << "[loading] " << label.ToStdString() << ": " << processed << " XML entries in "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count() << " ms\n";
 	}
 	return true;
 }
@@ -501,12 +542,12 @@ bool CreatureDatabase::importLuaFromOT(const FileName& filename, wxString& error
 		return false;
 	}
 
-	addOrUpdateLuaCreature(creature_map, creatureType);
+	addOrUpdateLuaCreature(creature_map, creatureType, false);
 	g_materials.createOtherTileset();
 	return true;
 }
 
-static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directory, LuaCreatureKind kind, wxString& error, wxArrayString& warnings, const wxString& label) {
+static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directory, LuaCreatureKind kind, wxString& error, wxArrayString& warnings, const wxString& label, const CreatureDatabase::ImportProgress& progress, bool updatePalettes) {
 	if (directory.IsEmpty()) {
 		return true;
 	}
@@ -515,32 +556,80 @@ static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directo
 		return false;
 	}
 
-	wxArrayString luaFiles;
-	wxDir::GetAllFiles(directory, &luaFiles, "*.lua", wxDIR_FILES | wxDIR_DIRS | wxDIR_HIDDEN);
-
-	int fileCount = 0;
-	for (const auto& filePath : luaFiles) {
-		if (++fileCount % 50 == 0) {
+	const auto started = std::chrono::steady_clock::now();
+	auto lastPump = started;
+	auto report = [&](const wxString& message, bool force = false) {
+		const auto now = std::chrono::steady_clock::now();
+		if (!force && now - lastPump < std::chrono::milliseconds(100)) {
+			return;
+		}
+		lastPump = now;
+		if (progress) {
+			progress(message);
+		} else {
 			wxSafeYield();
 		}
+	};
 
-		CreatureType* creatureType = loadCreatureFromLua(filePath, kind, warnings, false);
-		if (!creatureType) {
-			continue;
+	// GetAllFiles() offers no callbacks and could leave the dialog frozen
+	// while traversing a large server tree. The total is unknown until traversal ends.
+	wxArrayString luaFiles;
+	class Traverser final : public wxDirTraverser {
+	public:
+		Traverser(wxArrayString& files, std::function<void()> pulse) :
+			files(files), pulse(std::move(pulse)) { }
+		wxDirTraverseResult OnFile(const wxString& path) override {
+			files.push_back(path);
+			pulse();
+			return wxDIR_CONTINUE;
 		}
-		addOrUpdateLuaCreature(creatureMap, creatureType);
-	}
+		wxDirTraverseResult OnDir(const wxString&) override {
+			pulse();
+			return wxDIR_CONTINUE;
+		}
 
-	g_materials.createOtherTileset();
+	private:
+		wxArrayString& files;
+		std::function<void()> pulse;
+	};
+	const wxString scanning = "Finding server " + label + " Lua files...";
+	report(scanning, true);
+	Traverser traverser(luaFiles, [&] { report(scanning + wxString::Format(" (%zu found)", luaFiles.size())); });
+	wxDir dir(directory);
+	dir.Traverse(traverser, "*.lua", wxDIR_FILES | wxDIR_DIRS | wxDIR_HIDDEN | wxDIR_NO_FOLLOW);
+
+	size_t fileCount = 0;
+	auto importStatus = [&] { return wxString::Format("Importing server %s: %zu / %zu Lua files", label, fileCount, luaFiles.size()); };
+	report(importStatus(), true);
+	for (const auto& filePath : luaFiles) {
+		CreatureType* creatureType = loadCreatureFromLua(filePath, kind, warnings, false);
+		// Creatures discovered automatically from the active server workspace
+		// belong to that workspace. Do not persist them into the shared user
+		// creature overlay, where they would be reloaded as stale duplicates
+		// when another TFS/Canary/Crystal project is opened.
+		if (creatureType) {
+			addOrUpdateLuaCreature(creatureMap, creatureType, true);
+		}
+		++fileCount;
+		report(importStatus());
+	}
+	report(importStatus(), true);
+	std::clog << "[loading] " << label.ToStdString() << ": " << fileCount << " Lua files enumerated/imported in "
+			  << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count() << " ms\n";
+	// Resource loading builds palettes once, after materials and both imports.
+	if (updatePalettes) {
+		report("Building creature palettes...", true);
+		g_materials.createOtherTileset();
+	}
 	return true;
 }
 
-bool CreatureDatabase::importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings) {
-	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Monster, error, warnings, "Monsters");
+bool CreatureDatabase::importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress, bool updatePalettes) {
+	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Monster, error, warnings, "monsters", progress, updatePalettes);
 }
 
-bool CreatureDatabase::importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings) {
-	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Npc, error, warnings, "NPCs");
+bool CreatureDatabase::importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress, bool updatePalettes) {
+	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Npc, error, warnings, "NPCs", progress, updatePalettes);
 }
 
 bool CreatureDatabase::saveToXML(const FileName& filename) {

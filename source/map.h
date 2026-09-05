@@ -199,6 +199,9 @@ public:
 
 	// Returns true if the given (non-zero) unique id is already present somewhere on the map.
 	bool hasUniqueId(uint16_t uid) const;
+	uint32_t getUniqueIdCount(uint16_t uid) const {
+		return uid < uidRefCount.size() ? uidRefCount[uid] : 0;
+	}
 
 protected:
 	// Loads a map
@@ -248,6 +251,7 @@ protected:
 	friend class Editor;
 	friend class SpawnMapAdapter;
 	friend class GUI;
+	friend class MultiplayerSession;
 
 public:
 	Waypoints waypoints;
@@ -346,6 +350,7 @@ inline long long remove_if_TileOnMap(Map& map, RemoveIfType& remove_if) {
 
 template <typename RemoveIfType>
 inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedOnly) {
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 	int64_t done = 0;
 	int64_t removed = 0;
 
@@ -364,6 +369,7 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 			if (condition(map, tile->ground, removed, done)) {
 				delete tile->ground;
 				tile->ground = nullptr;
+				tile->markRenderChunkChanged();
 				++removed;
 			}
 		}
@@ -373,6 +379,7 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 			if (condition(map, item, removed, done)) {
 				iit = tile->items.erase(iit);
 				delete item;
+				tile->markRenderChunkChanged();
 				++removed;
 			} else {
 				++iit;
@@ -385,6 +392,7 @@ inline int64_t RemoveItemOnMap(Map& map, RemoveIfType& condition, bool selectedO
 
 template <typename RemoveIfType>
 inline int64_t RemoveItemDuplicateOnMap(Map& map, RemoveIfType& condition, bool selectedOnly) {
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 	int64_t done = 0;
 	int64_t removed = 0;
 
@@ -406,6 +414,7 @@ inline int64_t RemoveItemDuplicateOnMap(Map& map, RemoveIfType& condition, bool 
 			if (duplicated && condition(map, tile, item, removed, done)) {
 				iit = tile->items.erase(iit);
 				delete item;
+				tile->markRenderChunkChanged();
 				++removed;
 			} else {
 				++iit;

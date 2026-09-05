@@ -57,7 +57,18 @@
 		<item name="Preferences" action="PREFERENCES" help="Configure the map editor."/>
 		<item name="Exit" action="EXIT" help="Close the editor."/>
 	</menu>
+	<menu name="Multiplayer">
+		<item name="Host Session..." action="MULTIPLAYER_HOST" help="Share this map with other NexaMap users."/>
+		<item name="Join Session..." action="MULTIPLAYER_JOIN" help="Join a host by IP and port in an empty map tab."/>
+		<item name="Disconnect" action="MULTIPLAYER_DISCONNECT" help="Leave or close the multiplayer session."/>
+		<separator/>
+		<item name="Players, Chat and Approvals..." action="MULTIPLAYER_PLAYERS" help="Participants, permissions, chat, reviews and connection diagnostics."/>
+		<item name="Lock Selected Area" action="MULTIPLAYER_LOCK_SELECTION" help="Reserve the selection's bounding rectangle on each floor."/>
+		<item name="Release My Locks" action="MULTIPLAYER_UNLOCK" help="Release your tile and area locks."/>
+	</menu>
 	<menu name="Tools">
+		<item name="Command Palette..." action="COMMAND_PALETTE" hotkey="Ctrl+Shift+P" help="Search and execute NexaMap commands."/>
+		<separator/>
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
 		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>
 		<item name="Learn Border from Selection..." action="LEARN_BORDER_SELECTION" help="Analyze selected map tiles and infer an autoborder draft without changing the map."/>
@@ -119,6 +130,7 @@
 		<item name="Cleanup..." action="MAP_CLEANUP" help="Removes all items that do not exist in the OTB file (red tiles the server can't load)."/>
 		<item name="Remove Duplicated Items..." action="REMOVE_ON_MAP_DUPLICATED_ITEMS" help="Removes duplicated items from the map."/>
 		<item name="Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
+		<item name="Map Diagnostics..." action="MAP_DIAGNOSTICS" help="Scan the active map for invalid items, duplicate IDs, broken teleports, and structural problems."/>
 		<item name="Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
 	</menu>
 	<menu name="Selection">
@@ -163,6 +175,7 @@
 		<item name="Extended house shader" hotkey="" action="EXT_HOUSE_SHADER" help="Draw house brush on walls and items."/>
 		<separator/>
 		<item name="Show tooltips" hotkey="Y" action="SHOW_TOOLTIPS" help="Show tooltips."/>
+		<item name="Show container preview" hotkey="" action="SHOW_CONTAINER_PREVIEW" help="Show a visual preview of container contents when hovering over containers."/>
 		<item name="Show grid" hotkey="Shift+G" action="SHOW_GRID" help="Shows a grid over all items."/>
 		<item name="Show client box" hotkey="Shift+I" action="SHOW_INGAME_BOX" help="Shadows out areas not visible ingame (from the center of the screen)."/>
 		<separator/>
@@ -218,8 +231,9 @@
 		</menu>
 	</menu>
 	<menu name="Window">
+		<item name="Show Favorites" action="SHOW_FAVORITES" help="Show favorite brushes, items, creatures and saved terrains for this resource workspace."/>
 		<item name="Minimap" hotkey="M" action="WIN_MINIMAP" help="Displays the minimap window."/>
-		<item name="In-game Preview" action="WIN_INGAME_PREVIEW" help="Open a dockable 15 x 11 in-game view that follows the current selection."/>
+		<item name="Playtest Mode" action="WIN_INGAME_PREVIEW" hotkey="F6" help="Walk through the map with WASD, inspect transitions and preview lighting/weather. No map edits."/>
 		<item name="New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
 		<item name="Materials Workbench..." action="MATERIALS_WORKBENCH" help="Visually edit XML ground, wall, doodad, carpet, and table brushes."/>
 		<item name="Border Workspace..." action="BORDER_WORKSPACE" help="Visually edit XML autoborder sets and item slots."/>
@@ -249,6 +263,8 @@
 	</menu>
 	-->
 	<menu name="Experimental">
+		<item name="Persistent GPU Ground Cache" action="USE_GPU_GROUND_CACHE" help="Reuse static ground VBOs per chunk with atlas generation checks. Experimental; OFF by default."/>
+		<item name="CPU Ground Geometry Cache" action="USE_CPU_GEOMETRY_CACHE" help="Reuse static ground geometry on the CPU. Experimental; toggle for OFF/ON comparison."/>
 		<item name="Fog in light view" hotkey="" action="EXPERIMENTAL_FOG" help="Apply fog filter to light effect."/>
 	</menu>
 	<menu name="Hotkeys">

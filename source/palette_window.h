@@ -19,6 +19,7 @@
 #define RME_PALETTE_H_
 
 #include "palette_common.h"
+#include <memory>
 
 class BrushPalettePanel;
 class CreaturePalettePanel;
@@ -26,6 +27,8 @@ class HousePalettePanel;
 class WaypointPalettePanel;
 class ZonesPalettePanel;
 class SavedTerrainPalettePanel;
+class FavoritesPalettePanel;
+class EditorResourceSession;
 
 class PaletteWindow : public wxPanel {
 public:
@@ -39,6 +42,8 @@ public:
 	void InvalidateContents();
 	// (Re)Loads all currently displayed data, called from InvalidateContents implicitly
 	void LoadCurrentContents();
+	void RefreshFavorites();
+	bool HasCurrentResources() const;
 	// Goes to the selected page and selects any brush there
 	void SelectPage(PaletteType palette);
 	// The currently selected brush in this palette
@@ -65,6 +70,7 @@ public:
 	void OnClose(wxCloseEvent&);
 
 protected:
+	void RefreshCollectionPalette(bool rebuild = false);
 	static PalettePanel* CreateTerrainPalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateDoodadPalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateItemPalette(wxWindow* parent, const TilesetContainer& tilesets);
@@ -88,6 +94,9 @@ protected:
 	ZonesPalettePanel* zones_palette;
 	SavedTerrainPalettePanel* saved_terrain_palette;
 	BrushPalettePanel* raw_palette;
+	FavoritesPalettePanel* favorites_palette = nullptr;
+	std::weak_ptr<EditorResourceSession> resource_session;
+	std::string resource_context;
 
 	DECLARE_EVENT_TABLE()
 };

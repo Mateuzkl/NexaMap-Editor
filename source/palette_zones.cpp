@@ -12,6 +12,7 @@
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/statline.h>
+#include <wx/weakref.h>
 
 #include "action.h"
 #include "editor.h"
@@ -67,42 +68,43 @@ ZonesPalettePanel::ZonesPalettePanel(wxWindow* parent, wxWindowID id) :
 	editing_new_zone(false),
 	rebuilding_list(false) {
 	auto* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Zones");
+	wxWindow* box = sidesizer->GetStaticBox();
 
-	zone_list = createEntityList(PALETTE_ZONES_LISTBOX);
+	zone_list = createEntityList(box, PALETTE_ZONES_LISTBOX);
 	sidesizer->Add(zone_list, 1, wxEXPAND | wxBOTTOM, 4);
-	sidesizer->Add(newd wxStaticLine(this), 0, wxEXPAND | wxBOTTOM, 4);
+	sidesizer->Add(newd wxStaticLine(box), 0, wxEXPAND | wxBOTTOM, 4);
 
-	active_zone_label = newd wxStaticText(this, wxID_ANY, "Active Zone: None");
+	active_zone_label = newd wxStaticText(box, wxID_ANY, "Active Zone: None");
 	sidesizer->Add(active_zone_label, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
 
 	auto* row = newd wxBoxSizer(wxHORIZONTAL);
-	row->Add(new_zone_button = newd wxButton(this, PALETTE_ZONES_NEW_ZONE, "New Zone"), 1, wxEXPAND | wxRIGHT, 2);
-	row->Add(rename_zone_button = newd wxButton(this, PALETTE_ZONES_RENAME_ZONE, "Rename"), 1, wxEXPAND | wxLEFT, 2);
+	row->Add(new_zone_button = newd wxButton(box, PALETTE_ZONES_NEW_ZONE, "New Zone"), 1, wxEXPAND | wxRIGHT, 2);
+	row->Add(rename_zone_button = newd wxButton(box, PALETTE_ZONES_RENAME_ZONE, "Rename"), 1, wxEXPAND | wxLEFT, 2);
 	sidesizer->Add(row, 0, wxEXPAND | wxBOTTOM, 4);
 
-	delete_zone_button = newd wxButton(this, PALETTE_ZONES_DELETE_ZONE, "Delete Zone");
+	delete_zone_button = newd wxButton(box, PALETTE_ZONES_DELETE_ZONE, "Delete Zone");
 	sidesizer->Add(delete_zone_button, 0, wxEXPAND | wxBOTTOM, 4);
 
 	row = newd wxBoxSizer(wxHORIZONTAL);
-	row->Add(paint_zone_button = newd wxToggleButton(this, PALETTE_ZONES_PAINT, "Paint Zone"), 1, wxEXPAND | wxRIGHT, 2);
-	row->Add(erase_zone_button = newd wxToggleButton(this, PALETTE_ZONES_ERASE, "Erase Zone"), 1, wxEXPAND | wxLEFT, 2);
+	row->Add(paint_zone_button = newd wxToggleButton(box, PALETTE_ZONES_PAINT, "Paint Zone"), 1, wxEXPAND | wxRIGHT, 2);
+	row->Add(erase_zone_button = newd wxToggleButton(box, PALETTE_ZONES_ERASE, "Erase Zone"), 1, wxEXPAND | wxLEFT, 2);
 	sidesizer->Add(row, 0, wxEXPAND | wxBOTTOM, 4);
 
-	apply_selection_button = newd wxButton(this, PALETTE_ZONES_APPLY_SELECTION, "Apply to Selection");
+	apply_selection_button = newd wxButton(box, PALETTE_ZONES_APPLY_SELECTION, "Apply to Selection");
 	sidesizer->Add(apply_selection_button, 0, wxEXPAND | wxBOTTOM, 2);
 
-	remove_selection_button = newd wxButton(this, PALETTE_ZONES_REMOVE_SELECTION, "Remove from Selection");
+	remove_selection_button = newd wxButton(box, PALETTE_ZONES_REMOVE_SELECTION, "Remove from Selection");
 	sidesizer->Add(remove_selection_button, 0, wxEXPAND | wxBOTTOM, 4);
 
-	select_tiles_button = newd wxButton(this, PALETTE_ZONES_SELECT_TILES, "Select Zone Tiles");
+	select_tiles_button = newd wxButton(box, PALETTE_ZONES_SELECT_TILES, "Select Zone Tiles");
 	sidesizer->Add(select_tiles_button, 0, wxEXPAND | wxBOTTOM, 4);
 
-	show_overlay_checkbox = newd wxCheckBox(this, PALETTE_ZONES_SHOW_OVERLAY, "Show Zones Overlay");
+	show_overlay_checkbox = newd wxCheckBox(box, PALETTE_ZONES_SHOW_OVERLAY, "Show Zones Overlay");
 	sidesizer->Add(show_overlay_checkbox, 0, wxEXPAND | wxBOTTOM, 4);
 
 	row = newd wxBoxSizer(wxHORIZONTAL);
-	row->Add(import_zone_button = newd wxButton(this, PALETTE_ZONES_IMPORT_ZONE, "Import"), 1, wxEXPAND | wxRIGHT, 2);
-	row->Add(export_zone_button = newd wxButton(this, PALETTE_ZONES_EXPORT_ZONE, "Export"), 1, wxEXPAND | wxLEFT, 2);
+	row->Add(import_zone_button = newd wxButton(box, PALETTE_ZONES_IMPORT_ZONE, "Import"), 1, wxEXPAND | wxRIGHT, 2);
+	row->Add(export_zone_button = newd wxButton(box, PALETTE_ZONES_EXPORT_ZONE, "Export"), 1, wxEXPAND | wxLEFT, 2);
 	sidesizer->Add(row, 0, wxEXPAND);
 
 	SetSizerAndFit(sidesizer);
@@ -368,12 +370,18 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 		if (editing_new_zone) {
 			event.Veto();
 			const long item = event.GetIndex();
-			CallAfter([this, item]() {
-				if (item >= 0 && item < zone_list->GetItemCount() && getSelectedName(zone_list, item).empty()) {
-					zone_list->DeleteItem(item);
+			wxWeakRef<ZonesPalettePanel> weak(this);
+			CallAfter([weak, item]() {
+				if (!weak) {
+					return;
 				}
-				selectZoneItem(g_gui.zone_brush->getZone());
-				updateControlStates();
+				if (item >= 0 && item < weak->zone_list->GetItemCount() && getSelectedName(weak->zone_list, item).empty()) {
+					weak->zone_list->DeleteItem(item);
+				}
+				if (g_gui.zone_brush) {
+					weak->selectZoneItem(g_gui.zone_brush->getZone());
+				}
+				weak->updateControlStates();
 			});
 		}
 		editing_new_zone = false;
@@ -390,12 +398,18 @@ void ZonesPalettePanel::OnEditZoneLabel(wxListEvent& event) {
 		g_gui.SetStatusText(!validName ? "Zone name cannot be empty." : "There already is a zone with this name.");
 		if (editing_new_zone) {
 			const long item = event.GetIndex();
-			CallAfter([this, item]() {
-				if (item >= 0 && item < zone_list->GetItemCount() && getSelectedName(zone_list, item).empty()) {
-					zone_list->DeleteItem(item);
+			wxWeakRef<ZonesPalettePanel> weak(this);
+			CallAfter([weak, item]() {
+				if (!weak) {
+					return;
 				}
-				selectZoneItem(g_gui.zone_brush->getZone());
-				updateControlStates();
+				if (item >= 0 && item < weak->zone_list->GetItemCount() && getSelectedName(weak->zone_list, item).empty()) {
+					weak->zone_list->DeleteItem(item);
+				}
+				if (g_gui.zone_brush) {
+					weak->selectZoneItem(g_gui.zone_brush->getZone());
+				}
+				weak->updateControlStates();
 			});
 		}
 		editing_new_zone = false;

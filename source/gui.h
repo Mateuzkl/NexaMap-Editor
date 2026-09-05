@@ -22,6 +22,7 @@
 #include "position.h"
 
 #include <chrono>
+#include <memory>
 
 #include "copybuffer.h"
 #include "dcbutton.h"
@@ -35,6 +36,10 @@
 
 class BaseMap;
 class Map;
+class EditorResourceSession;
+class FavoritesManager;
+class CrossClientClipboard;
+class EditorDisposalQueue;
 
 enum class EditorClientVersionPolicy;
 class Editor;
@@ -146,6 +151,8 @@ public:
 	 * abort the loading.
 	 */
 	bool SetLoadDone(int32_t done, const wxString& newMessage = "");
+	// A busy stage with no meaningful overall percentage. Also pumps UI events.
+	bool SetLoadIndeterminate(const wxString& message);
 
 	/**
 	 * Sets the scale of the loading bar.
@@ -158,6 +165,15 @@ public:
 	void ShowWelcomeDialog(const wxBitmap& icon);
 	void FinishWelcomeDialog(bool showMainWindow = true);
 	bool IsWelcomeDialogShown();
+	void SetApplicationClosing(bool closing) noexcept {
+		closingApplication = closing;
+	}
+	bool IsApplicationClosing() const noexcept {
+		return closingApplication;
+	}
+	bool ShouldSuppressNewTabRequests() const noexcept {
+		return closingApplication || closingAllEditors;
+	}
 
 	/**
 	 * Destroys (hides) the current loading bar.
@@ -169,6 +185,8 @@ public:
 	bool IsRenderingEnabled() const {
 		return disabled_counter == 0;
 	}
+	void DisposeEditor(std::unique_ptr<Editor> editor);
+	void DrainEditorDisposals();
 
 	void EnableHotkeys();
 	void DisableHotkeys();
@@ -289,6 +307,7 @@ public:
 	// Fetch different useful directories
 	static wxString GetExecDirectory();
 	static wxString GetDataDirectory();
+	static wxString GetEditorDataDirectory();
 	static wxString GetLocalDataDirectory();
 	static wxString GetLocalDirectory();
 	static wxString GetExtensionsDirectory();
@@ -304,6 +323,7 @@ public:
 	void SaveUserCreatures();
 	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false);
 	bool LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force = false);
+	bool LoadWorkspace(wxString& error, wxArrayString& warnings, bool force = false);
 	bool IsCanaryCrystalAssetsLoaded() const {
 		return canary_crystal_assets_loaded;
 	}
@@ -327,6 +347,8 @@ public:
 	void DoCopy();
 	void DoPaste();
 	void PreparePaste();
+	bool CanPaste() const;
+	void CaptureCrossClientCopy(CopyBuffer& source);
 	void StartPasting();
 	void EndPasting();
 	bool IsPasting() const {
@@ -348,6 +370,9 @@ public:
 	Editor* GetCurrentEditor();
 	MapTab* GetCurrentMapTab() const;
 	void CycleTab(bool forward = true);
+	bool ActivateResourceSession(const std::shared_ptr<EditorResourceSession>& session);
+	void FinalizeResourceSessionActivation();
+	void ShowNewMapTabDialog();
 	bool CloseAllEditors(bool querySave = true);
 	void NewMapView();
 
@@ -367,7 +392,9 @@ public:
 	bool LoadValidatedConvertedMap(const FileName& fileName, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 
 protected:
-	bool LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
+	void SwapResourceSessionState(EditorResourceSession& session);
+	bool PrepareCrossClientPaste(Editor& editor);
+	bool LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false, bool replaceEmptyEditor = true);
 	bool ConfigureSpawnSaveAs(const FileName& mapFilename);
 	bool LoadDataFiles(wxString& error, wxArrayString& warnings);
 	bool LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings);
@@ -380,6 +407,8 @@ protected:
 public:
 	// Spawn a newd palette
 	PaletteWindow* NewPalette();
+	FavoritesManager& GetFavorites();
+	void RefreshFavorites();
 	// Bring this palette to the front (as the 'active' palette)
 	void ActivatePalette(PaletteWindow* p);
 	// Rebuild forces palette to reload the entire contents
@@ -420,7 +449,7 @@ public:
 	GraphicManager gfx;
 
 	BaseMap* secondary_map; // A buffer map
-	BaseMap* doodad_buffer_map; // The map in which doodads are temporarily stored
+	std::unique_ptr<BaseMap> doodad_buffer_map; // The map in which doodads are temporarily stored
 
 	//=========================================================================
 	// Brush references
@@ -452,11 +481,13 @@ protected:
 	//=========================================================================
 	typedef std::list<PaletteWindow*> PaletteList;
 	PaletteList palettes;
+	std::unique_ptr<FavoritesManager> favorites;
 
 	wxGLContext* OGLContext;
 
 	ClientVersionID loaded_version;
 	bool canary_crystal_assets_loaded;
+	uint64_t loaded_workspace_generation = 0;
 	EditorMode mode;
 	bool pasting;
 
@@ -496,11 +527,20 @@ protected:
 	// GUI events and causes another progress update recursively.
 	bool progressUpdating = false;
 	bool destroyPending = false;
+	bool resourceSessionUiPending = false;
+	bool closingApplication = false;
+	bool closingAllEditors = false;
+	std::unique_ptr<CrossClientClipboard> crossClientClipboard;
+	std::unique_ptr<EditorDisposalQueue> editorDisposals;
 
 	int disabled_counter;
 
 	friend class RenderingLock;
-	friend MapTab::MapTab(MapTabbook*, Editor*);
+	friend class EditorResourceSession;
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	friend class CollectionsPaletteTests;
+#endif
+	friend MapTab::MapTab(MapTabbook*, std::unique_ptr<Editor>);
 	friend MapTab::MapTab(const MapTab*);
 };
 

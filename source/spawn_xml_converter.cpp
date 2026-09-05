@@ -15,8 +15,8 @@
 namespace {
 	constexpr size_t MAX_REPORT_WARNINGS = 100;
 
-	const std::set<std::string> AREA_ATTRIBUTES = {"centerx", "centery", "centerz", "radius"};
-	const std::set<std::string> CREATURE_ATTRIBUTES = {"name", "x", "y", "z", "spawntime", "direction"};
+	const std::set<std::string> AREA_ATTRIBUTES = { "centerx", "centery", "centerz", "radius" };
+	const std::set<std::string> CREATURE_ATTRIBUTES = { "name", "x", "y", "z", "spawntime", "direction" };
 
 	void AddWarning(std::vector<std::string>& warnings, std::string warning) {
 		if (warnings.size() < MAX_REPORT_WARNINGS) {
@@ -26,7 +26,7 @@ namespace {
 		}
 	}
 
-	bool IsRegularFile(const std::filesystem::path& path) {
+	bool IsRegularSpawnFile(const std::filesystem::path& path) {
 		if (path.empty()) {
 			return false;
 		}
@@ -36,10 +36,14 @@ namespace {
 
 	std::string LayoutRoot(SpawnXmlLayout layout) {
 		switch (layout) {
-			case SpawnXmlLayout::TfsCombined: return "spawns";
-			case SpawnXmlLayout::CanaryMonsters: return "monsters";
-			case SpawnXmlLayout::CanaryNpcs: return "npcs";
-			default: return {};
+			case SpawnXmlLayout::TfsCombined:
+				return "spawns";
+			case SpawnXmlLayout::CanaryMonsters:
+				return "monsters";
+			case SpawnXmlLayout::CanaryNpcs:
+				return "npcs";
+			default:
+				return {};
 		}
 	}
 
@@ -98,14 +102,13 @@ namespace {
 	}
 
 	bool IsNonWhitespaceText(const pugi::xml_node& node) {
-		return (node.type() == pugi::node_pcdata || node.type() == pugi::node_cdata) &&
-			std::string(node.value()).find_first_not_of(" \t\r\n") != std::string::npos;
+		return (node.type() == pugi::node_pcdata || node.type() == pugi::node_cdata) && std::string(node.value()).find_first_not_of(" \t\r\n") != std::string::npos;
 	}
 
 	std::vector<SpawnXmlAttribute> ReadAttributes(const pugi::xml_node& node) {
 		std::vector<SpawnXmlAttribute> attributes;
 		for (const pugi::xml_attribute& attribute : node.attributes()) {
-			attributes.push_back({attribute.name(), attribute.value()});
+			attributes.push_back({ attribute.name(), attribute.value() });
 		}
 		return attributes;
 	}
@@ -144,7 +147,7 @@ namespace {
 			error = NodeLocation(file, node) + ": <" + node.name() + "> creature is missing a non-empty 'name' attribute.";
 			return false;
 		}
-		for (const char* numericName : {"x", "y", "z", "spawntime", "direction"}) {
+		for (const char* numericName : { "x", "y", "z", "spawntime", "direction" }) {
 			if (const SpawnXmlAttribute* attribute = FindAttribute(creature.attributes, numericName); attribute != nullptr && !IsInteger(attribute->value.c_str())) {
 				error = NodeLocation(file, node) + ": creature '" + name->value + "' attribute '" + numericName + "' has value '" + attribute->value + "'; expected an integer.";
 				return false;
@@ -162,7 +165,7 @@ namespace {
 	bool LoadDocument(const std::filesystem::path& file, SpawnXmlLayout expectedLayout, SpawnXmlDocument& document, size_t& additionalAttributes, std::string& error) {
 		document = {};
 		additionalAttributes = 0;
-		if (!IsRegularFile(file)) {
+		if (!IsRegularSpawnFile(file)) {
 			error = "Spawn XML file was not found: " + file.string();
 			return false;
 		}
@@ -401,7 +404,7 @@ namespace {
 
 SpawnXmlInspection SpawnXmlConverter::Inspect(const std::filesystem::path& file) {
 	SpawnXmlInspection inspection;
-	if (!IsRegularFile(file)) {
+	if (!IsRegularSpawnFile(file)) {
 		inspection.error = "Spawn XML file was not found: " + file.string();
 		return inspection;
 	}
@@ -428,11 +431,11 @@ SpawnXmlSuggestedPaths SpawnXmlConverter::SuggestFromCanaryFile(const std::files
 	SpawnXmlSuggestedPaths paths;
 	const std::filesystem::path directory = selectedFile.parent_path();
 	const NativePathString base = StripSuffix(selectedFile.stem().native(), {
-		std::filesystem::path("-monsters").native(),
-		std::filesystem::path("-monster").native(),
-		std::filesystem::path("-npcs").native(),
-		std::filesystem::path("-npc").native(),
-	});
+																				std::filesystem::path("-monsters").native(),
+																				std::filesystem::path("-monster").native(),
+																				std::filesystem::path("-npcs").native(),
+																				std::filesystem::path("-npc").native(),
+																			});
 	paths.monsterFile = NamedFile(directory, base, "monster");
 	paths.npcFile = NamedFile(directory, base, "npc");
 	paths.tfsFile = NamedFile(directory, base, "spawn");
@@ -447,7 +450,7 @@ SpawnXmlSuggestedPaths SpawnXmlConverter::SuggestFromCanaryFile(const std::files
 SpawnXmlSuggestedPaths SpawnXmlConverter::SuggestFromTfsFile(const std::filesystem::path& selectedFile, const std::filesystem::path& outputDirectory, bool pluralMonsterFilename) {
 	SpawnXmlSuggestedPaths paths;
 	const std::filesystem::path directory = outputDirectory.empty() ? selectedFile.parent_path() : outputDirectory;
-	const NativePathString base = StripSuffix(selectedFile.stem().native(), {std::filesystem::path("-spawn").native()});
+	const NativePathString base = StripSuffix(selectedFile.stem().native(), { std::filesystem::path("-spawn").native() });
 	paths.tfsFile = selectedFile;
 	paths.monsterFile = NamedFile(directory, base, pluralMonsterFilename ? "monsters" : "monster");
 	paths.npcFile = NamedFile(directory, base, "npc");
@@ -464,15 +467,15 @@ SpawnXmlConversionResult SpawnXmlConverter::ConvertCanaryToTfs(
 	const auto started = std::chrono::steady_clock::now();
 	SpawnXmlConversionResult result;
 	result.report.direction = "Canary / Crystal 11.x -> TFS 1.8 / protocol 8.60";
-	result.report.outputFiles = {outputFile};
+	result.report.outputFiles = { outputFile };
 	const auto finish = [&] { FinishDuration(result, started); };
 	try {
 		if (!ReportProgress(progress, 0, "Preparing", result)) {
 			finish();
 			return result;
 		}
-		const bool hasMonsterFile = IsRegularFile(monsterFile);
-		const bool hasNpcFile = IsRegularFile(npcFile);
+		const bool hasMonsterFile = IsRegularSpawnFile(monsterFile);
+		const bool hasNpcFile = IsRegularSpawnFile(npcFile);
 		if (!hasMonsterFile && !hasNpcFile) {
 			result.error = "No valid Canary/Crystal spawn XML was provided. Select at least one existing <monsters> or <npcs> file.";
 			finish();
@@ -483,13 +486,12 @@ SpawnXmlConversionResult SpawnXmlConverter::ConvertCanaryToTfs(
 			finish();
 			return result;
 		}
-		if ((hasMonsterFile && FileSaveTransaction::PathsReferToSameFile(monsterFile, outputFile)) ||
-			(hasNpcFile && FileSaveTransaction::PathsReferToSameFile(npcFile, outputFile))) {
+		if ((hasMonsterFile && FileSaveTransaction::PathsReferToSameFile(monsterFile, outputFile)) || (hasNpcFile && FileSaveTransaction::PathsReferToSameFile(npcFile, outputFile))) {
 			result.error = "Source and destination spawn XML files must be different.";
 			finish();
 			return result;
 		}
-		if (!CheckOverwrite({outputFile}, allowOverwrite, result)) {
+		if (!CheckOverwrite({ outputFile }, allowOverwrite, result)) {
 			finish();
 			return result;
 		}
@@ -598,15 +600,15 @@ SpawnXmlConversionResult SpawnXmlConverter::ConvertTfsToCanary(
 	const auto started = std::chrono::steady_clock::now();
 	SpawnXmlConversionResult result;
 	result.report.direction = "TFS 1.8 / protocol 8.60 -> Canary / Crystal 11.x";
-	result.report.sourceFiles = {sourceFile};
-	result.report.outputFiles = {monsterOutputFile, npcOutputFile};
+	result.report.sourceFiles = { sourceFile };
+	result.report.outputFiles = { monsterOutputFile, npcOutputFile };
 	const auto finish = [&] { FinishDuration(result, started); };
 	try {
 		if (!ReportProgress(progress, 0, "Preparing", result)) {
 			finish();
 			return result;
 		}
-		if (!IsRegularFile(sourceFile)) {
+		if (!IsRegularSpawnFile(sourceFile)) {
 			result.error = "TFS spawn XML file was not found: " + sourceFile.string();
 			finish();
 			return result;
@@ -626,7 +628,7 @@ SpawnXmlConversionResult SpawnXmlConverter::ConvertTfsToCanary(
 			finish();
 			return result;
 		}
-		if (!CheckOverwrite({monsterOutputFile, npcOutputFile}, allowOverwrite, result)) {
+		if (!CheckOverwrite({ monsterOutputFile, npcOutputFile }, allowOverwrite, result)) {
 			finish();
 			return result;
 		}

@@ -26,24 +26,23 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <fstream>
 #include "gl_renderer.h"
 #include "minimap_page_cache.h"
+#include "map_chunk_revision.h"
+#include "map_chunk_geometry_cache.h"
+#include "map_chunk_render_cache.h"
+
+class EditorResourceSession;
 
 class GameSprite;
 
 struct MapTooltip {
-	enum TextLength {
-		MAX_CHARS_PER_LINE = 40,
-		MAX_CHARS = 255,
-	};
-
 	MapTooltip(int x, int y, std::string text, uint8_t r, uint8_t g, uint8_t b) :
-		x(x), y(y), text(std::move(text)), r(r), g(g), b(b) {
-		ellipsis = (this->text.length() - 3) > MAX_CHARS;
-	}
+		x(x), y(y), text(std::move(text)), r(r), g(g), b(b) { }
 
 	void checkLineEnding() {
-		if (text.at(text.size() - 1) == '\n') {
+		if (!text.empty() && text.back() == '\n') {
 			text.resize(text.size() - 1);
 		}
 	}
@@ -51,7 +50,6 @@ struct MapTooltip {
 	int x, y;
 	std::string text;
 	uint8_t r, g, b;
-	bool ellipsis;
 };
 
 // Storage during drawing, for option caching
@@ -89,6 +87,7 @@ struct DrawingOptions {
 	bool highlight_locked_doors;
 	bool show_blocking;
 	bool show_tooltips;
+	bool show_container_preview;
 	bool show_performance_stats;
 	bool show_as_minimap;
 	bool show_only_colors;
@@ -218,6 +217,18 @@ class MapDrawer {
 	std::shared_ptr<LightDrawer> light_drawer;
 	std::unique_ptr<GLRenderer> renderer = std::make_unique<GLRenderer>();
 	MinimapPageCache minimap_page_cache;
+	MapChunkGeometryCache chunk_geometry_cache;
+	MapChunkRenderCache chunk_render_cache { *renderer };
+	bool gpu_ground_enabled = false;
+	bool cpu_geometry_enabled = false;
+	double ground_draw_ms = 0;
+	std::ofstream geometry_trace;
+	size_t geometry_trace_rows = 0;
+	std::chrono::steady_clock::time_point frame_started;
+	std::chrono::steady_clock::time_point previous_frame_started;
+	double frame_interval_ms = 0;
+	bool scene_drawn_this_frame = false;
+	bool frame_started_valid = false;
 
 	float zoom;
 
@@ -256,6 +267,18 @@ class MapDrawer {
 protected:
 	std::unordered_map<unsigned int, std::vector<FinderPosition>> zoneTiles;
 	std::vector<MapTooltip> tooltips;
+	struct OverlayTextTexture {
+		std::string text;
+		int maxWidth, maxHeight, fontPixels;
+		wxColour foreground, background;
+		GLuint texture;
+		int width, height;
+	};
+	std::vector<OverlayTextTexture> overlay_text_cache;
+	size_t overlay_text_cache_bytes = 0;
+	const OverlayTextTexture& GetOverlayText(const std::string& text, int maxWidth, int maxHeight);
+	void ClearOverlayTextCache();
+	void DrawHoverTooltip();
 	std::ostringstream tooltip;
 	wxStopWatch pos_indicator_timer;
 	Position pos_indicator;
@@ -274,6 +297,8 @@ protected:
 	double last_scene_ms = 0.0;
 	size_t visible_tile_count = 0;
 	size_t visible_item_count = 0;
+	MapChunkRevisionObserver chunk_revision_observer;
+	std::weak_ptr<EditorResourceSession> chunk_observed_session;
 
 #ifdef __WINDOWS__
 	ULARGE_INTEGER last_cpu_time;
@@ -313,6 +338,7 @@ public:
 	void DrawHigherFloors();
 	void DrawSelectionBox();
 	void DrawBrush();
+	void DrawMultiplayer();
 	void DrawIngameBox();
 	void DrawGrid();
 	void DrawTooltips();
@@ -344,17 +370,21 @@ protected:
 	void BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red = 255, int green = 255, int blue = 255, int alpha = 255, int animationFrame = 0);
 	void BlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size = 0);
 	void DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha);
-	void DrawTile(TileLocation* tile);
+	void DrawTile(TileLocation* tile, const MapChunkGroundQuad* groundQuad = nullptr, const MapChunkRenderCache::Entry* gpuChunk = nullptr, size_t slot = 0);
+	MapChunkGeometry BuildChunkGeometry(const Floor& chunk) const;
+	bool BlitCachedGround(int& x, int& y, Item& ground, const MapChunkGroundQuad& quad, int red, int green, int blue, const MapChunkRenderCache::Entry* gpuChunk, size_t slot);
 	void DrawBrushIndicator(int x, int y, Brush* brush, uint8_t r, uint8_t g, uint8_t b);
 	void DrawHookIndicator(int x, int y, const ItemType& type);
 	void DrawIndicator(int x, int y, int indicator, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
 	void DrawPositionIndicator(int z);
-	void WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile);
+	void WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile, bool hover = false);
 	void WriteTooltip(Waypoint* item, std::ostringstream& stream);
 	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
+	void DrawContainerPreview();
 	void UpdateRAMUsage();
 	void UpdateCPUUsage();
 	void AddLight(TileLocation* location);
+	void TraceGeometryFrame();
 
 	enum BrushColor {
 		COLOR_BRUSH,

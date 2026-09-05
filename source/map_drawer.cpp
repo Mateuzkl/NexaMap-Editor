@@ -16,9 +16,12 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "multiplayer_session.h"
 #include "profiling.h"
 
 #include "bitmap_font.h"
+#include "map_overlay_text.h"
+#include <wx/dcmemory.h>
 #include "theme.h"
 
 #ifdef __WINDOWS__
@@ -37,8 +40,11 @@
 #include <chrono>
 #include <cmath>
 #include <iterator>
+#include <filesystem>
+#include <locale>
 
 #include "editor.h"
+#include "editor_resource_session.h"
 #include "autoborder_preview.h"
 #include "gui.h"
 #include "sprites.h"
@@ -58,6 +64,13 @@
 using Color = std::tuple<int, int, int>;
 
 namespace {
+	// Stack-only visual definition; never installed in a map or action queue.
+	class PlaytestDoorSprite final : public Item {
+	public:
+		explicit PlaytestDoorSprite(uint16_t id) :
+			Item(id, 1) { }
+	};
+
 	struct PreparedSpritePart {
 		int screen_x;
 		int screen_y;
@@ -78,6 +91,18 @@ namespace {
 			}
 		}
 		return complete;
+	}
+
+	int ItemSpriteSubtype(const Item& item, const ItemType& type) {
+		if (type.isSplash() || type.isFluidContainer()) {
+			return item.getSubtype();
+		}
+		if (type.stackable && !type.isHangable) {
+			const int count = item.getSubtype();
+			const int limits[] = { 1, 2, 3, 4, 9, 24, 49 };
+			return static_cast<int>(std::lower_bound(std::begin(limits), std::end(limits), count) - std::begin(limits));
+		}
+		return -1;
 	}
 }
 
@@ -173,6 +198,7 @@ void DrawingOptions::SetDefault() {
 	highlight_locked_doors = true;
 	show_blocking = false;
 	show_tooltips = false;
+	show_container_preview = true;
 	show_performance_stats = false;
 	show_as_minimap = false;
 	show_only_colors = false;
@@ -209,6 +235,7 @@ void DrawingOptions::SetIngame() {
 	highlight_locked_doors = false;
 	show_blocking = false;
 	show_tooltips = false;
+	show_container_preview = false;
 	show_performance_stats = false;
 	show_as_minimap = false;
 	show_only_colors = false;
@@ -243,10 +270,21 @@ MapDrawer::MapDrawer(MapCanvas* canvas) :
 {
 	light_drawer = std::make_shared<LightDrawer>();
 	perf_update_timer.Start();
+	wxString trace;
+	if (wxGetEnv("NEXAMAP_CPU_CACHE_TRACE", &trace) && trace == "1") {
+		const auto path = std::filesystem::u8path(g_gui.GetLocalDataDirectory().ToStdString(wxConvUTF8)) / ("cpu-chunks-" + std::to_string(wxGetProcessId()) + "-" + std::to_string(editor.map.getSessionId()) + ".csv");
+		geometry_trace.open(path);
+		if (geometry_trace) {
+			geometry_trace.imbue(std::locale::classic());
+			geometry_trace << "sample,map,resources,cache_requested,cache_active,scene_drawn,ingame,width,height,zoom,scroll_x,scroll_y,floor,tiles,items,visible_chunks,hits,misses,rebuilds,resident_quads,payload_bytes,replayed_quads,build_ms,lookup_ms,ground_submit_ms,scene_cpu_ms,frame_submit_ms,frame_interval_ms,cpu_percent,draw_calls,texture_bindings,stream_bytes,content_changes,presentation_changes,gpu_requested,gpu_active,gpu_visible,gpu_hits,gpu_misses,gpu_created,gpu_rebuilt,gpu_evicted,gpu_fallback,gpu_replayed_quads,gpu_chunks,gpu_bytes,gpu_uploaded_bytes,gpu_uploaded_total\n";
+			std::cout << "[cpu-cache] CSV in user data directory: " << path.filename().string() << std::endl;
+		}
+	}
 }
 
 MapDrawer::~MapDrawer() {
 	Release();
+	ClearOverlayTextCache();
 	minimap_page_cache.releaseGL();
 }
 
@@ -290,6 +328,11 @@ void MapDrawer::SetupVars() {
 }
 
 void MapDrawer::SetupGL() {
+	frame_started = std::chrono::steady_clock::now();
+	frame_interval_ms = previous_frame_started.time_since_epoch().count() == 0 ? 0.0 : std::chrono::duration<double, std::milli>(frame_started - previous_frame_started).count();
+	previous_frame_started = frame_started;
+	frame_started_valid = true;
+	scene_drawn_this_frame = false;
 	glViewport(0, 0, screensize_x, screensize_y);
 
 	// Enable 2D mode
@@ -313,7 +356,14 @@ void MapDrawer::SetupGL() {
 }
 
 void MapDrawer::Release() {
+	// The canvas also destroys drawers that were never painted or whose frame
+	// has already ended. Only a matching SetupGL owns matrix-stack entries.
+	if (!frame_started_valid) {
+		return;
+	}
 	renderer->endFrame();
+	TraceGeometryFrame();
+	frame_started_valid = false;
 
 	tooltips.clear();
 
@@ -329,10 +379,11 @@ void MapDrawer::Release() {
 }
 
 void MapDrawer::DrawScene() {
+	scene_drawn_this_frame = true;
 	const auto started = std::chrono::steady_clock::now();
 	DrawBackground();
 	DrawMap();
-	if (canvas->IsIngamePreview()) {
+	if (canvas->IsIngamePreview() && !editor.map.getTile(canvas->GetIngamePreviewDrawTile())) {
 		DrawIngamePreviewPlayer();
 	}
 	if (options.isDrawLight() && !far_zoom_mode) {
@@ -344,7 +395,53 @@ void MapDrawer::DrawScene() {
 	last_scene_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
 }
 
+void MapDrawer::DrawMultiplayer() {
+	if (!editor.multiplayer || !editor.multiplayer->active() || options.ingame) {
+		return;
+	}
+	auto point = [&](const Position& p, const wxColor& color, const std::string& label, bool ping) {
+		if (p.z != floor || p.x < start_x || p.x > end_x || p.y < start_y || p.y > end_y) {
+			return;
+		}
+		const int offset = p.z <= GROUND_LAYER ? (GROUND_LAYER - p.z) * TileSize : 0;
+		const int x = p.x * TileSize - view_scroll_x - offset, y = p.y * TileSize - view_scroll_y - offset;
+		drawRect(x, y, TileSize, TileSize, color, ping ? 4 : 2);
+		MakeTooltip(x, y - 16, label, color.Red(), color.Green(), color.Blue());
+	};
+	for (const auto& [id, player] : editor.multiplayer->players()) {
+		if (id == editor.multiplayer->clientId()) {
+			continue;
+		}
+		wxColor color((player.color >> 16) & 255, (player.color >> 8) & 255, player.color & 255);
+		point(player.cursor, color, player.name + (player.afk ? " (AFK)" : ""), false);
+	}
+	for (const auto& ping : editor.multiplayer->pings()) {
+		wxColor color((ping.color >> 16) & 255, (ping.color >> 8) & 255, ping.color & 255);
+		point(ping.position, color, ping.author + " ping", true);
+	}
+	for (const auto& lock : editor.multiplayer->locks()) {
+		const auto& r = lock.region;
+		if (r.z != floor || r.x2 < start_x || r.x1 > end_x || r.y2 < start_y || r.y1 > end_y) {
+			continue;
+		}
+		const int offset = r.z <= GROUND_LAYER ? (GROUND_LAYER - r.z) * TileSize : 0;
+		drawRect(r.x1 * TileSize - view_scroll_x - offset, r.y1 * TileSize - view_scroll_y - offset, (r.x2 - r.x1 + 1) * TileSize, (r.y2 - r.y1 + 1) * TileSize, lock.owner == editor.multiplayer->clientId() ? wxColor(80, 220, 130) : wxColor(255, 150, 70), 2);
+	}
+}
+
 void MapDrawer::DrawOverlays() {
+	if (canvas->IsIngamePreview()) {
+		// Screen-space effects after scene/lighting, using the existing GL batch.
+		// This path never touches the editor's scene FBO or normal map overlays.
+		if (canvas->playtestWeather != Playtest::Weather::Off) {
+			renderer->flush();
+			renderer->setOrtho(0, screensize_x, screensize_y, 0);
+			Playtest::DrawWeather(*renderer, Playtest::BuildWeather(canvas->playtestWeather, screensize_x, screensize_y, canvas->playtestSeconds, canvas->GetDPIScaleFactor()));
+			renderer->flush();
+			renderer->setOrtho(0, screensize_x * zoom, screensize_y * zoom, 0);
+		}
+		return;
+	}
 	DrawMinimapImportOverlay();
 	if (!far_zoom_mode) {
 		DrawDraggingShadow();
@@ -353,14 +450,27 @@ void MapDrawer::DrawOverlays() {
 		DrawSelectionBox();
 	}
 	DrawBrush();
+	DrawMultiplayer();
 	if (options.show_grid && !medium_zoom_mode && !far_zoom_mode) {
 		DrawGrid();
 	}
 	if (options.show_ingame_box) {
 		DrawIngameBox();
 	}
-	if (options.show_tooltips && !medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
-		DrawTooltips();
+	if (!isViewportInteractionActive()) {
+		// Text and preview sprites are screen-space overlays, outside the scene
+		// FBO/LOD passes. Only the hovered tile is queried at distant zooms.
+		renderer->flush();
+		renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
+		if (options.show_container_preview) {
+			DrawContainerPreview();
+		}
+		if (options.show_tooltips) {
+			DrawHoverTooltip();
+			DrawTooltips();
+		}
+		renderer->flush();
+		renderer->setOrtho(0.0f, screensize_x * zoom, screensize_y * zoom, 0.0f);
 	}
 	for (int map_z = start_z; map_z >= superend_z; --map_z) {
 		DrawPositionIndicator(map_z);
@@ -541,6 +651,29 @@ inline int getFloorAdjustment(int floor) {
 }
 
 void MapDrawer::DrawMap() {
+	const bool gpuRequested = g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE);
+	const bool cpuRequested = g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) || gpuRequested;
+	cpu_geometry_enabled = cpuRequested && !far_zoom_mode && !options.isOnlyColors();
+	gpu_ground_enabled = gpuRequested && cpu_geometry_enabled;
+	chunk_render_cache.beginPass(editor.map.getSessionId(), g_gui.gfx.getResourceIdentity(), gpuRequested);
+	ground_draw_ms = 0;
+	if (cpuRequested) {
+		chunk_geometry_cache.beginPass(editor.map.getSessionId(), g_gui.gfx.getResourceIdentity(), options.show_performance_stats || geometry_trace.is_open());
+	} else {
+		chunk_geometry_cache.clear();
+	}
+	// Observe the existing traversal only when the HUD is enabled. No culling,
+	// ordering, FBO invalidation or draw decisions depend on these revisions.
+	if (options.show_performance_stats && !far_zoom_mode) {
+		const auto session = GetActiveEditorResourceSession();
+		if (chunk_observed_session.lock() != session) {
+			chunk_revision_observer.reset();
+			chunk_observed_session = session;
+		}
+		chunk_revision_observer.beginPass();
+	} else {
+		chunk_revision_observer.reset();
+	}
 	Brush* brush = g_gui.GetCurrentBrush();
 	if (!far_zoom_mode) {
 		visible_tile_count = 0;
@@ -560,6 +693,24 @@ void MapDrawer::DrawMap() {
 	bool show_zone_tooltips = options.isTooltips() && !far_zoom_mode;
 	if (far_zoom_mode) {
 		DrawMapMinimapPages();
+		if (g_gui.secondary_map != nullptr && canvas->isPasting()) {
+			Position sourceMinimum;
+			Position sourceMaximum;
+			if (editor.copybuffer.getBounds(sourceMinimum, sourceMaximum)) {
+				const Position sourceAnchor = editor.copybuffer.getPosition();
+				const int floorOffset = floor <= GROUND_LAYER ? (GROUND_LAYER - floor) * TileSize : 0;
+				const int targetMinimumX = mouse_map_x + sourceMinimum.x - sourceAnchor.x;
+				const int targetMinimumY = mouse_map_y + sourceMinimum.y - sourceAnchor.y;
+				const int targetMaximumX = mouse_map_x + sourceMaximum.x - sourceAnchor.x;
+				const int targetMaximumY = mouse_map_y + sourceMaximum.y - sourceAnchor.y;
+				const int drawX = targetMinimumX * TileSize - view_scroll_x - floorOffset;
+				const int drawY = targetMinimumY * TileSize - view_scroll_y - floorOffset;
+				const int drawWidth = std::max(TileSize, (targetMaximumX - targetMinimumX + 1) * TileSize);
+				const int drawHeight = std::max(TileSize, (targetMaximumY - targetMinimumY + 1) * TileSize);
+				drawFilledRect(drawX, drawY, drawWidth, drawHeight, wxColour(116, 76, 238, 42));
+				drawRect(drawX, drawY, drawWidth, drawHeight, wxColour(155, 125, 255, 235), 2);
+			}
+		}
 		return;
 	}
 
@@ -586,11 +737,39 @@ void MapDrawer::DrawMap() {
 					if (!nd) {
 						continue;
 					}
+					if (options.show_performance_stats) {
+						if (const Floor* chunk = nd->getFloor(map_z)) {
+							const Position origin = chunk->locs[0].getPosition();
+							chunk_revision_observer.observe(MakeMapChunkKey(origin.x, origin.y, origin.z), chunk->getRenderRevision());
+						}
+					}
 
+					const MapChunkGeometry* geometry = nullptr;
+					const MapChunkRenderCache::Entry* gpuChunk = nullptr;
+					if (cpu_geometry_enabled) {
+						if (const Floor* chunk = nd->getFloor(map_z)) {
+							const Position origin = chunk->locs[0].getPosition();
+							geometry = &chunk_geometry_cache.get(MakeMapChunkKey(origin.x, origin.y, origin.z), chunk->getRenderRevision().content, [&] { return BuildChunkGeometry(*chunk); });
+							if (gpu_ground_enabled) {
+								gpuChunk = chunk_render_cache.prepare(
+									MakeMapChunkKey(origin.x, origin.y, origin.z), chunk->getRenderRevision().content, *geometry,
+									[](const MapChunkGroundQuad& quad) {
+										GameSprite* sprite = g_items[quad.itemId].sprite;
+										if (!sprite) {
+											return ChunkAtlasSprite {};
+										}
+										const auto st = sprite->getSpriteTexByIndex(quad.imageIndex);
+										return ChunkAtlasSprite { g_gui.gfx.getAtlasPageToken(st.texture), st.u0, st.v0, st.u1, st.v1 };
+									},
+									[](AtlasPageToken token) { return g_gui.gfx.retainAtlasPage(token); }
+								);
+							}
+						}
+					}
 					for (int map_x = 0; map_x < 4; ++map_x) {
 						for (int map_y = 0; map_y < 4; ++map_y) {
 							TileLocation* location = nd->getTile(map_x, map_y, map_z);
-							DrawTile(location);
+							DrawTile(location, geometry ? &geometry->grounds[map_x * 4 + map_y] : nullptr, gpuChunk, map_x * 4 + map_y);
 							// draw light, but only if not zoomed too far
 							if (location && options.isDrawLight()) {
 								AddLight(location);
@@ -1326,6 +1505,17 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, Item* item,
 
 void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* item, bool ephemeral, int red, int green, int blue, int alpha, const Tile* tile) {
 	RME_PROFILE_SCOPE("MapDrawer::BlitItem(pos)");
+	std::optional<PlaytestDoorSprite> previewDoor;
+	if (canvas->IsIngamePreview() && (item->isDoor() || item->isBrushDoor())) {
+		const auto found = canvas->playtestDoors.find(pos);
+		if (found != canvas->playtestDoors.end() && found->second.original == item->getID()) {
+			const auto& replacement = g_items[found->second.replacement];
+			if (replacement.id && (replacement.isDoor() || replacement.isBrushDoor)) {
+				previewDoor.emplace(replacement.id);
+				item = &*previewDoor;
+			}
+		}
+	}
 	ItemType& it = g_items[item->getID()];
 
 	// Locked door indicator
@@ -1395,39 +1585,19 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 	draw_x -= spr->getDrawHeight();
 	draw_y -= spr->getDrawHeight();
 
-	int subtype = -1;
+	const int subtype = ItemSpriteSubtype(*item, it);
 
 	int pattern_x = pos.x % spr->pattern_x;
 	int pattern_y = pos.y % spr->pattern_y;
 	int pattern_z = pos.z % spr->pattern_z;
 
-	if (it.isSplash() || it.isFluidContainer()) {
-		subtype = item->getSubtype();
-	} else if (it.isHangable) {
+	if (it.isHangable && !it.isSplash() && !it.isFluidContainer()) {
 		if (tile && tile->hasProperty(HOOK_SOUTH)) {
 			pattern_x = 1;
 		} else if (tile && tile->hasProperty(HOOK_EAST)) {
 			pattern_x = 2;
 		} else {
 			pattern_x = 0;
-		}
-	} else if (it.stackable) {
-		if (item->getSubtype() <= 1) {
-			subtype = 0;
-		} else if (item->getSubtype() <= 2) {
-			subtype = 1;
-		} else if (item->getSubtype() <= 3) {
-			subtype = 2;
-		} else if (item->getSubtype() <= 4) {
-			subtype = 3;
-		} else if (item->getSubtype() < 10) {
-			subtype = 4;
-		} else if (item->getSubtype() < 25) {
-			subtype = 5;
-		} else if (item->getSubtype() < 50) {
-			subtype = 6;
-		} else {
-			subtype = 7;
 		}
 	}
 
@@ -1771,7 +1941,7 @@ void MapDrawer::DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8
 	BlitSpriteType(screenx, screeny, spr, r, g, b, alpha);
 }
 
-void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile) {
+void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile, bool hover) {
 	if (item == nullptr) {
 		return;
 	}
@@ -1796,7 +1966,12 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	}
 
 	auto* tp = dynamic_cast<Teleport*>(item);
-	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty()) {
+	const auto* container = dynamic_cast<const Container*>(item);
+	const bool hoveredContainerContents = hover && item == tile->getTopItem() && container && container->getItemCount() > 0;
+	// Hover must not introduce labels for ordinary floors/items. Only show
+	// existing attributes or a container's contents, even at reduced zoom.
+	const bool sceneZoneInfo = !hover && !zoneIds.empty();
+	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && !sceneZoneInfo && !hoveredContainerContents) {
 		return;
 	}
 
@@ -1804,7 +1979,7 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 		stream << "\n";
 	}
 
-	if (!zoneIds.empty()) {
+	if (!zoneIds.empty() && !hover) {
 		const FinderPosition position(tile->getX(), tile->getY(), tile->getZ());
 		for (auto& zoneId : zoneIds) {
 			auto& positions = zoneTiles[zoneId];
@@ -1812,9 +1987,11 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 				positions.push_back(position);
 			}
 		}
-	} else {
-		stream << "Item ID: " << id << "\n";
 	}
+	if (!item->getName().empty()) {
+		stream << item->getName() << "\n";
+	}
+	stream << "Item ID: " << id << "\n";
 
 	if (action > 0) {
 		stream << "Action ID: " << action << "\n";
@@ -1841,7 +2018,65 @@ void MapDrawer::WriteTooltip(Waypoint* waypoint, std::ostringstream& stream) {
 	stream << "Waypoint: " << waypoint->name << "\n";
 }
 
-void MapDrawer::DrawTile(TileLocation* location) {
+MapChunkGeometry MapDrawer::BuildChunkGeometry(const Floor& chunk) const {
+	MapChunkGeometry geometry;
+	for (size_t index = 0; index < geometry.grounds.size(); ++index) {
+		const Tile* tile = chunk.locs[index].get();
+		if (!tile || !tile->ground) {
+			continue;
+		}
+		const Item& ground = *tile->ground;
+		const ItemType& type = g_items[ground.getID()];
+		GameSprite* sprite = type.sprite;
+		// The rest of BlitItem (special squares, item-dependent patterns,
+		// multi-part completeness, podiums and indicators) remains live.
+		if (!type.isGroundTile() || type.isMetaItem() || type.pickupable || type.stackable || type.isSplash() || type.isFluidContainer() || type.isHangable || type.isPodium() || type.isDoor() || type.hookSouth || type.hookEast || !sprite) {
+			continue;
+		}
+		if (sprite->width != 1 || sprite->height != 1 || sprite->layers != 1 || sprite->frames != 1 || sprite->animator || sprite->pattern_x == 0 || sprite->pattern_y == 0 || sprite->pattern_z == 0 || sprite->numsprites == 0 || ground.getLight().intensity != 0) {
+			continue;
+		}
+		const auto clientId = type.clientID;
+		if (clientId == 469 || clientId == 470 || clientId == 17970 || clientId == 20028 || clientId == 34168 || clientId == 2187 || (clientId >= 39092 && clientId <= 39100) || clientId == 39236 || clientId == 39367 || clientId == 39368) {
+			continue;
+		}
+		const Position& pos = tile->getPosition();
+		const auto offset = sprite->getDrawOffset();
+		geometry.grounds[index] = { -offset.first, -offset.second, sprite->getDrawHeight(), sprite->getItemImageIndex(0, 0, 0, -1, pos.x % sprite->pattern_x, pos.y % sprite->pattern_y, 0), ground.getID() };
+		++geometry.quadCount;
+	}
+	return geometry;
+}
+
+bool MapDrawer::BlitCachedGround(int& x, int& y, Item& ground, const MapChunkGroundQuad& quad, int red, int green, int blue, const MapChunkRenderCache::Entry* gpuChunk, size_t slot) {
+	if (quad.itemId == 0 || ground.getID() != quad.itemId || ground.isSelected() || ground.getFrame() != 0) {
+		return false;
+	}
+	if (gpuChunk && chunk_render_cache.draw(*gpuChunk, slot, x, y, { uint8_t(red), uint8_t(green), uint8_t(blue), 255 })) {
+		x -= quad.elevation;
+		y -= quad.elevation;
+		ground.setLastReadyFrame(0);
+		chunk_geometry_cache.recordReplay();
+		return true;
+	}
+	GameSprite* sprite = g_items[quad.itemId].sprite;
+	if (!sprite) {
+		return false;
+	}
+	const int screenX = x + quad.offsetX, screenY = y + quad.offsetY;
+	// Elevation advances even when an atlas upload is deferred, like BlitItem.
+	x -= quad.elevation;
+	y -= quad.elevation;
+	const auto texture = sprite->getSpriteTexByIndex(quad.imageIndex);
+	if (texture.texture != 0) {
+		ground.setLastReadyFrame(0);
+		glBlitTexture(screenX, screenY, texture.texture, red, green, blue, 255, false, texture.u0, texture.v0, texture.u1, texture.v1);
+		chunk_geometry_cache.recordReplay();
+	}
+	return true;
+}
+
+void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groundQuad, const MapChunkRenderCache::Entry* gpuChunk, size_t slot) {
 	RME_PROFILE_SCOPE("MapDrawer::DrawTile");
 	if (!location) {
 		return;
@@ -1966,7 +2201,14 @@ void MapDrawer::DrawTile(TileLocation* location) {
 				tile->ground->animate();
 			}
 
-			BlitItem(draw_x, draw_y, tile, tile->ground, false, r, g, b);
+			const bool measureGround = options.show_performance_stats || geometry_trace.is_open();
+			const auto groundStart = measureGround ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point {};
+			if (!groundQuad || !BlitCachedGround(draw_x, draw_y, *tile->ground, *groundQuad, r, g, b, gpuChunk, slot)) {
+				BlitItem(draw_x, draw_y, tile, tile->ground, false, r, g, b);
+			}
+			if (measureGround) {
+				ground_draw_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - groundStart).count();
+			}
 		} else if (options.always_show_zones && (r != 255 || g != 255 || b != 255)) {
 			DrawRawBrush(draw_x, draw_y, &g_items[SPRITE_ZONE], r, g, b, 60);
 		}
@@ -2015,6 +2257,9 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			if (!medium_zoom_mode && tile->creature && options.show_creatures) {
 				BlitCreature(draw_x, draw_y, tile->creature);
 			}
+			if (canvas->IsIngamePreview() && tile->getPosition() == canvas->GetIngamePreviewDrawTile()) {
+				DrawIngamePreviewPlayer();
+			}
 		}
 
 		if (!medium_zoom_mode && zoom < 10.0) {
@@ -2048,9 +2293,9 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			// tooltips
 			if (show_tooltips) {
 				if (location->getWaypointCount() > 0) {
-					MakeTooltip(draw_x, draw_y, tooltip.str(), 0, 255, 0);
+					MakeTooltip(map_x * TileSize - view_scroll_x - offset, map_y * TileSize - view_scroll_y - offset, tooltip.str(), 0, 255, 0);
 				} else {
-					MakeTooltip(draw_x, draw_y, tooltip.str());
+					MakeTooltip(map_x * TileSize - view_scroll_x - offset, map_y * TileSize - view_scroll_y - offset, tooltip.str());
 				}
 			}
 			tooltip.str("");
@@ -2170,135 +2415,142 @@ void MapDrawer::DrawPositionIndicator(int z) {
 	drawRect(x + borderOffset + 1, y + borderOffset + 1, size - 2, size - 2, *wxBLACK, 2);
 }
 
-void MapDrawer::DrawTooltips() {
-	for (auto it = tooltips.cbegin(); it != tooltips.cend(); ++it) {
-		const MapTooltip& tip = *it;
-		const char* text = tip.text.c_str();
-		float line_width = 0.0f;
-		float width = 2.0f;
-		float height = 14.0f;
-		int char_count = 0;
-		int line_char_count = 0;
+void MapDrawer::ClearOverlayTextCache() {
+	// Called only while this canvas's GL context is current. Flush before
+	// deleting textures that may still be referenced by queued overlay quads.
+	renderer->flushAndUnbind();
+	for (const auto& entry : overlay_text_cache) {
+		glDeleteTextures(1, &entry.texture);
+	}
+	overlay_text_cache.clear();
+	overlay_text_cache_bytes = 0;
+}
 
-		for (const char* c = text; *c != '\0'; c++) {
-			if (*c == '\n' || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
-				height += 14.0f;
-				line_width = 0.0f;
-				line_char_count = 0;
-			} else {
-				line_width += bitmapCharWidth(rme_bitmap_helvetica_12, *c);
-			}
-			width = std::max<float>(width, line_width);
-			char_count++;
-			line_char_count++;
-
-			if (tip.ellipsis && char_count > (MapTooltip::MAX_CHARS + 3)) {
-				break;
-			}
+const MapDrawer::OverlayTextTexture& MapDrawer::GetOverlayText(const std::string& text, int maxWidth, int maxHeight) {
+	const int fontPixels = std::max(1, static_cast<int>(canvas->FromDIP(12) * canvas->GetContentScaleFactor()));
+	const wxColour foreground = Theme::Get(Theme::Role::TooltipValue);
+	const wxColour background = Theme::Get(Theme::Role::TooltipBackground);
+	maxWidth = std::max(1, maxWidth);
+	maxHeight = std::max(1, maxHeight);
+	for (const auto& entry : overlay_text_cache) {
+		if (entry.text == text && entry.maxWidth == maxWidth && entry.maxHeight == maxHeight && entry.fontPixels == fontPixels && entry.foreground == foreground && entry.background == background) {
+			return entry;
 		}
+	}
 
-		float scale = zoom < 1.0f ? zoom : 1.0f;
+	wxBitmap measureBitmap(1, 1, 24);
+	wxMemoryDC dc(measureBitmap);
+	dc.SetFont(wxFont(wxFontInfo(wxSize(0, fontPixels)).Family(wxFONTFAMILY_SWISS)));
+	const auto layout = LayoutMapOverlayText(dc, wxString::FromUTF8(text), maxWidth, maxHeight);
+	dc.SelectObject(wxNullBitmap);
+	wxBitmap bitmap(layout.width, layout.height, 24);
+	dc.SelectObject(bitmap);
+	dc.SetBackground(wxBrush(background));
+	dc.Clear();
+	dc.SetTextForeground(foreground);
+	for (size_t i = 0; i < layout.lines.size(); ++i) {
+		dc.DrawText(layout.lines[i], 0, static_cast<int>(i) * layout.lineHeight);
+	}
+	dc.SelectObject(wxNullBitmap);
+	const wxImage pixels = bitmap.ConvertToImage();
+	const size_t bytes = static_cast<size_t>(layout.width) * layout.height * 3;
+	renderer->flushAndUnbind();
+	while (!overlay_text_cache.empty() && (overlay_text_cache.size() >= 128 || overlay_text_cache_bytes + bytes > 8 * 1024 * 1024)) {
+		const auto& oldest = overlay_text_cache.front();
+		glDeleteTextures(1, &oldest.texture);
+		overlay_text_cache_bytes -= static_cast<size_t>(oldest.width) * oldest.height * 3;
+		overlay_text_cache.erase(overlay_text_cache.begin());
+	}
+	GLuint texture = 0;
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE (legacy Windows headers)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+	GLint alignment = 4;
+	glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, layout.width, layout.height, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels.GetData());
+	glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	overlay_text_cache.push_back({ text, maxWidth, maxHeight, fontPixels, foreground, background, texture, layout.width, layout.height });
+	overlay_text_cache_bytes += bytes;
+	return overlay_text_cache.back();
+}
 
-		width = (width + 8.0f) * scale;
-		height = (height + 4.0f) * scale;
-
-		float x = tip.x + (TileSize / 2.0f);
-		float y = tip.y;
-		float center = width / 2.0f;
-		float space = (7.0f * scale);
-		float startx = x - center;
-		float endx = x + center;
-		float starty = y - (height + space);
-		float endy = y - space;
-
-		// 7----0----1
-		// |         |
-		// 6--5  3--2
-		//     \/
-		//     4
-		float vertexes[9][2] = {
-			{ x, starty }, // 0
-			{ endx, starty }, // 1
-			{ endx, endy }, // 2
-			{ x + space, endy }, // 3
-			{ x, y }, // 4
-			{ x - space, endy }, // 5
-			{ startx, endy }, // 6
-			{ startx, starty }, // 7
-			{ x, starty }, // 0
-		};
-
-		// background
-		{
-			const wxColour background = Theme::Get(Theme::Role::TooltipBackground);
-			float poly[16];
-			for (int i = 0; i < 8; ++i) {
-				poly[i * 2] = vertexes[i][0];
-				poly[i * 2 + 1] = vertexes[i][1];
-			}
-			renderer->drawPolygon(poly, 8, background.Red(), background.Green(), background.Blue(), 245);
+void MapDrawer::DrawHoverTooltip() {
+	if (!options.isTooltips() || options.ingame || canvas->space_held || canvas->drawing || dragging || dragging_draw || !canvas->GetScreenRect().Contains(wxGetMousePosition())) {
+		return;
+	}
+	Tile* tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
+	const Item* item = tile ? tile->getTopItem() : nullptr;
+	if (!item || (options.show_only_modified && !tile->isModified()) || (!options.show_items && g_items[item->getID()].pickupable)) {
+		return;
+	}
+	const int offset = floor <= GROUND_LAYER ? (GROUND_LAYER - floor) * TileSize : 0;
+	const int x = mouse_map_x * TileSize - view_scroll_x - offset;
+	const int y = mouse_map_y * TileSize - view_scroll_y - offset;
+	// The hovered tile is resolved each overlay pass, including FBO cache hits
+	// and the medium/far LOD paths. Never retain Item* across frames/sessions.
+	std::ostringstream text;
+	WriteTooltip(tile, tile->ground, text, tile->isHouseTile(), true);
+	for (Item* entry : tile->items) {
+		if (options.show_items || !g_items[entry->getID()].pickupable) {
+			WriteTooltip(tile, entry, text, tile->isHouseTile(), true);
 		}
-
-		// borders
-		{
-			const wxColour themedBorder = Theme::Get(Theme::Role::TooltipBorder);
-			const bool defaultBorder = tip.r == 255 && tip.g == 255 && tip.b == 255;
-			const uint8_t borderR = defaultBorder ? themedBorder.Red() : tip.r;
-			const uint8_t borderG = defaultBorder ? themedBorder.Green() : tip.g;
-			const uint8_t borderB = defaultBorder ? themedBorder.Blue() : tip.b;
-			float seg[32];
-			for (int i = 0; i < 8; ++i) {
-				seg[i * 4] = vertexes[i][0];
-				seg[i * 4 + 1] = vertexes[i][1];
-				seg[i * 4 + 2] = vertexes[i + 1][0];
-				seg[i * 4 + 3] = vertexes[i + 1][1];
-			}
-			renderer->drawLines(seg, 8, borderR, borderG, borderB, 255, 1.5f);
-		}
-
-		// text
-		if (zoom <= 1.0) {
-			const wxColour labelColour = Theme::Get(Theme::Role::TooltipLabel);
-			const wxColour valueColour = Theme::Get(Theme::Role::TooltipValue);
-			renderer->flushAndUnbind();
-			startx += (3.0f * scale);
-			starty += (14.0f * scale);
-			glColor4ub(labelColour.Red(), labelColour.Green(), labelColour.Blue(), 255);
-			glRasterPos2f(startx, starty);
-			char_count = 0;
-			line_char_count = 0;
-			bool valuePart = false;
-			for (const char* c = text; *c != '\0'; c++) {
-				const bool explicitLineBreak = *c == '\n';
-				if (explicitLineBreak || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
-					starty += (14.0f * scale);
-					glRasterPos2f(startx, starty);
-					line_char_count = 0;
-					if (explicitLineBreak) {
-						valuePart = false;
-					}
+	}
+	if (const auto* container = dynamic_cast<const Container*>(item); container && container->getItemCount() > 0) {
+		text << "Container contents (" << container->getItemCount() << "/" << container->getVolume() << "):\n";
+		for (size_t i = 0; i < container->getItemCount(); ++i) {
+			if (const Item* child = container->getItem(i)) {
+				text << "  " << (child->getName().empty() ? "Item" : child->getName()) << " (Item ID: " << child->getID();
+				if (g_items[child->getID()].stackable) {
+					text << ", count: " << child->getCount();
 				}
-				char_count++;
-				line_char_count++;
-
-				if (tip.ellipsis && char_count >= MapTooltip::MAX_CHARS) {
-					drawBitmapChar(rme_bitmap_helvetica_18, '.');
-					if (char_count >= (MapTooltip::MAX_CHARS + 2)) {
-						break;
-					}
-				} else if (!iscntrl(*c)) {
-					const wxColour& colour = valuePart ? valueColour : labelColour;
-					glColor4ub(colour.Red(), colour.Green(), colour.Blue(), 255);
-					drawBitmapChar(rme_bitmap_helvetica_12, *c);
-					if (*c == ':') {
-						valuePart = true;
-					}
+				if (child->getActionID()) {
+					text << ", Action ID: " << child->getActionID();
 				}
+				if (child->getUniqueID()) {
+					text << ", Unique ID: " << child->getUniqueID();
+				}
+				text << ")\n";
 			}
 		}
 	}
+	if (text.tellp() == 0) {
+		return;
+	}
+	// Replace the tile's scene label, then draw hover last for readability.
+	std::erase_if(tooltips, [&](const MapTooltip& tip) { return tip.x == x && tip.y == y; });
+	MakeTooltip(x, y, text.str());
 }
 
+void MapDrawer::DrawTooltips() {
+	const int padding = std::max(2, static_cast<int>(canvas->FromDIP(5) * canvas->GetContentScaleFactor()));
+	if (screensize_x <= 4 * padding || screensize_y <= 4 * padding) {
+		return;
+	}
+	for (const MapTooltip& tip : tooltips) {
+		const int maxWidth = std::min(screensize_x - 4 * padding, static_cast<int>(canvas->FromDIP(460) * canvas->GetContentScaleFactor()));
+		const auto& text = GetOverlayText(tip.text, maxWidth, screensize_y - 4 * padding);
+		const float width = text.width + 2 * padding;
+		const float height = text.height + 2 * padding;
+		const float anchorX = (tip.x + TileSize / 2.0f) / zoom;
+		const float anchorY = tip.y / zoom;
+		const float x = std::clamp(std::round(anchorX - width / 2), 0.0f, std::max(0.0f, screensize_x - width));
+		float y = anchorY - height - padding;
+		if (y < 0) {
+			y = anchorY + TileSize / zoom + padding;
+		}
+		y = std::clamp(std::round(y), 0.0f, std::max(0.0f, screensize_y - height));
+		const wxColour background = Theme::Get(Theme::Role::TooltipBackground);
+		const wxColour border = tip.r == 255 && tip.g == 255 && tip.b == 255 ? Theme::Get(Theme::Role::TooltipBorder) : wxColour(tip.r, tip.g, tip.b);
+		renderer->drawColoredQuad(x, y, width, height, { background.Red(), background.Green(), background.Blue(), 255 });
+		renderer->drawRect(x, y, width, height, { border.Red(), border.Green(), border.Blue(), 255 }, 1.0f);
+		renderer->drawTexturedQuad(x + padding, y + padding, text.width, text.height, text.texture, { 255, 255, 255, 255 });
+	}
+}
 void MapDrawer::DrawLight() {
 	// draw in-game light
 	light_drawer->draw(start_x, start_y, end_x, end_y, view_scroll_x, view_scroll_y, options.experimental_fog, renderer.get());
@@ -2311,6 +2563,110 @@ void MapDrawer::MakeTooltip(int screenx, int screeny, const std::string& text, u
 
 	tooltips.emplace_back(screenx, screeny, text, r, g, b);
 	tooltips.back().checkLineEnding();
+}
+
+void MapDrawer::DrawContainerPreview() {
+	if (options.ingame || options.isOnlyColors() || canvas->space_held || canvas->space_dragging || canvas->screendragging || canvas->drawing || dragging || dragging_draw || !canvas->GetScreenRect().Contains(wxGetMousePosition())) {
+		return;
+	}
+
+	// Resolve only the hovered tile in this canvas's resource session. No
+	// Item/Container pointers or texture IDs survive this overlay pass.
+	const Tile* tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
+	const auto* container = tile ? dynamic_cast<const Container*>(tile->getTopItem()) : nullptr;
+	if (!container || container->getItemCount() == 0 || (options.show_only_modified && !tile->isModified()) || (!options.show_items && g_items[container->getID()].pickupable)) {
+		return;
+	}
+	const size_t itemCount = container->getItemCount();
+	const int offset = floor <= GROUND_LAYER ? (GROUND_LAYER - floor) * TileSize : 0;
+	const float tileX = (mouse_map_x * TileSize - view_scroll_x - offset) / zoom;
+	const float tileY = (mouse_map_y * TileSize - view_scroll_y - offset) / zoom;
+	const std::string name = container->getName().empty() ? "Container " + std::to_string(container->getID()) : container->getName();
+
+	if (!options.show_container_preview) {
+		return;
+	}
+
+	// Screen-space DIP sizing, independent of map zoom. Bound both
+	// dimensions and work per frame even for oversized/malformed containers.
+	const float unit = static_cast<float>(canvas->FromDIP(100) / 100.0 * canvas->GetContentScaleFactor());
+	const float padding = 4.0f * unit;
+	const auto title = GetOverlayText(name, static_cast<int>(std::min(screensize_x - 4 * padding, 320 * unit)), screensize_y / 3);
+	const float headerHeight = title.height + padding;
+	const float slotSize = 36.0f * unit;
+	const float viewWidth = screensize_x;
+	const float viewHeight = screensize_y;
+	const int maxCols = std::min(6, static_cast<int>((viewWidth - 2 * padding) / slotSize));
+	const int maxRows = std::min(6, static_cast<int>((viewHeight - 2 * padding - 2 * headerHeight) / slotSize));
+	if (maxCols <= 0 || maxRows <= 0) {
+		return;
+	}
+	const int visibleCount = static_cast<int>(std::min(itemCount, static_cast<size_t>(maxCols * maxRows)));
+	const int cols = std::min(visibleCount, maxCols);
+	const int rows = (visibleCount + cols - 1) / cols;
+	const bool truncated = static_cast<size_t>(visibleCount) < itemCount;
+	const float totalWidth = std::min(viewWidth, std::max({ cols * slotSize, static_cast<float>(title.width), truncated ? 180 * unit : 0.0f }) + 2 * padding);
+	const float totalHeight = rows * slotSize + 2 * padding + headerHeight * (truncated ? 2 : 1);
+	const float x = std::clamp(tileX + TileSize / (2.0f * zoom) - totalWidth / 2, 0.0f, std::max(0.0f, viewWidth - totalWidth));
+	float y = options.isTooltips() ? tileY + TileSize / zoom + padding : tileY - totalHeight - padding;
+	if (y < 0 || y + totalHeight > viewHeight) {
+		y = options.isTooltips() ? tileY - totalHeight - padding : tileY + TileSize / zoom + padding;
+	}
+	y = std::clamp(y, 0.0f, std::max(0.0f, viewHeight - totalHeight));
+	const wxColour bg = Theme::Get(Theme::Role::TooltipBackground);
+	const wxColour borderClr = Theme::Get(Theme::Role::TooltipBorder);
+	renderer->drawColoredQuad(x, y, totalWidth, totalHeight, { bg.Red(), bg.Green(), bg.Blue(), 240 });
+	renderer->drawRect(x, y, totalWidth, totalHeight, { borderClr.Red(), borderClr.Green(), borderClr.Blue(), 255 }, 1.0f);
+
+	std::vector<PreparedSpritePart> parts;
+	for (int i = 0; i < visibleCount; ++i) {
+		const float slotX = x + padding + (i % cols) * slotSize;
+		const float slotY = y + padding + headerHeight + (i / cols) * slotSize;
+		renderer->drawRect(slotX, slotY, slotSize, slotSize, { borderClr.Red(), borderClr.Green(), borderClr.Blue(), 180 }, 1.0f);
+		const Item* item = container->getItem(static_cast<size_t>(i));
+		if (!item) {
+			continue;
+		}
+		const ItemType& type = g_items[item->getID()];
+		GameSprite* sprite = type.sprite;
+		if (!sprite || sprite->width == 0 || sprite->height == 0 || sprite->layers == 0 || static_cast<unsigned int>(sprite->width) * sprite->height * sprite->layers > 256) {
+			continue;
+		}
+		parts.clear();
+		const int subtype = ItemSpriteSubtype(*item, type);
+		if (!AppendPreparedSpriteParts(
+				0, 0, sprite->width, sprite->height, sprite->layers, [&](int cx, int cy, int layer) { return sprite->getSpriteTex(cx, cy, layer, subtype, 0, 0, 0, 0); }, parts
+			)) {
+			continue;
+		}
+		const float partSize = (slotSize - 2 * padding) / std::max(sprite->width, sprite->height);
+		const float iconX = slotX + (slotSize - sprite->width * partSize) / 2;
+		const float iconY = slotY + (slotSize - sprite->height * partSize) / 2;
+		for (const PreparedSpritePart& part : parts) {
+			const auto& st = part.texture;
+			const float partX = iconX + (sprite->width - 1 + part.screen_x / TileSize) * partSize;
+			const float partY = iconY + (sprite->height - 1 + part.screen_y / TileSize) * partSize;
+			renderer->drawTexturedQuad(partX, partY, partSize, partSize, st.texture, { 255, 255, 255, 255 }, st.u0, st.v0, st.u1, st.v1);
+		}
+	}
+
+	// Cached, measured Unicode text uses the same screen-space projection.
+	auto drawText = [&](float textX, float textY, const std::string& value, float availableWidth, float availableHeight) {
+		const auto& text = GetOverlayText(value, static_cast<int>(availableWidth), static_cast<int>(availableHeight));
+		renderer->drawTexturedQuad(std::round(textX), std::round(textY), text.width, text.height, text.texture, { 255, 255, 255, 255 });
+	};
+	drawText(x + padding, y + padding, name, std::min(viewWidth - 4 * padding, 320 * unit), screensize_y / 3);
+	for (int i = 0; i < visibleCount; ++i) {
+		const Item* item = container->getItem(static_cast<size_t>(i));
+		if (item && g_items[item->getID()].stackable && item->getCount() > 1) {
+			const float textX = x + padding * 2 + (i % cols) * slotSize;
+			const float textY = y + headerHeight + (i / cols + 1) * slotSize;
+			drawText(textX, textY - 16 * unit, std::to_string(item->getCount()), slotSize - 2 * padding, 20 * unit);
+		}
+	}
+	if (truncated) {
+		drawText(x + padding, y + totalHeight - headerHeight, "+ " + std::to_string(itemCount - visibleCount) + " more items", totalWidth - 2 * padding, headerHeight);
+	}
 }
 
 void MapDrawer::AddLight(TileLocation* location) {
@@ -2606,8 +2962,9 @@ void MapDrawer::DrawPerformanceStats() {
 	glPushMatrix();
 	glLoadIdentity();
 
-	int width = 240;
-	int height = 232;
+	const bool twoColumns = screensize_x >= 680;
+	int width = twoColumns ? 660 : 330;
+	int height = twoColumns ? 312 : 568;
 	int margin = 10;
 	int x = std::max(margin, screensize_x - width - margin);
 	int y = margin;
@@ -2701,9 +3058,87 @@ void MapDrawer::DrawPerformanceStats() {
 	snprintf(buf, sizeof(buf), "Stream: %zu KB O/F:%zu/%zu", batchStats.streamBytes / 1024, batchStats.bufferOrphans, batchStats.mappingFallbacks);
 	drawText(text_x, text_y + 208, 0.7f, 0.7f, 0.7f, buf);
 
+	const auto& chunks = chunk_revision_observer.getStats();
+	if (far_zoom_mode) {
+		snprintf(buf, sizeof(buf), "Chunks: not sampled (minimap)");
+	} else {
+		snprintf(buf, sizeof(buf), "Last chunks V/N/C: %zu/%zu/%zu", chunks.visible, chunks.firstSeen, chunks.contentChanged);
+	}
+	drawText(text_x, text_y + 224, 0.55f, 0.75f, 1.0f, buf);
+	snprintf(buf, sizeof(buf), "Last chunks P/S: %zu/%zu", chunks.presentationChanged, chunks.unchanged);
+	drawText(text_x, text_y + 240, 0.55f, 0.75f, 1.0f, buf);
+	const auto& revisions = editor.map.getChunkRevisionTracker().getStats();
+	snprintf(buf, sizeof(buf), "Marks C/P: %llu/%llu", static_cast<unsigned long long>(revisions.contentMarks), static_cast<unsigned long long>(revisions.presentationMarks));
+	drawText(text_x, text_y + 256, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Revisions C/P: %llu/%llu", static_cast<unsigned long long>(revisions.contentChanges), static_cast<unsigned long long>(revisions.presentationChanges));
+	drawText(text_x, text_y + 272, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Coalesced: %llu", static_cast<unsigned long long>(revisions.coalescedMarks));
+	drawText(text_x, text_y + 288, 0.7f, 0.7f, 0.7f, buf);
+
+	const int cpuX = twoColumns ? text_x + 330 : text_x;
+	const int cpuY = twoColumns ? text_y : text_y + 304;
+	const auto& cpu = chunk_geometry_cache.getStats();
+	const bool requested = g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) || g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE);
+	drawText(cpuX, cpuY, 0.55f, 0.9f, 0.65f, requested ? (cpu_geometry_enabled ? "CPU ground cache: ON" : "CPU ground cache: bypass") : "CPU ground cache: OFF");
+	snprintf(buf, sizeof(buf), "Last CPU V/H/M: %zu/%zu/%zu", cpu.visible, cpu.hits, cpu.misses);
+	drawText(cpuX, cpuY + 16, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Rebuilds: %zu Replay Q: %zu", cpu.rebuilds, cpu.replayedQuads);
+	drawText(cpuX, cpuY + 32, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Resident Q/V: %zu/%zu", chunk_geometry_cache.getQuadCount(), chunk_geometry_cache.getQuadCount() * 4);
+	drawText(cpuX, cpuY + 48, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "CPU payload: %.1f KB", chunk_geometry_cache.getGeometryBytes() / 1024.0);
+	drawText(cpuX, cpuY + 64, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Build: %.3fms", cpu.buildMs);
+	drawText(cpuX, cpuY + 80, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Lookup: %.3fms", cpu.lookupMs);
+	drawText(cpuX, cpuY + 96, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Ground CPU: %.3fms", ground_draw_ms);
+	drawText(cpuX, cpuY + 112, 0.7f, 0.7f, 0.7f, buf);
+	drawText(cpuX, cpuY + 128, 0.7f, 0.7f, 0.7f, "Static 1x1 grounds; live atlas UV");
+	const auto& gpuCache = chunk_render_cache.getStats();
+	drawText(cpuX, cpuY + 152, 0.55f, 0.9f, 0.65f, g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE) ? (gpu_ground_enabled ? "GPU ground cache: ON" : "GPU ground cache: bypass") : "GPU ground cache: OFF");
+	snprintf(buf, sizeof(buf), "GPU V/H/M: %zu/%zu/%zu", gpuCache.visible, gpuCache.hits, gpuCache.misses);
+	drawText(cpuX, cpuY + 168, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "New/Rebuild/Evict: %zu/%zu/%zu", gpuCache.created, gpuCache.rebuilt, gpuCache.evicted);
+	drawText(cpuX, cpuY + 184, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "GPU chunks: %zu / %.1f KB", chunk_render_cache.getChunkCount(), chunk_render_cache.getMemoryBytes() / 1024.0);
+	drawText(cpuX, cpuY + 200, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "Upload: %.1f KB Total: %.1f MB", gpuCache.uploadedBytes / 1024.0, chunk_render_cache.getUploadedTotal() / (1024.0 * 1024.0));
+	drawText(cpuX, cpuY + 216, 0.7f, 0.7f, 0.7f, buf);
+	snprintf(buf, sizeof(buf), "GPU Q: %zu Fallback: %zu", gpuCache.replayedQuads, gpuCache.fallback);
+	drawText(cpuX, cpuY + 232, 0.7f, 0.7f, 0.7f, buf);
+
 	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
 	renderer->setOrtho(0.0f, static_cast<float>(screensize_x) * zoom, static_cast<float>(screensize_y) * zoom, 0.0f);
+}
+
+void MapDrawer::TraceGeometryFrame() {
+	if (!geometry_trace.is_open()) {
+		return;
+	}
+	const double submitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_started).count();
+	const auto& cpu = chunk_geometry_cache.getStats();
+	const auto& gpu = renderer->getFrameStats();
+	const auto& revision = editor.map.getChunkRevisionTracker().getStats();
+	const auto& persistent = chunk_render_cache.getStats();
+	geometry_trace << ++geometry_trace_rows << ',' << editor.map.getSessionId() << ',' << g_gui.gfx.getResourceIdentity() << ','
+				   << g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) << ',' << cpu_geometry_enabled << ',' << scene_drawn_this_frame << ','
+				   << options.ingame << ',' << screensize_x << ',' << screensize_y << ','
+				   << zoom << ',' << view_scroll_x << ',' << view_scroll_y << ',' << floor << ',' << visible_tile_count << ',' << visible_item_count << ','
+				   << cpu.visible << ',' << cpu.hits << ',' << cpu.misses << ',' << cpu.rebuilds << ',' << chunk_geometry_cache.getQuadCount() << ','
+				   << chunk_geometry_cache.getGeometryBytes() << ',' << cpu.replayedQuads << ',' << cpu.buildMs << ',' << cpu.lookupMs << ',' << ground_draw_ms << ','
+				   << last_scene_ms << ',' << submitMs << ',' << frame_interval_ms << ',' << current_cpu << ',' << gpu.drawCalls << ',' << gpu.textureBindings << ','
+				   << gpu.streamBytes << ',' << revision.contentChanges << ',' << revision.presentationChanges << ','
+				   << g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE) << ',' << gpu_ground_enabled << ',' << persistent.visible << ',' << persistent.hits << ',' << persistent.misses << ','
+				   << persistent.created << ',' << persistent.rebuilt << ',' << persistent.evicted << ',' << persistent.fallback << ',' << persistent.replayedQuads << ','
+				   << chunk_render_cache.getChunkCount() << ',' << chunk_render_cache.getMemoryBytes() << ',' << persistent.uploadedBytes << ',' << chunk_render_cache.getUploadedTotal() << '\n';
+	if (geometry_trace_rows % 30 == 0) {
+		geometry_trace.flush();
+	}
+	if (geometry_trace_rows >= 6000) {
+		geometry_trace.close();
+	}
 }

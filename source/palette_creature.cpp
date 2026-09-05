@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "favorites_resources.h"
 
 #include "settings.h"
 #include "brush.h"
@@ -51,54 +52,63 @@ CreaturePalettePanel::CreaturePalettePanel(wxWindow* parent, wxWindowID id) :
 	handling_event(false) {
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 
-	wxSizer* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Creatures");
-	tileset_choice = newd wxChoice(this, PALETTE_CREATURE_TILESET_CHOICE, wxDefaultPosition, wxDefaultSize, (int)0, (const wxString*)nullptr);
+	auto* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Creatures");
+	wxWindow* creaturesBox = sidesizer->GetStaticBox();
+	tileset_choice = newd wxChoice(creaturesBox, PALETTE_CREATURE_TILESET_CHOICE, wxDefaultPosition, wxDefaultSize, (int)0, (const wxString*)nullptr);
 	sidesizer->Add(tileset_choice, 0, wxEXPAND);
 
-	wxSizer* creatureNameSizer = newd wxStaticBoxSizer(wxHORIZONTAL, this);
-	creature_name_text = newd wxTextCtrl(this, PALETTE_CREATURE_SEARCH, "Search name", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	auto* creatureNameSizer = newd wxBoxSizer(wxHORIZONTAL);
+	creature_name_text = newd wxTextCtrl(creaturesBox, PALETTE_CREATURE_SEARCH, "Search name", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	creature_name_text->Bind(wxEVT_SET_FOCUS, &CreaturePalettePanel::OnSetFocus, this);
 	creature_name_text->Bind(wxEVT_KILL_FOCUS, &CreaturePalettePanel::OnKillFocus, this);
 	creature_name_text->Bind(wxEVT_TEXT_ENTER, &CreaturePalettePanel::OnChangeCreatureNameSearch, this);
 
-	creature_search_button = newd wxButton(this, wxID_ANY, "Search");
+	creature_search_button = newd wxButton(creaturesBox, wxID_ANY, "Search");
 	creature_search_button->Bind(wxEVT_BUTTON, &CreaturePalettePanel::OnChangeCreatureNameSearch, this);
 
 	creatureNameSizer->Add(creature_name_text, 2, wxEXPAND);
 	creatureNameSizer->Add(creature_search_button, 1, wxEXPAND);
 	sidesizer->Add(creatureNameSizer, 0, wxEXPAND);
 
-	creature_list = newd wxCheckListBox(this, PALETTE_CREATURE_LISTBOX, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE | wxLB_NEEDED_SB);
+	creature_list = newd wxCheckListBox(creaturesBox, PALETTE_CREATURE_LISTBOX, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE | wxLB_NEEDED_SB);
+	creature_list->Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent& event) {
+		if (!FavoriteResources::IsCurrentPalette(this)) {
+			return;
+		}
+		const int index = creature_list->HitTest(event.GetPosition());
+		if (index != wxNOT_FOUND) {
+			FavoriteResources::Popup(creature_list, GetCreatureBrush(index));
+		}
+	});
 	sidesizer->Add(creature_list, 1, wxEXPAND);
 	topsizer->Add(sidesizer, 1, wxEXPAND);
 
 	// Brush selection
-	sidesizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Brushes", wxDefaultPosition, wxSize(150, 200)), wxVERTICAL);
+	sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Brushes");
+	wxWindow* brushesBox = sidesizer->GetStaticBox();
 
-	// sidesizer->Add(180, 1, wxEXPAND);
-
-	auto* grid = newd wxFlexGridSizer(4, 3, 10, 10);
+	auto* grid = newd wxFlexGridSizer(4, 3, FromDIP(10), FromDIP(10));
 	grid->AddGrowableCol(1);
 
-	grid->Add(newd wxStaticText(this, wxID_ANY, "Spawntime"));
-	creature_spawntime_spin = newd wxSpinCtrl(this, PALETTE_CREATURE_SPAWN_TIME, i2ws(g_settings.getInteger(Config::DEFAULT_SPAWNTIME)), wxDefaultPosition, wxSize(50, 20), wxSP_ARROW_KEYS, 0, 86400, g_settings.getInteger(Config::DEFAULT_SPAWNTIME));
+	grid->Add(newd wxStaticText(brushesBox, wxID_ANY, "Spawntime"));
+	creature_spawntime_spin = newd wxSpinCtrl(brushesBox, PALETTE_CREATURE_SPAWN_TIME, i2ws(g_settings.getInteger(Config::DEFAULT_SPAWNTIME)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 86400, g_settings.getInteger(Config::DEFAULT_SPAWNTIME));
 	grid->Add(creature_spawntime_spin, 0, wxEXPAND);
-	creature_brush_button = newd wxToggleButton(this, PALETTE_CREATURE_BRUSH_BUTTON, "Place Creature");
+	creature_brush_button = newd wxToggleButton(brushesBox, PALETTE_CREATURE_BRUSH_BUTTON, "Place Creature");
 	grid->Add(creature_brush_button, 0, wxEXPAND);
 
-	grid->Add(newd wxStaticText(this, wxID_ANY, "Spawn size"));
-	spawn_size_spin = newd wxSpinCtrl(this, PALETTE_CREATURE_SPAWN_SIZE, i2ws(5), wxDefaultPosition, wxSize(50, 20), wxSP_ARROW_KEYS, 1, g_settings.getInteger(Config::MAX_SPAWN_RADIUS), g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS));
+	grid->Add(newd wxStaticText(brushesBox, wxID_ANY, "Spawn size"));
+	spawn_size_spin = newd wxSpinCtrl(brushesBox, PALETTE_CREATURE_SPAWN_SIZE, i2ws(5), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, g_settings.getInteger(Config::MAX_SPAWN_RADIUS), g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS));
 	grid->Add(spawn_size_spin, 0, wxEXPAND);
-	spawn_brush_button = newd wxToggleButton(this, PALETTE_SPAWN_BRUSH_BUTTON, "Place Spawn");
+	spawn_brush_button = newd wxToggleButton(brushesBox, PALETTE_SPAWN_BRUSH_BUTTON, "Place Spawn");
 	grid->Add(spawn_brush_button, 0, wxEXPAND);
 
-	grid->Add(newd wxStaticText(this, wxID_ANY, "Spawn density %"));
-	spawn_density_spin = newd wxSpinCtrl(this, PALETTE_CREATURE_SPAWN_DENSITY, i2ws(g_settings.getInteger(Config::SPAWN_MONSTER_DENSITY)), wxDefaultPosition, wxSize(50, 20), wxSP_ARROW_KEYS, 0, 3600, g_settings.getInteger(Config::SPAWN_MONSTER_DENSITY));
+	grid->Add(newd wxStaticText(brushesBox, wxID_ANY, "Spawn density %"));
+	spawn_density_spin = newd wxSpinCtrl(brushesBox, PALETTE_CREATURE_SPAWN_DENSITY, i2ws(g_settings.getInteger(Config::SPAWN_MONSTER_DENSITY)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 3600, g_settings.getInteger(Config::SPAWN_MONSTER_DENSITY));
 	grid->Add(spawn_density_spin, 0, wxEXPAND);
 	grid->AddSpacer(1);
 
-	grid->Add(newd wxStaticText(this, wxID_ANY, "Default weight %"));
-	default_weight_spin = newd wxSpinCtrl(this, PALETTE_CREATURE_DEFAULT_WEIGHT, i2ws(g_settings.getInteger(Config::MONSTER_DEFAULT_WEIGHT)), wxDefaultPosition, wxSize(50, 20), wxSP_ARROW_KEYS, 0, 100, g_settings.getInteger(Config::MONSTER_DEFAULT_WEIGHT));
+	grid->Add(newd wxStaticText(brushesBox, wxID_ANY, "Default weight %"));
+	default_weight_spin = newd wxSpinCtrl(brushesBox, PALETTE_CREATURE_DEFAULT_WEIGHT, i2ws(g_settings.getInteger(Config::MONSTER_DEFAULT_WEIGHT)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, g_settings.getInteger(Config::MONSTER_DEFAULT_WEIGHT));
 	grid->Add(default_weight_spin, 0, wxEXPAND);
 	grid->AddSpacer(1);
 
@@ -466,8 +476,9 @@ void CreaturePalettePanel::RefreshCreatureList(const std::string& preferredSelec
 	const std::string searchText = GetSearchText();
 	if (!searchText.empty()) {
 		brushes.erase(std::remove_if(brushes.begin(), brushes.end(), [&searchText](CreatureBrush* brush) {
-			return as_lower_str(brush->getName()).find(searchText) == std::string::npos;
-		}), brushes.end());
+						  return as_lower_str(brush->getName()).find(searchText) == std::string::npos;
+					  }),
+					  brushes.end());
 	}
 
 	sortBrushesByLowerName(brushes);

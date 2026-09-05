@@ -129,10 +129,19 @@ public:
 		setTile(newtile->getX(), newtile->getY(), newtile->getZ(), newtile, remove);
 	}
 	// Replaces a tile and returns the old one
-	Tile* swapTile(int _x, int _y, int _z, Tile* newtile);
-	Tile* swapTile(const Position& pos, Tile* newtile) {
-		return swapTile(pos.x, pos.y, pos.z, newtile);
+	Tile* swapTile(int _x, int _y, int _z, Tile* newtile, MapChunkChange change = MapChunkChange::Content);
+	Tile* swapTile(const Position& pos, Tile* newtile, MapChunkChange change = MapChunkChange::Content) {
+		return swapTile(pos.x, pos.y, pos.z, newtile, change);
 	}
+
+	MapChunkRevisionTracker& getChunkRevisionTracker() {
+		return chunkRevisionTracker;
+	}
+	const MapChunkRevisionTracker& getChunkRevisionTracker() const {
+		return chunkRevisionTracker;
+	}
+	// No allocation for an absent location. Used after direct, in-place edits.
+	void markRenderChunkChanged(const Position& pos, MapChunkChange change = MapChunkChange::Content);
 
 	// Clears the visiblity according to the mask passed
 	void clearVisible(uint32_t mask);
@@ -187,6 +196,7 @@ protected:
 	}
 
 	uint64_t tilecount;
+	MapChunkRevisionTracker chunkRevisionTracker;
 
 	QTreeNode root; // The Quad Tree root
 

@@ -103,6 +103,14 @@ public:
 	}
 
 public: // Functions
+	// Detached undo/preview copies share a TileLocation but must not invalidate
+	// the installed tile. Public member edits must call this or update() afterward.
+	void markRenderChunkChanged(MapChunkChange change = MapChunkChange::Content) const {
+		if (location) {
+			location->markInstalledTileChanged(this, change);
+		}
+	}
+
 	// Absorb the other tile into this tile
 	void merge(Tile* other);
 
@@ -111,9 +119,15 @@ public: // Functions
 		return testFlags(statflags, TILESTATE_MODIFIED);
 	}
 	void modify() {
+		if (!(statflags & TILESTATE_MODIFIED)) {
+			markRenderChunkChanged(MapChunkChange::Presentation);
+		}
 		statflags |= TILESTATE_MODIFIED;
 	}
 	void unmodify() {
+		if (statflags & TILESTATE_MODIFIED) {
+			markRenderChunkChanged(MapChunkChange::Presentation);
+		}
 		statflags &= ~TILESTATE_MODIFIED;
 	}
 
@@ -135,6 +149,9 @@ public: // Functions
 		return testFlags(mapflags, TILESTATE_PROTECTIONZONE);
 	}
 	void setPZ(bool pz) {
+		if (isPZ() != pz) {
+			markRenderChunkChanged();
+		}
 		if (pz) {
 			mapflags |= TILESTATE_PROTECTIONZONE;
 		} else {
@@ -171,7 +188,7 @@ public: // Functions
 	Item* getTopSelectedItem();
 
 	// Refresh internal flags (such as selected etc.)
-	void update();
+	void update(MapChunkChange change = MapChunkChange::Content);
 	void finalizeLoadedState();
 
 	uint8_t getMiniMapColor() const;
@@ -213,6 +230,9 @@ public: // Functions
 		return testFlags(statflags, TILESTATE_OP_BORDER);
 	}
 	void setOptionalBorder(bool b) {
+		if (hasOptionalBorder() != b) {
+			markRenderChunkChanged();
+		}
 		if (b) {
 			statflags |= TILESTATE_OP_BORDER;
 		} else {
@@ -270,14 +290,21 @@ public: // Functions
 		if (zone == 0) {
 			return;
 		}
-		zones.insert(zone);
+		if (zones.insert(zone).second) {
+			markRenderChunkChanged();
+		}
 	}
 
 	void removeZone(unsigned int zone) {
-		zones.erase(zone);
+		if (zones.erase(zone) != 0) {
+			markRenderChunkChanged();
+		}
 	}
 
 	void removeZones() {
+		if (!zones.empty()) {
+			markRenderChunkChanged();
+		}
 		zones.clear();
 	}
 
@@ -344,10 +371,16 @@ inline bool Tile::hasHouseExit(uint32_t exit) const {
 }
 
 inline void Tile::setMapFlags(uint16_t _flags) {
+	if ((_flags | mapflags) != mapflags) {
+		markRenderChunkChanged();
+	}
 	mapflags = _flags | mapflags;
 }
 
 inline void Tile::unsetMapFlags(uint16_t _flags) {
+	if (mapflags & _flags) {
+		markRenderChunkChanged();
+	}
 	mapflags &= ~_flags;
 }
 

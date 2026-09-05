@@ -102,6 +102,7 @@ bool Map::convert(MapVersion to, bool showdialog) {
 }
 
 bool Map::convert(const ConversionMap& rm, bool showdialog) {
+	MapChunkRevisionTracker::Batch chunkBatch(getChunkRevisionTracker());
 	if (showdialog) {
 		g_gui.CreateLoadBar("Converting map ...");
 	}
@@ -147,6 +148,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 		size_t inserted_items = 0;
 
 		if (cfmtm != rm.mtm.end()) {
+			tile->markRenderChunkChanged();
 			const std::vector<uint16_t>& v = cfmtm->first;
 
 			if (tile->ground && std::find(v.begin(), v.end(), tile->ground->getID()) != v.end()) {
@@ -178,6 +180,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 		if (tile->ground) {
 			auto cfstm = rm.stm.find(tile->ground->getID());
 			if (cfstm != rm.stm.end()) {
+				tile->markRenderChunkChanged();
 				uint16_t aid = tile->ground->getActionID();
 				uint16_t uid = tile->ground->getUniqueID();
 				delete tile->ground;
@@ -205,6 +208,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 			uint16_t id = (*replace_item_iter)->getID();
 			auto cf = rm.stm.find(id);
 			if (cf != rm.stm.end()) {
+				tile->markRenderChunkChanged();
 				// uint16_t aid = (*replace_item_iter)->getActionID();
 				// uint16_t uid = (*replace_item_iter)->getUniqueID();
 				delete *replace_item_iter;
@@ -235,6 +239,7 @@ bool Map::convert(const ConversionMap& rm, bool showdialog) {
 }
 
 void Map::cleanInvalidTiles(bool showdialog) {
+	MapChunkRevisionTracker::Batch chunkBatch(getChunkRevisionTracker());
 	if (showdialog) {
 		g_gui.CreateLoadBar("Removing invalid tiles...");
 	}
@@ -253,6 +258,7 @@ void Map::cleanInvalidTiles(bool showdialog) {
 			if (g_items.typeExists((*item_iter)->getID())) {
 				++item_iter;
 			} else {
+				tile->markRenderChunkChanged();
 				delete *item_iter;
 				item_iter = tile->items.erase(item_iter);
 			}
@@ -288,6 +294,7 @@ Position Map::getZonePosition(unsigned int zoneId) {
 }
 
 void Map::convertHouseTiles(uint32_t fromId, uint32_t toId) {
+	MapChunkRevisionTracker::Batch chunkBatch(getChunkRevisionTracker());
 	g_gui.CreateLoadBar("Converting house tiles...");
 	uint64_t tiles_done = 0;
 
@@ -533,6 +540,7 @@ SpawnList Map::getSpawnList(Tile* where) {
 }
 
 int64_t RemoveMonstersOnMap(Map& map, bool selectedOnly) {
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 	int64_t done = 0;
 	int64_t removed = 0;
 
@@ -550,6 +558,7 @@ int64_t RemoveMonstersOnMap(Map& map, bool selectedOnly) {
 		if (tile->creature) {
 			delete tile->creature;
 			tile->creature = nullptr;
+			tile->markRenderChunkChanged();
 			++removed;
 		}
 

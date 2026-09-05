@@ -139,6 +139,7 @@ Item* transformItem(Item* old_item, uint16_t new_id, Tile* parent) {
 	// Through the magic of deepCopy, this will now be a pointer to an item of the correct type.
 	Item* new_item = old_item->deepCopy();
 	if (parent) {
+		parent->markRenderChunkChanged();
 		// Find the old item and remove it from the tile, insert this one instead!
 		if (old_item == parent->ground) {
 			delete old_item;

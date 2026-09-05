@@ -200,8 +200,7 @@ GraphicManager::GraphicManager() :
 	has_frame_groups(false),
 	loaded_textures(0),
 	lastclean(0) {
-	animation_timer = newd wxStopWatch();
-	animation_timer->Start();
+	animation_timer.Start();
 }
 
 GraphicManager::~GraphicManager() {
@@ -212,8 +211,60 @@ GraphicManager::~GraphicManager() {
 	for (auto iter = image_space.begin(); iter != image_space.end(); ++iter) {
 		delete iter->second;
 	}
+}
 
-	delete animation_timer;
+void GraphicManager::swap(GraphicManager& other) noexcept {
+	using std::swap;
+	swap(resourceIdentity, other.resourceIdentity);
+	swap(atlas_page_epochs, other.atlas_page_epochs);
+	swap(client_version, other.client_version);
+	swap(unloaded, other.unloaded);
+	swap(spritefile, other.spritefile);
+	swap(sprite_file_handle, other.sprite_file_handle);
+	swap(sprite_offsets, other.sprite_offsets);
+	sprite_space.swap(other.sprite_space);
+	image_space.swap(other.image_space);
+	cleanup_list.swap(other.cleanup_list);
+	swap(dat_format, other.dat_format);
+	swap(item_count, other.item_count);
+	swap(creature_count, other.creature_count);
+	swap(otfi_found, other.otfi_found);
+	swap(is_extended, other.is_extended);
+	swap(has_transparency, other.has_transparency);
+	swap(has_frame_durations, other.has_frame_durations);
+	swap(has_frame_groups, other.has_frame_groups);
+	swap(metadata_file, other.metadata_file);
+	swap(sprites_file, other.sprites_file);
+	swap(loaded_textures, other.loaded_textures);
+	swap(lastclean, other.lastclean);
+	atlas_textures.swap(other.atlas_textures);
+	atlas_page_last_use.swap(other.atlas_page_last_use);
+	atlas_page_last_frame.swap(other.atlas_page_last_frame);
+	swap(atlas_access_counter, other.atlas_access_counter);
+	swap(atlas_frame_counter, other.atlas_frame_counter);
+	swap(atlas_size, other.atlas_size);
+	swap(atlas_count, other.atlas_count);
+	swap(atlas_allocation_failure_logged, other.atlas_allocation_failure_logged);
+
+	texture_upload_budget_active = false;
+	texture_upload_deferred = false;
+	frame_had_missing_texture = false;
+	texture_upload_attempt_active = false;
+	atlas_frame_active = false;
+	active_map_renderer = nullptr;
+	other.texture_upload_budget_active = false;
+	other.texture_upload_deferred = false;
+	other.frame_had_missing_texture = false;
+	other.texture_upload_attempt_active = false;
+	other.atlas_frame_active = false;
+	other.active_map_renderer = nullptr;
+}
+
+void GraphicManager::activateSpritePreloader() {
+	g_spritePreloader.clear();
+	if (!spritefile.empty() && !sprite_offsets.empty()) {
+		g_spritePreloader.configure(spritefile, sprite_offsets, has_transparency);
+	}
 }
 
 bool GraphicManager::hasTransparency() const {
@@ -273,6 +324,7 @@ bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 			atlas_textures.push_back(tex);
+			atlas_page_epochs.replace(tex);
 			atlas_page_last_use.push_back(++atlas_access_counter);
 			atlas_page_last_frame.push_back(atlas_frame_active ? atlas_frame_counter : 0);
 			atlas_count = 0;
@@ -344,6 +396,7 @@ bool GraphicManager::recycleAtlasPage() {
 	loaded_textures = std::max(0, loaded_textures - invalidated);
 
 	GLRenderer::invalidateTexture(victimTexture);
+	atlas_page_epochs.replace(victimTexture);
 	glBindTexture(GL_TEXTURE_2D, victimTexture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
@@ -360,6 +413,15 @@ bool GraphicManager::recycleAtlasPage() {
 	}
 	atlas_count = 0;
 	atlas_allocation_failure_logged = false;
+	return true;
+}
+
+bool GraphicManager::retainAtlasPage(AtlasPageToken token) {
+	if (!atlas_page_epochs.contains(token)) {
+		return false;
+	}
+	// Prevent recycling while queued persistent draws still reference this page.
+	touchAtlasPage(token.texture);
 	return true;
 }
 
@@ -455,8 +517,12 @@ void GraphicManager::markTextureMissing() noexcept {
 	}
 }
 
-void GraphicManager::clear() {
-	g_spritePreloader.clear();
+void GraphicManager::clear(bool clearPreloader) {
+	resourceIdentity = CreateSessionId();
+	atlas_page_epochs.clear();
+	if (clearPreloader) {
+		g_spritePreloader.clear();
+	}
 
 	SpriteMap new_sprite_space;
 	for (auto iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
@@ -736,6 +802,7 @@ bool GraphicManager::loadOTFI(const FileName& filename, wxString& error, wxArray
 }
 
 bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& error, wxArrayString& warnings) {
+	resourceIdentity = CreateSessionId();
 	// items.otb has most of the info we need. This only loads the GameSprite metadata
 	FileReadHandle file(nstr(datafile.GetFullPath()));
 
@@ -885,6 +952,7 @@ bool GraphicManager::loadAppearanceSprite(
 	wxArrayString& warnings
 ) {
 	using namespace rme::protobuf::appearances;
+	resourceIdentity = CreateSessionId();
 
 	const FrameGroup* frameGroup = nullptr;
 	for (const FrameGroup& candidate : appearance.frame_group()) {
@@ -1489,31 +1557,57 @@ void GameSprite::unloadDC() {
 	dc[SPRITE_SIZE_32x32] = nullptr;
 }
 
-bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending) {
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit) {
+	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
-	if (pixelWidth <= 0 || pixelHeight <= 0 || layers == 0) {
+	const size_t pixelCount = static_cast<size_t>(pixelWidth) * static_cast<size_t>(pixelHeight);
+	if (pixelWidth <= 0 || pixelHeight <= 0 || pixelCount > MaximumPreviewBytes / 4
+		|| layers == 0 || (outfit && (pattern_x == 0 || pattern_y == 0))) {
 		pixels.clear();
 		return false;
 	}
 
-	pixels.assign(static_cast<size_t>(pixelWidth) * pixelHeight * 4, 0);
+	pixels.assign(pixelCount * 4, 0);
 	std::vector<uint8_t> tilePixels(SPRITE_PIXELS_SIZE * 4);
-	for (uint8_t layer = 0; layer < layers; ++layer) {
+	const uint8_t previewLayers = outfit ? pattern_y : layers;
+	for (uint8_t layer = 0; layer < previewLayers; ++layer) {
+		if (outfit && layer > 0 && (layer > 8 || !(outfit->lookAddon & (1u << (layer - 1))))) {
+			continue;
+		}
 		for (uint8_t tileX = 0; tileX < width; ++tileX) {
 			for (uint8_t tileY = 0; tileY < height; ++tileY) {
-				const int index = getIndex(tileX, tileY, layer, 0, 0, 0, 0);
+				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, outfit ? std::min(2, static_cast<int>(pattern_x) - 1) : 0, outfit ? layer : 0, 0, 0);
 				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
 					continue;
 				}
 
 				NormalImage* image = spriteList[index];
-				if (image->fromAssets) {
+				if (outfit && layers > 1) {
+					const size_t templateIndex = static_cast<size_t>(index) + height * width;
+					if (templateIndex >= spriteList.size() || !spriteList[templateIndex]) {
+						pixels.clear();
+						return false;
+					}
+					std::unique_ptr<uint8_t[]> rgba(getTemplateImage(index, *outfit)->getRGBAData());
+					if (!rgba) {
+						pixels.clear();
+						return false;
+					}
+					std::copy_n(rgba.get(), tilePixels.size(), tilePixels.begin());
+				} else if (image->fromAssets) {
 					std::vector<uint8_t> sourcePixels;
 					ClientSpriteSize sourceSize;
 					bool imagePending = false;
-					if (!g_spriteAppearances.getSpritePixelsIfLoaded(image->id, sourcePixels, sourceSize, imagePending)) {
+					bool loaded = false;
+					if (allowAsync) {
+						loaded = g_spriteAppearances.getSpritePixelsIfLoaded(image->id, sourcePixels, sourceSize, imagePending);
+					} else {
+						wxString loadError;
+						loaded = g_spriteAppearances.getSpritePixels(image->id, sourcePixels, sourceSize, loadError);
+					}
+					if (!loaded) {
 						pending = pending || imagePending;
 						pixels.clear();
 						return false;
@@ -1536,7 +1630,7 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 					}
 				} else {
 					bool imagePending = false;
-					uint8_t* rgba = image->getRGBAData(&imagePending);
+					uint8_t* rgba = image->getRGBAData(allowAsync ? &imagePending : nullptr);
 					if (!rgba) {
 						pending = pending || imagePending;
 						pixels.clear();
@@ -1561,6 +1655,66 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 			}
 		}
 	}
+	return true;
+}
+
+bool GameSprite::getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync) {
+	pending = false;
+	fingerprint = {};
+	if (spriteList.empty() || width == 0 || height == 0 || layers == 0 || frames == 0) {
+		return false;
+	}
+
+	constexpr uint64_t FnvOffset = 14695981039346656037ull;
+	constexpr uint64_t FnvPrime = 1099511628211ull;
+	uint64_t primaryHash = FnvOffset;
+	uint64_t secondaryHash = 0x9E3779B97F4A7C15ull;
+	auto hashByte = [&](uint8_t byte) {
+		primaryHash = (primaryHash ^ byte) * FnvPrime;
+		secondaryHash ^= static_cast<uint64_t>(byte) + 0x9E3779B97F4A7C15ull + (secondaryHash << 6) + (secondaryHash >> 2);
+	};
+	auto hashU32 = [&](uint32_t value) {
+		for (int shift = 0; shift < 32; shift += 8) {
+			hashByte(static_cast<uint8_t>((value >> shift) & 0xFF));
+		}
+	};
+
+	hashU32(width);
+	hashU32(height);
+	hashU32(layers);
+	hashU32(pattern_x);
+	hashU32(pattern_y);
+	hashU32(pattern_z);
+	hashU32(frames);
+	hashU32(draw_height);
+	hashU32(drawoffset_x);
+	hashU32(drawoffset_y);
+	hashU32(ground_speed);
+	hashU32(minimap_color);
+	hashU32(has_light ? 1 : 0);
+	hashU32(light.intensity);
+	hashU32(light.color);
+	hashU32(static_cast<uint32_t>(spriteList.size()));
+	for (NormalImage* image : spriteList) {
+		if (!image) {
+			hashU32(0);
+			continue;
+		}
+		bool imagePending = false;
+		uint8_t* rgba = image->getRGBAData(allowAsync ? &imagePending : nullptr);
+		if (!rgba) {
+			pending = pending || imagePending;
+			return false;
+		}
+		for (size_t byte = 0; byte < SPRITE_PIXELS_SIZE * 4; ++byte) {
+			hashByte(rgba[byte]);
+		}
+		delete[] rgba;
+		fingerprint.pixelBytes += SPRITE_PIXELS_SIZE * 4;
+	}
+
+	fingerprint.primary = primaryHash;
+	fingerprint.secondary = secondaryHash;
 	return true;
 }
 
@@ -1598,16 +1752,31 @@ GLuint GameSprite::getHardwareID(int _x, int _y, int _layer, int _count, int _pa
 }
 
 GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _layer, int _count, int _pattern_x, int _pattern_y, int _pattern_z, int _frame) {
+	return getSpriteTexByIndex(getItemImageIndex(_x, _y, _layer, _count, _pattern_x, _pattern_y, _frame));
+}
+
+uint32_t GameSprite::getItemImageIndex(int _x, int _y, int _layer, int _count, int _pattern_x, int _pattern_y, int _frame) const {
 	uint32_t v;
 	if (_count >= 0 && height <= 1 && width <= 1) {
 		v = _count;
 	} else {
 		v = ((((((_frame)*pattern_y + _pattern_y) * pattern_x + _pattern_x) * layers + _layer) * height + _y) * width + _x);
 	}
+	if (numsprites == 0) {
+		return 0;
+	}
 	if (v >= numsprites) {
 		v = (numsprites == 1) ? 0 : (v % numsprites);
 	}
+	return v;
+}
+
+GameSprite::SpriteTex GameSprite::getSpriteTexByIndex(uint32_t v) {
 	SpriteTex st;
+	if (v >= spriteList.size()) {
+		g_gui.gfx.markTextureMissing();
+		return st;
+	}
 	st.texture = spriteList[v]->getHardwareID();
 	if (st.texture == 0) {
 		g_gui.gfx.markTextureMissing();

@@ -34,6 +34,7 @@
 #include "map_format.h"
 #include "spawn_format.h"
 #include "item_id_codec.h"
+#include "multiplayer_session.h"
 
 #include <filesystem>
 #include <optional>
@@ -115,7 +116,7 @@ namespace {
 }
 
 Editor::Editor(CopyBuffer& copybuffer) :
-	actionQueue(newd ActionQueue(*this)),
+	actionQueue(std::make_unique<ActionQueue>(*this)),
 	selection(*this),
 	copybuffer(copybuffer),
 	replace_brush(nullptr) {
@@ -309,13 +310,16 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPo
 		map.unnamed = true;
 	}
 
-	actionQueue = newd ActionQueue(*this);
+	actionQueue = std::make_unique<ActionQueue>(*this);
 }
 
 Editor::~Editor() {
-	UnnamedRenderingLock();
+	multiplayer.reset();
+	// Views and multiplayer are released on the GUI thread before queued
+	// disposal. Clearing selection is data-only and must precede the undo queue;
+	// both still need the map's tile locations to be alive.
 	selection.clear();
-	delete actionQueue;
+	actionQueue.reset();
 }
 
 void Editor::addBatch(BatchAction* action, int stacking_delay) {
@@ -329,6 +333,10 @@ void Editor::addAction(Action* action, int stacking_delay) {
 }
 
 bool Editor::saveMap(const FileName& filename, bool showdialog) {
+	if (multiplayer && !multiplayer->isHost()) {
+		g_gui.PopupDialog("Multiplayer", "Only the host saves the official map. Ask the host to save it.", wxOK);
+		return false;
+	}
 	const std::string originalFilename = map.filename;
 	const std::string originalName = map.name;
 	const bool originallyUnnamed = map.unnamed;
@@ -996,6 +1004,7 @@ void Editor::randomizeSelection() {
 }
 
 void Editor::randomizeMap(bool showdialog) {
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 	if (showdialog) {
 		g_gui.CreateLoadBar("Randomizing map...");
 	}
@@ -1483,7 +1492,7 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 	if (brush->isDoodad()) {
 		BatchAction* batch = actionQueue->createBatch(ACTION_DRAW);
 		Action* action = actionQueue->createAction(batch);
-		BaseMap* buffer_map = g_gui.doodad_buffer_map;
+		BaseMap* buffer_map = g_gui.doodad_buffer_map.get();
 
 		Position delta_pos = offset - Position(0x8000, 0x8000, 0x8);
 		PositionList tilestoborder;
@@ -1884,7 +1893,7 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 		if (alt && dodraw) {
 			// This is exempt from USE_AUTOMAGIC
 			g_gui.doodad_buffer_map->clear();
-			BaseMap* draw_map = g_gui.doodad_buffer_map;
+			BaseMap* draw_map = g_gui.doodad_buffer_map.get();
 
 			for (auto it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 				TileLocation* location = map.createTileL(*it);

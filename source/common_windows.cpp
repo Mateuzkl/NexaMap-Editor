@@ -31,6 +31,8 @@
 #include "application.h"
 #include "common_windows.h"
 
+#include <limits>
+#include <set>
 #include <utility>
 #include "positionctrl.h"
 
@@ -1108,6 +1110,7 @@ FindDialogListBox::~FindDialogListBox() {
 }
 
 void FindDialogListBox::Clear() {
+	SetSelection(wxNOT_FOUND);
 	cleared = true;
 	no_matches = false;
 	brushlist.clear();
@@ -1115,6 +1118,7 @@ void FindDialogListBox::Clear() {
 }
 
 void FindDialogListBox::SetNoMatches() {
+	SetSelection(wxNOT_FOUND);
 	cleared = false;
 	no_matches = true;
 	brushlist.clear();
@@ -1129,13 +1133,22 @@ void FindDialogListBox::AddBrush(Brush* brush) {
 	cleared = false;
 	no_matches = false;
 
-	SetItemCount(GetItemCount() + 1);
 	brushlist.push_back(brush);
+	SetItemCount(brushlist.size());
+}
+
+void FindDialogListBox::SetBrushes(std::vector<Brush*> brushes) {
+	SetSelection(wxNOT_FOUND);
+	brushlist = std::move(brushes);
+	cleared = false;
+	no_matches = brushlist.empty();
+	SetItemCount(no_matches ? 1 : brushlist.size());
+	Refresh();
 }
 
 Brush* FindDialogListBox::GetSelectedBrush() {
 	ssize_t n = GetSelection();
-	if (n == wxNOT_FOUND || no_matches || cleared) {
+	if (n < 0 || no_matches || cleared || static_cast<size_t>(n) >= brushlist.size()) {
 		return nullptr;
 	}
 	return brushlist[n];
@@ -1147,7 +1160,9 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 	} else if (cleared) {
 		dc.DrawText("Please enter your search string.", rect.GetX() + 40, rect.GetY() + 6);
 	} else {
-		ASSERT(n < brushlist.size());
+		if (n >= brushlist.size() || !brushlist[n]) {
+			return;
+		}
 		Sprite* spr = g_gui.gfx.getSprite(brushlist[n]->getLookID());
 		if (spr) {
 			spr->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
@@ -1291,13 +1306,17 @@ EVT_LISTBOX(EDIT_TOWNS_LISTBOX, EditTownsDialog::OnListBoxChange)
 EVT_BUTTON(EDIT_TOWNS_SELECT_TEMPLE, EditTownsDialog::OnClickSelectTemplePosition)
 EVT_BUTTON(EDIT_TOWNS_ADD, EditTownsDialog::OnClickAdd)
 EVT_BUTTON(EDIT_TOWNS_REMOVE, EditTownsDialog::OnClickRemove)
+EVT_BUTTON(EDIT_TOWNS_MOVE_UP, EditTownsDialog::OnClickMoveUp)
+EVT_BUTTON(EDIT_TOWNS_MOVE_DOWN, EditTownsDialog::OnClickMoveDown)
 EVT_BUTTON(wxID_OK, EditTownsDialog::OnClickOK)
 EVT_BUTTON(wxID_CANCEL, EditTownsDialog::OnClickCancel)
 END_EVENT_TABLE()
 
 EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
-	wxDialog(parent, wxID_ANY, "Towns", wxDefaultPosition, wxSize(280, 330)),
-	editor(editor) {
+	wxDialog(parent, wxID_ANY, "Towns", wxDefaultPosition, wxSize(320, 380)),
+	editor(editor),
+	max_town_id(0),
+	current_selection(wxNOT_FOUND) {
 	Map& map = editor.map;
 
 	// Create topsizer
@@ -1306,7 +1325,9 @@ EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
 
 	for (TownMap::const_iterator town_iter = map.towns.begin(); town_iter != map.towns.end(); ++town_iter) {
 		Town* town = town_iter->second;
-		town_list.push_back(newd Town(*town));
+		Town* town_copy = newd Town(*town);
+		town_list.push_back(town_copy);
+		original_town_ids[town_copy] = town->getID();
 		if (max_town_id < town->getID()) {
 			max_town_id = town->getID();
 		}
@@ -1321,19 +1342,25 @@ EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
 	tmpsizer->Add(remove_button = newd wxButton(this, EDIT_TOWNS_REMOVE, "Remove"), 0, wxRIGHT | wxTOP, 5);
 	sizer->Add(tmpsizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
+	tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
+	tmpsizer->Add(move_up_button = newd wxButton(this, EDIT_TOWNS_MOVE_UP, "Move Up"), 1, wxRIGHT | wxTOP, 5);
+	tmpsizer->Add(move_down_button = newd wxButton(this, EDIT_TOWNS_MOVE_DOWN, "Move Down"), 1, wxTOP, 5);
+	sizer->Add(tmpsizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+
 	// House options
-	tmpsizer = newd wxStaticBoxSizer(wxHORIZONTAL, this, "Name / ID");
-	name_field = newd wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(190, 20), 0, wxTextValidator(wxFILTER_ASCII, &town_name));
+	auto* nameBox = newd wxStaticBox(this, wxID_ANY, "Name / ID");
+	tmpsizer = newd wxStaticBoxSizer(nameBox, wxHORIZONTAL);
+	name_field = newd wxTextCtrl(nameBox, wxID_ANY, "", wxDefaultPosition, wxSize(190, 20), 0, wxTextValidator(wxFILTER_ASCII, &town_name));
 	tmpsizer->Add(name_field, 2, wxEXPAND | wxLEFT | wxBOTTOM, 5);
 
-	id_field = newd wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(40, 20), 0, wxTextValidator(wxFILTER_NUMERIC, &town_id));
+	id_field = newd wxTextCtrl(nameBox, wxID_ANY, "", wxDefaultPosition, wxSize(40, 20), 0, wxTextValidator(wxFILTER_NUMERIC, &town_id));
 	id_field->Enable(false);
 	tmpsizer->Add(id_field, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
 	sizer->Add(tmpsizer, 0, wxEXPAND | wxALL, 10);
 
 	// Temple position
 	temple_position = newd PositionCtrl(this, "Temple Position", 0, 0, 0, map.getWidth(), map.getHeight());
-	select_position_button = newd wxButton(this, EDIT_TOWNS_SELECT_TEMPLE, "Go To");
+	select_position_button = newd wxButton(temple_position->GetStaticBox(), EDIT_TOWNS_SELECT_TEMPLE, "Go To");
 	temple_position->Add(select_position_button, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
 	sizer->Add(temple_position, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
@@ -1355,103 +1382,79 @@ EditTownsDialog::~EditTownsDialog() {
 }
 
 void EditTownsDialog::BuildListBox(bool doselect) {
-	long tmplong = 0;
 	max_town_id = 0;
 	wxArrayString town_name_list;
-	uint32_t selection_before = 0;
-
-	if (doselect && id_field->GetValue().ToLong(&tmplong)) {
-		uint32_t old_town_id = tmplong;
-
-		for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
-			if (old_town_id == (*town_iter)->getID()) {
-				selection_before = (*town_iter)->getID();
-				break;
-			}
-		}
-	}
+	Town* selected_town = current_selection >= 0 && static_cast<size_t>(current_selection) < town_list.size()
+		? town_list[current_selection]
+		: nullptr;
 
 	for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
 		Town* town = *town_iter;
-		town_name_list.Add(wxstr(town->getName()));
+		wxString label;
+		label << town->getID() << " - " << wxstr(town->getName());
+		town_name_list.Add(label);
 		if (max_town_id < town->getID()) {
 			max_town_id = town->getID();
 		}
 	}
 
 	town_listbox->Set(town_name_list);
-	remove_button->Enable(town_listbox->GetCount() != 0);
-	select_position_button->Enable(false);
 
 	if (doselect) {
-		if (selection_before) {
-			int i = 0;
-			for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
-				if (selection_before == (*town_iter)->getID()) {
-					town_listbox->SetSelection(i);
-					return;
-				}
-				++i;
-			}
-		}
-		UpdateSelection(0);
-	}
-}
-
-void EditTownsDialog::UpdateSelection(int new_selection) {
-	long tmplong;
-
-	// Save old values
-	if (town_list.size() > 0) {
-		if (id_field->GetValue().ToLong(&tmplong)) {
-			uint32_t old_town_id = tmplong;
-
-			Town* old_town = nullptr;
-
-			for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
-				if (old_town_id == (*town_iter)->getID()) {
-					old_town = *town_iter;
+		int selection = town_list.empty() ? wxNOT_FOUND : 0;
+		if (selected_town) {
+			for (size_t index = 0; index < town_list.size(); ++index) {
+				if (town_list[index] == selected_town) {
+					selection = static_cast<int>(index);
 					break;
 				}
 			}
-
-			if (old_town) {
-				editor.map.getOrCreateTile(old_town->getTemplePosition())->getLocation()->decreaseTownCount();
-
-				Position templePos = temple_position->GetPosition();
-
-				editor.map.getOrCreateTile(templePos)->getLocation()->increaseTownCount();
-
-				// printf("Changed town %d:%s\n", old_town_id, old_town->getName().c_str());
-				// printf("New values %d:%s:%d:%d:%d\n", town_id, town_name.c_str(), templepos.x, templepos.y, templepos.z);
-				old_town->setTemplePosition(templePos);
-
-				wxString new_name = name_field->GetValue();
-				wxString old_name = wxstr(old_town->getName());
-
-				old_town->setName(nstr(new_name));
-				if (new_name != old_name) {
-					// Name has changed, update list
-					BuildListBox(false);
-				}
-			}
 		}
+		current_selection = wxNOT_FOUND;
+		UpdateSelection(selection);
+	} else {
+		UpdateButtons();
+	}
+}
+
+void EditTownsDialog::SaveCurrentTown() {
+	if (current_selection < 0 || static_cast<size_t>(current_selection) >= town_list.size()) {
+		return;
 	}
 
-	// Clear fields
+	Town* town = town_list[current_selection];
+	town->setName(nstr(name_field->GetValue()));
+	town->setTemplePosition(temple_position->GetPosition());
+
+	if (static_cast<unsigned int>(current_selection) < town_listbox->GetCount()) {
+		wxString label;
+		label << town->getID() << " - " << wxstr(town->getName());
+		town_listbox->SetString(current_selection, label);
+	}
+}
+
+void EditTownsDialog::UpdateButtons() {
+	const bool valid_selection = current_selection >= 0 && static_cast<size_t>(current_selection) < town_list.size();
+	remove_button->Enable(valid_selection);
+	select_position_button->Enable(valid_selection);
+	move_up_button->Enable(valid_selection && current_selection > 0);
+	move_down_button->Enable(valid_selection && static_cast<size_t>(current_selection + 1) < town_list.size());
+}
+
+void EditTownsDialog::UpdateSelection(int new_selection) {
+	SaveCurrentTown();
+
 	town_name.Clear();
 	town_id.Clear();
 
-	if (town_list.size() > size_t(new_selection)) {
+	if (new_selection >= 0 && static_cast<size_t>(new_selection) < town_list.size()) {
+		current_selection = new_selection;
 		name_field->Enable(true);
 		temple_position->Enable(true);
-		select_position_button->Enable(true);
 
-		// Change the values to reflect the newd selection
 		Town* town = town_list[new_selection];
 		ASSERT(town);
 
-		// printf("Selected %d:%s\n", new_selection, town->getName().c_str());
 		town_name << wxstr(town->getName());
 		name_field->SetValue(town_name);
 		town_id << long(town->getID());
@@ -1459,10 +1462,14 @@ void EditTownsDialog::UpdateSelection(int new_selection) {
 		temple_position->SetPosition(town->getTemplePosition());
 		town_listbox->SetSelection(new_selection);
 	} else {
+		current_selection = wxNOT_FOUND;
+		name_field->SetValue("");
+		id_field->SetValue("");
 		name_field->Enable(false);
 		temple_position->Enable(false);
-		select_position_button->Enable(false);
+		town_listbox->SetSelection(wxNOT_FOUND);
 	}
+	UpdateButtons();
 	Refresh();
 }
 
@@ -1476,129 +1483,202 @@ void EditTownsDialog::OnClickSelectTemplePosition(wxCommandEvent& WXUNUSED(event
 }
 
 void EditTownsDialog::OnClickAdd(wxCommandEvent& WXUNUSED(event)) {
+	SaveCurrentTown();
+
 	Town* new_town = newd Town(++max_town_id);
 	new_town->setName("Unnamed Town");
 	new_town->setTemplePosition(Position(0, 0, 0));
 	town_list.push_back(new_town);
 
-	editor.map.getOrCreateTile(Position(0, 0, 0))->getLocation()->increaseTownCount();
-
+	current_selection = wxNOT_FOUND;
 	BuildListBox(false);
 	UpdateSelection(static_cast<int>(town_list.size() - 1));
-	town_listbox->SetSelection(static_cast<int>(town_list.size() - 1));
 }
 
 void EditTownsDialog::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {
-	long tmplong;
-	if (id_field->GetValue().ToLong(&tmplong)) {
-		uint32_t old_town_id = tmplong;
+	SaveCurrentTown();
+	if (current_selection < 0 || static_cast<size_t>(current_selection) >= town_list.size()) {
+		return;
+	}
 
-		Town* town = nullptr;
+	const int selection_index = current_selection;
+	Town* town = town_list[selection_index];
+	const uint32_t original_town_id = GetOriginalTownId(town);
 
-		auto town_iter = town_list.begin();
-
-		int selection_index = 0;
-		while (town_iter != town_list.end()) {
-			if (old_town_id == (*town_iter)->getID()) {
-				town = *town_iter;
-				break;
-			}
-			++selection_index;
-			++town_iter;
-		}
-		if (!town) {
-			return;
-		}
-
-		Map& map = editor.map;
-		for (auto house_iter = map.houses.begin(); house_iter != map.houses.end(); ++house_iter) {
+	if (original_town_id != 0) {
+		for (auto house_iter = editor.map.houses.begin(); house_iter != editor.map.houses.end(); ++house_iter) {
 			House* house = house_iter->second;
-			if (house->townid == town->getID()) {
+			if (house->townid == original_town_id) {
 				g_gui.PopupDialog(this, "Error", "You cannot delete a town which still has houses associated with it.", wxOK);
 				return;
 			}
 		}
-
-		// remove town flag from tile
-		editor.map.getOrCreateTile(town->getTemplePosition())->getLocation()->decreaseTownCount();
-
-		// remove town object
-		delete town;
-		town_list.erase(town_iter);
-		BuildListBox(false);
-		UpdateSelection(selection_index - 1);
 	}
+
+	original_town_ids.erase(town);
+	delete town;
+	town_list.erase(town_list.begin() + selection_index);
+
+	current_selection = wxNOT_FOUND;
+	BuildListBox(false);
+	const int next_selection = town_list.empty()
+		? wxNOT_FOUND
+		: std::min(selection_index, static_cast<int>(town_list.size() - 1));
+	UpdateSelection(next_selection);
+}
+
+uint32_t EditTownsDialog::GetOriginalTownId(const Town* town) const {
+	const auto original = original_town_ids.find(town);
+	return original != original_town_ids.end() ? original->second : 0;
+}
+
+void EditTownsDialog::MoveSelectedTown(int offset) {
+	if (current_selection < 0 || static_cast<size_t>(current_selection) >= town_list.size()) {
+		return;
+	}
+
+	const int target_selection = current_selection + offset;
+	if (target_selection < 0 || static_cast<size_t>(target_selection) >= town_list.size()) {
+		return;
+	}
+
+	SaveCurrentTown();
+	Town* selected_town = town_list[current_selection];
+	Town* displaced_town = town_list[target_selection];
+	const uint32_t selected_id = selected_town->getID();
+	selected_town->setID(displaced_town->getID());
+	displaced_town->setID(selected_id);
+	std::swap(town_list[current_selection], town_list[target_selection]);
+
+	current_selection = wxNOT_FOUND;
+	BuildListBox(false);
+	UpdateSelection(target_selection);
+}
+
+void EditTownsDialog::OnClickMoveUp(wxCommandEvent& WXUNUSED(event)) {
+	MoveSelectedTown(-1);
+}
+
+void EditTownsDialog::OnClickMoveDown(wxCommandEvent& WXUNUSED(event)) {
+	MoveSelectedTown(1);
 }
 
 void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
-	long tmplong = 0;
-
-	if (Validate() && TransferDataFromWindow()) {
-		// Save old values
-		if (town_list.size() > 0 && id_field->GetValue().ToLong(&tmplong)) {
-			uint32_t old_town_id = tmplong;
-
-			Town* old_town = nullptr;
-
-			for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
-				if (old_town_id == (*town_iter)->getID()) {
-					old_town = *town_iter;
-					break;
-				}
-			}
-
-			if (old_town) {
-				editor.map.getOrCreateTile(old_town->getTemplePosition())->getLocation()->decreaseTownCount();
-
-				Position templePos = temple_position->GetPosition();
-
-				editor.map.getOrCreateTile(templePos)->getLocation()->increaseTownCount();
-
-				// printf("Changed town %d:%s\n", old_town_id, old_town->getName().c_str());
-				// printf("New values %d:%s:%d:%d:%d\n", town_id, town_name.c_str(), templepos.x, templepos.y, templepos.z);
-				old_town->setTemplePosition(templePos);
-
-				wxString new_name = name_field->GetValue();
-				wxString old_name = wxstr(old_town->getName());
-
-				old_town->setName(nstr(new_name));
-				if (new_name != old_name) {
-					// Name has changed, update list
-					BuildListBox(true);
-				}
-			}
-		}
-
-		Towns& towns = editor.map.towns;
-
-		// Verify the newd information
-		for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
-			Town* town = *town_iter;
-			if (town->getName() == "") {
-				g_gui.PopupDialog(this, "Error", "You can't have a town with an empty name.", wxOK);
-				return;
-			}
-			if (!town->getTemplePosition().isValid() || town->getTemplePosition().x > editor.map.getWidth() || town->getTemplePosition().y > editor.map.getHeight()) {
-				wxString msg;
-				msg << "The town " << wxstr(town->getName()) << " has an invalid temple position.";
-				g_gui.PopupDialog(this, "Error", msg, wxOK);
-				return;
-			}
-		}
-
-		// Clear old towns
-		towns.clear();
-
-		// Build the newd town map
-		for (auto town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
-			towns.addTown(*town_iter);
-		}
-		town_list.clear();
-		editor.map.doChange();
-
-		EndModal(wxID_OK);
-		g_gui.RefreshPalettes();
+	if (!Validate() || !TransferDataFromWindow()) {
+		return;
 	}
+
+	SaveCurrentTown();
+
+	std::set<uint32_t> assigned_ids;
+	std::map<uint32_t, uint32_t> town_id_remap;
+	bool town_ids_changed = false;
+	for (Town* town : town_list) {
+		if (town->getName().empty()) {
+			g_gui.PopupDialog(this, "Error", "You can't have a town with an empty name.", wxOK);
+			return;
+		}
+		if (town->getID() == 0 || !assigned_ids.insert(town->getID()).second) {
+			g_gui.PopupDialog(this, "Error", "Town IDs must be unique and greater than zero.", wxOK);
+			return;
+		}
+		if (!town->getTemplePosition().isValid() || town->getTemplePosition().x > editor.map.getWidth() || town->getTemplePosition().y > editor.map.getHeight()) {
+			wxString msg;
+			msg << "The town " << wxstr(town->getName()) << " has an invalid temple position.";
+			g_gui.PopupDialog(this, "Error", msg, wxOK);
+			return;
+		}
+
+		const uint32_t original_id = GetOriginalTownId(town);
+		if (original_id != 0) {
+			town_id_remap[original_id] = town->getID();
+			town_ids_changed = town_ids_changed || original_id != town->getID();
+		}
+	}
+
+	std::vector<std::pair<House*, uint32_t>> pending_house_updates;
+	for (auto house_iter = editor.map.houses.begin(); house_iter != editor.map.houses.end(); ++house_iter) {
+		House* house = house_iter->second;
+		const auto remap = town_id_remap.find(house->townid);
+		if (remap == town_id_remap.end()) {
+			wxString msg;
+			msg << "House " << house->getID() << " references unknown Town ID " << house->townid << ". No changes were applied.";
+			g_gui.PopupDialog(this, "Error", msg, wxOK);
+			return;
+		}
+		pending_house_updates.emplace_back(house, remap->second);
+	}
+
+	std::vector<std::pair<Depot*, uint16_t>> pending_depot_updates;
+	bool depot_id_overflow = false;
+	bool depot_town_removed = false;
+	auto collect_depot_updates = [&](Map&, Tile*, Item* item, long long) {
+		auto* depot = dynamic_cast<Depot*>(item);
+		if (!depot || depot->getDepotID() == 0) {
+			return;
+		}
+
+		const auto remap = town_id_remap.find(depot->getDepotID());
+		if (remap == town_id_remap.end()) {
+			if (editor.map.towns.getTown(depot->getDepotID()) != nullptr) {
+				depot_town_removed = true;
+			}
+			return;
+		}
+		if (remap->second > std::numeric_limits<uint16_t>::max()) {
+			depot_id_overflow = true;
+			return;
+		}
+		pending_depot_updates.emplace_back(depot, static_cast<uint16_t>(remap->second));
+	};
+	const bool town_reference_structure_changed = town_ids_changed || town_id_remap.size() != editor.map.towns.count();
+	if (town_reference_structure_changed) {
+		foreach_ItemOnMap(editor.map, collect_depot_updates, false);
+	}
+	if (depot_town_removed) {
+		g_gui.PopupDialog(this, "Error", "You cannot delete a town which still has depots associated with it. No changes were applied.", wxOK);
+		return;
+	}
+	if (depot_id_overflow) {
+		g_gui.PopupDialog(this, "Error", "A reordered Town ID does not fit the 16-bit Depot ID format. No changes were applied.", wxOK);
+		return;
+	}
+
+	// Build the complete replacement before touching the active map. Unique IDs
+	// were validated above, so every insertion succeeds and ownership transfers
+	// as one swap below.
+	Towns replacement_towns;
+	for (Town* town : town_list) {
+		const bool added = replacement_towns.addTown(town);
+		ASSERT(added);
+		(void)added;
+	}
+	town_list.clear();
+
+	for (auto town_iter = editor.map.towns.begin(); town_iter != editor.map.towns.end(); ++town_iter) {
+		TileLocation* location = editor.map.getOrCreateTile(town_iter->second->getTemplePosition())->getLocation();
+		if (location->getTownCount() > 0) {
+			location->decreaseTownCount();
+		}
+	}
+	for (auto town_iter = replacement_towns.begin(); town_iter != replacement_towns.end(); ++town_iter) {
+		editor.map.getOrCreateTile(town_iter->second->getTemplePosition())->getLocation()->increaseTownCount();
+	}
+
+	for (const auto& update : pending_house_updates) {
+		update.first->townid = update.second;
+	}
+	for (const auto& update : pending_depot_updates) {
+		update.first->setDepotID(update.second);
+	}
+
+	editor.map.towns.swap(replacement_towns);
+	original_town_ids.clear();
+	editor.map.doChange();
+
+	EndModal(wxID_OK);
+	g_gui.RefreshPalettes();
+	g_gui.RefreshView();
 }
 
 void EditTownsDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {

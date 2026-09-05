@@ -23,6 +23,7 @@
 #include "editor.h"
 #include "gui.h"
 #include "house_paste_transaction.h"
+#include "multiplayer_session.h"
 
 namespace {
 	struct HouseRegistryChange {
@@ -302,10 +303,15 @@ bool Action::commit() {
 	if (commited) {
 		return true;
 	}
+	if (editor.multiplayer && editor.multiplayer->active() && !editor.multiplayer->internalChange() && type != ACTION_SELECT && type != ACTION_REMOTE && !editor.multiplayer->canEdit()) {
+		return false;
+	}
 	if (!canApplyHouseChanges()) {
 		return false;
 	}
 
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
+	const MapChunkChange chunkChange = type == ACTION_SELECT ? MapChunkChange::Presentation : MapChunkChange::Content;
 	editor.selection.start(Selection::INTERNAL);
 	ChangeList::const_iterator it = changes.begin();
 	while (it != changes.end()) {
@@ -317,10 +323,10 @@ bool Action::commit() {
 				ASSERT(newtile);
 				Position pos = newtile->getPosition();
 
-				Tile* oldtile = editor.map.swapTile(pos, newtile);
+				Tile* oldtile = editor.map.swapTile(pos, newtile, chunkChange);
 				TileLocation* location = newtile->getLocation();
 
-				newtile->update();
+				newtile->update(chunkChange);
 
 				// std::cout << "\tSwitched tile at " << pos.x << ";" << pos.y << ";" << pos.z << " from " << (void*)oldtile << " to " << *data <<  std::endl;
 				if (newtile->isSelected()) {
@@ -456,6 +462,8 @@ bool Action::undo() {
 		return false;
 	}
 
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
+	const MapChunkChange chunkChange = type == ACTION_SELECT ? MapChunkChange::Presentation : MapChunkChange::Content;
 	editor.selection.start(Selection::INTERNAL);
 	auto it = changes.rbegin();
 
@@ -468,7 +476,7 @@ bool Action::undo() {
 				ASSERT(oldtile);
 				Position pos = oldtile->getPosition();
 
-				Tile* newtile = editor.map.swapTile(pos, oldtile);
+				Tile* newtile = editor.map.swapTile(pos, oldtile, chunkChange);
 
 				if (oldtile->isSelected()) {
 					editor.selection.addInternal(oldtile);
@@ -578,7 +586,11 @@ BatchAction::BatchAction(Editor& editor, ActionIdentifier ident) :
 	timestamp(0),
 	memory_size(0),
 	type(ident) {
-	////
+	if (editor.multiplayer && editor.multiplayer->active() && !editor.multiplayer->internalChange()) {
+		multiplayerGroup = editor.multiplayer.get();
+		multiplayerLifetime = multiplayerGroup->lifetimeToken();
+		multiplayerGroup->beginActionGroup();
+	}
 }
 
 BatchAction::~BatchAction() {
@@ -586,6 +598,9 @@ BatchAction::~BatchAction() {
 		delete action;
 	}
 	batch.clear();
+	if (multiplayerGroup && !multiplayerLifetime.expired()) {
+		multiplayerGroup->endActionGroup();
+	}
 }
 
 size_t BatchAction::memsize(bool recalc) const {
@@ -663,6 +678,7 @@ void BatchAction::rollback() {
 }
 
 bool BatchAction::commit() {
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
 	std::vector<Action*> committedActions;
 	for (Action* action : batch) {
 		if (action && !action->isCommited()) {
@@ -761,6 +777,7 @@ bool BatchAction::canRedoHouseChanges() const {
 }
 
 bool BatchAction::undo() {
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
 	if (!canUndoHouseChanges()) {
 		return false;
 	}
@@ -781,6 +798,7 @@ bool BatchAction::undo() {
 }
 
 bool BatchAction::redo() {
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
 	if (!canRedoHouseChanges()) {
 		return false;
 	}
@@ -855,6 +873,12 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 	}
 
 	// Update title
+	if (editor.multiplayer && editor.multiplayer->active() && !editor.multiplayer->internalChange()) {
+		editor.multiplayer->consumeBatch(batch);
+		return;
+	}
+
+	// Update title
 	if (editor.map.doChange()) {
 		g_gui.UpdateTitle();
 	}
@@ -920,6 +944,9 @@ void ActionQueue::addAction(Action* action, int stacking_delay) {
 }
 
 bool ActionQueue::undo() {
+	if (editor.multiplayer && editor.multiplayer->active()) {
+		return editor.multiplayer->undo();
+	}
 	if (current > 0) {
 		BatchAction* batch = actions[current - 1];
 		if (!batch->undo()) {
@@ -932,6 +959,9 @@ bool ActionQueue::undo() {
 }
 
 bool ActionQueue::redo() {
+	if (editor.multiplayer && editor.multiplayer->active()) {
+		return editor.multiplayer->redo();
+	}
 	if (current < actions.size()) {
 		BatchAction* batch = actions[current];
 		if (!batch->redo()) {
@@ -949,6 +979,14 @@ void ActionQueue::clear() {
 		it = actions.erase(it);
 	}
 	current = 0;
+	memory_size = 0;
+}
+
+bool ActionQueue::canUndo() {
+	return editor.multiplayer && editor.multiplayer->active() ? editor.multiplayer->canUndo() : current > 0;
+}
+bool ActionQueue::canRedo() {
+	return editor.multiplayer && editor.multiplayer->active() ? editor.multiplayer->canRedo() : current < actions.size();
 }
 
 ActionIdentifier ActionQueue::getUndoType() const {

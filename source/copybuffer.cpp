@@ -22,6 +22,9 @@
 #include "gui.h"
 #include "creature.h"
 
+#include <algorithm>
+#include <memory>
+
 namespace {
 	HouseSnapshot makeRecoveredHouseSnapshot(uint32_t houseId) {
 		HouseSnapshot recovered;
@@ -44,6 +47,16 @@ BaseMap& CopyBuffer::getBufferMap() {
 
 CopyBuffer::~CopyBuffer() = default;
 
+void CopyBuffer::swap(CopyBuffer& other) noexcept {
+	std::swap(tiles, other.tiles);
+	std::swap(copyPos, other.copyPos);
+	std::swap(minimumPosition, other.minimumPosition);
+	std::swap(maximumPosition, other.maximumPosition);
+	std::swap(boundsValid, other.boundsValid);
+	std::swap(sourceMapSessionId, other.sourceMapSessionId);
+	std::swap(houses, other.houses);
+}
+
 Position CopyBuffer::getPosition() const {
 	ASSERT(tiles);
 	return copyPos;
@@ -53,12 +66,45 @@ void CopyBuffer::clear() {
 	tiles.reset();
 	sourceMapSessionId = InvalidSessionId;
 	houses.clear();
+	resetBounds();
 }
 
 void CopyBuffer::replace(std::unique_ptr<BaseMap> map, const Position& position) {
 	clear();
 	tiles = std::move(map);
 	copyPos = position;
+	rebuildBounds();
+}
+
+void CopyBuffer::resetBounds() {
+	minimumPosition = Position();
+	maximumPosition = Position();
+	boundsValid = false;
+}
+
+void CopyBuffer::includePosition(const Position& position) {
+	if (!boundsValid) {
+		minimumPosition = position;
+		maximumPosition = position;
+		boundsValid = true;
+		return;
+	}
+	minimumPosition.x = std::min(minimumPosition.x, position.x);
+	minimumPosition.y = std::min(minimumPosition.y, position.y);
+	minimumPosition.z = std::min(minimumPosition.z, position.z);
+	maximumPosition.x = std::max(maximumPosition.x, position.x);
+	maximumPosition.y = std::max(maximumPosition.y, position.y);
+	maximumPosition.z = std::max(maximumPosition.z, position.z);
+}
+
+void CopyBuffer::rebuildBounds() {
+	resetBounds();
+	if (!tiles) {
+		return;
+	}
+	for (MapIterator iterator = tiles->begin(); iterator != tiles->end(); ++iterator) {
+		includePosition((*iterator)->getPosition());
+	}
 }
 
 void CopyBuffer::captureHouse(const Map& map, uint32_t houseId) {
@@ -128,6 +174,7 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 		}
 
 		tiles->setTile(copied_tile);
+		includePosition(copied_tile->getPosition());
 
 		if (copied_tile->getX() < copyPos.x) {
 			copyPos.x = copied_tile->getX();
@@ -141,6 +188,7 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	std::ostringstream ss;
 	ss << "Copied " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+	g_gui.CaptureCrossClientCopy(*this);
 }
 
 void CopyBuffer::cut(Editor& editor, int floor) {
@@ -197,6 +245,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 		}
 
 		tiles->setTile(copied_tile->getPosition(), copied_tile);
+		includePosition(copied_tile->getPosition());
 
 		if (copied_tile->getX() < copyPos.x) {
 			copyPos.x = copied_tile->getX();
@@ -249,6 +298,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	std::stringstream ss;
 	ss << "Cut out " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+	g_gui.CaptureCrossClientCopy(*this);
 }
 
 void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
@@ -256,6 +306,15 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		return;
 	}
 
+	const uint64_t totalTiles = tiles->size();
+	const bool showProgress = totalTiles >= 4096;
+	std::unique_ptr<ScopedLoadingBar> progress;
+	if (showProgress) {
+		progress = std::make_unique<ScopedLoadingBar>(wxString::Format("Preparing large paste (%llu tiles)...", static_cast<unsigned long long>(totalTiles)));
+		ScopedLoadingBar::SetLoadScale(0, 65);
+	}
+
+	constexpr size_t ActionChunkSize = 1024;
 	BatchAction* batchAction = editor.actionQueue->createBatch(ACTION_PASTE_TILES);
 	std::set<uint32_t> pasted_house_ids;
 	for (MapIterator it = tiles->begin(); it != tiles->end(); ++it) {
@@ -305,7 +364,14 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 	}
 
 	Action* action = editor.actionQueue->createAction(batchAction);
+	uint64_t processedTiles = 0;
+	uint64_t pastedTiles = 0;
 	for (MapIterator it = tiles->begin(); it != tiles->end(); ++it) {
+		++processedTiles;
+		if (showProgress && processedTiles % 256 == 0) {
+			const int percentage = static_cast<int>(std::min<uint64_t>(99, processedTiles * 100 / std::max<uint64_t>(1, totalTiles)));
+			ScopedLoadingBar::SetLoadDone(percentage, wxString::Format("Preparing destination tiles (%llu / %llu)...", static_cast<unsigned long long>(processedTiles), static_cast<unsigned long long>(totalTiles)));
+		}
 		Tile* buffer_tile = (*it)->get();
 		Position pos = buffer_tile->getPosition() - copyPos + toPosition;
 
@@ -351,10 +417,24 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		editor.map.createTile(pos.x + 1, pos.y + 1, pos.z);
 
 		action->addChange(newd Change(new_dest_tile));
+		++pastedTiles;
+		if (action->size() >= ActionChunkSize) {
+			batchAction->addAndCommitAction(action);
+			action = editor.actionQueue->createAction(batchAction);
+		}
 	}
 	batchAction->addAndCommitAction(action);
+	if (batchAction->size() == 0) {
+		delete batchAction;
+		g_gui.SetStatusText("Nothing was pasted because the complete area is outside the valid map bounds.");
+		return;
+	}
 
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_PASTE)) {
+		if (showProgress) {
+			ScopedLoadingBar::SetLoadScale(65, 90);
+			ScopedLoadingBar::SetLoadDone(1, "Updating borders around the pasted area...");
+		}
 		action = editor.actionQueue->createAction(batchAction);
 		TileList borderize_tiles;
 		Map& map = editor.map;
@@ -416,7 +496,14 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		borderize_tiles.sort();
 		borderize_tiles.unique();
 
+		uint64_t processedBorders = 0;
+		const uint64_t totalBorders = borderize_tiles.size();
 		for (Tile* tile : borderize_tiles) {
+			++processedBorders;
+			if (showProgress && processedBorders % 256 == 0) {
+				const int percentage = static_cast<int>(std::min<uint64_t>(99, processedBorders * 100 / std::max<uint64_t>(1, totalBorders)));
+				ScopedLoadingBar::SetLoadDone(percentage, wxString::Format("Updating paste borders (%llu / %llu)...", static_cast<unsigned long long>(processedBorders), static_cast<unsigned long long>(totalBorders)));
+			}
 			if (tile) {
 				Tile* newTile = tile->deepCopy(editor.map);
 				newTile->borderize(&map);
@@ -434,7 +521,12 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		batchAction->addAndCommitAction(action);
 	}
 
+	if (showProgress) {
+		ScopedLoadingBar::SetLoadScale(90, 99);
+		ScopedLoadingBar::SetLoadDone(1, "Finalizing large paste...");
+	}
 	editor.addBatch(batchAction);
+	g_gui.SetStatusText(wxString::Format("Pasted %llu tiles successfully.", static_cast<unsigned long long>(pastedTiles)));
 	if (created_houses) {
 		g_gui.RefreshPalettes(nullptr, true, false);
 	}
@@ -442,4 +534,17 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 
 bool CopyBuffer::canPaste() const {
 	return tiles && tiles->size() != 0;
+}
+
+uint64_t CopyBuffer::getTileCount() const {
+	return tiles ? tiles->size() : 0;
+}
+
+bool CopyBuffer::getBounds(Position& minimum, Position& maximum) const {
+	if (!boundsValid) {
+		return false;
+	}
+	minimum = minimumPosition;
+	maximum = maximumPosition;
+	return true;
 }

@@ -10,10 +10,12 @@
 #include "preferences.h"
 #include "settings.h"
 #include "theme.h"
+#include "workspace_session.h"
 
 #include <wx/access.h>
 #include <wx/dcbuffer.h>
 #include <wx/display.h>
+#include <wx/dirdlg.h>
 #include <wx/filename.h>
 
 #include <algorithm>
@@ -25,8 +27,8 @@
 wxDEFINE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 
 namespace {
-	constexpr int NAVIGATION_WIDTH_DIP = 300;
-	constexpr int NAVIGATION_ITEM_HEIGHT_DIP = 72;
+	constexpr int NAVIGATION_WIDTH_DIP = 178;
+	constexpr int NAVIGATION_ITEM_HEIGHT_DIP = 42;
 
 	namespace WelcomeThemeStyle {
 		wxColour Get(Theme::Role role) {
@@ -43,7 +45,7 @@ namespace {
 			m_default_action(defaultAction),
 			m_action(std::move(action)),
 			m_selected_state(selectedState),
-			m_selected(std::move(selected)) {}
+			m_selected(std::move(selected)) { }
 
 		wxAccStatus GetName(int childId, wxString* name) override {
 			if (childId != wxACC_SELF || !name) {
@@ -247,10 +249,110 @@ namespace {
 	wxRect Deflated(wxRect rect, int amount) {
 		return rect.Deflate(amount);
 	}
+
+	class WorkspaceCardPanel final : public wxPanel {
+	public:
+		explicit WorkspaceCardPanel(wxWindow* parent) :
+			wxPanel(parent, wxID_ANY) {
+			SetBackgroundStyle(wxBG_STYLE_PAINT);
+			Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
+				wxAutoBufferedPaintDC dc(this);
+				const wxRect bounds(wxPoint(0, 0), GetClientSize());
+				dc.SetBackground(wxBrush(WelcomeThemeStyle::Get(Theme::Role::Background)));
+				dc.Clear();
+				dc.SetBrush(wxBrush(WelcomeThemeStyle::Get(Theme::Role::RaisedSurface)));
+				dc.SetPen(wxPen(WelcomeThemeStyle::Get(Theme::Role::Border), FROM_DIP(this, 1)));
+				dc.DrawRoundedRectangle(Deflated(bounds, FROM_DIP(this, 1)), FROM_DIP(this, 8));
+			});
+		}
+	};
+
+	class WorkspaceActionButton final : public wxControl {
+	public:
+		WorkspaceActionButton(wxWindow* parent, const wxString& label, bool primary = false) :
+			wxControl(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE | wxWANTS_CHARS),
+			label(label),
+			primary(primary) {
+			SetBackgroundStyle(wxBG_STYLE_PAINT);
+			SetMinSize(FROM_DIP(parent, wxSize(-1, 34)));
+			SetName(label);
+			Bind(wxEVT_PAINT, &WorkspaceActionButton::OnPaint, this);
+			Bind(wxEVT_ENTER_WINDOW, [this](wxMouseEvent& event) {
+				hovered = true;
+				SetCursor(IsEnabled() ? wxCursor(wxCURSOR_HAND) : wxNullCursor);
+				Refresh();
+				event.Skip();
+			});
+			Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent& event) {
+				hovered = false;
+				pressed = false;
+				SetCursor(wxNullCursor);
+				Refresh();
+				event.Skip();
+			});
+			Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& event) {
+				if (!IsEnabled()) {
+					return;
+				}
+				SetFocus();
+				pressed = true;
+				Refresh();
+				event.Skip();
+			});
+			Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& event) {
+				const bool activate = pressed && IsEnabled() && GetClientRect().Contains(event.GetPosition());
+				pressed = false;
+				Refresh();
+				if (activate) {
+					wxCommandEvent command(wxEVT_BUTTON, GetId());
+					command.SetEventObject(this);
+					ProcessWindowEvent(command);
+				}
+			});
+			Bind(wxEVT_KEY_DOWN, [this](wxKeyEvent& event) {
+				if (IsEnabled() && (event.GetKeyCode() == WXK_RETURN || event.GetKeyCode() == WXK_NUMPAD_ENTER || event.GetKeyCode() == WXK_SPACE)) {
+					wxCommandEvent command(wxEVT_BUTTON, GetId());
+					command.SetEventObject(this);
+					ProcessWindowEvent(command);
+					return;
+				}
+				event.Skip();
+			});
+			Bind(wxEVT_SET_FOCUS, [this](wxFocusEvent& event) { Refresh(); event.Skip(); });
+			Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& event) { Refresh(); event.Skip(); });
+		}
+
+	private:
+		void OnPaint(wxPaintEvent&) {
+			wxAutoBufferedPaintDC dc(this);
+			const wxRect bounds(wxPoint(0, 0), GetClientSize());
+			const wxColour accent(116, 76, 238);
+			const wxColour accentHover(91, 58, 191);
+			const wxColour background = !IsEnabled()
+				? WelcomeThemeStyle::Get(Theme::Role::Surface)
+				: (primary ? (pressed ? accent.ChangeLightness(82) : (hovered ? accentHover : accent))
+						   : (pressed ? WelcomeThemeStyle::Get(Theme::Role::SelectionFill) : (hovered ? accentHover : WelcomeThemeStyle::Get(Theme::Role::RaisedSurface))));
+			dc.SetBackground(wxBrush(WelcomeThemeStyle::Get(Theme::Role::RaisedSurface)));
+			dc.Clear();
+			dc.SetBrush(wxBrush(background));
+			dc.SetPen(wxPen(IsEnabled() ? accent : WelcomeThemeStyle::Get(Theme::Role::Border), FROM_DIP(this, 1)));
+			dc.DrawRoundedRectangle(Deflated(bounds, FROM_DIP(this, 1)), FROM_DIP(this, 7));
+			dc.SetFont(FontWithPointSize(GetFont(), GetFont().GetPointSize(), true));
+			dc.SetTextForeground(IsEnabled() ? (primary ? WelcomeThemeStyle::Get(Theme::Role::TextOnAccent) : WelcomeThemeStyle::Get(Theme::Role::Text)) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
+			const wxSize extent = dc.GetTextExtent(label);
+			dc.DrawText(label, std::max(0, (bounds.width - extent.x) / 2), std::max(0, (bounds.height - extent.y) / 2));
+			DrawFocusRing(dc, this, Deflated(bounds, FROM_DIP(this, 4)), 5);
+		}
+
+		wxString label;
+		bool primary = false;
+		bool hovered = false;
+		bool pressed = false;
+	};
 }
 
 WelcomeDialog::WelcomeDialog(const wxString& titleText, const wxString& versionText, const wxSize& size, const wxBitmap& fallbackLogo, const std::vector<wxString>& recentFiles) :
-	wxDialog(nullptr, wxID_ANY, titleText, wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
+	wxDialog(nullptr, wxID_ANY, titleText, wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER | wxMINIMIZE_BOX | wxMAXIMIZE_BOX) {
 	SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Surface));
 	m_welcome_dialog_panel = newd WelcomeDialogPanel(this, titleText, versionText, fallbackLogo, recentFiles);
 
@@ -258,7 +360,7 @@ WelcomeDialog::WelcomeDialog(const wxString& titleText, const wxString& versionT
 	dialogSizer->Add(m_welcome_dialog_panel, 1, wxEXPAND);
 	SetSizer(dialogSizer);
 
-	wxSize minimumClientSize = FROM_DIP(this, wxSize(640, 400));
+	wxSize minimumClientSize = FROM_DIP(this, wxSize(860, 560));
 	wxSize requestedClientSize(std::max(size.x, minimumClientSize.x), std::max(size.y, minimumClientSize.y));
 	int displayIndex = g_gui.root ? wxDisplay::GetFromWindow(g_gui.root) : wxNOT_FOUND;
 	if (displayIndex == wxNOT_FOUND && wxDisplay::GetCount() > 0) {
@@ -310,6 +412,7 @@ void WelcomeDialog::ActivateAction(wxWindowID action, const wxString& path) {
 			selectedPath = fileDialog.GetPath();
 		}
 		actionEvent.SetString(selectedPath);
+		actionEvent.SetInt(g_workspace.containsMap(selectedPath) ? 1 : 0);
 	}
 
 	actionEvent.SetId(action);
@@ -317,89 +420,211 @@ void WelcomeDialog::ActivateAction(wxWindowID action, const wxString& path) {
 }
 
 WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& titleText, const wxString& versionText, const wxBitmap& fallbackLogo, const std::vector<wxString>& recentFiles) :
-	wxPanel(dialog) {
+	wxPanel(dialog),
+	m_recent_files(recentFiles),
+	m_version_text(versionText) {
 	m_active_theme = static_cast<int>(Theme::GetType());
 	SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Surface));
 
-	auto* navigationPanel = newd wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxBORDER_NONE);
-	navigationPanel->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Surface));
-	navigationPanel->SetScrollRate(0, FROM_DIP(this, 12));
-	navigationPanel->SetMinSize(wxSize(FROM_DIP(this, NAVIGATION_WIDTH_DIP), -1));
-	auto* navigationSizer = newd wxBoxSizer(wxVERTICAL);
-	navigationSizer->AddSpacer(FROM_DIP(this, 44));
+	const wxColour surface = WelcomeThemeStyle::Get(Theme::Role::Surface);
+	const wxColour background = WelcomeThemeStyle::Get(Theme::Role::Background);
+	const wxColour raised = WelcomeThemeStyle::Get(Theme::Role::RaisedSurface);
+	const wxColour text = WelcomeThemeStyle::Get(Theme::Role::Text);
+	const wxColour subtle = WelcomeThemeStyle::Get(Theme::Role::TextSubtle);
+	const wxColour accent(116, 76, 238);
+	const wxColour cyan(38, 211, 230);
+	const wxColour green(69, 201, 105);
 
-	AddNavigationItem(navigationPanel, navigationSizer, "icon_new_map.png", "New Map", "Start a new project", "Create a new OTBM map.", wxID_NEW, true);
-	AddNavigationItem(navigationPanel, navigationSizer, "icon_open_project.png", "Open Project", "Open an existing map", "Open an existing OTBM map.", wxID_OPEN);
-	AddNavigationItem(navigationPanel, navigationSizer, "icon_map_converter.png", "Map Converter", "Convert map formats", "Convert maps between ServerID and ClientID formats.", WELCOME_DIALOG_MAP_CONVERTER);
-	AddNavigationItem(navigationPanel, navigationSizer, "icon_spawn_npc_converter.png", "Spawn / NPC Converter", "Convert spawns and NPCs", "Convert spawn files between TFS and Canary/Crystal formats.", WELCOME_DIALOG_SPAWN_CONVERTER);
+	auto makeText = [&](wxWindow* parent, const wxString& value, int pointDelta = 0, bool bold = false, const wxColour& colour = wxNullColour) {
+		auto* label = newd wxStaticText(parent, wxID_ANY, value, wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
+		label->SetFont(FontWithPointSize(GetFont(), std::max(8, GetFont().GetPointSize() + pointDelta), bold));
+		label->SetForegroundColour(colour.IsOk() ? colour : text);
+		label->SetBackgroundColour(dynamic_cast<WorkspaceCardPanel*>(parent) ? raised : parent->GetBackgroundColour());
+		return label;
+	};
+
+	// Compact fixed sidebar: the startup screen never needs its own scrollbar.
+	auto* navigationPanel = newd wxPanel(this, wxID_ANY);
+	navigationPanel->SetBackgroundColour(surface);
+	navigationPanel->SetMinSize(wxSize(FROM_DIP(this, NAVIGATION_WIDTH_DIP), -1));
+	navigationPanel->SetMaxSize(wxSize(FROM_DIP(this, NAVIGATION_WIDTH_DIP), -1));
+	auto* navigationSizer = newd wxBoxSizer(wxVERTICAL);
+
+	auto* brandRow = newd wxBoxSizer(wxHORIZONTAL);
+	if (fallbackLogo.IsOk()) {
+		wxImage image = fallbackLogo.ConvertToImage().Scale(FROM_DIP(this, 34), FROM_DIP(this, 34), wxIMAGE_QUALITY_HIGH);
+		brandRow->Add(newd wxStaticBitmap(navigationPanel, wxID_ANY, wxBitmap(image)), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 8));
+	}
+	auto* brandText = newd wxBoxSizer(wxVERTICAL);
+	auto* brandTitle = makeText(navigationPanel, "NexaMap", 2, true);
+	auto* brandSuffix = makeText(navigationPanel, "Editor", -1, true, accent);
+	brandText->Add(brandTitle, 0, wxEXPAND);
+	brandText->Add(brandSuffix, 0, wxEXPAND);
+	brandRow->Add(brandText, 1, wxALIGN_CENTER_VERTICAL);
+	navigationSizer->Add(brandRow, 0, wxEXPAND | wxALL, FROM_DIP(this, 14));
+
+	auto* navigationLabel = makeText(navigationPanel, "NAVIGATION", -2, true, subtle);
+	navigationSizer->Add(navigationLabel, 0, wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 12));
+	AddNavigationItem(navigationPanel, navigationSizer, "icon_open_project.png", "Workspace", "Client + server resources", "Open the configured Server Workspace.", WELCOME_DIALOG_OPEN_WORKSPACE, true);
+	AddNavigationItem(navigationPanel, navigationSizer, "icon_new_map.png", "New Map", "Create an OTBM map", "Create a new OTBM map.", wxID_NEW);
+	AddNavigationItem(navigationPanel, navigationSizer, "icon_open_project.png", "Open Map", "Open an existing map", "Open an existing OTBM map.", wxID_OPEN);
+	AddNavigationItem(navigationPanel, navigationSizer, "icon_map_converter.png", "Converters", "Maps, spawns and IDs", "Open the map item ID converter.", WELCOME_DIALOG_MAP_CONVERTER);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_preferences.png", "Preferences", "Configure the editor", "Configure NexaMap Editor.", wxID_PREFERENCES);
 
-	navigationSizer->AddSpacer(FROM_DIP(this, 18));
-	auto* separator = newd wxPanel(navigationPanel, wxID_ANY);
-	separator->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Border));
-	separator->SetMinSize(wxSize(-1, FROM_DIP(this, 1)));
-	navigationSizer->Add(separator, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 24));
-	navigationSizer->AddSpacer(FROM_DIP(this, 18));
-
-	auto* themeLabel = newd wxStaticText(navigationPanel, wxID_ANY, "THEME");
-	themeLabel->SetFont(FontWithPointSize(GetFont(), std::max(8, GetFont().GetPointSize() - 1), true));
-	themeLabel->SetForegroundColour(WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
-	themeLabel->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Surface));
-	navigationSizer->Add(themeLabel, 0, wxLEFT | wxRIGHT, FROM_DIP(this, 24));
-
+	navigationSizer->AddStretchSpacer();
+	auto* themeLabel = makeText(navigationPanel, "APPEARANCE", -2, true, subtle);
+	navigationSizer->Add(themeLabel, 0, wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 12));
 	auto* themeSizer = newd wxBoxSizer(wxHORIZONTAL);
 	m_system_theme_choice = newd WelcomeThemeChoice(navigationPanel, 0, "icon_system.png", "System");
 	m_dark_theme_choice = newd WelcomeThemeChoice(navigationPanel, 1, "icon_dark.png", "Dark");
 	m_light_theme_choice = newd WelcomeThemeChoice(navigationPanel, 2, "icon_light.png", "Light");
-	for (WelcomeThemeChoice* choice : {m_system_theme_choice, m_dark_theme_choice, m_light_theme_choice}) {
+	for (WelcomeThemeChoice* choice : { m_system_theme_choice, m_dark_theme_choice, m_light_theme_choice }) {
 		choice->Bind(wxEVT_BUTTON, &WelcomeDialogPanel::OnThemeChanged, this);
-		themeSizer->Add(choice, 1, wxEXPAND | wxRIGHT, choice == m_light_theme_choice ? 0 : FROM_DIP(this, 6));
+		themeSizer->Add(choice, 1, wxEXPAND | wxRIGHT, choice == m_light_theme_choice ? 0 : FROM_DIP(this, 4));
 	}
-	navigationSizer->Add(themeSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 16));
+	navigationSizer->Add(themeSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 10));
 
-	m_theme_status_label = newd wxStaticText(navigationPanel, wxID_ANY, "Changes require an application restart.", wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
-	m_theme_status_label->SetFont(FontWithPointSize(GetFont(), std::max(8, GetFont().GetPointSize() - 1)));
-	m_theme_status_label->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Surface));
-	navigationSizer->Add(m_theme_status_label, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 24));
-
-	m_show_welcome_dialog_checkbox = newd wxCheckBox(navigationPanel, wxID_ANY, "Show this screen on startup");
+	m_show_welcome_dialog_checkbox = newd wxCheckBox(navigationPanel, wxID_ANY, "Show on startup");
 	m_show_welcome_dialog_checkbox->SetValue(g_settings.getInteger(Config::WELCOME_DIALOG) == 1);
 	m_show_welcome_dialog_checkbox->Bind(wxEVT_CHECKBOX, &WelcomeDialog::OnCheckboxClicked, dialog);
-	m_show_welcome_dialog_checkbox->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Surface));
-	m_show_welcome_dialog_checkbox->SetForegroundColour(WelcomeThemeStyle::Get(Theme::Role::Text));
-	navigationSizer->AddStretchSpacer();
-	navigationSizer->Add(m_show_welcome_dialog_checkbox, 0, wxEXPAND | wxALL, FROM_DIP(this, 24));
+	m_show_welcome_dialog_checkbox->SetBackgroundColour(surface);
+	m_show_welcome_dialog_checkbox->SetForegroundColour(text);
+	navigationSizer->Add(m_show_welcome_dialog_checkbox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 8));
+	m_theme_status_label = makeText(navigationPanel, versionText, -2, false, subtle);
+	navigationSizer->Add(m_theme_status_label, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 12));
 	navigationPanel->SetSizer(navigationSizer);
-	navigationPanel->FitInside();
-	// Native scrollbars inherit the application theme on Windows. Keep them
-	// hidden so a Light editor preference cannot introduce a bright strip into
-	// the fixed dark welcome surface; mouse-wheel and keyboard scrolling remain.
-	navigationPanel->ShowScrollbars(wxSHOW_SB_NEVER, wxSHOW_SB_NEVER);
 
 	auto* divider = newd wxPanel(this, wxID_ANY);
 	divider->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Border));
 	divider->SetMinSize(wxSize(FROM_DIP(this, 1), -1));
 
+	// Main dashboard: every section fits in the initial 1000 x 650 window.
 	auto* contentPanel = newd wxPanel(this, wxID_ANY);
-	contentPanel->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Background));
+	contentPanel->SetBackgroundColour(background);
 	auto* contentSizer = newd wxBoxSizer(wxVERTICAL);
-	auto* brandPanel = newd WelcomeBrandPanel(contentPanel, titleText, versionText, fallbackLogo);
-	brandPanel->SetMinSize(wxSize(-1, FROM_DIP(this, 180)));
-	contentSizer->Add(brandPanel, 1, wxEXPAND);
 
-	auto* recentMapsPanel = newd RecentMapsPanel(contentPanel, dialog, recentFiles);
-	contentSizer->Add(recentMapsPanel, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 20));
+	auto* heading = makeText(contentPanel, "NexaMap Workspace", 3, true);
+	auto* subheading = makeText(contentPanel, "Choose the client and server folders. Resources are detected automatically.", -1, false, subtle);
+	contentSizer->Add(heading, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 14));
+	contentSizer->Add(subheading, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 6));
+	contentSizer->AddSpacer(FROM_DIP(this, 10));
 
-	contentSizer->AddSpacer(FROM_DIP(this, 24));
-	auto* featuresPanel = newd WelcomeFeaturesPanel(contentPanel);
-	featuresPanel->SetMinSize(wxSize(-1, FROM_DIP(this, 106)));
-	contentSizer->Add(featuresPanel, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 16));
+	auto* cardsSizer = newd wxBoxSizer(wxHORIZONTAL);
 
-	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by Mateuzkl and Skyyzyy");
-	creditText->SetFont(FontWithPointSize(GetFont(), std::max(7, GetFont().GetPointSize() - 2)));
-	creditText->SetForegroundColour(wxColour(246, 196, 69));
-	creditText->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Background));
-	contentSizer->Add(creditText, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 16));
+	// Client card.
+	auto* clientCard = newd WorkspaceCardPanel(contentPanel);
+	clientCard->SetMinSize(FROM_DIP(this, wxSize(0, 124)));
+	auto* clientSizer = newd wxBoxSizer(wxVERTICAL);
+	auto* clientHeaderRow = newd wxBoxSizer(wxHORIZONTAL);
+	auto* clientHeader = makeText(clientCard, "1  CLIENT", 0, true, accent);
+	m_client_status_label = makeText(clientCard, "Waiting", -2, true, subtle);
+	clientHeaderRow->Add(clientHeader, 0, wxALIGN_CENTER_VERTICAL);
+	clientHeaderRow->AddStretchSpacer();
+	clientHeaderRow->Add(m_client_status_label, 0, wxALIGN_CENTER_VERTICAL);
+	auto* selectClient = newd WorkspaceActionButton(clientCard, "Select Client Folder");
+	selectClient->Bind(wxEVT_BUTTON, &WelcomeDialogPanel::OnSelectClient, this);
+	m_client_path_label = makeText(clientCard, "No client folder selected", -1, false, cyan);
+	clientSizer->Add(clientHeaderRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 11));
+	clientSizer->Add(selectClient, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 11));
+	clientSizer->Add(m_client_path_label, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 11));
+	clientCard->SetSizer(clientSizer);
+	cardsSizer->Add(clientCard, 1, wxEXPAND | wxRIGHT, FROM_DIP(this, 8));
+
+	// Server card mirrors the client card; resources live in their own compact strip.
+	auto* serverCard = newd WorkspaceCardPanel(contentPanel);
+	serverCard->SetMinSize(FROM_DIP(this, wxSize(0, 124)));
+	auto* serverSizer = newd wxBoxSizer(wxVERTICAL);
+	auto* serverHeaderRow = newd wxBoxSizer(wxHORIZONTAL);
+	serverHeaderRow->Add(makeText(serverCard, "2  SERVER", 0, true, accent), 0, wxALIGN_CENTER_VERTICAL);
+	serverHeaderRow->AddStretchSpacer();
+	m_server_status_label = makeText(serverCard, "Waiting", -2, true, subtle);
+	serverHeaderRow->Add(m_server_status_label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 8));
+	serverHeaderRow->Add(makeText(serverCard, "AUTO", -2, true, cyan), 0, wxALIGN_CENTER_VERTICAL);
+	auto* selectServer = newd WorkspaceActionButton(serverCard, "Select Server Folder", true);
+	selectServer->Bind(wxEVT_BUTTON, &WelcomeDialogPanel::OnSelectServer, this);
+	m_server_path_label = makeText(serverCard, "No server folder selected", -1, false, cyan);
+	serverSizer->Add(serverHeaderRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 11));
+	serverSizer->Add(selectServer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 11));
+	serverSizer->Add(m_server_path_label, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 11));
+	serverCard->SetSizer(serverSizer);
+	cardsSizer->Add(serverCard, 1, wxEXPAND);
+
+	// Detected resources are deliberately one compact horizontal strip.
+	auto* resourcesCard = newd WorkspaceCardPanel(contentPanel);
+	auto* resourcesSizer = newd wxBoxSizer(wxVERTICAL);
+	resourcesSizer->Add(makeText(resourcesCard, "DETECTED RESOURCES", -2, true, subtle), 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 10));
+	auto* resourceGrid = newd wxFlexGridSizer(1, 5, 0, FROM_DIP(this, 8));
+	for (int column = 0; column < 5; ++column) {
+		resourceGrid->AddGrowableCol(column, 1);
+	}
+	m_items_otb_status = makeText(resourcesCard, "Item DB  Not scanned", -2, false, subtle);
+	m_items_xml_status = makeText(resourcesCard, "items.xml  Not scanned", -2, false, subtle);
+	m_maps_status = makeText(resourcesCard, "Maps  Not scanned", -2, false, subtle);
+	m_monsters_status = makeText(resourcesCard, "Monsters  Not scanned", -2, false, subtle);
+	m_npcs_status = makeText(resourcesCard, "NPCs  Not scanned", -2, false, subtle);
+	for (wxStaticText* row : { m_items_otb_status, m_items_xml_status, m_maps_status, m_monsters_status, m_npcs_status }) {
+		resourceGrid->Add(row, 1, wxEXPAND);
+	}
+	resourcesSizer->Add(resourceGrid, 0, wxEXPAND | wxALL, FROM_DIP(this, 10));
+	resourcesCard->SetSizer(resourcesSizer);
+
+	// Workspace summary keeps the primary action next to its state.
+	auto* summaryCard = newd WorkspaceCardPanel(contentPanel);
+	summaryCard->SetMinSize(FROM_DIP(this, wxSize(0, 92)));
+	auto* summarySizer = newd wxBoxSizer(wxVERTICAL);
+	auto* summaryHeader = newd wxBoxSizer(wxHORIZONTAL);
+	summaryHeader->Add(makeText(summaryCard, "WORKSPACE", -1, true, accent), 0, wxALIGN_CENTER_VERTICAL);
+	summaryHeader->AddSpacer(FROM_DIP(this, 14));
+	m_ready_description = makeText(summaryCard, "Select a client and server folder to prepare the workspace.", -2, false, subtle);
+	summaryHeader->Add(m_ready_description, 1, wxALIGN_CENTER_VERTICAL);
+	summarySizer->Add(summaryHeader, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 11));
+	auto* summaryBody = newd wxBoxSizer(wxHORIZONTAL);
+	auto addSummary = [&](const wxString& label, wxStaticText*& value) {
+		auto* metric = newd wxBoxSizer(wxVERTICAL);
+		metric->Add(makeText(summaryCard, label, -2, false, subtle), 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 2));
+		value = makeText(summaryCard, "-", -1, true, cyan);
+		value->SetWindowStyleFlag(wxST_ELLIPSIZE_END);
+		metric->Add(value, 0, wxEXPAND);
+		summaryBody->Add(metric, 1, wxEXPAND | wxRIGHT, FROM_DIP(this, 10));
+	};
+	addSummary("Client", m_protocol_value);
+	addSummary("ID Mode", m_id_mode_value);
+	addSummary("Items", m_items_source_value);
+	addSummary("Status", m_workspace_status_value);
+	m_open_workspace_button = newd WorkspaceActionButton(summaryCard, "Open Editor", true);
+	m_open_workspace_button->Bind(wxEVT_BUTTON, &WelcomeDialogPanel::OnOpenWorkspace, this);
+	m_open_workspace_button->SetMinSize(FROM_DIP(this, wxSize(124, 34)));
+	summaryBody->Add(m_open_workspace_button, 0, wxALIGN_CENTER_VERTICAL);
+	summarySizer->Add(summaryBody, 1, wxEXPAND | wxALL, FROM_DIP(this, 11));
+	summaryCard->SetSizer(summarySizer);
+
+	contentSizer->Add(cardsSizer, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 14));
+	contentSizer->AddSpacer(FROM_DIP(this, 8));
+	contentSizer->Add(resourcesCard, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 14));
+	contentSizer->AddSpacer(FROM_DIP(this, 8));
+	contentSizer->Add(summaryCard, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 14));
+	contentSizer->AddSpacer(FROM_DIP(this, 8));
+	m_recent_maps_panel = newd RecentMapsPanel(contentPanel, dialog, recentFiles);
+	contentSizer->Add(m_recent_maps_panel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
+	contentSizer->AddStretchSpacer();
+	auto* footerSizer = newd wxBoxSizer(wxVERTICAL);
+	auto* communityText = newd wxStaticText(
+		contentPanel,
+		wxID_ANY,
+		"NexaMap is free and open-source software, shaped by community contributions to advance map editing for everyone."
+	);
+	communityText->SetFont(FontWithPointSize(GetFont(), std::max(9, GetFont().GetPointSize() - 1)));
+	communityText->SetForegroundColour(WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
+	communityText->SetBackgroundColour(background);
+	footerSizer->Add(communityText, 0, wxALIGN_RIGHT);
+	footerSizer->AddSpacer(FROM_DIP(this, 4));
+	auto* creditText = newd wxStaticText(contentPanel, wxID_ANY, "Developed by  Mateuzkl,  Skyyzyy  and  SoyFabi");
+	creditText->SetFont(FontWithPointSize(GetFont(), std::max(11, GetFont().GetPointSize() + 1), true));
+	creditText->SetForegroundColour(wxColour(255, 211, 77));
+	creditText->SetBackgroundColour(background);
+	creditText->SetToolTip("NexaMap Editor developers: Mateuzkl, Skyyzyy and SoyFabi");
+	footerSizer->Add(creditText, 0, wxALIGN_RIGHT);
+	contentSizer->Add(footerSizer, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 14));
 	contentPanel->SetSizer(contentSizer);
 
 	auto* rootSizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -414,7 +639,7 @@ void WelcomeDialogPanel::AddNavigationItem(wxWindow* parent, wxSizer* sizer, con
 	auto* item = newd WelcomeNavigationItem(parent, iconName, title, subtitle, tooltip, action, primary);
 	item->SetMinSize(wxSize(-1, FROM_DIP(this, NAVIGATION_ITEM_HEIGHT_DIP)));
 	item->Bind(wxEVT_BUTTON, &WelcomeDialog::OnNavigationActivated, static_cast<WelcomeDialog*>(GetParent()));
-	sizer->Add(item, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 8));
+	sizer->Add(item, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 3));
 }
 
 void WelcomeDialogPanel::UpdateInputs() {
@@ -422,7 +647,176 @@ void WelcomeDialogPanel::UpdateInputs() {
 	const int selectedTheme = g_settings.getInteger(Config::THEME);
 	SetThemeSelection(selectedTheme >= 0 && selectedTheme <= 2 ? selectedTheme : m_active_theme);
 	UpdateThemeStatus();
+	RefreshWorkspaceDashboard();
 	Layout();
+}
+
+void WelcomeDialogPanel::OnSelectClient(wxCommandEvent& WXUNUSED(event)) {
+	const wxString current = g_workspace.getClient().rootPath;
+	wxDirDialog dialog(this, "Select the Tibia client folder", current, wxDD_DIR_MUST_EXIST);
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+
+	wxString error;
+	wxArrayString warnings;
+	if (!g_workspace.configureClient(dialog.GetPath(), error, warnings)) {
+		wxMessageBox(error, "Client folder not supported", wxOK | wxICON_ERROR, this);
+	}
+	if (!warnings.empty()) {
+		wxString message;
+		for (const wxString& warning : warnings) {
+			message << warning << "\n";
+		}
+		wxMessageBox(message, "Client detection warnings", wxOK | wxICON_WARNING, this);
+	}
+	RefreshWorkspaceDashboard();
+}
+
+void WelcomeDialogPanel::OnSelectServer(wxCommandEvent& WXUNUSED(event)) {
+	std::cerr << "[workspace] Select Server Folder clicked; preparing folder dialog" << std::endl;
+	wxString current;
+	if (!g_workspace.getServer().rootPath.empty()) {
+#ifdef __WINDOWS__
+		current = wxString(g_workspace.getServer().rootPath.wstring());
+#else
+		current = wxString::FromUTF8(g_workspace.getServer().rootPath.string());
+#endif
+	}
+	wxDirDialog dialog(this, "Select the OT server root folder", current, wxDD_DIR_MUST_EXIST);
+	std::cerr << "[workspace] Opening native server folder dialog" << std::endl;
+	if (dialog.ShowModal() != wxID_OK) {
+		std::cerr << "[workspace] Server folder selection cancelled" << std::endl;
+		return;
+	}
+
+	std::cerr << "[workspace] Selected server folder: " << dialog.GetPath().ToStdString(wxConvUTF8) << std::endl;
+	wxString error;
+	g_workspace.configureServer(dialog.GetPath(), error);
+	std::cerr << "[workspace] Restoring compatible client" << std::endl;
+	wxString clientError;
+	wxArrayString clientWarnings;
+	g_workspace.restoreCompatibleClient(clientError, clientWarnings);
+	if (!clientError.empty()) {
+		std::cerr << "[workspace] Client compatibility: " << clientError.ToStdString(wxConvUTF8) << std::endl;
+	}
+	for (const wxString& warning : clientWarnings) {
+		std::cerr << "[workspace] Client warning: " << warning.ToStdString(wxConvUTF8) << std::endl;
+	}
+	std::cerr << "[workspace] Refreshing dashboard after server selection" << std::endl;
+	RefreshWorkspaceDashboard();
+	std::cerr << "[workspace] Server selection finished" << std::endl;
+	if (!error.empty()) {
+		wxMessageBox(error, "Server scan completed", wxOK | wxICON_WARNING, this);
+	}
+}
+
+void WelcomeDialogPanel::OnRescanServer(wxCommandEvent& WXUNUSED(event)) {
+	wxString error;
+	g_workspace.rescanServer(error);
+	RefreshWorkspaceDashboard();
+	if (!error.empty()) {
+		wxMessageBox(error, "Server scan completed", wxOK | wxICON_WARNING, this);
+	}
+}
+
+void WelcomeDialogPanel::OnOpenWorkspace(wxCommandEvent& WXUNUSED(event)) {
+	wxCommandEvent action(wxEVT_BUTTON, WELCOME_DIALOG_OPEN_WORKSPACE);
+	static_cast<WelcomeDialog*>(GetParent())->OnNavigationActivated(action);
+}
+
+void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
+	if (!m_client_path_label || !m_recent_maps_panel) {
+		return;
+	}
+
+	const wxColour subtle = WelcomeThemeStyle::Get(Theme::Role::TextSubtle);
+	const wxColour cyan(38, 211, 230);
+	const wxColour green(69, 201, 105);
+	const wxColour warning(241, 184, 55);
+	const wxColour danger(236, 92, 92);
+	const WorkspaceClientSelection& client = g_workspace.getClient();
+	const ServerWorkspace& server = g_workspace.getServer();
+
+	auto pathText = [](const std::filesystem::path& path) {
+#ifdef __WINDOWS__
+		return wxString(path.wstring());
+#else
+		return wxString::FromUTF8(path.string());
+#endif
+	};
+	auto setPath = [](wxStaticText* label, const wxString& value) {
+		label->SetLabel(value);
+		label->SetToolTip(value);
+	};
+	auto setResource = [&](wxStaticText* label, const wxString& name, bool found, const wxString& foundText = "Found", bool required = false) {
+		const wxString status = found ? foundText : wxString("Not found");
+		label->SetLabel(name + "  |  " + status);
+		label->SetToolTip(label->GetLabel());
+		label->SetForegroundColour(found ? green : (required ? danger : warning));
+	};
+
+	if (client.valid) {
+		setPath(m_client_path_label, client.rootPath);
+		m_client_status_label->SetLabel("Ready  |  " + client.versionName);
+		m_client_status_label->SetForegroundColour(green);
+	} else {
+		setPath(m_client_path_label, client.rootPath.empty() ? wxString("No client folder selected") : client.rootPath);
+		m_client_status_label->SetLabel(client.rootPath.empty() ? "Waiting" : "Not recognized");
+		m_client_status_label->SetForegroundColour(client.rootPath.empty() ? subtle : danger);
+	}
+
+	if (!server.rootPath.empty()) {
+		setPath(m_server_path_label, pathText(server.rootPath));
+		m_server_status_label->SetLabel(server.hasRequiredResources() ? wxString("Ready  |  ") + wxString::FromUTF8(server.serverProfile) : wxString("Item DB missing"));
+		m_server_status_label->SetForegroundColour(server.hasRequiredResources() ? green : danger);
+	} else {
+		setPath(m_server_path_label, "No server folder selected");
+		m_server_status_label->SetLabel("Waiting");
+		m_server_status_label->SetForegroundColour(subtle);
+	}
+
+	if (server.usesCanaryCrystalLoader()) {
+		setResource(m_items_otb_status, "appearances.dat", server.hasAppearances(), "Found", true);
+	} else {
+		setResource(m_items_otb_status, "items.otb", server.hasItemsOtb(), "Found", true);
+	}
+	setResource(m_items_xml_status, "items.xml", server.itemsXmlFingerprint.exists);
+	setResource(m_maps_status, "Maps", !server.maps.empty(), wxString::Format("%llu found", static_cast<unsigned long long>(server.maps.size())));
+	setResource(m_monsters_status, "Monsters", !server.monstersDirectory.empty(), "Found");
+	setResource(m_npcs_status, "NPCs", !server.npcsDirectory.empty(), "Found");
+
+	m_protocol_value->SetLabel(client.valid ? client.versionName : wxString("-"));
+	const ItemIdMode idMode = g_workspace.getEffectiveItemIdMode();
+	const ItemIdModePreference idPreference = g_workspace.getItemIdModePreference();
+	const wxString preferenceLabel = idPreference == ItemIdModePreference::ServerId
+		? wxString("Manual")
+		: (idPreference == ItemIdModePreference::ClientId ? wxString("Manual") : wxString("Auto"));
+	m_id_mode_value->SetLabel(idMode == ItemIdMode::Unknown ? wxString("Needs review") : preferenceLabel + "  |  " + wxString::FromUTF8(ItemIdModeName(idMode)));
+	m_id_mode_value->SetForegroundColour(idMode == ItemIdMode::Unknown ? warning : cyan);
+	m_items_source_value->SetLabel(server.usesCanaryCrystalLoader() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
+	m_workspace_status_value->SetLabel(g_workspace.isReady() ? "Ready" : "Setup required");
+	m_workspace_status_value->SetForegroundColour(g_workspace.isReady() ? green : warning);
+	m_open_workspace_button->Enable(g_workspace.isReady());
+
+	if (g_workspace.isReady()) {
+		m_ready_description->SetLabel("Ready - server resources load directly.");
+		m_ready_description->SetForegroundColour(green);
+	} else if (!client.valid) {
+		m_ready_description->SetLabel("Select a supported client folder.");
+		m_ready_description->SetForegroundColour(subtle);
+	} else {
+		m_ready_description->SetLabel("Select a compatible server root containing items.otb or appearances.dat.");
+		m_ready_description->SetForegroundColour(subtle);
+	}
+
+	const std::vector<wxString> detectedMaps = g_workspace.getDetectedMaps();
+	m_recent_maps_panel->SetFiles(detectedMaps.empty() ? m_recent_files : detectedMaps, !detectedMaps.empty());
+	Layout();
+	if (GetParent()) {
+		GetParent()->Layout();
+	}
+	Refresh();
 }
 
 void WelcomeDialogPanel::OnThemeChanged(wxCommandEvent& event) {
@@ -485,9 +879,7 @@ void WelcomeDialogPanel::SetThemeSelection(int theme) {
 
 void WelcomeDialogPanel::UpdateThemeStatus() {
 	const bool pending = g_settings.getInteger(Config::THEME) != m_active_theme;
-	const wxString text = pending
-		? "Theme change pending. Restart to apply it."
-		: "Changes require an application restart.";
+	const wxString text = pending ? wxString("Restart to apply theme") : m_version_text;
 	m_theme_status_label->SetLabel(text);
 	m_theme_status_label->SetToolTip(text);
 	m_theme_status_label->SetForegroundColour(pending ? WelcomeThemeStyle::Get(Theme::Role::Accent) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
@@ -533,8 +925,8 @@ wxAccessible* WelcomeNavigationItem::CreateAccessible() {
 
 void WelcomeNavigationItem::RebuildBitmaps() {
 	const wxColour normalTint = m_primary ? WelcomeThemeStyle::Get(Theme::Role::Accent) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle);
-	m_normal_bitmap = LoadWelcomeBitmap(this, m_icon_name, wxSize(30, 30), normalTint);
-	m_active_bitmap = LoadWelcomeBitmap(this, m_icon_name, wxSize(30, 30), WelcomeThemeStyle::Get(Theme::Role::Accent));
+	m_normal_bitmap = LoadWelcomeBitmap(this, m_icon_name, wxSize(22, 22), normalTint);
+	m_active_bitmap = LoadWelcomeBitmap(this, m_icon_name, wxSize(22, 22), WelcomeThemeStyle::Get(Theme::Role::Accent));
 }
 
 void WelcomeNavigationItem::Activate() {
@@ -564,21 +956,20 @@ void WelcomeNavigationItem::OnPaint(wxPaintEvent& WXUNUSED(event)) {
 	}
 
 	const wxBitmap& bitmap = (m_hovered || HasFocus() || m_pressed) && interactive ? m_active_bitmap : m_normal_bitmap;
-	const int iconX = FROM_DIP(this, 18);
+	const int iconX = FROM_DIP(this, 12);
 	const int iconY = (bounds.height - bitmap.GetHeight()) / 2;
 	if (bitmap.IsOk()) {
 		dc.DrawBitmap(bitmap, iconX, iconY, true);
 	}
 
-	const int textX = FROM_DIP(this, 64);
-	const int availableTextWidth = std::max(0, bounds.width - textX - FROM_DIP(this, 14));
+	const int textX = FROM_DIP(this, 44);
+	const int availableTextWidth = std::max(0, bounds.width - textX - FROM_DIP(this, 10));
 	const wxColour titleColour = interactive ? WelcomeThemeStyle::Get(Theme::Role::Text) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle).ChangeLightness(80);
 	dc.SetTextForeground(titleColour);
-	dc.SetFont(FontWithPointSize(GetFont(), GetFont().GetPointSize() + 1, true));
-	dc.DrawText(Ellipsize(m_title, dc, wxELLIPSIZE_END, availableTextWidth), textX, FROM_DIP(this, 14));
-	dc.SetTextForeground(interactive ? WelcomeThemeStyle::Get(Theme::Role::TextSubtle) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle).ChangeLightness(80));
-	dc.SetFont(FontWithPointSize(GetFont(), std::max(8, GetFont().GetPointSize() - 1)));
-	dc.DrawText(Ellipsize(m_subtitle, dc, wxELLIPSIZE_END, availableTextWidth), textX, FROM_DIP(this, 39));
+	dc.SetFont(FontWithPointSize(GetFont(), GetFont().GetPointSize(), true));
+	const wxString title = Ellipsize(m_title, dc, wxELLIPSIZE_END, availableTextWidth);
+	const wxSize titleSize = dc.GetTextExtent(title);
+	dc.DrawText(title, textX, std::max(0, (bounds.height - titleSize.y) / 2));
 
 	DrawFocusRing(dc, this, Deflated(bounds, FROM_DIP(this, 3)));
 }
@@ -644,7 +1035,7 @@ void WelcomeNavigationItem::OnFocus(wxFocusEvent& event) {
 }
 
 WelcomeThemeChoice::WelcomeThemeChoice(wxWindow* parent, int theme, const wxString& iconName, const wxString& label) :
-	wxControl(parent, wxID_ANY, wxDefaultPosition, FROM_DIP(parent, wxSize(72, 62)), wxBORDER_NONE | wxWANTS_CHARS),
+	wxControl(parent, wxID_ANY, wxDefaultPosition, FROM_DIP(parent, wxSize(48, 32)), wxBORDER_NONE | wxWANTS_CHARS),
 	m_theme(theme),
 	m_icon_name(iconName),
 	m_label(label) {
@@ -673,7 +1064,9 @@ WelcomeThemeChoice::WelcomeThemeChoice(wxWindow* parent, int theme, const wxStri
 
 #if wxUSE_ACCESSIBILITY && defined(__WXMSW__)
 wxAccessible* WelcomeThemeChoice::CreateAccessible() {
-	return newd WelcomeControlAccessible(this, wxROLE_SYSTEM_RADIOBUTTON, "Select", [this] { Activate(); }, wxACC_STATE_SYSTEM_CHECKED, [this] { return m_selected; });
+	return newd WelcomeControlAccessible(
+		this, wxROLE_SYSTEM_RADIOBUTTON, "Select", [this] { Activate(); }, wxACC_STATE_SYSTEM_CHECKED, [this] { return m_selected; }
+	);
 }
 #endif
 
@@ -708,13 +1101,10 @@ void WelcomeThemeChoice::OnPaint(wxPaintEvent& WXUNUSED(event)) {
 	dc.SetBrush(wxBrush(background));
 	dc.SetPen(wxPen(m_selected ? WelcomeThemeStyle::Get(Theme::Role::Accent) : WelcomeThemeStyle::Get(Theme::Role::Border), FROM_DIP(this, 1)));
 	dc.DrawRoundedRectangle(Deflated(bounds, FROM_DIP(this, 1)), FROM_DIP(this, 4));
-	if (m_bitmap.IsOk()) {
-		dc.DrawBitmap(m_bitmap, (bounds.width - m_bitmap.GetWidth()) / 2, FROM_DIP(this, 8), true);
-	}
 	dc.SetFont(FontWithPointSize(GetFont(), std::max(8, GetFont().GetPointSize() - 1), m_selected));
 	dc.SetTextForeground(m_selected ? WelcomeThemeStyle::Get(Theme::Role::Accent) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
 	const wxSize textSize = dc.GetTextExtent(m_label);
-	dc.DrawText(m_label, (bounds.width - textSize.x) / 2, FROM_DIP(this, 37));
+	dc.DrawText(m_label, (bounds.width - textSize.x) / 2, std::max(0, (bounds.height - textSize.y) / 2));
 	DrawFocusRing(dc, this, Deflated(bounds, FROM_DIP(this, 3)), 3);
 }
 
@@ -1028,44 +1418,53 @@ void WelcomeFeaturesPanel::UpdateLayout(const wxSize& size) {
 }
 
 RecentMapsPanel::RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const std::vector<wxString>& recentFiles) :
-	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxBORDER_NONE) {
+	wxPanel(parent, wxID_ANY),
+	m_dialog(dialog) {
 	SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Background));
-	SetScrollRate(0, FROM_DIP(this, 12));
 	Bind(wxEVT_LEAVE_WINDOW, &RecentMapsPanel::OnMouseLeave, this);
+	m_sizer = newd wxBoxSizer(wxVERTICAL);
+	SetSizer(m_sizer);
+	SetFiles(recentFiles, false);
+}
 
-	auto* sizer = newd wxBoxSizer(wxVERTICAL);
-	auto* header = newd wxStaticText(this, wxID_ANY, "Recent Projects");
+void RecentMapsPanel::SetFiles(const std::vector<wxString>& files, bool detectedMaps) {
+	m_hovered_item = nullptr;
+	m_selected_item = nullptr;
+	m_sizer->Clear(true);
+	auto* header = newd wxStaticText(this, wxID_ANY, detectedMaps ? "DETECTED MAPS" : "RECENT MAPS");
 	header->SetFont(FontWithPointSize(GetFont(), GetFont().GetPointSize(), true));
-	header->SetForegroundColour(WelcomeThemeStyle::Get(Theme::Role::Text));
+	header->SetForegroundColour(WelcomeThemeStyle::Get(Theme::Role::Accent));
 	header->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Background));
-	sizer->Add(header, 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 8));
+	m_sizer->Add(header, 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 6));
 
-	if (recentFiles.empty()) {
-		auto* empty = newd wxStaticText(this, wxID_ANY, "No recent projects yet. Create or open a map to get started.");
+	if (files.empty()) {
+		auto* empty = newd wxStaticText(this, wxID_ANY, "No maps detected yet. Optional map folders will appear here automatically.");
 		empty->SetForegroundColour(WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
 		empty->SetBackgroundColour(WelcomeThemeStyle::Get(Theme::Role::Background));
-		sizer->Add(empty, 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 10));
-		const wxSize recentSize(-1, FROM_DIP(this, 58));
+		m_sizer->Add(empty, 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 10));
+		const wxSize recentSize(-1, FROM_DIP(this, 46));
 		SetMinSize(recentSize);
 		SetMaxSize(recentSize);
 	} else {
-		for (const wxString& file : recentFiles) {
-			auto* recentItem = newd RecentItem(this, file);
-			recentItem->Bind(wxEVT_BUTTON, &WelcomeDialog::OnRecentItemActivated, dialog);
-			sizer->Add(recentItem, 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 4));
+		const size_t visibleItems = std::min<size_t>(2, files.size());
+		for (size_t index = 0; index < visibleItems; ++index) {
+			const wxString& file = files[index];
+			wxString serverType;
+			if (detectedMaps) {
+				const std::optional<DetectedMap> detectedMap = g_workspace.getDetectedMap(file);
+				serverType = wxString::FromUTF8(ServerTypeName(detectedMap ? detectedMap->serverType : ServerType::UnknownGeneric));
+			}
+			auto* recentItem = newd RecentItem(this, file, serverType);
+			recentItem->Bind(wxEVT_BUTTON, &WelcomeDialog::OnRecentItemActivated, m_dialog);
+			m_sizer->Add(recentItem, 0, wxEXPAND | wxBOTTOM, FROM_DIP(this, 4));
 		}
-		const int visibleItems = std::min<int>(3, recentFiles.size());
-		const wxSize recentSize(-1, FROM_DIP(this, 30 + visibleItems * 58));
+		const int itemHeight = detectedMaps ? 72 : 44;
+		const wxSize recentSize(-1, FROM_DIP(this, 24 + static_cast<int>(visibleItems) * itemHeight));
 		SetMinSize(recentSize);
 		SetMaxSize(recentSize);
 	}
-	SetSizer(sizer);
-	// Keep the viewport height capped above, but let the sizer retain the full
-	// list height as the scrollable virtual area. FitInside() recalculates that
-	// area after every recent-project card has been added.
 	Layout();
-	FitInside();
-	ShowScrollbars(wxSHOW_SB_NEVER, wxSHOW_SB_DEFAULT);
+	Refresh();
 }
 
 void RecentMapsPanel::SetHoveredItem(RecentItem* item) {
@@ -1107,14 +1506,16 @@ void RecentMapsPanel::OnMouseLeave(wxMouseEvent& event) {
 	event.Skip();
 }
 
-RecentItem::RecentItem(RecentMapsPanel* parent, const wxString& itemName) :
-	wxControl(parent, wxID_ANY, wxDefaultPosition, FROM_DIP(parent, wxSize(-1, 54)), wxBORDER_NONE | wxWANTS_CHARS),
-	m_item_text(itemName) {
+RecentItem::RecentItem(RecentMapsPanel* parent, const wxString& itemName, const wxString& serverType) :
+	wxControl(parent, wxID_ANY, wxDefaultPosition, FROM_DIP(parent, wxSize(-1, serverType.empty() ? 40 : 68)), wxBORDER_NONE | wxWANTS_CHARS),
+	m_item_text(itemName),
+	m_server_type(serverType) {
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
-	SetMinSize(wxSize(-1, FROM_DIP(this, 54)));
+	SetMinSize(wxSize(-1, FROM_DIP(this, m_server_type.empty() ? 40 : 68)));
 	SetName(wxFileNameFromPath(m_item_text));
-	SetHelpText(m_item_text);
-	SetToolTip(m_item_text);
+	const wxString details = m_server_type.empty() ? m_item_text : m_item_text + "\nType: " + m_server_type;
+	SetHelpText(details);
+	SetToolTip(details);
 	Bind(wxEVT_PAINT, &RecentItem::OnPaint, this);
 	Bind(wxEVT_ENTER_WINDOW, &RecentItem::OnMouseEnter, this);
 	Bind(wxEVT_LEAVE_WINDOW, &RecentItem::OnMouseLeave, this);
@@ -1127,7 +1528,9 @@ RecentItem::RecentItem(RecentMapsPanel* parent, const wxString& itemName) :
 
 #if wxUSE_ACCESSIBILITY && defined(__WXMSW__)
 wxAccessible* RecentItem::CreateAccessible() {
-	return newd WelcomeControlAccessible(this, wxROLE_SYSTEM_LISTITEM, "Open", [this] { Activate(); }, wxACC_STATE_SYSTEM_SELECTED, [this] { return m_selected; });
+	return newd WelcomeControlAccessible(
+		this, wxROLE_SYSTEM_LISTITEM, "Open", [this] { Activate(); }, wxACC_STATE_SYSTEM_SELECTED, [this] { return m_selected; }
+	);
 }
 #endif
 
@@ -1176,13 +1579,28 @@ void RecentItem::OnPaint(wxPaintEvent& WXUNUSED(event)) {
 	}
 
 	const int textX = FROM_DIP(this, 12);
-	const int width = bounds.width - textX - FROM_DIP(this, 12);
+	const int actionWidth = FROM_DIP(this, 54);
+	const int width = bounds.width - textX - actionWidth - FROM_DIP(this, 12);
 	dc.SetFont(FontWithPointSize(GetFont(), GetFont().GetPointSize(), true));
 	dc.SetTextForeground(WelcomeThemeStyle::Get(Theme::Role::Text));
-	dc.DrawText(Ellipsize(wxFileNameFromPath(m_item_text), dc, wxELLIPSIZE_END, width), textX, FROM_DIP(this, 8));
-	dc.SetFont(FontWithPointSize(GetFont(), std::max(7, GetFont().GetPointSize() - 2)));
-	dc.SetTextForeground(WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
-	dc.DrawText(Ellipsize(m_item_text, dc, wxELLIPSIZE_START, width), textX, FROM_DIP(this, 30));
+	const wxString fileName = Ellipsize(wxFileNameFromPath(m_item_text), dc, wxELLIPSIZE_END, width);
+	if (m_server_type.empty()) {
+		const wxSize fileSize = dc.GetTextExtent(fileName);
+		dc.DrawText(fileName, textX, std::max(0, (bounds.height - fileSize.y) / 2));
+	} else {
+		dc.DrawText(fileName, textX, FROM_DIP(this, 5));
+		dc.SetFont(FontWithPointSize(GetFont(), std::max(7, GetFont().GetPointSize() - 2)));
+		dc.SetTextForeground(WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
+		const wxString path = Ellipsize(m_item_text, dc, wxELLIPSIZE_MIDDLE, width);
+		dc.DrawText(path, textX, FROM_DIP(this, 25));
+		dc.SetTextForeground(WelcomeThemeStyle::Get(Theme::Role::Accent));
+		dc.DrawText("Type: " + m_server_type, textX, FROM_DIP(this, 45));
+	}
+	dc.SetFont(FontWithPointSize(GetFont(), std::max(8, GetFont().GetPointSize() - 1), true));
+	dc.SetTextForeground(m_hovered || m_selected ? WelcomeThemeStyle::Get(Theme::Role::Accent) : WelcomeThemeStyle::Get(Theme::Role::TextSubtle));
+	const wxString action = "Open";
+	const wxSize actionSize = dc.GetTextExtent(action);
+	dc.DrawText(action, bounds.width - actionSize.x - FROM_DIP(this, 14), std::max(0, (bounds.height - actionSize.y) / 2));
 	DrawFocusRing(dc, this, Deflated(bounds, FROM_DIP(this, 3)), 3);
 }
 

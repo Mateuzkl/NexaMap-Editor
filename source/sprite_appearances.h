@@ -54,6 +54,7 @@ public:
 
 	void init();
 	void unload();
+	void swap(SpriteAppearances& other);
 	bool loadCatalog(const ClientAssetsManifest& manifest, wxString& error, wxArrayString& warnings);
 	bool getSpritePixels(uint32_t spriteId, std::vector<uint8_t>& pixels, ClientSpriteSize& size, wxString& error);
 	bool getSpritePixelsIfLoaded(uint32_t spriteId, std::vector<uint8_t>& pixels, ClientSpriteSize& size, bool& pending);

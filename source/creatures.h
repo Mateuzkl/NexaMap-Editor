@@ -22,6 +22,7 @@
 
 #include <string>
 #include <map>
+#include <functional>
 
 class CreatureType;
 class CreatureBrush;
@@ -40,6 +41,7 @@ public:
 	~CreatureDatabase();
 
 	void clear();
+	void swap(CreatureDatabase& other) noexcept;
 
 	CreatureType* operator[](const std::string& name);
 	CreatureType* addMissingCreatureType(const std::string& name, bool isNpc);
@@ -56,11 +58,12 @@ public:
 		return creature_map.end();
 	}
 
-	bool loadFromXML(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings);
+	using ImportProgress = std::function<void(const wxString&)>;
+	bool loadFromXML(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {});
 	bool importXMLFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
 	bool importLuaFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
-	bool importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings);
-	bool importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings);
+	bool importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {}, bool updatePalettes = true);
+	bool importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {}, bool updatePalettes = true);
 
 	bool saveToXML(const FileName& filename);
 };

@@ -18,6 +18,9 @@
 #ifndef RME_GRAPHICS_H_
 #define RME_GRAPHICS_H_
 
+#include "session_id.h"
+#include "atlas_page_epochs.h"
+
 #include "outfit.h"
 #include "common.h"
 #include <chrono>
@@ -88,6 +91,16 @@ protected:
 	wxBitmap* bm[SPRITE_SIZE_COUNT];
 };
 
+struct SpriteVisualFingerprint {
+	uint64_t primary = 0;
+	uint64_t secondary = 0;
+	uint64_t pixelBytes = 0;
+
+	bool operator==(const SpriteVisualFingerprint& other) const noexcept {
+		return primary == other.primary && secondary == other.secondary && pixelBytes == other.pixelBytes;
+	}
+};
+
 class GameSprite : public Sprite {
 public:
 	GameSprite();
@@ -105,13 +118,16 @@ public:
 		float v1 = 1.f;
 	};
 	SpriteTex getSpriteTex(int _x, int _y, int _layer, int _subtype, int _pattern_x, int _pattern_y, int _pattern_z, int _frame);
+	uint32_t getItemImageIndex(int x, int y, int layer, int count, int patternX, int patternY, int frame) const;
+	SpriteTex getSpriteTexByIndex(uint32_t index);
 	SpriteTex getSpriteTex(int _x, int _y, int _dir, int _addon, int _pattern_z, const Outfit& _outfit, int _frame);
 	void DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width = -1, int height = -1) override;
 
 	void unloadDC() override;
 
 	void clean(int time);
-	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending);
+	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync = true, const Outfit* outfit = nullptr);
+	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 
 	int getDrawHeight() const;
 	std::pair<int, int> getDrawOffset() const;
@@ -331,15 +347,22 @@ public:
 	GraphicManager(const GraphicManager&) = delete;
 	GraphicManager& operator=(const GraphicManager&) = delete;
 
-	void clear();
+	void clear(bool clearPreloader = true);
 	void cleanSoftwareSprites();
+	void swap(GraphicManager& other) noexcept;
+	void activateSpritePreloader();
+	// CPU sprite definitions, not an atlas epoch. This identity travels with
+	// the resource storage and changes when definitions are cleared/reloaded.
+	SessionId getResourceIdentity() const noexcept {
+		return resourceIdentity;
+	}
 
 	Sprite* getSprite(int id);
 	GameSprite* getCreatureSprite(int id);
 	GameSprite* getEditorSprite(int id);
 
 	long getElapsedTime() const {
-		return (animation_timer->TimeInMicro() / 1000).ToLong();
+		return (animation_timer.TimeInMicro() / 1000).ToLong();
 	}
 
 	uint16_t getItemSpriteMaxID() const;
@@ -392,6 +415,10 @@ public:
 
 	// Sprite atlas: packs 32x32 sprites into large pages so they can be batched.
 	bool allocAtlasSlot(GLuint& outTex, int& outX, int& outY);
+	AtlasPageToken getAtlasPageToken(GLuint texture) const {
+		return atlas_page_epochs.get(texture);
+	}
+	bool retainAtlasPage(AtlasPageToken token);
 	int getAtlasSize() const {
 		return atlas_size;
 	}
@@ -416,6 +443,7 @@ public:
 
 private:
 	bool unloaded;
+	SessionId resourceIdentity = CreateSessionId();
 	// This is used if memcaching is NOT on
 	std::string spritefile;
 	std::unique_ptr<FileReadHandle> sprite_file_handle;
@@ -461,6 +489,7 @@ private:
 	bool texture_upload_attempt_active = false;
 
 	std::vector<GLuint> atlas_textures;
+	AtlasPageEpochs atlas_page_epochs;
 	std::vector<uint64_t> atlas_page_last_use;
 	std::vector<uint64_t> atlas_page_last_frame;
 	uint64_t atlas_access_counter = 0;
@@ -473,7 +502,7 @@ private:
 	bool recycleAtlasPage();
 	void touchAtlasPage(GLuint texture) noexcept;
 
-	wxStopWatch* animation_timer;
+	wxStopWatch animation_timer;
 
 	friend class GameSprite::Image;
 	friend class GameSprite::NormalImage;

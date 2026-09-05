@@ -10,16 +10,6 @@
 #include <unordered_set>
 
 namespace {
-	constexpr size_t MAX_REPORTED_WARNINGS = 200;
-
-	void AppendWarning(std::vector<std::string>& warnings, std::string warning) {
-		if (warnings.size() < MAX_REPORTED_WARNINGS) {
-			warnings.push_back(std::move(warning));
-		} else if (warnings.size() == MAX_REPORTED_WARNINGS) {
-			warnings.emplace_back("Additional warnings were omitted to keep the report responsive.");
-		}
-	}
-
 	struct SpawnSignature {
 		int spawnTime;
 		Direction direction;
@@ -82,6 +72,7 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 	if (!ValidateBeforeApply(map, document, warnings)) {
 		return false;
 	}
+	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
 
 	for (const SpawnAreaData& area : document.areas) {
 		const Position center(area.centerX, area.centerY, area.centerZ);
@@ -129,6 +120,7 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 					type = g_creatures.addMissingCreatureType(primary.name, primary.isNpc);
 				}
 				creatureTile->creature = newd Creature(type);
+				creatureTile->markRenderChunkChanged();
 				creatureTile->creature->setSpawnType(primary.isNpc);
 				creatureTile->creature->setSpawnDirection(
 					static_cast<Direction>(std::clamp(entry.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),
@@ -150,7 +142,8 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 				for (const SpawnVariantData& variant : variants) {
 					creature->addSpawnAlternative(variant);
 				}
-				AppendWarning(warnings, "Preserved weighted alternatives sharing tile " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z) + ".");
+				// Multiple weighted entries on one Canary/Crystal tile are valid.
+				// They were merged and preserved above, so this is not a loader error.
 			}
 		}
 	}

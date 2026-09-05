@@ -70,6 +70,22 @@ void SpriteAppearances::unload() {
 	accessCounter = 0;
 }
 
+void SpriteAppearances::swap(SpriteAppearances& other) {
+	if (this == &other) {
+		return;
+	}
+	stopWorker();
+	other.stopWorker();
+	sheets.swap(other.sheets);
+	std::swap(accessCounter, other.accessCounter);
+	if (!sheets.empty()) {
+		startWorker();
+	}
+	if (!other.sheets.empty()) {
+		other.startWorker();
+	}
+}
+
 bool SpriteAppearances::loadCatalog(const ClientAssetsManifest& manifest, wxString& error, wxArrayString& warnings) {
 	init();
 	for (const ClientSpriteSheetManifest& entry : manifest.spriteSheets) {

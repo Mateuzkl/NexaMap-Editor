@@ -208,6 +208,7 @@ public:
 	static ClientVersionList getAllForOTBMVersion(MapVersionID map_version);
 	static ClientVersionList getAllVersionsSupportedForClientVersion(ClientVersion* v);
 	static ClientVersion* getLatestVersion();
+	static ClientVersion* detectFromPath(const FileName& path, wxString& error);
 
 	bool operator==(const ClientVersion& o) const {
 		return otb.id == o.otb.id;

@@ -31,6 +31,10 @@ public:
 	contigous_vector(const contigous_vector&) = delete;
 	contigous_vector& operator=(const contigous_vector&) = delete;
 
+	void swap(contigous_vector& other) noexcept {
+		v.swap(other.v);
+	}
+
 	size_t size() const {
 		return v.size();
 	}

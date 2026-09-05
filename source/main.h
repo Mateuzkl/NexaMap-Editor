@@ -20,10 +20,12 @@
 
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
-	#ifdef _WIN32_WINNT
+	#ifndef _WIN32_WINNT
+		#define _WIN32_WINNT 0x0601
+	#elif _WIN32_WINNT < 0x0601
 		#undef _WIN32_WINNT
+		#define _WIN32_WINNT 0x0601
 	#endif
-	#define _WIN32_WINNT 0x0501
 #endif
 
 #ifdef DEBUG_MEM

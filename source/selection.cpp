@@ -207,6 +207,7 @@ void Selection::removeInternal(Tile* tile) {
 }
 
 void Selection::clear() {
+	MapChunkRevisionTracker::Batch chunkBatch(editor.map.getChunkRevisionTracker());
 	if (session) {
 		for (auto it = tiles.begin(); it != tiles.end(); it++) {
 			Tile* new_tile = (*it)->deepCopy(editor.map);

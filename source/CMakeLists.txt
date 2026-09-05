@@ -22,6 +22,8 @@ ${CMAKE_CURRENT_LIST_DIR}/complexitem.h
 ${CMAKE_CURRENT_LIST_DIR}/con_vector.h
 ${CMAKE_CURRENT_LIST_DIR}/container_properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/copybuffer.h
+${CMAKE_CURRENT_LIST_DIR}/cross_client_clipboard.h
+${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/creature.h
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/creatures.h
@@ -31,11 +33,15 @@ ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.h
 ${CMAKE_CURRENT_LIST_DIR}/definitions.h
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/editor.h
+${CMAKE_CURRENT_LIST_DIR}/editor_disposal.h
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
 ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.h
 ${CMAKE_CURRENT_LIST_DIR}/file_transaction.h
+${CMAKE_CURRENT_LIST_DIR}/favorites_manager.h
+${CMAKE_CURRENT_LIST_DIR}/favorites_resources.h
+${CMAKE_CURRENT_LIST_DIR}/palette_favorites.h
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.h
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.h
 ${CMAKE_CURRENT_LIST_DIR}/post_process_renderer.h
@@ -45,11 +51,17 @@ ${CMAKE_CURRENT_LIST_DIR}/gui.h
 ${CMAKE_CURRENT_LIST_DIR}/gui_ids.h
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.h
+${CMAKE_CURRENT_LIST_DIR}/quick_command_palette.h
 ${CMAKE_CURRENT_LIST_DIR}/house.h
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_paste_transaction.h
 ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/ingame_preview_window.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_controller.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_input.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_map.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_weather.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_hud.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.h
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.h
@@ -68,18 +80,28 @@ ${CMAKE_CURRENT_LIST_DIR}/main.h
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.h
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.h
 ${CMAKE_CURRENT_LIST_DIR}/map.h
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics.h
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_scanner.h
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_format.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_allocator.h
 ${CMAKE_CURRENT_LIST_DIR}/map_display.h
 ${CMAKE_CURRENT_LIST_DIR}/map_drawer.h
+${CMAKE_CURRENT_LIST_DIR}/map_overlay_text.h
 ${CMAKE_CURRENT_LIST_DIR}/map_region.h
+${CMAKE_CURRENT_LIST_DIR}/map_chunk_revision.h
+${CMAKE_CURRENT_LIST_DIR}/map_chunk_geometry_cache.h
+${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.h
+${CMAKE_CURRENT_LIST_DIR}/atlas_page_epochs.h
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.h
 ${CMAKE_CURRENT_LIST_DIR}/map_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.h
+${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.h
+${CMAKE_CURRENT_LIST_DIR}/minimap_style.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.h
 ${CMAKE_CURRENT_LIST_DIR}/mt_rand.h
 ${CMAKE_CURRENT_LIST_DIR}/numbertextctrl.h
@@ -122,6 +144,7 @@ ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/session_id.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
+${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.h
@@ -142,6 +165,7 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/workspace_session.h
 ${CMAKE_CURRENT_LIST_DIR}/version_info.h
 ${CMAKE_CURRENT_LIST_DIR}/zones.h
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.h
@@ -181,6 +205,8 @@ ${CMAKE_CURRENT_LIST_DIR}/common_windows.cpp
 ${CMAKE_CURRENT_LIST_DIR}/complexitem.cpp
 ${CMAKE_CURRENT_LIST_DIR}/container_properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/copybuffer.cpp
+${CMAKE_CURRENT_LIST_DIR}/cross_client_clipboard.cpp
+${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp
@@ -189,6 +215,7 @@ ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.cpp
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor.cpp
+${CMAKE_CURRENT_LIST_DIR}/editor_resource_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.cpp
 ${CMAKE_CURRENT_LIST_DIR}/eraser_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension.cpp
@@ -197,15 +224,24 @@ ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/post_process_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gui.cpp
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/hotkey_manager.cpp
+${CMAKE_CURRENT_LIST_DIR}/favorites_manager.cpp
+${CMAKE_CURRENT_LIST_DIR}/favorites_resources.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_favorites.cpp
+${CMAKE_CURRENT_LIST_DIR}/quick_command_palette.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/ingame_preview_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_controller.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_weather.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_hud.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iomap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.cpp
@@ -222,6 +258,9 @@ ${CMAKE_CURRENT_LIST_DIR}/light_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.cpp
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_scanner.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.cpp
@@ -233,9 +272,12 @@ ${CMAKE_CURRENT_LIST_DIR}/map_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/materials.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.cpp
+${CMAKE_CURRENT_LIST_DIR}/minimap_style.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mkpch.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mt_rand.cpp
+${CMAKE_CURRENT_LIST_DIR}/new_map_tab_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/numbertextctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/object_pool.cpp
 ${CMAKE_CURRENT_LIST_DIR}/old_properties_window.cpp
@@ -269,6 +311,7 @@ ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/session_id.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
+${CMAKE_CURRENT_LIST_DIR}/server_workspace.cpp
 ${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn.cpp
@@ -290,6 +333,7 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/workspace_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zones.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zone_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_zones.cpp
@@ -313,3 +357,39 @@ ${CMAKE_CURRENT_LIST_DIR}/add_item_window.cpp
 #       $<$<PLATFORM_ID:Windows>:psapi>
 #   )
 # ============================================================================
+
+# Multiplayer modules have independent wire/GUI boundaries.
+list(APPEND rme_H
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.h
+)
+list(APPEND rme_SRC
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
+)
+set_source_files_properties(
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
+PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+# Keep local macros in the legacy RNG and standalone playtest modules isolated.
+set_source_files_properties(
+    ${CMAKE_CURRENT_LIST_DIR}/mt_rand.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_map.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_weather.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_hud.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)

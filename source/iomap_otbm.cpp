@@ -342,6 +342,19 @@ bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute att
 			setTier(static_cast<uint16_t>(tier));
 			break;
 		}
+		case OTBM_ATTR_DURATION:
+		case OTBM_ATTR_WRITTENDATE:
+		case OTBM_ATTR_SLEEPERGUID:
+		case OTBM_ATTR_SLEEPSTART:
+			// Runtime/deprecated server state. It is valid in older TFS maps but
+			// has no editable representation in NexaMap.
+			return stream->skip(4);
+		case OTBM_ATTR_DECAYING_STATE:
+			return stream->skip(1);
+		case OTBM_ATTR_WRITTENBY: {
+			std::string ignoredWriter;
+			return stream->getString(ignoredWriter);
+		}
 
 		// The following *should* be handled in the derived classes
 		// However, we still need to handle them here since otherwise things

@@ -21,6 +21,7 @@
 #include "position.h"
 
 #include <deque>
+#include <memory>
 #include <string>
 
 class Editor;
@@ -32,6 +33,7 @@ class Change;
 class Action;
 class BatchAction;
 class ActionQueue;
+class MultiplayerSession;
 
 enum ChangeType {
 	CHANGE_NONE,
@@ -148,6 +150,7 @@ protected:
 
 	friend class ActionQueue;
 	friend class BatchAction;
+	friend class MultiplayerSession;
 };
 
 typedef std::vector<Action*> ActionVector;
@@ -191,8 +194,11 @@ protected:
 	uint32_t memory_size;
 	ActionIdentifier type;
 	ActionVector batch;
+	MultiplayerSession* multiplayerGroup = nullptr;
+	std::weak_ptr<void> multiplayerLifetime;
 
 	friend class ActionQueue;
+	friend class MultiplayerSession;
 };
 
 class ActionQueue {
@@ -215,12 +221,8 @@ public:
 	bool redo();
 	void clear();
 
-	bool canUndo() {
-		return current > 0;
-	}
-	bool canRedo() {
-		return current < actions.size();
-	}
+	bool canUndo();
+	bool canRedo();
 	ActionIdentifier getUndoType() const;
 	ActionIdentifier getRedoType() const;
 

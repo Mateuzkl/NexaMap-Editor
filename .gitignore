@@ -16,6 +16,8 @@ rme
 rme.cfg
 data/user
 /rme.log
+nexamap.log
+nexamap-crash-*.dmp
 /performance.log
 /tmp/
 

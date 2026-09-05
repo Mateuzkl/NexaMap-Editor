@@ -28,6 +28,9 @@ find_package(Protobuf REQUIRED)
 
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
+if(NOT WIN32)
+	find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+endif()
 
 # LibArchive support is disabled by default. To enable OTGZ support, define
 # OTGZ_SUPPORT in source/definitions.h and add LibArchive back to the build.
@@ -55,7 +58,8 @@ if(MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8)
 endif()
 if(WIN32)
-	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+	# Keep a console in Release too, as in RME Redux, for startup/crash output.
+	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 endif()
 if(ENABLE_UNITY_BUILD)
 	if(CMAKE_VERSION VERSION_LESS 3.16)
@@ -65,6 +69,7 @@ if(ENABLE_UNITY_BUILD)
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/gl_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/post_process_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/minimap_import_window.cpp"
@@ -93,6 +98,100 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+if(WIN32)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE "_WIN32_WINNT=0x0601")
+	target_link_libraries(${PROJECT_NAME} bcrypt ws2_32)
+else()
+	target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto)
+endif()
+
+if(BUILD_TESTING)
+	add_executable(playtest_controller_tests tests/playtest_controller_tests.cpp source/ingame_preview/playtest_controller.cpp source/ingame_preview/playtest_weather.cpp)
+	target_include_directories(playtest_controller_tests PRIVATE source)
+	target_compile_features(playtest_controller_tests PRIVATE cxx_std_20)
+	add_test(NAME playtest_controller_tests COMMAND playtest_controller_tests)
+	option(ENABLE_MULTIPLAYER_SESSION_TESTS "Build full editor wxSocket session integration tests (no visible windows)" OFF)
+	if(ENABLE_MULTIPLAYER_SESSION_TESTS)
+		add_executable(multiplayer_session_tests tests/multiplayer_session_tests.cpp tests/startup_validation_tests.cpp tests/playtest_integration_tests.cpp tests/collections_palette_tests.cpp ${rme_SRC})
+		target_include_directories(multiplayer_session_tests PRIVATE source)
+		target_compile_features(multiplayer_session_tests PRIVATE cxx_std_20)
+		target_compile_definitions(multiplayer_session_tests PRIVATE NEXAMAP_MULTIPLAYER_TESTS)
+		target_link_libraries(multiplayer_session_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+		set_target_properties(multiplayer_session_tests PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
+		if(MSVC)
+			target_compile_options(multiplayer_session_tests PRIVATE /bigobj /utf-8)
+			target_compile_definitions(multiplayer_session_tests PRIVATE "_WIN32_WINNT=0x0601")
+			target_link_libraries(multiplayer_session_tests PRIVATE bcrypt iphlpapi ws2_32)
+		else()
+			target_link_libraries(multiplayer_session_tests PRIVATE OpenSSL::Crypto)
+		endif()
+		add_test(NAME multiplayer_session_tests COMMAND multiplayer_session_tests)
+		set_tests_properties(multiplayer_session_tests PROPERTIES TIMEOUT 90)
+		# Reuse the full editor test harness without running the network suite.
+		add_test(NAME startup_validation_tests COMMAND multiplayer_session_tests --startup-validation)
+		set_tests_properties(startup_validation_tests PROPERTIES TIMEOUT 30)
+		add_test(NAME playtest_integration_tests COMMAND multiplayer_session_tests --playtest-validation)
+		set_tests_properties(playtest_integration_tests PROPERTIES TIMEOUT 60)
+		add_test(NAME renderer_lifecycle_tests COMMAND multiplayer_session_tests --renderer-lifecycle-validation)
+		set_tests_properties(renderer_lifecycle_tests PROPERTIES TIMEOUT 60)
+		add_test(NAME collections_palette_tests COMMAND multiplayer_session_tests --collections-validation)
+		set_tests_properties(collections_palette_tests PROPERTIES TIMEOUT 30)
+	endif()
+	add_executable(map_overlay_text_tests tests/map_overlay_text_tests.cpp)
+	target_include_directories(map_overlay_text_tests PRIVATE source)
+	target_link_libraries(map_overlay_text_tests PRIVATE ${wxWidgets_LIBRARIES})
+	target_compile_features(map_overlay_text_tests PRIVATE cxx_std_20)
+	if(MSVC)
+		target_compile_options(map_overlay_text_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME map_overlay_text_tests COMMAND map_overlay_text_tests)
+
+	option(ENABLE_GL_CACHE_TESTS "Build offscreen OpenGL cache integration tests (requires an OpenGL 3.3 driver)" OFF)
+	if(ENABLE_GL_CACHE_TESTS)
+		add_executable(map_chunk_render_cache_gl_tests tests/map_chunk_render_cache_gl_tests.cpp source/gl_renderer.cpp source/post_process_renderer.cpp source/map_chunk_render_cache.cpp)
+		target_include_directories(map_chunk_render_cache_gl_tests PRIVATE source)
+		target_link_libraries(map_chunk_render_cache_gl_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json)
+		target_compile_features(map_chunk_render_cache_gl_tests PRIVATE cxx_std_20)
+		if(MSVC)
+			target_compile_options(map_chunk_render_cache_gl_tests PRIVATE /utf-8)
+		endif()
+		add_test(NAME map_chunk_render_cache_gl_tests COMMAND map_chunk_render_cache_gl_tests)
+		set_tests_properties(map_chunk_render_cache_gl_tests PROPERTIES SKIP_RETURN_CODE 77)
+	endif()
+
+	add_executable(map_chunk_geometry_cache_tests tests/map_chunk_geometry_cache_tests.cpp)
+	target_include_directories(map_chunk_geometry_cache_tests PRIVATE source)
+	target_compile_features(map_chunk_geometry_cache_tests PRIVATE cxx_std_20)
+	add_test(NAME map_chunk_geometry_cache_tests COMMAND map_chunk_geometry_cache_tests)
+
+	add_executable(map_chunk_revision_tests tests/map_chunk_revision_tests.cpp)
+	target_include_directories(map_chunk_revision_tests PRIVATE source)
+	target_compile_features(map_chunk_revision_tests PRIVATE cxx_std_20)
+	add_test(NAME map_chunk_revision_tests COMMAND map_chunk_revision_tests)
+
+	add_executable(favorites_manager_tests tests/favorites_manager_tests.cpp source/favorites_manager.cpp)
+	target_include_directories(favorites_manager_tests PRIVATE source)
+	target_link_libraries(favorites_manager_tests PRIVATE nlohmann_json::nlohmann_json)
+	target_compile_features(favorites_manager_tests PRIVATE cxx_std_20)
+	add_test(NAME favorites_manager_tests COMMAND favorites_manager_tests)
+
+	add_executable(map_diagnostics_tests tests/map_diagnostics_tests.cpp source/map_diagnostics.cpp)
+	target_include_directories(map_diagnostics_tests PRIVATE source)
+	target_compile_features(map_diagnostics_tests PRIVATE cxx_std_20)
+	add_test(NAME map_diagnostics_tests COMMAND map_diagnostics_tests)
+
+	add_executable(multiplayer_protocol_tests tests/multiplayer_protocol_tests.cpp source/multiplayer_protocol.cpp source/multiplayer_crypto.cpp)
+	target_include_directories(multiplayer_protocol_tests PRIVATE source)
+	target_compile_features(multiplayer_protocol_tests PRIVATE cxx_std_20)
+	if(WIN32)
+		target_link_libraries(multiplayer_protocol_tests PRIVATE bcrypt)
+		target_compile_definitions(multiplayer_protocol_tests PRIVATE "_WIN32_WINNT=0x0601")
+		target_compile_options(multiplayer_protocol_tests PRIVATE /utf-8)
+	else()
+		target_link_libraries(multiplayer_protocol_tests PRIVATE OpenSSL::Crypto)
+	endif()
+	add_test(NAME multiplayer_protocol_tests COMMAND multiplayer_protocol_tests)
+endif()
 install(DIRECTORY
 	"${CMAKE_CURRENT_SOURCE_DIR}/brushes"
 	"${CMAKE_CURRENT_SOURCE_DIR}/data"
@@ -103,6 +202,7 @@ install(DIRECTORY
 install(FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.rtf"
 	"${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+	"${CMAKE_CURRENT_SOURCE_DIR}/NexaMap-Debug.cmd"
 	DESTINATION .
 )
 
@@ -202,6 +302,27 @@ if(BUILD_TESTING)
 		CXX_STANDARD_REQUIRED ON
 	)
 	add_test(NAME client_assets_manifest_tests COMMAND client_assets_manifest_tests)
+
+	add_executable(server_workspace_tests
+		tests/server_workspace_tests.cpp
+		source/server_workspace.cpp
+	)
+	target_include_directories(server_workspace_tests PRIVATE source)
+	set_target_properties(server_workspace_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME server_workspace_tests COMMAND server_workspace_tests)
+
+	add_executable(editor_data_layout_tests
+		tests/editor_data_layout_tests.cpp
+	)
+	target_compile_definitions(editor_data_layout_tests PRIVATE NEXAMAP_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+	set_target_properties(editor_data_layout_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME editor_data_layout_tests COMMAND editor_data_layout_tests)
 
 	add_executable(map_format_tests
 		tests/map_format_tests.cpp

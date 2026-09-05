@@ -42,13 +42,17 @@ public:
 		wxString category;
 	};
 
+	const std::unordered_map<MenuBar::ActionID, ActionInfo>& GetActionInfo() const {
+		return actionInfo_;
+	}
+
 private:
 	struct XmlActionData {
 		wxString hotkey;
 		wxString help;
 		wxString itemName;
 	};
-	
+
 	struct XmlMenuData {
 		std::unordered_map<std::string, XmlActionData> actions;
 		std::unordered_map<std::string, wxString> categories;
@@ -56,7 +60,7 @@ private:
 
 	std::unordered_map<MenuBar::ActionID, HotkeyEntry> entries_;
 	std::unordered_map<MenuBar::ActionID, ActionInfo> actionInfo_;
-	
+
 	XmlMenuData ParseMenubarXml();
 	void BuildAcceleratorEntries(std::vector<wxAcceleratorEntry>& accelEntries) const;
 	void SyncToXml();

@@ -242,6 +242,8 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_SPECIAL_TILES, 1);
 	Int(SHOW_ZONE_AREAS, 1);
 	Int(USE_FBO_SCENE_CACHE, 1);
+	Int(USE_CPU_GEOMETRY_CACHE, 0);
+	Int(USE_GPU_GROUND_CACHE, 0);
 	Int(ANIMATION_FPS, 10);
 	Int(POST_PROCESS_EFFECT, 0);
 	Int(SHOW_SPAWNS, 1);
@@ -252,6 +254,7 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_HOUSES, 1);
 	Int(SHOW_BLOCKING, 0);
 	Int(SHOW_TOOLTIPS, 1);
+	Int(SHOW_CONTAINER_PREVIEW, 1);
 	Int(SHOW_PERFORMANCE_STATS, 1);
 	Int(SHOW_ONLY_TILEFLAGS, 0);
 	Int(SHOW_ONLY_MODIFIED_TILES, 0);
@@ -314,8 +317,16 @@ void Settings::IO(IOMode mode) {
 	Int(SAVE_WITH_OTB_MAGIC_NUMBER, 0);
 	Int(REPLACE_SIZE, 100000);
 	Int(COPY_POSITION_FORMAT, 0);
-	Int(ENABLE_DIAGNOSTIC_LOG, 0);
+	Int(ENABLE_DIAGNOSTIC_LOG, 1);
 	Int(DRAGON_SOULS_OTBM_COUNT_UINT16, 0);
+
+	section("Workspace");
+	String(WORKSPACE_CLIENT_ROOT, "");
+	String(WORKSPACE_SERVER_ROOT, "");
+	String(WORKSPACE_ITEMS_OTB_PATH, "");
+	String(WORKSPACE_ITEMS_XML_PATH, "");
+	String(WORKSPACE_APPEARANCES_PATH, "");
+	Int(WORKSPACE_ITEM_ID_MODE, 0);
 
 	section("Graphics");
 	Int(TEXTURE_MANAGEMENT, 1);
@@ -369,6 +380,9 @@ void Settings::IO(IOMode mode) {
 	String(PALETTE_LAYOUT, "name=02c30f6048629894000011bc00000002;caption=Palette;state=2099148;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=245;besth=100;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=-1;floath=-1");
 	Int(MINIMAP_VISIBLE, 0);
 	String(MINIMAP_LAYOUT, "name=066e2bc8486298990000259a00000003;caption=Minimap;state=2099151;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=170;besth=130;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=221;floath=164");
+	Int(MINIMAP_SHOW_COMPASS, 1);
+	Int(MINIMAP_SHOW_CONTROLS, 1);
+	Int(MINIMAP_ZOOM_LEVEL, 2);
 	Int(INGAME_PREVIEW_VISIBLE, 0);
 	String(INGAME_PREVIEW_LAYOUT, "");
 	Int(WINDOW_HEIGHT, 500);

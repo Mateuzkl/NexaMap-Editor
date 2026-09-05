@@ -86,9 +86,9 @@ wxNotebookPage* PreferencesWindow::CreateGeneralPage() {
 	only_one_instance_chkbox->SetToolTip("When checked, maps opened using the shell will all be opened in the same instance.");
 	sizer->Add(only_one_instance_chkbox, 0, wxLEFT | wxTOP, 5);
 
-	diagnostic_log_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Write diagnostic log (rme.log)");
+	diagnostic_log_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Write diagnostic log (nexamap.log)");
 	diagnostic_log_chkbox->SetValue(g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG));
-	diagnostic_log_chkbox->SetToolTip("Record diagnostic and crash information in rme.log next to the executable. Restart required.");
+	diagnostic_log_chkbox->SetToolTip("Save console and crash information in nexamap.log next to the executable (or Local AppData/NexaMap/logs if the folder is read-only). Restart required.");
 	sizer->Add(diagnostic_log_chkbox, 0, wxLEFT | wxTOP, 5);
 
 	enable_tileset_editing_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Enable tileset editing");

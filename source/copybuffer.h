@@ -34,12 +34,15 @@ class CopyBuffer {
 public:
 	CopyBuffer();
 	virtual ~CopyBuffer();
+	void swap(CopyBuffer& other) noexcept;
 
 	// In-editor implantation
 	void copy(Editor& editor, int floor);
 	void cut(Editor& editor, int floor);
 	void paste(Editor& editor, const Position& toPosition);
 	bool canPaste() const;
+	uint64_t getTileCount() const;
+	bool getBounds(Position& minimum, Position& maximum) const;
 	// Returns the upper-left corner of the copybuffer
 	Position getPosition() const;
 
@@ -52,10 +55,16 @@ public:
 	BaseMap& getBufferMap();
 
 private:
+	void resetBounds();
+	void includePosition(const Position& position);
+	void rebuildBounds();
 	void captureHouse(const Map& map, uint32_t houseId);
 	HouseSnapshot getHouseSnapshot(uint32_t houseId) const;
 
 	Position copyPos;
+	Position minimumPosition;
+	Position maximumPosition;
+	bool boundsValid = false;
 	std::unique_ptr<BaseMap> tiles;
 	SessionId sourceMapSessionId;
 	std::map<uint32_t, HouseSnapshot> houses;

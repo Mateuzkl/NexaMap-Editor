@@ -19,6 +19,7 @@
 #define RME_MATERIALS_H_
 
 #include "extension.h"
+#include <functional>
 
 class Materials {
 public:
@@ -26,14 +27,20 @@ public:
 	~Materials();
 
 	void clear();
+	void swap(Materials& other) noexcept;
 
 	const MaterialsExtensionList& getExtensions();
 
 	TilesetContainer tilesets;
+	// Query already resolved categories without creating empty ones or loading data.
+	static bool hasCollections(const TilesetContainer& tilesets);
+	bool hasCollections() const {
+		return hasCollections(tilesets);
+	}
 
 	bool loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds = false);
 	bool loadExtensions(const FileName& identifier, wxString& error, wxArrayString& warnings);
-	void createOtherTileset();
+	void createOtherTileset(const std::function<void(size_t, size_t)>& progress = {});
 	void addToTileset(const std::string& tilesetName, int itemId, TilesetCategoryType categoryType);
 
 	bool isInTileset(Item* item, const std::string& tileset) const;

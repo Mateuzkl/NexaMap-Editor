@@ -421,6 +421,7 @@ public:
 	~ItemDatabase();
 
 	void clear();
+	void swap(ItemDatabase& other) noexcept;
 
 	ItemType& operator[](size_t id) {
 		return getItemType(id);

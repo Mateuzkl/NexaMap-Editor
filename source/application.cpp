@@ -26,14 +26,17 @@
 #include "artprovider.h"
 #include "theme.h"
 #include "client_assets.h"
+#include "workspace_session.h"
 
 #include "materials.h"
 #include "map.h"
 #include "map_tab.h"
 
+#include <atomic>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <streambuf>
 #include <utility>
@@ -41,6 +44,9 @@
 #include <wx/snglinst.h>
 #include <wx/dir.h>
 #include <wx/stackwalk.h>
+#if defined(__WINDOWS__) && wxUSE_CRASHREPORT
+	#include <wx/msw/crashrpt.h>
+#endif
 
 #include "../brushes/icon/editor_icon.xpm"
 
@@ -87,6 +93,10 @@ wxIMPLEMENT_APP_NO_MAIN(Application);
 
 namespace {
 
+	std::recursive_mutex diagnosticStreamMutex;
+	std::atomic<bool> diagnosticFailure { false };
+	std::atomic<bool> diagnosticConsolePaused { false };
+
 	class TeeStreamBuffer final : public std::streambuf {
 	public:
 		TeeStreamBuffer(std::streambuf* consoleBuffer, std::streambuf* logBuffer) :
@@ -95,6 +105,7 @@ namespace {
 
 	protected:
 		int_type overflow(int_type character) override {
+			const std::lock_guard<std::recursive_mutex> lock(diagnosticStreamMutex);
 			if (traits_type::eq_int_type(character, traits_type::eof())) {
 				return traits_type::not_eof(character);
 			}
@@ -108,12 +119,15 @@ namespace {
 		}
 
 		std::streamsize xsputn(const char* text, std::streamsize size) override {
-			const std::streamsize consoleSize = consoleBuffer->sputn(text, size);
+			const std::lock_guard<std::recursive_mutex> lock(diagnosticStreamMutex);
+			consoleBuffer->sputn(text, size);
 			const std::streamsize logSize = logBuffer->sputn(text, size);
-			return std::min(consoleSize, logSize);
+			// A detached/redirected console must not stop writes to the log file.
+			return logSize;
 		}
 
 		int sync() override {
+			const std::lock_guard<std::recursive_mutex> lock(diagnosticStreamMutex);
 			consoleBuffer->pubsync();
 			return logBuffer->pubsync();
 		}
@@ -123,8 +137,19 @@ namespace {
 		std::streambuf* logBuffer;
 	};
 
-	class ConsoleLogTarget final : public wxLog {
+	class ConsoleLogTarget final : public wxLogInterposer {
 	protected:
+		void DoLogRecord(wxLogLevel level, const wxString& message, const wxLogRecordInfo& info) override {
+			if (level == wxLOG_Debug || level == wxLOG_Trace) {
+				// Forwarding debug to both loggers prints it twice through wx's
+				// default debug sink and bypasses our UTF-8 diagnostic file stream.
+				DoLogText(message);
+				return;
+			}
+			// Preserve normal wxWidgets warning/error dialogs as well as logging.
+			wxLogInterposer::DoLogRecord(level, message, info);
+		}
+
 		void DoLogText(const wxString& message) override {
 			const wxScopedCharBuffer utf8 = message.ToUTF8();
 			std::cerr << "[wx] " << (utf8 ? utf8.data() : "") << std::endl;
@@ -137,11 +162,52 @@ namespace {
 	std::streambuf* originalOutputBuffer = nullptr;
 	std::streambuf* originalErrorBuffer = nullptr;
 
+	std::string DiagnosticPath(const std::filesystem::path& path) {
+		const auto utf8 = path.u8string();
+		return std::string(utf8.begin(), utf8.end());
+	}
+
+	void PauseAfterDiagnosticFailure() {
+#ifdef __WINDOWS__
+		// Only pause a console owned by this process. An existing shell, the
+		// debugger, and NexaMap-Debug.cmd retain control of their own consoles.
+		DWORD processIds[2] {};
+		DWORD inputMode = 0;
+		const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+		if (IsDebuggerPresent() || GetConsoleProcessList(processIds, 2) != 1 || !GetConsoleMode(input, &inputMode) || diagnosticConsolePaused.exchange(true)) {
+			return;
+		}
+		std::cerr << "\n[critical] NexaMap stopped after an error. Copy the messages above or send nexamap.log."
+				  << "\nPress Enter to close this console." << std::endl;
+		INPUT_RECORD record {};
+		DWORD read = 0;
+		while (ReadConsoleInputW(input, &record, 1, &read) && read != 0) {
+			if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown && record.Event.KeyEvent.wVirtualKeyCode == VK_RETURN) {
+				break;
+			}
+		}
+#endif
+	}
+
 	bool StartDiagnostics(const std::filesystem::path& executablePath) {
-		const std::filesystem::path logPath = executablePath.parent_path() / "rme.log";
+		std::filesystem::path logPath = executablePath.parent_path() / "nexamap.log";
 		diagnosticLogFile.open(logPath, std::ios::out | std::ios::app);
+#ifdef __WINDOWS__
 		if (!diagnosticLogFile) {
-			std::cerr << "[warning] Could not open diagnostic log: " << logPath.string() << std::endl;
+			wxString localAppData;
+			if (wxGetEnv("LOCALAPPDATA", &localAppData) && !localAppData.empty()) {
+				logPath = std::filesystem::path(localAppData.ToStdWstring()) / "NexaMap" / "logs" / "nexamap.log";
+				std::error_code error;
+				std::filesystem::create_directories(logPath.parent_path(), error);
+				if (!error) {
+					diagnosticLogFile.clear();
+					diagnosticLogFile.open(logPath, std::ios::out | std::ios::app);
+				}
+			}
+		}
+#endif
+		if (!diagnosticLogFile) {
+			std::cerr << "[warning] Could not open diagnostic log: " << DiagnosticPath(logPath) << std::endl;
 			return false;
 		}
 
@@ -153,13 +219,22 @@ namespace {
 		std::cerr << std::unitbuf;
 
 		std::cerr << std::endl
-				  << "=== RME diagnostic session ===" << std::endl;
-		std::cerr << "[info] Diagnostic log: " << logPath.string() << std::endl;
-		std::cerr << "[info] RME starting" << std::endl;
+				  << "=== NexaMap diagnostic session: " << wxDateTime::Now().FormatISOCombined(' ').ToStdString() << " ===" << std::endl;
+		std::cerr << "[info] Version: " << NEXAMAP_VERSION_STRING << "; build: " << __DATE__ << " " << __TIME__ << std::endl;
+		std::cerr << "[info] Executable: " << DiagnosticPath(executablePath) << std::endl;
+		std::cerr << "[info] Working directory: " << wxGetCwd().ToStdString(wxConvUTF8) << std::endl;
+		std::cerr << "[info] Diagnostic log: " << DiagnosticPath(logPath) << std::endl;
+		std::cerr << "[info] Settings: " << (g_settings.getInteger(Config::INDIRECTORY_INSTALLATION) ? "local editor.cfg" : "user configuration store") << std::endl;
+#if defined(__WINDOWS__) && wxUSE_CRASHREPORT
+		const wxString dumpName = wxString::Format("nexamap-crash-%s-%lu.dmp", wxDateTime::Now().Format("%Y%m%d-%H%M%S"), wxGetProcessId());
+		wxCrashReport::SetFileName(wxString((logPath.parent_path() / dumpName.ToStdWstring()).wstring()));
+#endif
+		std::cerr << "[info] NexaMap starting" << std::endl;
 		return true;
 	}
 
 	void StopDiagnostics() {
+		const std::lock_guard<std::recursive_mutex> lock(diagnosticStreamMutex);
 		if (!diagnosticLogFile.is_open()) {
 			return;
 		}
@@ -189,12 +264,39 @@ namespace {
 	};
 #endif
 
+	void ReportTerminatedException() noexcept {
+		diagnosticFailure = true;
+		try {
+			if (const auto exception = std::current_exception()) {
+				std::rethrow_exception(exception);
+			}
+			std::cerr << "[critical] std::terminate called without an active exception" << std::endl;
+		} catch (const std::exception& exception) {
+			std::cerr << "[critical] Uncaught C++ exception: " << exception.what() << std::endl;
+		} catch (...) {
+			std::cerr << "[critical] Uncaught non-standard C++ exception" << std::endl;
+		}
+		PauseAfterDiagnosticFailure();
+		std::abort();
+	}
+
 	template <typename EntryPoint>
 	int RunApplication(EntryPoint&& entryPoint) {
+		std::cout << std::unitbuf;
+		std::cerr << std::unitbuf;
+#ifdef __WINDOWS__
+		SetConsoleOutputCP(CP_UTF8);
+		SetConsoleTitleW(L"NexaMap - Diagnostic Console");
+#endif
+		std::set_terminate(ReportTerminatedException);
 		try {
-			const int exitCode = std::forward<EntryPoint>(entryPoint)();
+			const int applicationExitCode = std::forward<EntryPoint>(entryPoint)();
+			const int exitCode = diagnosticFailure ? EXIT_FAILURE : applicationExitCode;
 			if (diagnosticLogFile.is_open()) {
-				std::cerr << "[info] RME stopped with code " << exitCode << std::endl;
+				std::cerr << "[info] NexaMap stopped with code " << exitCode << std::endl;
+			}
+			if (exitCode != EXIT_SUCCESS) {
+				PauseAfterDiagnosticFailure();
 			}
 			StopDiagnostics();
 			return exitCode;
@@ -204,14 +306,26 @@ namespace {
 		} catch (...) {
 			std::cerr << "[critical] Unknown startup/shutdown exception" << std::endl;
 		}
+		PauseAfterDiagnosticFailure();
 		StopDiagnostics();
 		return EXIT_FAILURE;
 	}
 
 } // namespace
 
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+wxLog* CreateDiagnosticLogTargetForTests() {
+	return new ConsoleLogTarget();
+}
+
+int RunMultiplayerSessionTests(int argc, char** argv);
+#endif
 int main(int argc, char** argv) {
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	return RunMultiplayerSessionTests(argc, argv);
+#else
 	return RunApplication([&] { return wxEntry(argc, argv); });
+#endif
 }
 
 #ifdef __WINDOWS__
@@ -230,16 +344,29 @@ bool Application::OnInit() {
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 	// Load the persisted theme before creating any windows.
+	std::cerr << "[startup] Loading settings" << std::endl;
 	g_settings.load();
+	wxString forceDiagnostics;
+	if (wxGetEnv("NEXAMAP_DIAGNOSTICS", &forceDiagnostics) && forceDiagnostics == "1") {
+		g_settings.setInteger(Config::ENABLE_DIAGNOSTIC_LOG, 1);
+	}
 	if (g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG)) {
-		const std::filesystem::path executablePath(nstr(wxStandardPaths::Get().GetExecutablePath()));
+#ifdef __WINDOWS__
+		const std::filesystem::path executablePath(wxStandardPaths::Get().GetExecutablePath().ToStdWstring());
+#else
+		const std::filesystem::path executablePath(wxStandardPaths::Get().GetExecutablePath().ToStdString(wxConvUTF8));
+#endif
 		if (StartDiagnostics(executablePath)) {
 			// Keep the normal wxWidgets UI logger and mirror all messages to the
 			// diagnostic console/file stream.
-			wxLog::GetActiveTarget();
-			new wxLogChain(new ConsoleLogTarget());
+			new ConsoleLogTarget();
 		}
 	}
+#if wxUSE_ON_FATAL_EXCEPTION
+	// Install before resource discovery and window construction so startup
+	// failures are captured as well as crashes in the event loop.
+	wxHandleFatalExceptions(true);
+#endif
 	const int rawTheme = g_settings.getInteger(Config::THEME);
 	const int theme = rawTheme >= 0 && rawTheme <= 2 ? rawTheme : 0;
 	Theme::SetType(static_cast<Theme::Type>(theme));
@@ -287,12 +414,26 @@ bool Application::OnInit() {
 	g_gui.LoadHotkeys();
 	ClientVersion::loadVersions();
 	ClientAssets::loadConfiguredPath();
+	g_workspace.loadConfiguredPaths();
 
 #ifdef _USE_PROCESS_COM
 	m_single_instance_checker = newd wxSingleInstanceChecker; // Instance checker has to stay alive throughout the applications lifetime
 	if (g_settings.getInteger(Config::ONLY_ONE_INSTANCE) && m_single_instance_checker->IsAnotherRunning()) {
 		RMEProcessClient client;
-		wxConnectionBase* connection = client.MakeConnection("localhost", "rme_host", "rme_talk");
+		wxConnectionBase* connection = nullptr;
+		// The primary process may own the single-instance lock just before its
+		// DDE server is ready. Retry that short startup window and suppress the
+		// wxWidgets DDE error dialog; failure simply leaves the primary instance
+		// responsible for the user's existing session.
+		for (int attempt = 0; attempt < 5 && connection == nullptr; ++attempt) {
+			{
+				wxLogNull suppressExpectedIpcError;
+				connection = client.MakeConnection("localhost", "rme_host", "rme_talk");
+			}
+			if (connection == nullptr && attempt < 4) {
+				wxMilliSleep(100);
+			}
+		}
 		if (connection) {
 			wxString fileName;
 			if (ParseCommandLineMap(fileName)) {
@@ -320,10 +461,6 @@ bool Application::OnInit() {
 
 	g_gui.gfx.loadEditorSprites();
 
-	// Let wxWidgets report fatal platform exceptions through OnFatalException().
-#ifdef __RELEASE__
-	wxHandleFatalExceptions(true);
-#endif
 	m_file_to_open = wxEmptyString;
 	ParseCommandLineMap(m_file_to_open);
 
@@ -457,6 +594,7 @@ void Application::FixVersionDiscrapencies() {
 }
 
 void Application::Unload() {
+	g_gui.SetApplicationClosing(true);
 	g_gui.CloseAllEditors();
 	g_gui.UnloadVersion();
 	g_gui.SaveHotkeys();
@@ -509,6 +647,7 @@ int Application::OnRun() {
 }
 
 void Application::ShutdownServices() {
+	g_gui.DrainEditorDisposals();
 #ifdef _USE_PROCESS_COM
 	wxDELETE(m_proc_server);
 	wxDELETE(m_single_instance_checker);
@@ -516,15 +655,30 @@ void Application::ShutdownServices() {
 }
 
 void Application::OnFatalException() {
-	std::cerr << "[critical] Fatal platform exception: RME crashed" << std::endl;
+	diagnosticFailure = true;
+	std::cerr << "[critical] Fatal platform exception: NexaMap crashed" << std::endl;
+#if defined(__WINDOWS__) && wxUSE_CRASHREPORT
+	const wxCrashContext context;
+	std::cerr << "[critical] Exception: " << context.GetExceptionString().ToStdString(wxConvUTF8)
+			  << "; code=0x" << std::hex << context.code << std::dec << "; address=" << context.addr << std::endl;
+	if (diagnosticLogFile.is_open()) {
+		if (wxCrashReport::Generate(wxCRASH_REPORT_DEFAULT)) {
+			std::cerr << "[critical] Crash dump: " << wxCrashReport::GetFileName().ToStdString(wxConvUTF8) << std::endl;
+		} else {
+			std::cerr << "[warning] Could not write a crash dump" << std::endl;
+		}
+	}
+#endif
 #if wxUSE_STACKWALKER && wxUSE_ON_FATAL_EXCEPTION
 	std::cerr << "[critical] Crash stack trace:" << std::endl;
 	DiagnosticStackWalker stackWalker;
 	stackWalker.WalkFromException(64);
 #endif
+	PauseAfterDiagnosticFailure();
 }
 
 bool Application::OnExceptionInMainLoop() {
+	diagnosticFailure = true;
 	try {
 		throw;
 	} catch (const std::exception& exception) {
@@ -537,6 +691,7 @@ bool Application::OnExceptionInMainLoop() {
 }
 
 void Application::OnUnhandledException() {
+	diagnosticFailure = true;
 	try {
 		throw;
 	} catch (const std::exception& exception) {
@@ -767,6 +922,13 @@ bool MainFrame::LoadMap(const FileName& name) {
 
 void MainFrame::OnExit(wxCloseEvent& event) {
 	// clicking 'x' button
+	if (g_gui.IsApplicationClosing()) {
+		if (event.CanVeto()) {
+			event.Veto();
+		}
+		return;
+	}
+	g_gui.SetApplicationClosing(true);
 
 	// Ask to save changed maps before starting the normal destruction sequence.
 	std::set<Map*> prompted;
@@ -780,6 +942,7 @@ void MainFrame::OnExit(wxCloseEvent& event) {
 		g_gui.tabbook->SetFocusedTab(i);
 		if (!DoQuerySave(false)) {
 			if (event.CanVeto()) {
+				g_gui.SetApplicationClosing(false);
 				event.Veto();
 				return;
 			}

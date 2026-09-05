@@ -23,10 +23,14 @@
 #include <utility>
 
 #include "gui.h"
+#include "favorites_manager.h"
+#include "favorites_resources.h"
 #include "autoborder_preview.h"
 #include "main_menubar.h"
+#include "multiplayer_session.h"
 
 #include "editor.h"
+#include "editor_disposal.h"
 #include "brush.h"
 #include "map.h"
 #include "materials.h"
@@ -36,6 +40,7 @@
 #include "spawn_converter_window.h"
 #include "map_item_id_converter_window.h"
 #include "client_assets.h"
+#include "workspace_session.h"
 
 #include "common_windows.h"
 #include "result_window.h"
@@ -47,6 +52,10 @@
 #include "theme.h"
 #include "welcome_dialog.h"
 #include "object_pool.h"
+#include "editor_resource_session.h"
+#include "new_map_tab_dialog.h"
+#include "cross_client_clipboard.h"
+#include "cross_client_paste_dialog.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -71,6 +80,82 @@ namespace {
 		directory.Mkdir(0755, wxPATH_MKDIR_FULL);
 		return directory;
 	}
+
+	wxString WorkspacePath(const std::filesystem::path& path) {
+#ifdef __WINDOWS__
+		return wxString(path.wstring());
+#else
+		return wxString::FromUTF8(path.string());
+#endif
+	}
+
+	bool RefreshRequiredServerWorkspace(wxString& error, bool& changed, WorkspaceClientMode expectedClientMode) {
+		changed = false;
+		if (!g_workspace.hasServerSelection()) {
+			error = "Server Workspace is not configured. Select the OT server root containing items.otb or appearances.dat.";
+			return false;
+		}
+
+		const uint64_t previousGeneration = g_workspace.getGeneration();
+		if (!g_workspace.rescanServer(error)) {
+			if (error.empty()) {
+				error = "Server Workspace is configured, but neither items.otb nor appearances.dat was found.";
+			}
+			return false;
+		}
+		const ServerWorkspace& workspace = g_workspace.getServer();
+		if (expectedClientMode == WorkspaceClientMode::Classic && !workspace.hasItemsOtb()) {
+			error = "This classic DAT/SPR client requires items.otb in the selected Server Workspace. appearances.dat is supported by Canary/Crystal clients.";
+			return false;
+		}
+		changed = g_workspace.getGeneration() != previousGeneration;
+		return true;
+	}
+
+	bool IsInapplicableMaterialItemWarning(const wxString& warning) {
+		wxString normalized = warning;
+		normalized.Trim(true);
+		normalized.Trim(false);
+
+		return normalized.StartsWith("Invalid item id ") || (normalized.StartsWith("Item ") && normalized.EndsWith(" is not ground item.")) || normalized == "Ground dependency equivalent is not a ground item." || normalized.StartsWith("There is no itemtype with id ") || normalized.StartsWith("Tileset: ") || normalized.StartsWith("Unknown item id #");
+	}
+
+	void AppendActionableMaterialWarnings(wxArrayString& target, const wxArrayString& materialWarnings) {
+		wxString pendingBrushHeader;
+		for (const wxString& warning : materialWarnings) {
+			if (warning.StartsWith("Errors while loading brush \"")) {
+				// A brush header is emitted only if that brush also has a warning
+				// other than an item missing from/incompatible with the active OTB.
+				pendingBrushHeader = warning;
+				continue;
+			}
+
+			if (IsInapplicableMaterialItemWarning(warning)) {
+				continue;
+			}
+
+			if (!pendingBrushHeader.empty()) {
+				target.push_back(pendingBrushHeader);
+				pendingBrushHeader.clear();
+			}
+			target.push_back(warning);
+		}
+	}
+
+	void AppendActionableDedicatedCreatureWarnings(wxArrayString& target, const wxArrayString& catalogWarnings) {
+		for (const wxString& warning : catalogWarnings) {
+			const bool conflictingOverlayName = warning.StartsWith("Duplicate creature type name \"");
+			const bool unsupportedCatalogOutfit = warning.StartsWith("Invalid creature \"") && warning.Contains("\" look type #");
+			if (conflictingOverlayName || unsupportedCatalogOutfit) {
+				// A stale user overlay may conflict with the catalog, and the catalog
+				// may be newer than the selected appearance package. Keep details in
+				// the diagnostic log; the active server import follows this fallback.
+				wxLogDebug("Canary/Crystal creature catalog: " + warning);
+				continue;
+			}
+			target.push_back(warning);
+		}
+	}
 }
 
 // Global GUI instance
@@ -92,12 +177,20 @@ GUI::GUI() :
 	waypoint_brush(nullptr),
 	optional_brush(nullptr),
 	eraser(nullptr),
+	spawn_brush(nullptr),
 	normal_door_brush(nullptr),
 	locked_door_brush(nullptr),
 	magic_door_brush(nullptr),
 	quest_door_brush(nullptr),
 	hatch_door_brush(nullptr),
+	normal_door_alt_brush(nullptr),
+	archway_door_brush(nullptr),
 	window_door_brush(nullptr),
+	pz_brush(nullptr),
+	rook_brush(nullptr),
+	nolog_brush(nullptr),
+	pvp_brush(nullptr),
+	zone_brush(nullptr),
 
 	OGLContext(nullptr),
 	loaded_version(CLIENT_VERSION_NONE),
@@ -118,13 +211,25 @@ GUI::GUI() :
 	custom_thickness_mod(0.0),
 	progressBar(nullptr),
 	disabled_counter(0) {
-	doodad_buffer_map = newd BaseMap();
+	doodad_buffer_map = std::make_unique<BaseMap>();
+	crossClientClipboard = std::make_unique<CrossClientClipboard>();
 }
 
 GUI::~GUI() {
-	delete doodad_buffer_map;
+	DrainEditorDisposals();
 	delete g_gui.aui_manager;
 	delete OGLContext;
+}
+
+void GUI::DisposeEditor(std::unique_ptr<Editor> editor) {
+	if (!editorDisposals) {
+		editorDisposals = std::make_unique<EditorDisposalQueue>();
+	}
+	editorDisposals->submit(std::move(editor));
+}
+
+void GUI::DrainEditorDisposals() {
+	editorDisposals.reset();
 }
 
 wxGLContext* GUI::GetGLContext(wxGLCanvas* win) {
@@ -178,6 +283,20 @@ wxString GUI::GetExecDirectory() {
 		wxLogError("Could not fetch executable directory.");
 	}
 	return exec_directory.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+}
+
+wxString GUI::GetEditorDataDirectory() {
+	for (const wxString& dataDirectory : { GetDataDirectory(), g_gui.getFoundDataDirectory() }) {
+		if (dataDirectory.empty()) {
+			continue;
+		}
+		FileName editorDirectory = FileName::DirName(dataDirectory);
+		editorDirectory.AppendDir("editor");
+		if (editorDirectory.DirExists()) {
+			return editorDirectory.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+		}
+	}
+	return {};
 }
 
 wxString GUI::GetLocalDataDirectory() {
@@ -273,6 +392,11 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 		error = wxString::Format("Unsupported client version! (%d)", version);
 		return false;
 	}
+	bool serverResourcesChanged = false;
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Classic)) {
+		return false;
+	}
+	force = force || serverResourcesChanged;
 
 	if (version != loaded_version || force || canary_crystal_assets_loaded) {
 		if (getLoadedVersion() != nullptr) {
@@ -300,7 +424,9 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 
 		bool ret = LoadDataFiles(error, warnings);
 		if (ret) {
-			g_gui.LoadPerspective();
+			if (!resourceSessionUiPending) {
+				g_gui.LoadPerspective();
+			}
 		} else {
 			loaded_version = CLIENT_VERSION_NONE;
 		}
@@ -320,11 +446,16 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		error = "Configure a CipSoft/Crystal or OTC Assets root in Preferences > Client Version first.";
 		return false;
 	}
+	bool serverResourcesChanged = false;
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Appearances)) {
+		return false;
+	}
+	force = force || serverResourcesChanged;
 	if (canary_crystal_assets_loaded && loaded_version == compatibilityProfile->getID() && !force) {
 		return true;
 	}
 
-	if (getLoadedVersion() != nullptr) {
+	if (getLoadedVersion() != nullptr && !resourceSessionUiPending) {
 		SavePerspective();
 	}
 	UnnamedRenderingLock();
@@ -343,8 +474,37 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		loaded_version = CLIENT_VERSION_NONE;
 		return false;
 	}
-	LoadPerspective();
+	if (!resourceSessionUiPending) {
+		LoadPerspective();
+	}
 	return true;
+}
+
+bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
+	wxArrayString restoredClientWarnings;
+	if (!g_workspace.restoreCompatibleClient(error, restoredClientWarnings)) {
+		return false;
+	}
+	for (const wxString& warning : restoredClientWarnings) {
+		warnings.push_back(warning);
+	}
+	bool serverResourcesChanged = false;
+	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, g_workspace.getClient().mode)) {
+		return false;
+	}
+
+	const uint64_t generation = g_workspace.getGeneration();
+	force = force || serverResourcesChanged || generation != loaded_workspace_generation;
+	bool loaded = false;
+	if (g_workspace.getServer().usesCanaryCrystalLoader()) {
+		loaded = LoadCanaryCrystalAssets(error, warnings, force);
+	} else {
+		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force);
+	}
+	if (loaded) {
+		loaded_workspace_generation = generation;
+	}
+	return loaded;
 }
 
 void GUI::EnableHotkeys() {
@@ -375,8 +535,171 @@ void GUI::CycleTab(bool forward) {
 	tabbook->CycleTab(forward);
 }
 
+void GUI::SwapResourceSessionState(EditorResourceSession& session) {
+	using std::swap;
+	swap(loaded_version, session.loadedVersion);
+	swap(canary_crystal_assets_loaded, session.canaryCrystalAssetsLoaded);
+	swap(loaded_workspace_generation, session.loadedWorkspaceGeneration);
+	swap(current_brush, session.currentBrush);
+	swap(previous_brush, session.previousBrush);
+	swap(house_brush, session.houseBrush);
+	swap(house_exit_brush, session.houseExitBrush);
+	swap(waypoint_brush, session.waypointBrush);
+	swap(optional_brush, session.optionalBrush);
+	swap(eraser, session.eraser);
+	swap(spawn_brush, session.spawnBrush);
+	swap(normal_door_brush, session.normalDoorBrush);
+	swap(locked_door_brush, session.lockedDoorBrush);
+	swap(magic_door_brush, session.magicDoorBrush);
+	swap(quest_door_brush, session.questDoorBrush);
+	swap(hatch_door_brush, session.hatchDoorBrush);
+	swap(normal_door_alt_brush, session.normalDoorAltBrush);
+	swap(archway_door_brush, session.archwayDoorBrush);
+	swap(window_door_brush, session.windowDoorBrush);
+	swap(pz_brush, session.pzBrush);
+	swap(rook_brush, session.rookBrush);
+	swap(nolog_brush, session.nologBrush);
+	swap(pvp_brush, session.pvpBrush);
+	swap(zone_brush, session.zoneBrush);
+	swap(doodad_buffer_map, session.doodadBufferMap);
+}
+
+bool GUI::ActivateResourceSession(const std::shared_ptr<EditorResourceSession>& session) {
+	if (!MultiplayerSession::permitsResourceSession(session)) {
+		PopupDialog("Multiplayer", "Disconnect the multiplayer session before switching to different client assets.", wxOK);
+		return false;
+	}
+	if (!session) {
+		return false;
+	}
+	const EditorResourceSessionPtr current = GetActiveEditorResourceSession();
+	if (current == session) {
+		return true;
+	}
+
+	UnnamedRenderingLock();
+	if (getLoadedVersion() != nullptr && !resourceSessionUiPending) {
+		SavePerspective();
+	}
+	DestroyPalettes();
+	DestroyMinimap();
+	DestroyIngamePreview();
+	g_autoborder_preview.Clear();
+	pasting = false;
+	secondary_map = nullptr;
+
+	SwapResourceSessionState(*current);
+	current->swapWithGlobals();
+	session->swapWithGlobals();
+	SwapResourceSessionState(*session);
+	SetActiveEditorResourceSession(session);
+	if (!doodad_buffer_map) {
+		doodad_buffer_map = std::make_unique<BaseMap>();
+	}
+
+	const WorkspaceClientSelection& client = g_workspace.getClient();
+	if (loaded_version != CLIENT_VERSION_NONE && client.mode == WorkspaceClientMode::Classic && !client.rootPath.empty()) {
+		if (ClientVersion* version = ClientVersion::get(loaded_version)) {
+			version->setClientPath(FileName(client.rootPath));
+		}
+	}
+	gfx.activateSpritePreloader();
+	resourceSessionUiPending = true;
+	if (MapTab* displayedTab = GetCurrentMapTab(); displayedTab && displayedTab->GetResourceSession() == session) {
+		FinalizeResourceSessionActivation();
+	}
+	return true;
+}
+
+void GUI::FinalizeResourceSessionActivation() {
+	if (!resourceSessionUiPending) {
+		return;
+	}
+	resourceSessionUiPending = false;
+	if (getLoadedVersion() != nullptr) {
+		LoadPerspective();
+	}
+	InvalidateAutoborderPreview();
+	UpdateIngamePreview();
+	UpdateTitle();
+	UpdateMenus();
+}
+
+void GUI::ShowNewMapTabDialog() {
+	if (ShouldSuppressNewTabRequests()) {
+		return;
+	}
+	NewMapTabDialog dialog(root);
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+	const NewMapTabSelection selection = dialog.GetSelection();
+	if (selection.useCurrentClient) {
+		if (selection.mapFile.empty()) {
+			NewMap();
+		} else {
+			LoadMapInternal(FileName(selection.mapFile), EditorClientVersionPolicy::KeepLoaded, nullptr, false, false);
+		}
+		return;
+	}
+
+	const EditorResourceSessionPtr previousSession = GetActiveEditorResourceSession();
+	const EditorResourceSessionPtr newSession = CreateEditorResourceSession();
+	// Loading dialogs pump the event loop. Keep the old canvas from rendering
+	// against the new session until its own map tab has been created.
+	RenderingLock sessionCreationLock;
+	if (!ActivateResourceSession(newSession)) {
+		PopupDialog(root, "New Tab", "Could not activate an independent resource session.", wxOK | wxICON_ERROR);
+		return;
+	}
+
+	auto restorePreviousSession = [&] {
+		ActivateResourceSession(previousSession);
+	};
+	g_workspace.setPersistenceEnabled(false);
+	gfx.loadEditorSprites();
+
+	wxString error;
+	wxArrayString warnings;
+	if (!g_workspace.configureClient(selection.clientDirectory, error, warnings, false)) {
+		restorePreviousSession();
+		PopupDialog(root, "Client not supported", error, wxOK | wxICON_ERROR);
+		return;
+	}
+	if (!g_workspace.configureServer(selection.serverDirectory, error, false)) {
+		restorePreviousSession();
+		PopupDialog(root, "Server not supported", error, wxOK | wxICON_ERROR);
+		return;
+	}
+	if (!LoadWorkspace(error, warnings, true)) {
+		restorePreviousSession();
+		PopupDialog(root, "Workspace not ready", error, wxOK | wxICON_ERROR);
+		return;
+	}
+
+	wxString mapPath = selection.mapFile;
+	if (mapPath.empty() && !g_workspace.getServer().primaryMapPath.empty()) {
+		mapPath = WorkspacePath(g_workspace.getServer().primaryMapPath);
+	}
+	const bool created = mapPath.empty()
+		? NewMap()
+		: LoadMapInternal(FileName(mapPath), EditorClientVersionPolicy::KeepLoaded, nullptr, false, false);
+	if (!created) {
+		restorePreviousSession();
+		return;
+	}
+	if (!warnings.empty()) {
+		ListDialog("Workspace warnings", warnings);
+	}
+}
+
 bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
-	FileName data_path = getLoadedVersion()->getDataPath();
+	const auto creatureProgress = [this](const wxString& status) { SetLoadIndeterminate(status); };
+	const wxString editorDataDirectory = GetEditorDataDirectory();
+	if (editorDataDirectory.empty()) {
+		error = "The canonical NexaMap editor data directory (data/editor) was not found.";
+		return false;
+	}
 	FileName client_path = getLoadedVersion()->getClientPath();
 	FileName extension_path = GetExtensionsDirectory();
 
@@ -418,52 +741,87 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		return false;
 	}
 
-	g_gui.SetLoadDone(20, "Loading items.otb file...");
-	if (!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
+	const ServerWorkspace& workspace = g_workspace.getServer();
+	if (!workspace.hasItemsOtb()) {
+		error = "Server Workspace is configured, but items.otb was not found. NexaMap will not use a bundled item database.";
+		g_gui.DestroyLoadBar();
+		UnloadVersion();
+		return false;
+	}
+	const wxString itemsOtbPath = WorkspacePath(workspace.itemsOtbPath);
+	const bool loadItemsXml = workspace.hasItemsXml();
+	const wxString itemsXmlPath = loadItemsXml ? WorkspacePath(workspace.itemsXmlPath) : wxString {};
+
+	g_gui.SetLoadDone(20, "Loading server items.otb...");
+	if (!g_items.loadFromOtb(itemsOtbPath, error, warnings)) {
 		error = "Couldn't load items.otb: " + error;
 		g_gui.DestroyLoadBar();
 		UnloadVersion();
 		return false;
 	}
 
-	g_gui.SetLoadDone(30, "Loading items.xml ...");
-	if (!g_items.loadFromGameXml(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml"), error, warnings)) {
-		warnings.push_back("Couldn't load items.xml: " + error);
+	if (loadItemsXml) {
+		g_gui.SetLoadDone(30, "Loading server items.xml...");
+		if (!g_items.loadFromGameXml(itemsXmlPath, error, warnings)) {
+			warnings.push_back("Couldn't load items.xml: " + error);
+		}
+	} else {
+		g_gui.SetLoadDone(30, "Server items.xml not found; continuing with items.otb...");
+		warnings.push_back("Server items.xml was not found. The workspace loaded directly from items.otb without optional XML metadata.");
 	}
 
-	g_gui.SetLoadDone(45, "Loading creatures.xml ...");
-	if (!g_creatures.loadFromXML(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "creatures.xml"), true, error, warnings)) {
+	g_gui.SetLoadIndeterminate("Loading creatures.xml ...");
+	if (!g_creatures.loadFromXML(editorDataDirectory + "creatures.xml", true, error, warnings, creatureProgress)) {
 		warnings.push_back("Couldn't load creatures.xml: " + error);
 	}
 
-	g_gui.SetLoadDone(45, "Loading user creatures.xml ...");
+	g_gui.SetLoadIndeterminate("Loading user creatures.xml ...");
 	{
 		FileName cdb = getLoadedVersion()->getLocalDataPath();
 		cdb.SetFullName("creatures.xml");
 		wxString nerr;
 		wxArrayString nwarn;
-		g_creatures.loadFromXML(cdb, false, nerr, nwarn);
+		g_creatures.loadFromXML(cdb, false, nerr, nwarn, creatureProgress);
 	}
 
-	g_gui.SetLoadDone(50, "Loading materials.xml ...");
-	if (!g_materials.loadMaterials(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "materials.xml"), error, warnings)) {
+	if (!workspace.monstersDirectory.empty()) {
+		wxString importError;
+		if (!g_creatures.importMonstersFromLuaDir(WorkspacePath(workspace.monstersDirectory), importError, warnings, creatureProgress, false)) {
+			warnings.push_back("Couldn't import monsters from the Server Workspace: " + importError);
+		}
+	}
+	if (!workspace.npcsDirectory.empty()) {
+		wxString importError;
+		if (!g_creatures.importNpcsFromLuaDir(WorkspacePath(workspace.npcsDirectory), importError, warnings, creatureProgress, false)) {
+			warnings.push_back("Couldn't import NPCs from the Server Workspace: " + importError);
+		}
+	}
+
+	g_gui.SetLoadIndeterminate("Loading materials.xml ...");
+	wxArrayString materialWarnings;
+	if (!g_materials.loadMaterials(editorDataDirectory + "materials.xml", error, materialWarnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + error);
 	}
+	AppendActionableMaterialWarnings(warnings, materialWarnings);
 
-	g_gui.SetLoadDone(70, "Loading extensions...");
-	if (!g_materials.loadExtensions(extension_path, error, warnings)) {
+	g_gui.SetLoadIndeterminate("Loading extensions...");
+	wxArrayString extensionWarnings;
+	if (!g_materials.loadExtensions(extension_path, error, extensionWarnings)) {
 		// warnings.push_back("Couldn't load extensions: " + error);
 	}
+	AppendActionableMaterialWarnings(warnings, extensionWarnings);
 
-	g_gui.SetLoadDone(70, "Finishing...");
+	g_gui.SetLoadIndeterminate("Initializing editor brushes...");
 	g_brushes.init();
-	g_materials.createOtherTileset();
+	g_materials.createOtherTileset([this](size_t completed, size_t total) { SetLoadIndeterminate(wxString::Format("Building palettes: %zu / %zu resource entries", completed, total)); });
 
-	g_gui.DestroyLoadBar();
+	g_gui.SetLoadDone(100, "Classic resources ready.");
+	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
 	return true;
 }
 
 bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
+	const auto creatureProgress = [this](const wxString& status) { SetLoadIndeterminate(status); };
 	const wxString assetsDataDirectory = GetCanaryCrystalBundledDataDirectory();
 	if (!wxDir::Exists(assetsDataDirectory)) {
 		error = "Missing bundled Canary/Crystal data directory: " + assetsDataDirectory;
@@ -472,7 +830,7 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 
 	gfx.client_version = getLoadedVersion();
 	CreateLoadBar("Loading Canary/Crystal Assets");
-	SetLoadDone(0, "Validating package and catalog...");
+	SetLoadIndeterminate("Validating package and catalog...");
 	wxLogMessage("Canary/Crystal: validating client package and catalog.");
 
 	if (!ClientAssets::load(error, warnings)) {
@@ -481,71 +839,89 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		return false;
 	}
 
-	SetLoadDone(35, "Loading item metadata...");
+	SetLoadIndeterminate("Loading item metadata...");
 	wxLogMessage("Canary/Crystal: loading dedicated item metadata.");
 	wxString supplementalError;
-	if (!g_items.loadFromGameXml(assetsDataDirectory + "items/items.xml", supplementalError, warnings, false)) {
-		warnings.push_back("Couldn't enrich Canary/Crystal items from items.xml: " + supplementalError);
+	const ServerWorkspace& workspace = g_workspace.getServer();
+	if (workspace.hasItemsXml()) {
+		const wxString serverItemsXml = WorkspacePath(workspace.itemsXmlPath);
+		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, true)) {
+			warnings.push_back("Couldn't enrich Canary/Crystal items from the server items.xml: " + supplementalError);
+		}
+	} else {
+		warnings.push_back("Server items.xml was not found. Canary/Crystal item properties are limited to appearances.dat metadata.");
 	}
 
-	SetLoadDone(50, "Loading creatures...");
+	SetLoadIndeterminate("Loading creatures...");
 	wxLogMessage("Canary/Crystal: loading dedicated monsters and NPCs.");
+	wxArrayString catalogWarnings;
 	supplementalError.clear();
-	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/monsters.xml", true, supplementalError, warnings)) {
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/monsters.xml", true, supplementalError, catalogWarnings, creatureProgress)) {
 		warnings.push_back("Couldn't load Canary/Crystal monsters.xml: " + supplementalError);
 	}
 	supplementalError.clear();
-	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/npcs.xml", true, supplementalError, warnings)) {
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/npcs.xml", true, supplementalError, catalogWarnings, creatureProgress)) {
 		warnings.push_back("Couldn't load Canary/Crystal npcs.xml: " + supplementalError);
 	}
+	AppendActionableDedicatedCreatureWarnings(warnings, catalogWarnings);
 	{
 		FileName userCreatures = GetCanaryCrystalLocalDataDirectory();
 		userCreatures.SetFullName("creatures.xml");
 		wxString userError;
 		wxArrayString userWarnings;
-		g_creatures.loadFromXML(userCreatures, false, userError, userWarnings);
-		for (const wxString& warning : userWarnings) {
-			warnings.push_back(warning);
-		}
+		g_creatures.loadFromXML(userCreatures, false, userError, userWarnings, creatureProgress);
+		// Older NexaMap versions persisted creatures imported from an entire
+		// server into this shared overlay. It can contain both stale duplicates
+		// and outfits newer than the selected appearance package; neither should
+		// interrupt opening because the active server import below refreshes them.
+		AppendActionableDedicatedCreatureWarnings(warnings, userWarnings);
 	}
 
-	const wxString monstersDirectory = wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
+	const wxString monstersDirectory = !workspace.monstersDirectory.empty()
+		? WorkspacePath(workspace.monstersDirectory)
+		: wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
 	if (!monstersDirectory.empty() && wxDir::Exists(monstersDirectory)) {
 		wxString luaError;
-		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings)) {
+		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings, creatureProgress, false)) {
 			warnings.push_back("Couldn't import the configured monsters Lua directory: " + luaError);
 		}
 	}
-	const wxString npcsDirectory = wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
+	const wxString npcsDirectory = !workspace.npcsDirectory.empty()
+		? WorkspacePath(workspace.npcsDirectory)
+		: wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
 	if (!npcsDirectory.empty() && wxDir::Exists(npcsDirectory)) {
 		wxString luaError;
-		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings)) {
+		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings, creatureProgress, false)) {
 			warnings.push_back("Couldn't import the configured NPCs Lua directory: " + luaError);
 		}
 	}
 
-	SetLoadDone(65, "Loading materials...");
+	SetLoadIndeterminate("Loading materials...");
 	wxLogMessage("Canary/Crystal: loading dedicated materials and borders.");
 	supplementalError.clear();
-	if (!g_materials.loadMaterials(assetsDataDirectory + "materials/materials.xml", supplementalError, warnings)) {
+	wxArrayString dedicatedMaterialWarnings;
+	if (!g_materials.loadMaterials(assetsDataDirectory + "materials/materials.xml", supplementalError, dedicatedMaterialWarnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + supplementalError);
 	}
+	AppendActionableMaterialWarnings(warnings, dedicatedMaterialWarnings);
 
 	// Legacy extensions are tied to versioned TFS ServerIDs and may redefine
 	// brushes from the dedicated ClientID material set. Do not mix them into an
 	// Assets session.
-	SetLoadDone(85, "Initializing Canary/Crystal brushes...");
+	SetLoadIndeterminate("Initializing Canary/Crystal brushes...");
 	wxLogMessage("Canary/Crystal: initializing editor brushes.");
 	g_brushes.init();
-	SetLoadDone(95, "Building Canary/Crystal palettes...");
+	SetLoadIndeterminate("Building Canary/Crystal palettes...");
 	wxLogMessage("Canary/Crystal: building item and creature palettes.");
-	g_materials.createOtherTileset();
+	g_materials.createOtherTileset([this](size_t completed, size_t total) { SetLoadIndeterminate(wxString::Format("Building palettes: %zu / %zu resource entries", completed, total)); });
 	wxLogMessage("Canary/Crystal: dedicated data load completed.");
-	DestroyLoadBar();
+	SetLoadDone(100, "Canary/Crystal palettes ready.");
+	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
 	return true;
 }
 
 void GUI::UnloadVersion() {
+	GetActiveEditorResourceSession()->favoritesContext.clear();
 	UnnamedRenderingLock();
 	DestroyIngamePreview();
 	gfx.clear();
@@ -557,12 +933,20 @@ void GUI::UnloadVersion() {
 	waypoint_brush = nullptr;
 	optional_brush = nullptr;
 	eraser = nullptr;
+	spawn_brush = nullptr;
 	normal_door_brush = nullptr;
 	locked_door_brush = nullptr;
 	magic_door_brush = nullptr;
 	quest_door_brush = nullptr;
 	hatch_door_brush = nullptr;
+	normal_door_alt_brush = nullptr;
+	archway_door_brush = nullptr;
 	window_door_brush = nullptr;
+	pz_brush = nullptr;
+	rook_brush = nullptr;
+	nolog_brush = nullptr;
+	pvp_brush = nullptr;
+	zone_brush = nullptr;
 
 	if (loaded_version != CLIENT_VERSION_NONE) {
 		// g_gui.UnloadVersion();
@@ -578,6 +962,7 @@ void GUI::UnloadVersion() {
 	}
 	ClientAssets::unload();
 	canary_crystal_assets_loaded = false;
+	loaded_workspace_generation = 0;
 }
 
 void GUI::SaveUserCreatures() {
@@ -653,17 +1038,17 @@ void GUI::FitViewToMap(MapTab* mt) {
 bool GUI::NewMap() {
 	FinishWelcomeDialog();
 
-	Editor* editor;
+	std::unique_ptr<Editor> editor;
 	try {
-		editor = newd Editor(copybuffer);
+		editor = std::make_unique<Editor>(copybuffer);
 	} catch (std::runtime_error& e) {
 		PopupDialog(root, "Error!", wxString(e.what(), wxConvUTF8), wxOK);
 		return false;
 	}
 
-	auto* mapTab = newd MapTab(tabbook, editor);
+	auto* mapTab = newd MapTab(tabbook, std::move(editor));
 	mapTab->OnSwitchEditorMode(mode);
-	editor->map.clearChanges();
+	mapTab->GetMap()->clearChanges();
 
 	SetStatusText("Created new map");
 	UpdateTitle();
@@ -787,25 +1172,25 @@ bool GUI::LoadValidatedConvertedMap(const FileName& fileName, const ItemIdCodec*
 	return LoadMapInternal(fileName, EditorClientVersionPolicy::KeepLoaded, readCodec, detachedDecodedView);
 }
 
-bool GUI::LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec, bool detachedDecodedView) {
+bool GUI::LoadMapInternal(const FileName& fileName, EditorClientVersionPolicy clientVersionPolicy, const ItemIdCodec* readCodec, bool detachedDecodedView, bool replaceEmptyEditor) {
 	rme::bindPooledObjectOwnerThread();
 
 	FinishWelcomeDialog();
 
-	const bool replaceEmptyEditor = GetCurrentEditor() && !GetCurrentMap().hasChanged() && !GetCurrentMap().hasFile();
+	const bool shouldReplaceEmptyEditor = replaceEmptyEditor && GetCurrentEditor() && !GetCurrentMap().hasChanged() && !GetCurrentMap().hasFile();
 
-	Editor* editor;
+	std::unique_ptr<Editor> editor;
 	try {
-		editor = newd Editor(copybuffer, fileName, clientVersionPolicy, readCodec, detachedDecodedView);
+		editor = std::make_unique<Editor>(copybuffer, fileName, clientVersionPolicy, readCodec, detachedDecodedView);
 	} catch (std::runtime_error& e) {
 		PopupDialog(root, "Error!", wxString(e.what(), wxConvUTF8), wxOK);
 		return false;
 	}
-	if (replaceEmptyEditor && GetCurrentEditor()) {
+	if (shouldReplaceEmptyEditor && GetCurrentEditor()) {
 		g_gui.CloseCurrentEditor();
 	}
 
-	auto* mapTab = newd MapTab(tabbook, editor);
+	auto* mapTab = newd MapTab(tabbook, std::move(editor));
 	mapTab->OnSwitchEditorMode(mode);
 
 	if (!detachedDecodedView) {
@@ -908,12 +1293,15 @@ void GUI::CloseCurrentEditor() {
 }
 
 bool GUI::CloseAllEditors(bool querySave) {
+	const bool wasClosingAllEditors = closingAllEditors;
+	closingAllEditors = true;
 	for (int i = 0; i < tabbook->GetTabCount(); ++i) {
 		auto* mapTab = dynamic_cast<MapTab*>(tabbook->GetTab(i));
 		if (mapTab) {
 			if (querySave && mapTab->IsUniqueReference() && mapTab->GetMap() && mapTab->GetMap()->hasChanged()) {
 				tabbook->SetFocusedTab(i);
 				if (!root->DoQuerySave(false)) {
+					closingAllEditors = wasClosingAllEditors;
 					return false;
 				} else {
 					RefreshPalettes();
@@ -927,6 +1315,7 @@ bool GUI::CloseAllEditors(bool querySave) {
 	if (root) {
 		root->UpdateMenubar();
 	}
+	closingAllEditors = wasClosingAllEditors;
 	return true;
 }
 
@@ -1012,6 +1401,12 @@ void GUI::LoadPerspective() {
 			}
 
 			wxAuiPaneInfo& info = aui_manager->GetPane(minimap);
+			info.Name("Minimap")
+				.Caption("Minimap")
+				.Dockable(true)
+				.Floatable(true)
+				.CloseButton(true)
+				.MinSize(FROM_DIP(root, wxSize(190, 180)));
 			if (info.IsFloatable()) {
 				bool offscreen = true;
 				for (uint32_t index = 0; index < wxDisplay::GetCount(); ++index) {
@@ -1051,7 +1446,7 @@ void GUI::SavePerspective() {
 	g_settings.setInteger(Config::WINDOW_WIDTH, root->GetSize().GetWidth());
 	g_settings.setInteger(Config::WINDOW_HEIGHT, root->GetSize().GetHeight());
 
-	g_settings.setInteger(Config::MINIMAP_VISIBLE, minimap ? 1 : 0);
+	g_settings.setInteger(Config::MINIMAP_VISIBLE, IsMinimapVisible() ? 1 : 0);
 	g_settings.setInteger(Config::INGAME_PREVIEW_VISIBLE, IsIngamePreviewVisible() ? 1 : 0);
 
 	wxString pinfo;
@@ -1098,6 +1493,24 @@ PaletteWindow* GUI::GetPalette() {
 
 PaletteWindow* GUI::NewPalette() {
 	return CreatePalette();
+}
+
+FavoritesManager& GUI::GetFavorites() {
+	if (!favorites) {
+		favorites = std::make_unique<FavoritesManager>(std::filesystem::u8path(GetLocalDataDirectory().ToStdString(wxConvUTF8)) / "favorites.json");
+		std::string error;
+		favorites->load(error);
+		if (!error.empty()) {
+			wxLogWarning("Favorites: %s", wxString::FromUTF8(error));
+		}
+	}
+	return *favorites;
+}
+
+void GUI::RefreshFavorites() {
+	for (auto* palette : palettes) {
+		palette->RefreshFavorites();
+	}
 }
 
 void GUI::RefreshPalettes(Map* m, bool usedefault, bool selectBrush) {
@@ -1177,6 +1590,10 @@ void GUI::ShowPalette() {
 }
 
 void GUI::SelectPalettePage(PaletteType pt) {
+	// Also guard direct accelerators; a disabled menu alone doesn't block them.
+	if (pt == TILESET_COLLECTION && !g_materials.hasCollections()) {
+		return;
+	}
 	if (palettes.empty()) {
 		CreatePalette();
 	}
@@ -1204,7 +1621,18 @@ void GUI::CreateMinimap() {
 	} else {
 		minimap = newd MinimapWindow(root);
 		minimap->Show(true);
-		aui_manager->AddPane(minimap, wxAuiPaneInfo().Caption("Minimap"));
+		aui_manager->AddPane(
+			minimap,
+			wxAuiPaneInfo()
+				.Name("Minimap")
+				.Caption("Minimap")
+				.Right()
+				.Dockable(true)
+				.Floatable(true)
+				.CloseButton(true)
+				.BestSize(FROM_DIP(root, wxSize(300, 340)))
+				.MinSize(FROM_DIP(root, wxSize(190, 180)))
+		);
 	}
 	aui_manager->Update();
 }
@@ -1221,7 +1649,7 @@ void GUI::DestroyMinimap() {
 void GUI::UpdateMinimap(bool immediate) {
 	if (IsMinimapVisible()) {
 		if (immediate) {
-			minimap->Refresh();
+			minimap->RefreshMap(true);
 		} else {
 			minimap->DelayedUpdate();
 		}
@@ -1241,7 +1669,7 @@ bool GUI::IsMinimapVisible() const {
 //=============================================================================
 
 void GUI::CreateIngamePreview() {
-	if (!IsVersionLoaded() || !aui_manager) {
+	if (!IsVersionLoaded() || !aui_manager || IsApplicationClosing()) {
 		return;
 	}
 
@@ -1249,26 +1677,37 @@ void GUI::CreateIngamePreview() {
 		aui_manager->GetPane(ingame_preview).Show(true);
 	} else {
 		ingame_preview = newd IngamePreviewWindow(root);
+		const int displayIndex = wxDisplay::GetFromWindow(root);
+		const wxSize available = wxDisplay(displayIndex == wxNOT_FOUND ? 0 : displayIndex).GetClientArea().GetSize();
+		const wxSize preferred = FROM_DIP(root, wxSize(740, 680));
+		const wxSize margin = FROM_DIP(root, wxSize(40, 80));
+		const wxSize paneSize(std::min(preferred.x, std::max(240, available.x - margin.x)), std::min(preferred.y, std::max(240, available.y - margin.y)));
+		const wxSize minimum = FROM_DIP(root, wxSize(360, 420));
 		aui_manager->AddPane(
 			ingame_preview,
 			wxAuiPaneInfo()
 				.Name("IngamePreview")
-				.Caption("In-game Preview")
-				.Right()
+				.Caption("Map Playtest")
+				.Float()
 				.Dockable(true)
 				.CloseButton(true)
-				.BestSize(FROM_DIP(root, wxSize(500, 430)))
-				.MinSize(FROM_DIP(root, wxSize(500, 430)))
+				.BestSize(paneSize)
+				.FloatingSize(paneSize)
+				.MinSize(std::min(minimum.x, paneSize.x), std::min(minimum.y, paneSize.y))
 		);
 	}
 	aui_manager->Update();
 	UpdateIngamePreview();
+	if (ingame_preview) {
+		ingame_preview->FocusView();
+	}
 }
 
 void GUI::DestroyIngamePreview() {
 	if (!ingame_preview) {
 		return;
 	}
+	ingame_preview->PrepareForClose();
 	if (aui_manager) {
 		aui_manager->DetachPane(ingame_preview);
 		aui_manager->Update();
@@ -1345,7 +1784,7 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 		wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0)
 	);
 
-	progressBar->SetSize(280, -1);
+	progressBar->SetSize(root->FromDIP(480), -1);
 	progressBar->Show(true);
 
 	progressUpdating = true;
@@ -1360,6 +1799,26 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 void GUI::SetLoadScale(int32_t from, int32_t to) {
 	progressFrom = from;
 	progressTo = to;
+}
+
+bool GUI::SetLoadIndeterminate(const wxString& message) {
+	if (!progressBar || progressUpdating) {
+		return true;
+	}
+	const auto now = std::chrono::steady_clock::now();
+	if (message == progressText && currentProgress == -1 && now - lastProgressPump < std::chrono::milliseconds(100)) {
+		return true;
+	}
+	progressText = message;
+	currentProgress = -1;
+	lastProgressPump = now;
+	progressUpdating = true;
+	const bool shouldContinue = progressBar->Pulse(message);
+	progressUpdating = false;
+	if (destroyPending) {
+		DestroyLoadBar();
+	}
+	return shouldContinue;
 }
 
 bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
@@ -1432,15 +1891,18 @@ void GUI::DestroyLoadBar() {
 	}
 
 	destroyPending = false;
-	progressBar->Show(false);
-
 	currentProgress = -1;
 	progressUpdating = false;
 
-	progressBar->Destroy();
+	// The native Windows progress dialog cannot be hidden. Destroy() defers
+	// destruction, leaving its owner disabled while the caller creates/focuses
+	// the next dialog or map tab. Update() has returned here (guarded above),
+	// so destroy synchronously to restore the owner before continuing.
+	wxProgressDialog* completedProgress = progressBar;
 	progressBar = nullptr;
+	delete completedProgress;
 
-	if (root) {
+	if (root && !closingApplication) {
 		if (root->IsActive()) {
 			root->Raise();
 		} else {
@@ -1450,8 +1912,11 @@ void GUI::DestroyLoadBar() {
 }
 
 void GUI::ShowWelcomeDialog(const wxBitmap& icon) {
+	if (closingApplication) {
+		return;
+	}
 	std::vector<wxString> recent_files = root->GetRecentFiles();
-	welcomeDialog = newd WelcomeDialog(__W_RME_APPLICATION_NAME__, "Version " + __W_RME_VERSION__, FROM_DIP(root, wxSize(1100, 700)), icon, recent_files);
+	welcomeDialog = newd WelcomeDialog(__W_RME_APPLICATION_NAME__, "Version " + __W_RME_VERSION__, FROM_DIP(root, wxSize(1000, 650)), icon, recent_files);
 	welcomeDialog->Bind(wxEVT_CLOSE_WINDOW, &GUI::OnWelcomeDialogClosed, this);
 	welcomeDialog->Bind(WELCOME_DIALOG_ACTION, &GUI::OnWelcomeDialogAction, this);
 	welcomeDialog->Show();
@@ -1480,10 +1945,57 @@ void GUI::OnWelcomeDialogClosed(wxCloseEvent& event) {
 }
 
 void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
-	if (event.GetId() == wxID_NEW) {
+	if (closingApplication) {
+		return;
+	}
+	auto loadWorkspace = [&]() {
+		wxString error;
+		wxArrayString warnings;
+		if (!LoadWorkspace(error, warnings)) {
+			PopupDialog(welcomeDialog, "Workspace not ready", error, wxOK);
+			return false;
+		}
+		if (!warnings.empty()) {
+			ListDialog("Workspace warnings", warnings);
+		}
+		return true;
+	};
+
+	if (event.GetId() == WELCOME_DIALOG_OPEN_WORKSPACE) {
+		if (loadWorkspace()) {
+			const wxString primaryMap = WorkspacePath(g_workspace.getServer().primaryMapPath);
+			if (!primaryMap.empty()) {
+				LoadMapInternal(FileName(primaryMap), EditorClientVersionPolicy::KeepLoaded);
+			} else {
+				NewMap();
+			}
+		}
+	} else if (event.GetId() == wxID_NEW) {
+		if ((g_workspace.getClient().valid || g_workspace.hasServerSelection()) && !loadWorkspace()) {
+			return;
+		}
 		NewMap();
 	} else if (event.GetId() == wxID_OPEN) {
-		LoadMap(FileName(event.GetString()));
+		if (event.GetInt() == 1) {
+			const std::optional<DetectedMap> detectedMap = g_workspace.getDetectedMap(event.GetString());
+			if (!detectedMap || detectedMap->serverType == ServerType::UnknownGeneric) {
+				// Unknown folders follow the established manual-opening path. They
+				// never inherit the previously selected Canary/Crystal workspace.
+				LoadMap(FileName(event.GetString()));
+				return;
+			}
+
+			wxString error;
+			if (!g_workspace.selectDetectedMap(event.GetString(), error)) {
+				PopupDialog(welcomeDialog, "Server not supported", error, wxOK);
+				return;
+			}
+			if (loadWorkspace()) {
+				LoadMapInternal(FileName(event.GetString()), EditorClientVersionPolicy::KeepLoaded);
+			}
+		} else {
+			LoadMap(FileName(event.GetString()));
+		}
 	} else if (event.GetId() == WELCOME_DIALOG_MAP_CONVERTER) {
 		static_cast<void>(RunMapItemIdConverter(welcomeDialog, MapItemIdConverterLaunchContext::Welcome));
 	} else if (event.GetId() == WELCOME_DIALOG_SPAWN_CONVERTER) {
@@ -1534,14 +2046,24 @@ void GUI::DoCopy() {
 
 void GUI::DoPaste() {
 	MapTab* mapTab = GetCurrentMapTab();
-	if (mapTab) {
-		copybuffer.paste(*mapTab->GetEditor(), mapTab->GetCanvas()->GetCursorPosition());
+	if (!mapTab) {
+		return;
+	}
+	Editor* editor = mapTab->GetEditor();
+	if (!PrepareCrossClientPaste(*editor)) {
+		return;
+	}
+	if (editor->copybuffer.canPaste()) {
+		editor->copybuffer.paste(*editor, mapTab->GetCanvas()->GetCursorPosition());
 	}
 }
 
 void GUI::PreparePaste() {
 	Editor* editor = GetCurrentEditor();
 	if (editor) {
+		if (!PrepareCrossClientPaste(*editor) || !editor->copybuffer.canPaste()) {
+			return;
+		}
 		SetSelectionMode();
 		editor->selection.start();
 		editor->selection.clear();
@@ -1551,10 +2073,72 @@ void GUI::PreparePaste() {
 	}
 }
 
+bool GUI::CanPaste() const {
+	if (copybuffer.canPaste()) {
+		return true;
+	}
+	return crossClientClipboard && crossClientClipboard->canPaste()
+		&& !crossClientClipboard->isFromSession(GetActiveEditorResourceSession());
+}
+
+void GUI::CaptureCrossClientCopy(CopyBuffer& source) {
+	if (!crossClientClipboard) {
+		crossClientClipboard = std::make_unique<CrossClientClipboard>();
+	}
+	wxString error;
+	if (!crossClientClipboard->capture(source, GetActiveEditorResourceSession(), error) && !error.empty()) {
+		wxLogWarning("Could not update the cross-client clipboard: " + error);
+	}
+}
+
+bool GUI::PrepareCrossClientPaste(Editor& editor) {
+	const EditorResourceSessionPtr activeSession = GetActiveEditorResourceSession();
+	if (!crossClientClipboard || !crossClientClipboard->canPaste() || crossClientClipboard->isFromSession(activeSession)) {
+		return editor.copybuffer.canPaste();
+	}
+
+	wxProgressDialog progress(
+		"Cross-Client Paste",
+		"Comparing destination sprites and item metadata...",
+		100,
+		root,
+		wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_SMOOTH | wxPD_AUTO_HIDE
+	);
+	wxString error;
+	CrossClientPasteAnalysis analysis = crossClientClipboard->analyze(
+		activeSession,
+		[&](size_t current, size_t total) {
+			const int percent = total == 0 ? 100 : static_cast<int>((current * 100) / total);
+			return progress.Update(std::clamp(percent, 0, 100));
+		},
+		error
+	);
+	if (!error.empty()) {
+		if (error != "Cross-client comparison was cancelled.") {
+			PopupDialog(root, "Cross-Client Paste", error, wxOK | wxICON_ERROR);
+		}
+		return false;
+	}
+
+	CrossClientPasteDialog dialog(root, analysis);
+	if (dialog.ShowModal() != wxID_OK) {
+		return false;
+	}
+	analysis = dialog.GetAnalysis();
+	if (!crossClientClipboard->apply(analysis, editor.copybuffer, error)) {
+		PopupDialog(root, "Cross-Client Paste", error, wxOK | wxICON_ERROR);
+		return false;
+	}
+	SetStatusText(wxString::Format("Cross-client paste ready: %u matched, %u remapped.", analysis.matched, analysis.remapped));
+	return true;
+}
+
 void GUI::StartPasting() {
 	if (GetCurrentEditor()) {
 		pasting = true;
 		secondary_map = &copybuffer.getBufferMap();
+		const uint64_t tileCount = copybuffer.getTileCount();
+		SetStatusText(wxString::Format("Paste ready: %llu tiles. Move the outline and click the map to place the complete area.", static_cast<unsigned long long>(tileCount)));
 	}
 }
 
@@ -1746,7 +2330,7 @@ void GUI::SetDrawingMode(bool preserveSelection) {
 	}
 
 	if (current_brush && current_brush->isDoodad()) {
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	} else {
 		secondary_map = nullptr;
 	}
@@ -1759,7 +2343,7 @@ void GUI::SetBrushSizeInternal(int nz) {
 	if (nz != brush_size && current_brush && current_brush->isDoodad() && !current_brush->oneSizeFitsAll()) {
 		brush_size = nz;
 		FillDoodadPreviewBuffer();
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	} else {
 		brush_size = nz;
 	}
@@ -1781,7 +2365,7 @@ void GUI::SetBrushVariation(int nz) {
 		// Monkey!
 		brush_variation = nz;
 		FillDoodadPreviewBuffer();
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	}
 }
 
@@ -1790,7 +2374,7 @@ void GUI::SetBrushShape(BrushShape bs) {
 		// Donkey!
 		brush_shape = bs;
 		FillDoodadPreviewBuffer();
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	}
 	brush_shape = bs;
 
@@ -1981,7 +2565,7 @@ void GUI::SelectBrushInternal(Brush* brush) {
 	brush_variation = min(brush_variation, brush->getMaxVariation());
 	FillDoodadPreviewBuffer();
 	if (brush->isDoodad()) {
-		secondary_map = doodad_buffer_map;
+		secondary_map = doodad_buffer_map.get();
 	}
 
 	SetDrawingMode(current_brush->isZone());
@@ -2119,7 +2703,7 @@ void GUI::FillDoodadPreviewBuffer() {
 						tile = doodad_buffer_map->allocator(doodad_buffer_map->createTileL(pos));
 					}
 					int variation = GetBrushVariation();
-					brush->draw(doodad_buffer_map, tile, &variation);
+					brush->draw(doodad_buffer_map.get(), tile, &variation);
 					// std::cout << "\tpos: " << tile->getPosition() << std::endl;
 					doodad_buffer_map->setTile(tile->getPosition(), tile);
 					exit = true;
@@ -2153,7 +2737,7 @@ void GUI::FillDoodadPreviewBuffer() {
 		} else if (brush->hasSingleObjects(GetBrushVariation())) {
 			Tile* tile = doodad_buffer_map->allocator(doodad_buffer_map->createTileL(center_pos));
 			int variation = GetBrushVariation();
-			brush->draw(doodad_buffer_map, tile, &variation);
+			brush->draw(doodad_buffer_map.get(), tile, &variation);
 			doodad_buffer_map->setTile(center_pos, tile);
 		}
 	}
@@ -2201,7 +2785,22 @@ void GUI::ListDialog(wxWindow* parent, const wxString& title, const wxArrayStrin
 	sizer->Add(item_list, 1, wxEXPAND);
 
 	wxSizer* stdsizer = newd wxBoxSizer(wxHORIZONTAL);
-	stdsizer->Add(newd wxButton(dlg, wxID_OK, "OK"), wxSizerFlags(1).Center());
+	auto* copyButton = newd wxButton(dlg, wxID_COPY, "Copy");
+	copyButton->Bind(wxEVT_BUTTON, [item_list](wxCommandEvent&) {
+		wxString text;
+		for (unsigned int index = 0; index < item_list->GetCount(); ++index) {
+			if (!text.empty()) {
+				text += "\n";
+			}
+			text += item_list->GetString(index);
+		}
+		if (!text.empty() && wxTheClipboard->Open()) {
+			wxTheClipboard->SetData(newd wxTextDataObject(text));
+			wxTheClipboard->Close();
+		}
+	});
+	stdsizer->Add(copyButton, wxSizerFlags(0).Center().Border(wxRIGHT, 8));
+	stdsizer->Add(newd wxButton(dlg, wxID_OK, "OK"), wxSizerFlags(0).Center());
 	sizer->Add(stdsizer, wxSizerFlags(0).Center());
 
 	dlg->SetSizerAndFit(sizer);

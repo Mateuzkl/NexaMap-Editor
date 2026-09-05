@@ -24,6 +24,7 @@
 #include "main.h"
 
 #include "object_pool.h"
+#include "map_region.h"
 
 #include <algorithm>
 #include <array>
@@ -45,15 +46,15 @@ namespace {
 
 	// Total block sizes including AllocationHeader. These cover Item subclasses,
 	// Tile, and Floor while preserving a safe heap fallback for larger objects.
-	constexpr std::array<std::size_t, 16> kClassSizes = {
+	constexpr std::array<std::size_t, 17> kClassSizes = {
 		32, 48, 64, 80,
 		96, 112, 128, 160,
 		192, 224, 256, 320,
-		384, 512, 768, 1024
+		384, 512, 768, 1024, 1152
 	};
 
 	constexpr std::size_t kClassCount = kClassSizes.size();
-	constexpr std::size_t kMaxClassSize = 1024;
+	constexpr std::size_t kMaxClassSize = 1152;
 	static_assert(kClassSizes[kClassCount - 1] == kMaxClassSize, "max class size must match the largest pool class");
 
 	constexpr std::size_t kSlabBytes = 4 * 1024 * 1024;
@@ -66,6 +67,8 @@ namespace {
 	};
 
 	static_assert(sizeof(AllocationHeader) <= 32, "unexpected pool allocation header size");
+	// Keep 4x4 floors pooled after adding CPU revision/ownership metadata.
+	static_assert(sizeof(Floor) + sizeof(AllocationHeader) <= kMaxClassSize, "Floor no longer fits the object pool");
 
 	struct FreeNode {
 		FreeNode* next;
@@ -263,9 +266,10 @@ namespace {
 		std::vector<void*> slabs_;
 	};
 
-	SmallObjectPool &pooledObjectResource() {
-		// Intentionally kept alive for the process lifetime. Map objects can be
-		// destroyed from detached threads, so static destruction order is unsafe.
+	SmallObjectPool& pooledObjectResource() {
+		// Intentional process-lifetime slabs: global registries and buffers may
+		// still own pooled objects after the app's disposal queue has drained.
+		// Do not free this pool without accounting for those global owners too.
 		static auto* pool = new SmallObjectPool();
 		return *pool;
 	}

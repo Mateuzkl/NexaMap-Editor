@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <functional>
 #include <utility>
+#include <wx/weakref.h>
 #include <wx/dnd.h>
 #include <wx/spinctrl.h>
 #include <wx/statbox.h>
@@ -247,9 +248,13 @@ void ReplaceRuleBuilderPanel::ScheduleRebuild() {
 		return;
 	}
 	rebuildScheduled = true;
-	CallAfter([this]() {
-		rebuildScheduled = false;
-		Rebuild();
+	wxWeakRef<ReplaceRuleBuilderPanel> weak(this);
+	CallAfter([weak]() {
+		if (!weak) {
+			return;
+		}
+		weak->rebuildScheduled = false;
+		weak->Rebuild();
 	});
 }
 

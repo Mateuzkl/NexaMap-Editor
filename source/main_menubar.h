@@ -180,6 +180,18 @@ namespace MenuBar {
 		SEARCH_ON_SELECTION_WALLS_UPON_WALLS,
 
 		SHOW_HOTKEYS,
+		MULTIPLAYER_HOST,
+		MULTIPLAYER_JOIN,
+		MULTIPLAYER_DISCONNECT,
+		MULTIPLAYER_PLAYERS,
+		MULTIPLAYER_LOCK_SELECTION,
+		MULTIPLAYER_UNLOCK,
+		COMMAND_PALETTE,
+		SHOW_FAVORITES,
+		USE_CPU_GEOMETRY_CACHE,
+		USE_GPU_GROUND_CACHE,
+		MAP_DIAGNOSTICS,
+		SHOW_CONTAINER_PREVIEW,
 	};
 }
 
@@ -206,6 +218,8 @@ public:
 	void EnableItem(MenuBar::ActionID id, bool enable);
 	void CheckItem(MenuBar::ActionID id, bool enable);
 	bool IsItemChecked(MenuBar::ActionID id) const;
+	bool HasItem(MenuBar::ActionID id) const;
+	bool IsItemEnabled(MenuBar::ActionID id) const;
 
 	// Event handlers for all menu buttons
 	// File Menu
@@ -290,7 +304,14 @@ public:
 	void OnMapCleanHouseItems(wxCommandEvent& event);
 	void OnMapCleanup(wxCommandEvent& event);
 	void OnMapProperties(wxCommandEvent& event);
+	void OnMultiplayerHost(wxCommandEvent& event);
+	void OnMultiplayerJoin(wxCommandEvent& event);
+	void OnMultiplayerDisconnect(wxCommandEvent& event);
+	void OnMultiplayerPlayers(wxCommandEvent& event);
+	void OnMultiplayerLockSelection(wxCommandEvent& event);
+	void OnMultiplayerUnlock(wxCommandEvent& event);
 	void OnMapStatistics(wxCommandEvent& event);
+	void OnMapDiagnostics(wxCommandEvent& event);
 
 	// View Menu
 	void OnToolbars(wxCommandEvent& event);
@@ -329,6 +350,8 @@ public:
 	void OnGotoWebsite(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
 	void OnShowHotkeys(wxCommandEvent& event);
+	void OnCommandPalette(wxCommandEvent& event);
+	void OnShowFavorites(wxCommandEvent& event);
 
 	// Access actions map for hotkey discovery
 	const std::map<std::string, MenuBar::Action*>& GetActions() const {
@@ -338,6 +361,9 @@ public:
 	void UpdateLabelHotkeys();
 
 protected:
+	wxMenuItem* FindEnabledItem(MenuBar::ActionID id) const;
+	std::vector<MenuBar::ActionID> recentCommands;
+
 	// Load and returns a menu item, also sets accelerator
 	wxObject* LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayString& warnings, wxString& error);
 	// Checks the items in the menus according to the settings (in config)

@@ -29,6 +29,11 @@
 #include "palette_waypoints.h"
 #include "palette_zones.h"
 #include "palette_saved_terrain.h"
+#include "palette_favorites.h"
+#include "favorites_resources.h"
+#include "editor_resource_session.h"
+#include "materials.h"
+#include <wx/wupdlock.h>
 
 #include "map.h"
 
@@ -56,6 +61,8 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	zones_palette(nullptr),
 	saved_terrain_palette(nullptr),
 	raw_palette(nullptr) {
+	resource_session = GetActiveEditorResourceSession();
+	resource_context = FavoriteResources::ActiveContext();
 	SetMinSize(wxSize(225, 250));
 
 	// Create choicebook
@@ -68,7 +75,9 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	choicebook->AddPage(doodad_palette, doodad_palette->GetName());
 
 	collection_palette = static_cast<BrushPalettePanel*>(CreateCollectionPalette(choicebook, tilesets));
-	choicebook->AddPage(collection_palette, collection_palette->GetName());
+	if (collection_palette) {
+		choicebook->AddPage(collection_palette, collection_palette->GetName());
+	}
 
 	item_palette = static_cast<BrushPalettePanel*>(CreateItemPalette(choicebook, tilesets));
 	choicebook->AddPage(item_palette, item_palette->GetName());
@@ -90,6 +99,8 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 	raw_palette = static_cast<BrushPalettePanel*>(CreateRAWPalette(choicebook, tilesets));
 	choicebook->AddPage(raw_palette, raw_palette->GetName());
+	favorites_palette = new FavoritesPalettePanel(choicebook);
+	choicebook->AddPage(favorites_palette, favorites_palette->GetName());
 
 	// Setup sizers
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
@@ -105,6 +116,16 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 PaletteWindow::~PaletteWindow() {
 	////
+}
+
+bool PaletteWindow::HasCurrentResources() const {
+	return resource_session.lock() == GetActiveEditorResourceSession() && resource_context == FavoriteResources::ActiveContext() && !resource_context.empty();
+}
+
+void PaletteWindow::RefreshFavorites() {
+	if (favorites_palette && HasCurrentResources()) {
+		favorites_palette->RefreshFavorites();
+	}
 }
 
 PalettePanel* PaletteWindow::CreateTerrainPalette(wxWindow* parent, const TilesetContainer& tilesets) {
@@ -123,6 +144,9 @@ PalettePanel* PaletteWindow::CreateTerrainPalette(wxWindow* parent, const Tilese
 }
 
 PalettePanel* PaletteWindow::CreateCollectionPalette(wxWindow* parent, const TilesetContainer& tilesets) {
+	if (!Materials::hasCollections(tilesets)) {
+		return nullptr;
+	}
 	auto* panel = newd BrushPalettePanel(parent, tilesets, TILESET_COLLECTION);
 	panel->SetListType(wxstr(g_settings.getString(Config::PALETTE_COLLECTION_STYLE)));
 
@@ -204,7 +228,52 @@ PalettePanel* PaletteWindow::CreateRAWPalette(wxWindow* parent, const TilesetCon
 	return panel;
 }
 
+void PaletteWindow::RefreshCollectionPalette(bool rebuild) {
+	// Resource switches destroy palettes before swapping registries. Ignore any
+	// late event from the old session rather than binding it to the new brushes.
+	if (resource_session.lock() != GetActiveEditorResourceSession()) {
+		return;
+	}
+	const bool available = g_materials.hasCollections();
+	if (available == (collection_palette != nullptr) && (!rebuild || !available)) {
+		return;
+	}
+	const PaletteType selected = GetSelectedPage();
+	wxWindowUpdateLocker freeze(this);
+	wxEventBlocker block(choicebook);
+	if (collection_palette) {
+		const int index = choicebook->FindPage(collection_palette);
+		BrushPalettePanel* previous = collection_palette;
+		collection_palette = nullptr;
+		if (index != wxNOT_FOUND) {
+			choicebook->DeletePage(index);
+		} else {
+			previous->Destroy();
+		}
+	}
+	if (available) {
+		collection_palette = static_cast<BrushPalettePanel*>(CreateCollectionPalette(choicebook, g_materials.tilesets));
+		choicebook->InsertPage(2, collection_palette, collection_palette->GetName());
+	}
+	const auto target = selected == TILESET_COLLECTION && !available ? TILESET_TERRAIN : selected;
+	for (size_t i = 0; i < choicebook->GetPageCount(); ++i) {
+		if (static_cast<PalettePanel*>(choicebook->GetPage(i))->GetType() == target) {
+			choicebook->ChangeSelection(i);
+			break;
+		}
+	}
+	LoadCurrentContents();
+	Layout();
+	if (g_gui.root) {
+		g_gui.UpdateMenus();
+	}
+}
+
 void PaletteWindow::ReloadSettings(Map* map) {
+	if (resource_session.lock() != GetActiveEditorResourceSession()) {
+		return;
+	}
+	RefreshCollectionPalette(true);
 	if (terrain_palette) {
 		terrain_palette->SetListType(wxstr(g_settings.getString(Config::PALETTE_TERRAIN_STYLE)));
 		terrain_palette->SetToolbarIconSize(g_settings.getBoolean(Config::USE_LARGE_TERRAIN_TOOLBAR));
@@ -242,11 +311,13 @@ void PaletteWindow::ReloadSettings(Map* map) {
 }
 
 void PaletteWindow::LoadCurrentContents() {
-	if (!choicebook) {
+	if (!choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
 		return;
 	}
 	auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
-	panel->LoadCurrentContents();
+	if (panel) {
+		panel->LoadCurrentContents();
+	}
 	Fit();
 	Refresh();
 	Update();
@@ -279,7 +350,7 @@ void PaletteWindow::InvalidateContents() {
 }
 
 void PaletteWindow::SelectPage(PaletteType id) {
-	if (!choicebook) {
+	if (!choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
 		return;
 	}
 	if (id == GetSelectedPage()) {
@@ -296,11 +367,11 @@ void PaletteWindow::SelectPage(PaletteType id) {
 }
 
 Brush* PaletteWindow::GetSelectedBrush() const {
-	if (!choicebook) {
+	if (!choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
 		return nullptr;
 	}
 	auto* panel = dynamic_cast<PalettePanel*>(choicebook->GetCurrentPage());
-	return panel->GetSelectedBrush();
+	return panel ? panel->GetSelectedBrush() : nullptr;
 }
 
 int PaletteWindow::GetSelectedBrushSize() const {
@@ -321,7 +392,7 @@ PaletteType PaletteWindow::GetSelectedPage() const {
 }
 
 bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
-	if (!choicebook || !whatbrush) {
+	if (!choicebook || !whatbrush || resource_session.lock() != GetActiveEditorResourceSession()) {
 		return false;
 	}
 
@@ -338,6 +409,12 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 	}
 
 	switch (primary) {
+		case TILESET_FAVORITES:
+			if (favorites_palette && favorites_palette->SelectBrush(whatbrush)) {
+				SelectPage(TILESET_FAVORITES);
+				return true;
+			}
+			break;
 		case TILESET_TERRAIN: {
 			// This is already searched first
 			break;
@@ -424,7 +501,7 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 
 void PaletteWindow::OnSwitchingPage(wxChoicebookEvent& event) {
 	event.Skip();
-	if (!choicebook) {
+	if (!choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
 		return;
 	}
 
@@ -442,7 +519,7 @@ void PaletteWindow::OnSwitchingPage(wxChoicebookEvent& event) {
 }
 
 void PaletteWindow::OnPageChanged(wxChoicebookEvent& event) {
-	if (!choicebook) {
+	if (!choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
 		return;
 	}
 	g_gui.SelectBrush();
@@ -458,6 +535,13 @@ void PaletteWindow::OnUpdateBrushSize(BrushShape shape, int size) {
 }
 
 void PaletteWindow::OnUpdate(Map* map) {
+	if (resource_session.lock() != GetActiveEditorResourceSession()) {
+		return;
+	}
+	RefreshCollectionPalette();
+	if (favorites_palette) {
+		favorites_palette->OnUpdate();
+	}
 	if (creature_palette) {
 		creature_palette->OnUpdate();
 	}

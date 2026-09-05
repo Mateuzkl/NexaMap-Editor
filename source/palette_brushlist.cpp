@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "favorites_resources.h"
 
 #include "palette_brushlist.h"
 #include "gui.h"
@@ -44,8 +45,8 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 
 	// Create the tileset panel
-	wxSizer* ts_sizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Tileset");
-	auto* tmp_choicebook = newd wxChoicebook(this, wxID_ANY, wxDefaultPosition, wxSize(180, 250));
+	auto* ts_sizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Tileset");
+	auto* tmp_choicebook = newd wxChoicebook(ts_sizer->GetStaticBox(), wxID_ANY, wxDefaultPosition, FromDIP(wxSize(180, 250)));
 	ts_sizer->Add(tmp_choicebook, 1, wxEXPAND);
 	topsizer->Add(ts_sizer, 1, wxEXPAND);
 
@@ -61,7 +62,8 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	}
 
 	for (auto iter = tilesets.begin(); iter != tilesets.end(); ++iter) {
-		const TilesetCategory* tcg = iter->second->getCategory(category);
+		const Tileset* tileset = iter->second;
+		const TilesetCategory* tcg = tileset->getCategory(category);
 		if (tcg && tcg->size() > 0) {
 			auto* panel = newd BrushPanel(tmp_choicebook);
 			panel->AssignTileset(tcg);
@@ -152,7 +154,9 @@ void BrushPalettePanel::SelectFirstBrush() {
 	}
 	wxWindow* page = choicebook->GetCurrentPage();
 	auto* panel = dynamic_cast<BrushPanel*>(page);
-	panel->SelectFirstBrush();
+	if (panel) {
+		panel->SelectFirstBrush();
+	}
 }
 
 bool BrushPalettePanel::SelectBrush(const Brush* whatbrush) {
@@ -562,6 +566,15 @@ BrushListBox::BrushListBox(wxWindow* parent, const TilesetCategory* tileset) :
 	SetForegroundColour(Theme::Get(Theme::Role::Text));
 	SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
 	SetItemCount(tileset->size());
+	Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent& event) {
+		if (!FavoriteResources::IsCurrentPalette(this)) {
+			return;
+		}
+		const int index = VirtualHitTest(event.GetY());
+		if (index != wxNOT_FOUND && static_cast<size_t>(index) < this->tileset->size()) {
+			FavoriteResources::Popup(this, this->tileset->brushlist[index]);
+		}
+	});
 }
 
 BrushListBox::~BrushListBox() {

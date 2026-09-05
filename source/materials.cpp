@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include <chrono>
 
 #include <wx/dir.h>
 
@@ -117,6 +118,14 @@ void Materials::clear() {
 
 	tilesets.clear();
 	extensions.clear();
+}
+
+void Materials::swap(Materials& other) noexcept {
+	tilesets.swap(other.tilesets);
+	extensions.swap(other.extensions);
+	std::swap(modified, other.modified);
+	std::swap(other_tileset_creature_count, other.other_tileset_creature_count);
+	std::swap(other_tileset_item_maxid, other.other_tileset_item_maxid);
 }
 
 const MaterialsExtensionList& Materials::getExtensions() {
@@ -297,7 +306,13 @@ bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node no
 				warnings.push_back(filename.GetFullName() + ": Ignored an empty materials include.");
 				continue;
 			}
-			FileName includeName(filename.GetPath(), includeFile);
+			// wxFileName(path, name) treats separators inside `name` as part of a
+			// filename on Windows. Resolve nested includes as complete relative
+			// paths so entries such as "brushs/animals.xml" keep their directory.
+			FileName includeName(includeFile);
+			if (!includeName.IsAbsolute()) {
+				includeName.MakeAbsolute(filename.GetPath());
+			}
 
 			wxString subError;
 			if (!loadMaterialsInternal(includeName, subError, warnings, serverIdsToClientIds, visited)) {
@@ -322,15 +337,26 @@ bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node no
 	return true;
 }
 
-void Materials::createOtherTileset() {
+void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& progress) {
 	// Skip the expensive full item-DB + creature rescan when nothing changed since the
 	// last build. This runs on every palette refresh (CreaturePalettePanel::OnUpdate),
 	// so rebuilding unconditionally re-scans every item id and every creature each time.
 	const size_t cur_creature_count = g_creatures.size();
 	const int32_t cur_item_maxid = g_items.getMaxID();
+	const size_t total = static_cast<size_t>(cur_item_maxid) + 1 + cur_creature_count;
+	auto lastPump = std::chrono::steady_clock::now();
+	auto report = [&](size_t completed, bool force = false) {
+		const auto now = std::chrono::steady_clock::now();
+		if (progress && (force || now - lastPump >= std::chrono::milliseconds(100))) {
+			lastPump = now;
+			progress(completed, total);
+		}
+	};
+	report(0, true);
 	if (tilesets.count("Others") && tilesets.count("NPCs")
 		&& cur_creature_count == other_tileset_creature_count
 		&& cur_item_maxid == other_tileset_item_maxid) {
+		report(total, true);
 		return;
 	}
 
@@ -355,6 +381,7 @@ void Materials::createOtherTileset() {
 
 	// There should really be an iterator to do this
 	for (int32_t id = 0; id <= g_items.getMaxID(); ++id) {
+		report(static_cast<size_t>(id));
 		ItemType& it = g_items[id];
 		if (it.id == 0) {
 			continue;
@@ -381,7 +408,9 @@ void Materials::createOtherTileset() {
 		}
 	}
 
+	size_t completed = static_cast<size_t>(cur_item_maxid) + 1;
 	for (auto iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
+		report(completed++);
 		CreatureType* type = iter->second;
 		if (type->in_other_tileset) {
 			if (type->isNpc) {
@@ -404,6 +433,7 @@ void Materials::createOtherTileset() {
 
 	other_tileset_creature_count = cur_creature_count;
 	other_tileset_item_maxid = cur_item_maxid;
+	report(total, true);
 }
 
 bool Materials::unserializeTileset(pugi::xml_node node, wxArrayString& warnings) {
@@ -430,6 +460,17 @@ bool Materials::unserializeTileset(pugi::xml_node node, wxArrayString& warnings)
 	return true;
 }
 
+bool Materials::hasCollections(const TilesetContainer& tilesets) {
+	for (const auto& [name, entry] : tilesets) {
+		const Tileset* tileset = entry;
+		const auto* category = tileset ? tileset->getCategory(TILESET_COLLECTION) : nullptr;
+		if (category && category->size() > 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void Materials::addToTileset(const std::string& tilesetName, int itemId, TilesetCategoryType categoryType) {
 	ItemType& it = g_items[itemId];
 
@@ -450,10 +491,7 @@ void Materials::addToTileset(const std::string& tilesetName, int itemId, Tileset
 
 	if (!it.isMetaItem()) {
 		Brush* brush;
-		if (it.in_other_tileset) {
-			category->brushlist.push_back(it.raw_brush);
-			return;
-		} else if (it.raw_brush == nullptr) {
+		if (it.raw_brush == nullptr) {
 			brush = it.raw_brush = newd RAWBrush(it.id);
 			it.has_raw = true;
 			g_brushes.addBrush(it.raw_brush);
@@ -462,7 +500,13 @@ void Materials::addToTileset(const std::string& tilesetName, int itemId, Tileset
 		}
 
 		brush->flagAsVisible();
-		category->brushlist.push_back(it.raw_brush);
+		if (categoryType == TILESET_COLLECTION) {
+			brush->setCollection();
+			it.collection_brush = brush;
+		}
+		if (!category->containsBrush(brush)) {
+			category->brushlist.push_back(brush);
+		}
 		it.in_other_tileset = true;
 	}
 }
@@ -470,7 +514,7 @@ void Materials::addToTileset(const std::string& tilesetName, int itemId, Tileset
 bool Materials::isInTileset(Item* item, const std::string& tilesetName) const {
 	const ItemType& it = g_items[item->getID()];
 
-	return it.id != 0 && (isInTileset(it.brush, tilesetName) || isInTileset(it.doodad_brush, tilesetName) || isInTileset(it.raw_brush, tilesetName)) || isInTileset(it.collection_brush, tilesetName);
+	return it.id != 0 && (isInTileset(it.brush, tilesetName) || isInTileset(it.doodad_brush, tilesetName) || isInTileset(it.raw_brush, tilesetName) || isInTileset(it.collection_brush, tilesetName));
 }
 
 bool Materials::isInTileset(Brush* brush, const std::string& tilesetName) const {

@@ -22,9 +22,13 @@
 #include "application.h"
 #include "map_window.h"
 
+#include <memory>
+
+class EditorResourceSession;
+
 class MapTab : public EditorTab, public MapWindow {
 public:
-	MapTab(MapTabbook* aui, Editor* editor);
+	MapTab(MapTabbook* aui, std::unique_ptr<Editor> editor);
 	// Constructs a newd window, but it uses the same internal editor as 'other'
 	// AND the same parent, aui_notebook etc.
 	MapTab(const MapTab* other);
@@ -39,6 +43,7 @@ public:
 	wxString GetTitle() const override;
 	Editor* GetEditor() const;
 	Map* GetMap() const;
+	std::shared_ptr<EditorResourceSession> GetResourceSession() const;
 
 	void VisibilityCheck();
 
@@ -47,11 +52,13 @@ public:
 
 protected:
 	struct InternalReference {
-		Editor* editor;
-		int owner_count;
+		explicit InternalReference(std::unique_ptr<Editor> editor);
+		~InternalReference();
+		std::unique_ptr<Editor> editor;
+		std::shared_ptr<EditorResourceSession> resourceSession;
 	};
 	MapTabbook* aui;
-	InternalReference* iref;
+	std::shared_ptr<InternalReference> iref;
 };
 
 inline bool MapTab::HasSameReference(MapTab* other) const {
