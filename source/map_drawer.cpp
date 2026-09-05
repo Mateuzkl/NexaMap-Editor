@@ -83,6 +83,18 @@ namespace {
 		}
 		return complete;
 	}
+
+	int ItemSpriteSubtype(const Item& item, const ItemType& type) {
+		if (type.isSplash() || type.isFluidContainer()) {
+			return item.getSubtype();
+		}
+		if (type.stackable && !type.isHangable) {
+			const int count = item.getSubtype();
+			const int limits[] = { 1, 2, 3, 4, 9, 24, 49 };
+			return static_cast<int>(std::lower_bound(std::begin(limits), std::end(limits), count) - std::begin(limits));
+		}
+		return -1;
+	}
 }
 
 static std::vector<Color> colors;
@@ -341,7 +353,6 @@ void MapDrawer::Release() {
 	}
 
 	tooltips.clear();
-	containerPreviews.clear();
 
 	if (light_drawer) {
 		light_drawer->clear();
@@ -421,12 +432,12 @@ void MapDrawer::DrawOverlays() {
 	if (options.show_ingame_box) {
 		DrawIngameBox();
 	}
-	if (options.show_tooltips && !medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
-		DrawTooltips();
-	}
-	if (options.show_container_preview && !medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
-		for (const auto& preview : containerPreviews) {
-			DrawContainerPreview(preview.x, preview.y, preview);
+	if (!medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
+		if (options.show_container_preview || options.isTooltips()) {
+			DrawContainerPreview();
+		}
+		if (options.show_tooltips) {
+			DrawTooltips();
 		}
 	}
 	for (int map_z = start_z; map_z >= superend_z; --map_z) {
@@ -1531,39 +1542,19 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 	draw_x -= spr->getDrawHeight();
 	draw_y -= spr->getDrawHeight();
 
-	int subtype = -1;
+	const int subtype = ItemSpriteSubtype(*item, it);
 
 	int pattern_x = pos.x % spr->pattern_x;
 	int pattern_y = pos.y % spr->pattern_y;
 	int pattern_z = pos.z % spr->pattern_z;
 
-	if (it.isSplash() || it.isFluidContainer()) {
-		subtype = item->getSubtype();
-	} else if (it.isHangable) {
+	if (it.isHangable && !it.isSplash() && !it.isFluidContainer()) {
 		if (tile && tile->hasProperty(HOOK_SOUTH)) {
 			pattern_x = 1;
 		} else if (tile && tile->hasProperty(HOOK_EAST)) {
 			pattern_x = 2;
 		} else {
 			pattern_x = 0;
-		}
-	} else if (it.stackable) {
-		if (item->getSubtype() <= 1) {
-			subtype = 0;
-		} else if (item->getSubtype() <= 2) {
-			subtype = 1;
-		} else if (item->getSubtype() <= 3) {
-			subtype = 2;
-		} else if (item->getSubtype() <= 4) {
-			subtype = 3;
-		} else if (item->getSubtype() < 10) {
-			subtype = 4;
-		} else if (item->getSubtype() < 25) {
-			subtype = 5;
-		} else if (item->getSubtype() < 50) {
-			subtype = 6;
-		} else {
-			subtype = 7;
 		}
 	}
 
@@ -1932,8 +1923,7 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	}
 
 	auto* tp = dynamic_cast<Teleport*>(item);
-	auto* container = dynamic_cast<Container*>(item);
-	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty() && !container) {
+	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty()) {
 		return;
 	}
 
@@ -1968,19 +1958,6 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	if (tp) {
 		Position dest = tp->getDestination();
 		stream << "Destination: " << dest.x << ", " << dest.y << ", " << dest.z << "\n";
-	}
-	if (container && container->getItemCount() > 0) {
-		stream << "Contents (" << container->getItemCount() << "/" << container->getVolume() << "):\n";
-		for (size_t i = 0; i < container->getItemCount(); ++i) {
-			Item* subItem = container->getItem(i);
-			if (subItem) {
-				stream << "  " << g_items[subItem->getID()].name;
-				if (subItem->getCount() > 1) {
-					stream << " (" << subItem->getCount() << ")";
-				}
-				stream << "\n";
-			}
-		}
 	}
 }
 
@@ -2199,47 +2176,15 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 				if (medium_zoom_mode && !(*it)->isBorder() && std::next(it) != tile->items.end()) {
 					continue;
 				}
-		// item tooltip
-			if (show_tooltips && map_z == floor) {
-				WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
-			}
-
-			// Collect container preview data
-			if (options.show_container_preview && map_z == floor) {
-				if (auto* container = dynamic_cast<Container*>(*it)) {
-					if (container->getItemCount() > 0) {
-						std::vector<uint16_t> itemIds;
-						std::vector<uint16_t> counts;
-						for (size_t ci = 0; ci < container->getItemCount(); ++ci) {
-							Item* subItem = container->getItem(ci);
-							if (subItem) {
-								itemIds.push_back(subItem->getID());
-								counts.push_back(subItem->getCount());
-							}
-						}
-						int previewX = draw_x + TileSize / 2;
-						int previewY;
-						if (show_tooltips) {
-							previewY = draw_y - TileSize - 25;
-						} else {
-							previewY = draw_y - TileSize;
-						}
-						if (previewY < 0) {
-							previewY = draw_y + TileSize + 2;
-						}
-						if (previewY < 0) {
-							previewY = draw_y + TileSize + 4;
-						}
-						std::string containerName = g_items[(*it)->getID()].name;
-						containerPreviews.emplace_back(previewX, previewY, containerName, itemIds, counts);
-					}
+				// item tooltip
+				if (show_tooltips && map_z == floor) {
+					WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
 				}
-			}
 
-			// item animation
-			if (options.show_preview && zoom <= 2.0) {
-				(*it)->animate();
-			}
+				// item animation
+				if (options.show_preview && zoom <= 2.0) {
+					(*it)->animate();
+				}
 
 				// item sprite
 				if ((*it)->isBorder()) {
@@ -2560,86 +2505,144 @@ void MapDrawer::MakeTooltip(int screenx, int screeny, const std::string& text, u
 	tooltips.back().checkLineEnding();
 }
 
-void MapDrawer::DrawContainerPreview(int screenx, int screeny, const ContainerPreview& preview) {
-	if (preview.itemIds.empty()) {
+void MapDrawer::DrawContainerPreview() {
+	if (options.ingame || options.isOnlyColors() || canvas->space_held || canvas->space_dragging || canvas->screendragging || canvas->drawing || dragging || dragging_draw || !canvas->GetScreenRect().Contains(wxGetMousePosition())) {
 		return;
 	}
 
-	const int maxCols = 6;
-	const float slotRatio = 0.35f;
-	const float borderRatio = 0.03f;
-	const float paddingRatio = 0.03f;
-
-	int itemCount = static_cast<int>(preview.itemIds.size());
-	int cols = std::min(itemCount, maxCols);
-	int rows = (itemCount + maxCols - 1) / maxCols;
-
-	float slotSize = TileSize * slotRatio;
-	float slotBorder = TileSize * borderRatio;
-	float padding = TileSize * paddingRatio;
-
-	float totalWidth = cols * (slotSize + slotBorder * 2) + padding * 2;
-	float totalHeight = rows * (slotSize + slotBorder * 2) + padding * 2;
-
-	float x = static_cast<float>(screenx) - totalWidth / 2.0f;
-	float y = static_cast<float>(screeny);
-
-	if (y < 0) {
-		y = static_cast<float>(screeny) + TileSize + 2.0f;
+	// Resolve only the hovered tile in this canvas's resource session. No
+	// Item/Container pointers or texture IDs survive this overlay pass.
+	const Tile* tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
+	const auto* container = tile ? dynamic_cast<const Container*>(tile->getTopItem()) : nullptr;
+	if (!container || container->getItemCount() == 0 || (options.show_only_modified && !tile->isModified()) || (!options.show_items && g_items[container->getID()].pickupable)) {
+		return;
 	}
-	if (x < 0) {
-		x = 0;
+	const size_t itemCount = container->getItemCount();
+	const int offset = floor <= GROUND_LAYER ? (GROUND_LAYER - floor) * TileSize : 0;
+	const int tileX = mouse_map_x * TileSize - view_scroll_x - offset;
+	const int tileY = mouse_map_y * TileSize - view_scroll_y - offset;
+	const std::string name = container->getName().empty() ? "Container " + std::to_string(container->getID()) : container->getName();
+
+	if (options.isTooltips()) {
+		std::ostringstream contents;
+		contents << name << "\nContents (" << itemCount << "/" << container->getVolume() << "):\n";
+		const size_t textCount = std::min<size_t>(itemCount, 12);
+		for (size_t i = 0; i < textCount; ++i) {
+			if (const Item* item = container->getItem(i)) {
+				contents << "  " << (item->getName().empty() ? "Item " + std::to_string(item->getID()) : item->getName());
+				if (g_items[item->getID()].stackable && item->getCount() > 1) {
+					contents << " (" << item->getCount() << ")";
+				}
+				contents << "\n";
+			}
+		}
+		if (textCount < itemCount) {
+			contents << "... " << itemCount - textCount << " more items\n";
+		}
+		auto existing = std::find_if(tooltips.begin(), tooltips.end(), [&](const MapTooltip& tip) { return tip.x == tileX && tip.y == tileY; });
+		if (existing != tooltips.end()) {
+			existing->text += "\n" + contents.str();
+			existing->ellipsis = existing->text.size() > MapTooltip::MAX_CHARS;
+			existing->checkLineEnding();
+		} else {
+			MakeTooltip(tileX, tileY, contents.str());
+		}
 	}
-	if (x + totalWidth > screensize_x * zoom) {
-		x = screensize_x * zoom - totalWidth;
+	if (!options.show_container_preview) {
+		return;
 	}
 
-	float bx = x;
-	float by = y;
-
+	// Convert DIP to the renderer's zoomed pixel coordinates. Bound both
+	// dimensions and work per frame even for oversized/malformed containers.
+	const float unit = static_cast<float>(canvas->FromDIP(100) / 100.0 * canvas->GetContentScaleFactor()) * zoom;
+	const float padding = 4.0f * unit;
+	const float headerHeight = 20.0f * unit;
+	const float slotSize = 36.0f * unit;
+	const float viewWidth = screensize_x * zoom;
+	const float viewHeight = screensize_y * zoom;
+	const int maxCols = std::min(6, static_cast<int>((viewWidth - 2 * padding) / slotSize));
+	const int maxRows = std::min(6, static_cast<int>((viewHeight - 2 * padding - 2 * headerHeight) / slotSize));
+	if (maxCols <= 0 || maxRows <= 0) {
+		return;
+	}
+	const int visibleCount = static_cast<int>(std::min(itemCount, static_cast<size_t>(maxCols * maxRows)));
+	const int cols = std::min(visibleCount, maxCols);
+	const int rows = (visibleCount + cols - 1) / cols;
+	const bool truncated = static_cast<size_t>(visibleCount) < itemCount;
+	const float totalWidth = cols * slotSize + 2 * padding;
+	const float totalHeight = rows * slotSize + 2 * padding + headerHeight * (truncated ? 2 : 1);
+	const float x = std::clamp(tileX + TileSize / 2.0f - totalWidth / 2, 0.0f, std::max(0.0f, viewWidth - totalWidth));
+	float y = options.isTooltips() ? tileY + TileSize + padding : tileY - totalHeight - padding;
+	if (y < 0 || y + totalHeight > viewHeight) {
+		y = options.isTooltips() ? tileY - totalHeight - padding : tileY + TileSize + padding;
+	}
+	y = std::clamp(y, 0.0f, std::max(0.0f, viewHeight - totalHeight));
 	const wxColour bg = Theme::Get(Theme::Role::TooltipBackground);
 	const wxColour borderClr = Theme::Get(Theme::Role::TooltipBorder);
+	renderer->drawColoredQuad(x, y, totalWidth, totalHeight, { bg.Red(), bg.Green(), bg.Blue(), 240 });
+	renderer->drawRect(x, y, totalWidth, totalHeight, { borderClr.Red(), borderClr.Green(), borderClr.Blue(), 255 }, 1.0f);
 
-	renderer->drawColoredQuad(bx, by, totalWidth, totalHeight, { bg.Red(), bg.Green(), bg.Blue(), 230 });
-	renderer->drawRect(bx, by, totalWidth, totalHeight, { borderClr.Red(), borderClr.Green(), borderClr.Blue(), 255 }, 1.0f);
+	std::vector<PreparedSpritePart> parts;
+	for (int i = 0; i < visibleCount; ++i) {
+		const float slotX = x + padding + (i % cols) * slotSize;
+		const float slotY = y + padding + headerHeight + (i / cols) * slotSize;
+		renderer->drawRect(slotX, slotY, slotSize, slotSize, { borderClr.Red(), borderClr.Green(), borderClr.Blue(), 180 }, 1.0f);
+		const Item* item = container->getItem(static_cast<size_t>(i));
+		if (!item) {
+			continue;
+		}
+		const ItemType& type = g_items[item->getID()];
+		GameSprite* sprite = type.sprite;
+		if (!sprite || sprite->width == 0 || sprite->height == 0 || sprite->layers == 0 || static_cast<unsigned int>(sprite->width) * sprite->height * sprite->layers > 256) {
+			continue;
+		}
+		parts.clear();
+		const int subtype = ItemSpriteSubtype(*item, type);
+		if (!AppendPreparedSpriteParts(
+				0, 0, sprite->width, sprite->height, sprite->layers, [&](int cx, int cy, int layer) { return sprite->getSpriteTex(cx, cy, layer, subtype, 0, 0, 0, 0); }, parts
+			)) {
+			continue;
+		}
+		const float partSize = (slotSize - 2 * padding) / std::max(sprite->width, sprite->height);
+		const float iconX = slotX + (slotSize - sprite->width * partSize) / 2;
+		const float iconY = slotY + (slotSize - sprite->height * partSize) / 2;
+		for (const PreparedSpritePart& part : parts) {
+			const auto& st = part.texture;
+			const float partX = iconX + (sprite->width - 1 + part.screen_x / TileSize) * partSize;
+			const float partY = iconY + (sprite->height - 1 + part.screen_y / TileSize) * partSize;
+			renderer->drawTexturedQuad(partX, partY, partSize, partSize, st.texture, { 255, 255, 255, 255 }, st.u0, st.v0, st.u1, st.v1);
+		}
+	}
 
-	float gridStartX = bx + padding;
-	float gridStartY = by + padding;
-
-	for (int i = 0; i < itemCount; ++i) {
-		int col = i % maxCols;
-		int row = i / maxCols;
-
-		float slotX = gridStartX + col * (slotSize + slotBorder * 2);
-		float slotY = gridStartY + row * (slotSize + slotBorder * 2);
-
-		renderer->drawColoredQuad(slotX, slotY, slotSize + slotBorder * 2, slotSize + slotBorder * 2,
-			{ static_cast<uint8_t>(bg.Red() / 2), static_cast<uint8_t>(bg.Green() / 2), static_cast<uint8_t>(bg.Blue() / 2), 200 });
-		renderer->drawRect(slotX, slotY, slotSize + slotBorder * 2, slotSize + slotBorder * 2,
-			{ borderClr.Red(), borderClr.Green(), borderClr.Blue(), 180 }, 0.5f);
-
-		float iconX = slotX + slotBorder;
-		float iconY = slotY + slotBorder;
-
-		GameSprite* spr = g_items[preview.itemIds[i]].sprite;
-		if (spr) {
-			const auto st = spr->getSpriteTex(0, 0, 0, -1, 0, 0, 0, 0);
-			if (st.texture != 0) {
-				renderer->drawTexturedQuad(iconX, iconY, slotSize, slotSize, st.texture, { 255, 255, 255, 255 }, st.u0, st.v0, st.u1, st.v1);
+	// Submit sprites before text, with one batch boundary for the whole grid.
+	renderer->flushAndUnbind();
+	const BitmapFont& font = unit / zoom >= 1.5f ? rme_bitmap_helvetica_18 : rme_bitmap_helvetica_12;
+	const wxColour textColour = Theme::Get(Theme::Role::TooltipValue);
+	glColor4ub(textColour.Red(), textColour.Green(), textColour.Blue(), 255);
+	auto drawText = [&](float textX, float textY, const std::string& text, float availableWidth) {
+		glRasterPos2f(textX, textY);
+		float usedWidth = 0;
+		for (unsigned char ch : text) {
+			usedWidth += bitmapCharWidth(font, ch) * zoom;
+			if (usedWidth > availableWidth) {
+				break;
+			}
+			if (ch >= 32) {
+				drawBitmapChar(font, ch);
 			}
 		}
-
-		if (preview.counts[i] > 1) {
-			renderer->flushAndUnbind();
-			const wxColour countColour = Theme::Get(Theme::Role::TooltipValue);
-			glColor4ub(countColour.Red(), countColour.Green(), countColour.Blue(), 255);
-			glRasterPos2f(iconX + slotSize - 6.0f, iconY + slotSize - 1.0f);
-			char countBuf[8];
-			snprintf(countBuf, sizeof(countBuf), "%d", preview.counts[i]);
-			for (const char* c = countBuf; *c != '\0'; ++c) {
-				drawBitmapChar(rme_bitmap_helvetica_12, *c);
-			}
+	};
+	drawText(x + padding, y + headerHeight - padding, name, totalWidth - 2 * padding);
+	for (int i = 0; i < visibleCount; ++i) {
+		const Item* item = container->getItem(static_cast<size_t>(i));
+		if (item && g_items[item->getID()].stackable && item->getCount() > 1) {
+			const float textX = x + padding * 2 + (i % cols) * slotSize;
+			const float textY = y + headerHeight + (i / cols + 1) * slotSize;
+			drawText(textX, textY, std::to_string(item->getCount()), slotSize - 2 * padding);
 		}
+	}
+	if (truncated) {
+		drawText(x + padding, y + totalHeight - padding * 2, "+ " + std::to_string(itemCount - visibleCount) + " more items", totalWidth - 2 * padding);
 	}
 }
 

@@ -1103,7 +1103,6 @@ FindDialogListBox::FindDialogListBox(wxWindow* parent, wxWindowID id) :
 	SetBackgroundColour(Theme::Get(Theme::Role::Background));
 	SetForegroundColour(Theme::Get(Theme::Role::Text));
 	Clear();
-	Connect(wxEVT_LEFT_DCLICK, wxMouseEventHandler(FindDialogListBox::OnDoubleClick), nullptr, this);
 }
 
 FindDialogListBox::~FindDialogListBox() {
@@ -1111,6 +1110,7 @@ FindDialogListBox::~FindDialogListBox() {
 }
 
 void FindDialogListBox::Clear() {
+	SetSelection(wxNOT_FOUND);
 	cleared = true;
 	no_matches = false;
 	brushlist.clear();
@@ -1118,6 +1118,7 @@ void FindDialogListBox::Clear() {
 }
 
 void FindDialogListBox::SetNoMatches() {
+	SetSelection(wxNOT_FOUND);
 	cleared = false;
 	no_matches = true;
 	brushlist.clear();
@@ -1132,13 +1133,22 @@ void FindDialogListBox::AddBrush(Brush* brush) {
 	cleared = false;
 	no_matches = false;
 
-	SetItemCount(GetItemCount() + 1);
 	brushlist.push_back(brush);
+	SetItemCount(brushlist.size());
+}
+
+void FindDialogListBox::SetBrushes(std::vector<Brush*> brushes) {
+	SetSelection(wxNOT_FOUND);
+	brushlist = std::move(brushes);
+	cleared = false;
+	no_matches = brushlist.empty();
+	SetItemCount(no_matches ? 1 : brushlist.size());
+	Refresh();
 }
 
 Brush* FindDialogListBox::GetSelectedBrush() {
 	ssize_t n = GetSelection();
-	if (n == wxNOT_FOUND || no_matches || cleared) {
+	if (n < 0 || no_matches || cleared || static_cast<size_t>(n) >= brushlist.size()) {
 		return nullptr;
 	}
 	return brushlist[n];
@@ -1150,7 +1160,9 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 	} else if (cleared) {
 		dc.DrawText("Please enter your search string.", rect.GetX() + 40, rect.GetY() + 6);
 	} else {
-		ASSERT(n < brushlist.size());
+		if (n >= brushlist.size() || !brushlist[n]) {
+			return;
+		}
 		Sprite* spr = g_gui.gfx.getSprite(brushlist[n]->getLookID());
 		if (spr) {
 			spr->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
@@ -1168,21 +1180,6 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 
 wxCoord FindDialogListBox::OnMeasureItem(size_t n) const {
 	return 32;
-}
-
-void FindDialogListBox::OnDoubleClick(wxMouseEvent& WXUNUSED(event)) {
-	if (no_matches || cleared) {
-		return;
-	}
-
-	ssize_t n = GetSelection();
-	if (n != wxNOT_FOUND) {
-		wxWindow* parent = GetParent();
-		if (parent) {
-			wxCommandEvent event(wxEVT_COMMAND_BUTTON_CLICKED, wxID_OK);
-			parent->GetEventHandler()->AddPendingEvent(event);
-		}
-	}
 }
 
 // ============================================================================

@@ -37,16 +37,6 @@ class EditorResourceSession;
 
 class GameSprite;
 
-struct ContainerPreview {
-	ContainerPreview(int x, int y, const std::string& name, const std::vector<uint16_t>& itemIds, const std::vector<uint16_t>& counts) :
-		x(x), y(y), name(name), itemIds(itemIds), counts(counts) {}
-
-	int x, y;
-	std::string name;
-	std::vector<uint16_t> itemIds;
-	std::vector<uint16_t> counts;
-};
-
 struct MapTooltip {
 	enum TextLength {
 		MAX_CHARS_PER_LINE = 40,
@@ -285,7 +275,6 @@ class MapDrawer {
 protected:
 	std::unordered_map<unsigned int, std::vector<FinderPosition>> zoneTiles;
 	std::vector<MapTooltip> tooltips;
-	std::vector<ContainerPreview> containerPreviews;
 	std::ostringstream tooltip;
 	wxStopWatch pos_indicator_timer;
 	Position pos_indicator;
@@ -387,7 +376,7 @@ protected:
 	void WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile);
 	void WriteTooltip(Waypoint* item, std::ostringstream& stream);
 	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
-	void DrawContainerPreview(int screenx, int screeny, const ContainerPreview& preview);
+	void DrawContainerPreview();
 	void UpdateRAMUsage();
 	void UpdateCPUUsage();
 	void AddLight(TileLocation* location);

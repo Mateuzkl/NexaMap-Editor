@@ -188,12 +188,11 @@ public:
 	void Clear();
 	void SetNoMatches();
 	void AddBrush(Brush*);
+	void SetBrushes(std::vector<Brush*> brushes);
 	Brush* GetSelectedBrush();
 
 	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const override;
 	wxCoord OnMeasureItem(size_t index) const override;
-
-	void OnDoubleClick(wxMouseEvent& event);
 
 protected:
 	bool cleared;

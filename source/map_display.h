@@ -153,6 +153,10 @@ protected:
 
 private:
 	void RefreshWithoutDirty();
+	void EndSpaceDrag();
+	void CancelSpacePan();
+	void OnCanvasKillFocus(wxFocusEvent& event);
+	void OnPanCaptureLost(wxMouseCaptureLostEvent& event);
 
 	enum {
 		BLOCK_SIZE = 100

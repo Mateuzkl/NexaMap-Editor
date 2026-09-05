@@ -145,7 +145,9 @@ namespace {
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 EVT_KEY_DOWN(MapCanvas::OnKeyDown)
-EVT_KEY_DOWN(MapCanvas::OnKeyUp)
+EVT_KEY_UP(MapCanvas::OnKeyUp)
+EVT_KILL_FOCUS(MapCanvas::OnCanvasKillFocus)
+EVT_MOUSE_CAPTURE_LOST(MapCanvas::OnPanCaptureLost)
 
 // Mouse events
 EVT_MOTION(MapCanvas::OnMouseMove)
@@ -255,6 +257,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool in
 }
 
 MapCanvas::~MapCanvas() {
+	CancelSpacePan();
 	delete popup_menu;
 	delete animation_timer;
 	if (drawer) {
@@ -663,31 +666,35 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 		return;
 	}
 	if (space_dragging) {
-		if (!wxGetKeyState(WXK_SPACE)) {
-			space_dragging = false;
-			space_held = false;
-			SetCursor(wxCursor(wxCURSOR_ARROW));
-		} else {
-			static_cast<MapWindow*>(GetParent())->ScrollRelative(int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (cursor_x - event.GetX())), int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (cursor_y - event.GetY())));
-			cursor_x = event.GetX();
-			cursor_y = event.GetY();
-			wxGLCanvas::Update();
+		if (!event.LeftIsDown()) {
+			EndSpaceDrag();
 			return;
 		}
-	}
-
-	if (wxGetKeyState(WXK_SPACE)) {
-		if (!space_held) {
-			space_held = true;
-			space_had_click = false;
-		}
-		SetCursor(wxCursor(wxCURSOR_HAND));
-	} else {
-		if (space_held) {
+		if (!wxGetKeyState(WXK_SPACE)) {
 			space_held = false;
-			space_had_click = false;
+			SetCursor(wxNullCursor);
 		}
-		SetCursor(wxCursor(wxCURSOR_ARROW));
+		if (space_held && !event.ControlDown()) {
+			const double speed = g_settings.getFloat(Config::SCROLL_SPEED) * zoom * GetContentScaleFactor();
+			static_cast<MapWindow*>(GetParent())->ScrollRelative(int(speed * (cursor_x - event.GetX())), int(speed * (cursor_y - event.GetY())));
+			RefreshViewport();
+		}
+		cursor_x = event.GetX();
+		cursor_y = event.GetY();
+		// Consume the whole left-button gesture, even if Space was released
+		// first. It must never fall through to painting or selection.
+		return;
+	}
+	if (screendragging) {
+		const double speed = g_settings.getFloat(Config::SCROLL_SPEED) * zoom * GetContentScaleFactor();
+		static_cast<MapWindow*>(GetParent())->ScrollRelative(int(speed * (cursor_x - event.GetX())), int(speed * (cursor_y - event.GetY())));
+		cursor_x = event.GetX();
+		cursor_y = event.GetY();
+		RefreshViewport();
+		return;
+	}
+	if (space_held && !wxGetKeyState(WXK_SPACE)) {
+		CancelSpacePan();
 	}
 
 	cursor_x = event.GetX();
@@ -827,6 +834,38 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 			RefreshViewport();
 		}
 	}
+	if (map_update && (g_settings.getBoolean(Config::SHOW_CONTAINER_PREVIEW) || g_settings.getBoolean(Config::SHOW_TOOLTIPS))) {
+		RefreshViewport();
+	}
+}
+
+void MapCanvas::EndSpaceDrag() {
+	space_dragging = false;
+	if (HasCapture()) {
+		ReleaseMouse();
+	}
+	SetCursor(space_held ? wxCursor(wxCURSOR_HAND) : wxNullCursor);
+	RefreshViewport();
+}
+
+void MapCanvas::CancelSpacePan() {
+	space_held = false;
+	space_had_click = false;
+	if (HasCapture()) {
+		ReleaseMouse();
+	}
+	SetCursor(wxNullCursor);
+	// Keep space_dragging until the button is released so a cancelled pan
+	// cannot commit a stale map action through OnMouseActionRelease().
+}
+
+void MapCanvas::OnCanvasKillFocus(wxFocusEvent& event) {
+	CancelSpacePan();
+	event.Skip();
+}
+
+void MapCanvas::OnPanCaptureLost(wxMouseCaptureLostEvent&) {
+	CancelSpacePan();
 }
 
 void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
@@ -834,7 +873,7 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
 		return;
 	}
 	if (space_dragging) {
-		space_dragging = false;
+		EndSpaceDrag();
 		return;
 	}
 	OnMouseActionRelease(event);
@@ -851,11 +890,22 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent& event) {
 		SetFocus();
 		return;
 	}
+	if (space_dragging) {
+		EndSpaceDrag();
+	}
 	if (space_held) {
 		space_had_click = true;
+	}
+	if (space_held && !event.ControlDown() && !event.AltDown() && !event.MetaDown() && !drawing && !dragging_draw && !dragging && !boundbox_selection && !screendragging) {
+		SetFocus();
+		space_had_click = true;
 		space_dragging = true;
-		last_mmb_click_x = event.GetX();
-		last_mmb_click_y = event.GetY();
+		cursor_x = event.GetX();
+		cursor_y = event.GetY();
+		if (!HasCapture()) {
+			CaptureMouse();
+		}
+		SetCursor(wxCursor(wxCURSOR_HAND));
 		return;
 	}
 	OnMouseActionClick(event);
@@ -863,6 +913,10 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent& event) {
 
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent& event) {
 	if (ingamePreview) {
+		return;
+	}
+	if (space_dragging || (space_held && !event.ControlDown())) {
+		OnMouseLeftClick(event);
 		return;
 	}
 	if (g_settings.getInteger(Config::DOUBLECLICK_PROPERTIES)) {
@@ -892,6 +946,7 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent& event) {
 					w = newd OldPropertiesWindow(g_gui.root, &editor.map, new_tile, item);
 				}
 			} else {
+				delete new_tile;
 				return;
 			}
 
@@ -1516,6 +1571,8 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 
 void MapCanvas::OnMouseCameraClick(wxMouseEvent& event) {
 	SetFocus();
+	cursor_x = event.GetX();
+	cursor_y = event.GetY();
 
 	last_mmb_click_x = event.GetX();
 	last_mmb_click_y = event.GetY();
@@ -1831,6 +1888,9 @@ void MapCanvas::OnGainMouse(wxMouseEvent& event) {
 		return;
 	}
 	if (!event.LeftIsDown()) {
+		if (space_dragging) {
+			EndSpaceDrag();
+		}
 		dragging = false;
 		boundbox_selection = false;
 		drawing = false;
@@ -1849,13 +1909,18 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 	}
 	if (event.GetKeyCode() == WXK_SPACE) {
 		if (event.ControlDown()) {
+			space_had_click = true;
 			g_gui.FillDoodadPreviewBuffer();
 			g_gui.RefreshView();
 			return;
 		}
-		if (!space_held) {
+		if (!space_held && !event.IsAutoRepeat() && !event.AltDown() && !event.MetaDown()) {
 			space_held = true;
-			space_had_click = false;
+			space_had_click = drawing || dragging_draw || dragging || boundbox_selection || screendragging || space_dragging;
+			if (!space_had_click) {
+				SetCursor(wxCursor(wxCURSOR_HAND));
+				RefreshViewport();
+			}
 		}
 		return;
 	}
@@ -2134,14 +2199,15 @@ void MapCanvas::OnKeyUp(wxKeyEvent& event) {
 		return;
 	}
 	if (event.GetKeyCode() == WXK_SPACE) {
-		if (!space_had_click) {
-			g_gui.SwitchMode();
-		}
+		const bool switchMode = space_held && !space_had_click && !event.ControlDown() && !event.AltDown() && !event.MetaDown();
 		space_held = false;
 		space_had_click = false;
-		space_dragging = false;
-		SetCursor(wxCursor(wxCURSOR_ARROW));
-		SetFocus();
+		SetCursor(wxNullCursor);
+		if (switchMode) {
+			g_gui.SwitchMode();
+		} else {
+			RefreshViewport();
+		}
 		return;
 	}
 	keyCode = WXK_NONE;
@@ -2810,6 +2876,8 @@ void MapCanvas::EndPasting() {
 }
 
 void MapCanvas::Reset() {
+	CancelSpacePan();
+	space_dragging = false;
 	minimap_import_overlay.reset();
 	cursor_x = 0;
 	cursor_y = 0;
