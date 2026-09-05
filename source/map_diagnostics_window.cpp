@@ -6,6 +6,7 @@
 #include "map.h"
 #include "map_diagnostics_scanner.h"
 #include "map_tab.h"
+#include "multiplayer_session.h"
 #include "theme.h"
 
 #include <algorithm>
@@ -257,6 +258,12 @@ void MapDiagnosticsWindow::StartScan() {
 	results_->UnsetToolTip();
 	progress_->SetValue(0);
 	scanner_->Start();
+	mapContentChanges_ = map_.getChunkRevisionTracker().getStats().contentChanges;
+	if (Editor* editor = g_gui.GetCurrentEditor(); editor && editor->multiplayer) {
+		multiplayerRevision_ = editor->multiplayer->revision();
+	} else {
+		multiplayerRevision_ = 0;
+	}
 	status_->SetLabel(wxString::Format("Scanning 0 of %llu tiles...", static_cast<unsigned long long>(scanner_->GetTotalTileCount())));
 	UpdateControls();
 	timer_.Start(10);
@@ -279,6 +286,7 @@ void MapDiagnosticsWindow::ClearResults() {
 		CancelScan();
 	}
 	showResults_ = false;
+	scanner_->Reset();
 	rows_.clear();
 	results_->SetRows(0);
 	progress_->SetValue(0);
@@ -295,7 +303,11 @@ void MapDiagnosticsWindow::OnTimer(wxTimerEvent&) {
 		return;
 	}
 	MapTab* currentTab = g_gui.GetCurrentMapTab();
-	if (!currentTab || &g_gui.GetCurrentMap() != &map_ || map_.getSessionId() != mapSessionId_) {
+	Editor* currentEditor = g_gui.GetCurrentEditor();
+	const uint64_t currentMultiplayerRevision = currentEditor && currentEditor->multiplayer ? currentEditor->multiplayer->revision() : 0;
+	if (!currentTab || &g_gui.GetCurrentMap() != &map_ || map_.getSessionId() != mapSessionId_
+		|| map_.getChunkRevisionTracker().getStats().contentChanges != mapContentChanges_
+		|| currentMultiplayerRevision != multiplayerRevision_) {
 		CancelScan();
 		status_->SetLabel("Scan cancelled because the active map or resource session changed.");
 		return;

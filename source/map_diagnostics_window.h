@@ -52,6 +52,8 @@ private:
 
 	Map& map_;
 	SessionId mapSessionId_;
+	uint64_t mapContentChanges_ = 0;
+	uint64_t multiplayerRevision_ = 0;
 	std::unique_ptr<MapDiagnosticsScanner> scanner_;
 	wxTimer timer_;
 	bool showResults_ = false;

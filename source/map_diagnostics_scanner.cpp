@@ -51,6 +51,16 @@ public:
 		map_(map), mapSessionId_(map.getSessionId()) { }
 
 	void Start() {
+		Reset();
+		totalTiles_ = map_.getTileCount();
+		running_ = true;
+		phase_ = Phase::Tiles;
+		tileIterator_ = std::make_unique<MapIterator>(map_.begin());
+		tileEnd_ = std::make_unique<MapIterator>(map_.end());
+	}
+	void Reset() {
+		tileIterator_.reset();
+		tileEnd_.reset();
 		issues_.clear();
 		uidOccurrences_.clear();
 		aidOccurrences_.clear();
@@ -63,13 +73,11 @@ public:
 		houseStarted_ = false;
 		actualHouseStarted_ = false;
 		processedTiles_ = 0;
-		totalTiles_ = map_.getTileCount();
+		totalTiles_ = 0;
 		cancelled_ = false;
 		complete_ = false;
-		running_ = true;
-		phase_ = Phase::Tiles;
-		tileIterator_ = std::make_unique<MapIterator>(map_.begin());
-		tileEnd_ = std::make_unique<MapIterator>(map_.end());
+		running_ = false;
+		phase_ = Phase::Done;
 	}
 
 	void Cancel() {
@@ -605,6 +613,9 @@ void MapDiagnosticsScanner::Start() {
 }
 void MapDiagnosticsScanner::Cancel() {
 	impl_->Cancel();
+}
+void MapDiagnosticsScanner::Reset() {
+	impl_->Reset();
 }
 void MapDiagnosticsScanner::Step(size_t workUnits) {
 	impl_->Step(workUnits);

@@ -21,6 +21,7 @@ public:
 
 	void Start();
 	void Cancel();
+	void Reset();
 	void Step(size_t workUnits);
 
 	bool IsRunning() const;
