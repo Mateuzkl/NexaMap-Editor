@@ -62,7 +62,8 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	}
 
 	for (auto iter = tilesets.begin(); iter != tilesets.end(); ++iter) {
-		const TilesetCategory* tcg = iter->second->getCategory(category);
+		const Tileset* tileset = iter->second;
+		const TilesetCategory* tcg = tileset->getCategory(category);
 		if (tcg && tcg->size() > 0) {
 			auto* panel = newd BrushPanel(tmp_choicebook);
 			panel->AssignTileset(tcg);
@@ -153,7 +154,9 @@ void BrushPalettePanel::SelectFirstBrush() {
 	}
 	wxWindow* page = choicebook->GetCurrentPage();
 	auto* panel = dynamic_cast<BrushPanel*>(page);
-	panel->SelectFirstBrush();
+	if (panel) {
+		panel->SelectFirstBrush();
+	}
 }
 
 bool BrushPalettePanel::SelectBrush(const Brush* whatbrush) {

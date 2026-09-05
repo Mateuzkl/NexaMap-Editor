@@ -533,6 +533,9 @@ protected:
 
 	friend class RenderingLock;
 	friend class EditorResourceSession;
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	friend class CollectionsPaletteTests;
+#endif
 	friend MapTab::MapTab(MapTabbook*, Editor*);
 	friend MapTab::MapTab(const MapTab*);
 };

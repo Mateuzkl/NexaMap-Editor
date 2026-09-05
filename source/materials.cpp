@@ -460,6 +460,17 @@ bool Materials::unserializeTileset(pugi::xml_node node, wxArrayString& warnings)
 	return true;
 }
 
+bool Materials::hasCollections(const TilesetContainer& tilesets) {
+	for (const auto& [name, entry] : tilesets) {
+		const Tileset* tileset = entry;
+		const auto* category = tileset ? tileset->getCategory(TILESET_COLLECTION) : nullptr;
+		if (category && category->size() > 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void Materials::addToTileset(const std::string& tilesetName, int itemId, TilesetCategoryType categoryType) {
 	ItemType& it = g_items[itemId];
 
@@ -480,10 +491,7 @@ void Materials::addToTileset(const std::string& tilesetName, int itemId, Tileset
 
 	if (!it.isMetaItem()) {
 		Brush* brush;
-		if (it.in_other_tileset) {
-			category->brushlist.push_back(it.raw_brush);
-			return;
-		} else if (it.raw_brush == nullptr) {
+		if (it.raw_brush == nullptr) {
 			brush = it.raw_brush = newd RAWBrush(it.id);
 			it.has_raw = true;
 			g_brushes.addBrush(it.raw_brush);
@@ -492,7 +500,13 @@ void Materials::addToTileset(const std::string& tilesetName, int itemId, Tileset
 		}
 
 		brush->flagAsVisible();
-		category->brushlist.push_back(it.raw_brush);
+		if (categoryType == TILESET_COLLECTION) {
+			brush->setCollection();
+			it.collection_brush = brush;
+		}
+		if (!category->containsBrush(brush)) {
+			category->brushlist.push_back(brush);
+		}
 		it.in_other_tileset = true;
 	}
 }

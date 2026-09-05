@@ -70,6 +70,7 @@ public:
 	void OnClose(wxCloseEvent&);
 
 protected:
+	void RefreshCollectionPalette(bool rebuild = false);
 	static PalettePanel* CreateTerrainPalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateDoodadPalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateItemPalette(wxWindow* parent, const TilesetContainer& tilesets);

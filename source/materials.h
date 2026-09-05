@@ -32,6 +32,11 @@ public:
 	const MaterialsExtensionList& getExtensions();
 
 	TilesetContainer tilesets;
+	// Query already resolved categories without creating empty ones or loading data.
+	static bool hasCollections(const TilesetContainer& tilesets);
+	bool hasCollections() const {
+		return hasCollections(tilesets);
+	}
 
 	bool loadMaterials(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds = false);
 	bool loadExtensions(const FileName& identifier, wxString& error, wxArrayString& warnings);

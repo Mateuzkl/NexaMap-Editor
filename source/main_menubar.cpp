@@ -514,7 +514,7 @@ void MainMenuBar::Update() {
 	EnableItem(SELECT_TERRAIN, loaded);
 	EnableItem(SELECT_DOODAD, loaded);
 	EnableItem(SELECT_ITEM, loaded);
-	EnableItem(SELECT_COLLECTION, loaded);
+	EnableItem(SELECT_COLLECTION, loaded && g_materials.hasCollections());
 	EnableItem(SELECT_HOUSE, loaded);
 	EnableItem(SELECT_CREATURE, loaded);
 	EnableItem(SELECT_WAYPOINT, loaded);

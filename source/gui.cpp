@@ -1578,6 +1578,10 @@ void GUI::ShowPalette() {
 }
 
 void GUI::SelectPalettePage(PaletteType pt) {
+	// Also guard direct accelerators; a disabled menu alone doesn't block them.
+	if (pt == TILESET_COLLECTION && !g_materials.hasCollections()) {
+		return;
+	}
 	if (palettes.empty()) {
 		CreatePalette();
 	}
