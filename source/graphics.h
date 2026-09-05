@@ -362,7 +362,7 @@ public:
 	GameSprite* getEditorSprite(int id);
 
 	long getElapsedTime() const {
-		return (animation_timer->TimeInMicro() / 1000).ToLong();
+		return (animation_timer.TimeInMicro() / 1000).ToLong();
 	}
 
 	uint16_t getItemSpriteMaxID() const;
@@ -502,7 +502,7 @@ private:
 	bool recycleAtlasPage();
 	void touchAtlasPage(GLuint texture) noexcept;
 
-	wxStopWatch* animation_timer;
+	wxStopWatch animation_timer;
 
 	friend class GameSprite::Image;
 	friend class GameSprite::NormalImage;

@@ -200,8 +200,7 @@ GraphicManager::GraphicManager() :
 	has_frame_groups(false),
 	loaded_textures(0),
 	lastclean(0) {
-	animation_timer = newd wxStopWatch();
-	animation_timer->Start();
+	animation_timer.Start();
 }
 
 GraphicManager::~GraphicManager() {
@@ -212,8 +211,6 @@ GraphicManager::~GraphicManager() {
 	for (auto iter = image_space.begin(); iter != image_space.end(); ++iter) {
 		delete iter->second;
 	}
-
-	delete animation_timer;
 }
 
 void GraphicManager::swap(GraphicManager& other) noexcept {
@@ -1561,15 +1558,18 @@ void GameSprite::unloadDC() {
 }
 
 bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit) {
+	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
-	if (pixelWidth <= 0 || pixelHeight <= 0 || layers == 0 || (outfit && (pattern_x == 0 || pattern_y == 0))) {
+	const size_t pixelCount = static_cast<size_t>(pixelWidth) * static_cast<size_t>(pixelHeight);
+	if (pixelWidth <= 0 || pixelHeight <= 0 || pixelCount > MaximumPreviewBytes / 4
+		|| layers == 0 || (outfit && (pattern_x == 0 || pattern_y == 0))) {
 		pixels.clear();
 		return false;
 	}
 
-	pixels.assign(static_cast<size_t>(pixelWidth) * pixelHeight * 4, 0);
+	pixels.assign(pixelCount * 4, 0);
 	std::vector<uint8_t> tilePixels(SPRITE_PIXELS_SIZE * 4);
 	const uint8_t previewLayers = outfit ? pattern_y : layers;
 	for (uint8_t layer = 0; layer < previewLayers; ++layer) {

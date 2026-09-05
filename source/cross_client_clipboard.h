@@ -59,8 +59,8 @@ struct CrossClientPasteRow {
 struct CrossClientPasteAnalysis {
 	bool valid = false;
 	uint64_t clipboardGeneration = 0;
-	std::shared_ptr<EditorResourceSession> sourceSession;
-	std::shared_ptr<EditorResourceSession> destinationSession;
+	std::weak_ptr<EditorResourceSession> sourceSession;
+	std::weak_ptr<EditorResourceSession> destinationSession;
 	wxString sourceClient;
 	wxString sourceServer;
 	wxString destinationClient;
@@ -103,7 +103,7 @@ public:
 private:
 	std::unique_ptr<BaseMap> map;
 	Position copyPosition;
-	std::shared_ptr<EditorResourceSession> sourceSession;
+	std::weak_ptr<EditorResourceSession> sourceSession;
 	wxString sourceClient;
 	wxString sourceServer;
 	std::vector<CrossClientItemSnapshot> items;

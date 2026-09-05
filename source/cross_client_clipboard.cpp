@@ -41,6 +41,40 @@ namespace {
 		SpriteVisualFingerprint visual;
 	};
 
+	constexpr int StoredPreviewExtent = 16;
+	constexpr size_t MaximumRetainedPreviewBytes = 64u * 1024u * 1024u;
+
+	bool LoadStoredPreview(GameSprite* sprite, std::vector<uint8_t>& pixels, int& width, int& height, bool& pending) {
+		if (!sprite || !sprite->getVisualPreviewRGBA(pixels, width, height, pending, false)) {
+			return false;
+		}
+		if (width <= StoredPreviewExtent && height <= StoredPreviewExtent) {
+			return true;
+		}
+
+		int storedWidth = StoredPreviewExtent;
+		int storedHeight = StoredPreviewExtent;
+		if (width > height) {
+			storedHeight = std::max(1, height * StoredPreviewExtent / width);
+		} else if (height > width) {
+			storedWidth = std::max(1, width * StoredPreviewExtent / height);
+		}
+		std::vector<uint8_t> stored(static_cast<size_t>(storedWidth) * storedHeight * 4);
+		for (int y = 0; y < storedHeight; ++y) {
+			const int sourceY = std::min(height - 1, y * height / storedHeight);
+			for (int x = 0; x < storedWidth; ++x) {
+				const int sourceX = std::min(width - 1, x * width / storedWidth);
+				const size_t source = (static_cast<size_t>(sourceY) * width + sourceX) * 4;
+				const size_t destination = (static_cast<size_t>(y) * storedWidth + x) * 4;
+				std::copy_n(pixels.data() + source, 4, stored.data() + destination);
+			}
+		}
+		pixels = std::move(stored);
+		width = storedWidth;
+		height = storedHeight;
+		return true;
+	}
+
 	wxString DisplayPath(const std::filesystem::path& path) {
 		if (path.empty()) {
 			return "Not configured";
@@ -283,6 +317,7 @@ bool CrossClientClipboard::capture(CopyBuffer& source, const std::shared_ptr<Edi
 
 	std::vector<CrossClientItemSnapshot> capturedItems;
 	capturedItems.reserve(counts.size());
+	size_t retainedPreviewBytes = 0;
 	for (const auto& [id, occurrences] : counts) {
 		CrossClientItemSnapshot snapshot;
 		snapshot.sourceId = id;
@@ -302,9 +337,16 @@ bool CrossClientClipboard::capture(CopyBuffer& source, const std::shared_ptr<Edi
 				bool pending = false;
 				snapshot.visualAvailable = sprite->getVisualFingerprint(snapshot.visual, pending, false);
 				pending = false;
-				snapshot.previewAvailable = sprite->getVisualPreviewRGBA(snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight, pending, false);
-				if (snapshot.previewAvailable) {
+				snapshot.previewAvailable = LoadStoredPreview(sprite, snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight, pending);
+				if (snapshot.previewAvailable && retainedPreviewBytes <= MaximumRetainedPreviewBytes
+					&& snapshot.previewRgba.size() <= MaximumRetainedPreviewBytes - retainedPreviewBytes) {
+					retainedPreviewBytes += snapshot.previewRgba.size();
 					snapshot.previewVisual = PixelFingerprint(snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight);
+				} else {
+					snapshot.previewAvailable = false;
+					snapshot.previewRgba.clear();
+					snapshot.previewWidth = 0;
+					snapshot.previewHeight = 0;
 				}
 			}
 		}
@@ -336,11 +378,11 @@ void CrossClientClipboard::clear() {
 }
 
 bool CrossClientClipboard::canPaste() const noexcept {
-	return map && map->size() != 0 && sourceSession;
+	return map && map->size() != 0;
 }
 
 bool CrossClientClipboard::isFromSession(const std::shared_ptr<EditorResourceSession>& session) const noexcept {
-	return canPaste() && session && sourceSession == session;
+	return canPaste() && session && sourceSession.lock() == session;
 }
 
 CrossClientPasteAnalysis CrossClientClipboard::analyze(
@@ -399,7 +441,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			std::vector<uint8_t> previewRgba;
 			int previewWidth = 0;
 			int previewHeight = 0;
-			const bool previewAvailable = sprite && sprite->getVisualPreviewRGBA(previewRgba, previewWidth, previewHeight, pending, false);
+			const bool previewAvailable = LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending);
 			if (previewAvailable && sourcePreviews.contains(PixelFingerprint(previewRgba, previewWidth, previewHeight))) {
 				pending = false;
 				spriteData.visualAvailable = sprite->getVisualFingerprint(spriteData.visual, pending, false);
@@ -495,7 +537,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			std::vector<uint8_t> previewRgba;
 			int previewWidth = 0;
 			int previewHeight = 0;
-			if (!sprite || !sprite->getVisualPreviewRGBA(previewRgba, previewWidth, previewHeight, pending, false)) {
+			if (!LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending)) {
 				continue;
 			}
 
@@ -562,11 +604,11 @@ bool CrossClientClipboard::resolveMapping(CrossClientPasteAnalysis& analysis, si
 
 bool CrossClientClipboard::apply(const CrossClientPasteAnalysis& analysis, CopyBuffer& destination, wxString& error) {
 	error.clear();
-	if (!canPaste() || analysis.clipboardGeneration != generation || analysis.sourceSession != sourceSession) {
+	if (!canPaste() || analysis.clipboardGeneration != generation) {
 		error = "The copied area changed while the cross-client verification window was open.";
 		return false;
 	}
-	if (analysis.destinationSession != GetActiveEditorResourceSession()) {
+	if (analysis.destinationSession.lock() != GetActiveEditorResourceSession()) {
 		error = "The destination resource session changed before the paste was applied.";
 		return false;
 	}
