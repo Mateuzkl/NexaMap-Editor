@@ -1,611 +1,151 @@
 <p align="center">
-  <a href="https://postimg.cc/Xp0WGdxP">
-    <img src="https://i.postimg.cc/1583dKFy/Chat-GPT-Image-17-de-ago-de-2026-10-00-00.png" alt="NexaMap Editor" width="100%" />
+  <a href="https://mateuzkl.github.io/NexaMap-Showcase/">
+    <img src="https://i.postimg.cc/1583dKFy/Chat-GPT-Image-17-de-ago-de-2026-10-00-00.png" alt="NexaMap Editor" width="760" />
   </a>
 </p>
 
-<div align="center">
+<h1 align="center">NexaMap Editor</h1>
 
-# NexaMap Editor
+<p align="center">
+  <strong>Create. Convert. Build Worlds.</strong><br />
+  A modern native map editor for OpenTibia projects.
+</p>
 
-**Create. Convert. Build Worlds.**
+<p align="center">
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor"><img src="https://img.shields.io/badge/version-5.0.0-00B8C8?style=flat-square" alt="Version 5.0.0" /></a>
+  <img src="https://img.shields.io/badge/C++-20-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++20" />
+  <img src="https://img.shields.io/badge/UI-wxWidgets-007ACC?style=flat-square" alt="wxWidgets" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-44545F?style=flat-square" alt="Windows and Linux" />
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml/badge.svg" alt="Windows builds" /></a>
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml/badge.svg" alt="Code style" /></a>
+</p>
 
-A modern native map editor for OpenTibia projects, focused on OTBM editing, ClientID workflows, asset compatibility, conversion tools, large-world performance and **Dragon Souls TFS 1.4 compatibility**.
+<p align="center">
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml"><strong>Download</strong></a> ·
+  <a href="https://mateuzkl.github.io/NexaMap-Showcase/"><strong>Showcase</strong></a> ·
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor/issues"><strong>Report a bug</strong></a> ·
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor/pulls"><strong>Contribute</strong></a>
+</p>
 
-[![Version](https://img.shields.io/badge/version-5.0.0-00B8C8?style=flat-square)](https://github.com/Mateuzkl/NexaMap-Editor)
-![C++](https://img.shields.io/badge/C++-20-00599C?style=flat-square&logo=cplusplus&logoColor=white)
-![wxWidgets](https://img.shields.io/badge/UI-wxWidgets-007ACC?style=flat-square)
-![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-44545F?style=flat-square)
-[![Formatting](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml/badge.svg)](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml)
-[![Windows builds](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml/badge.svg)](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml)
-[![Repository size](https://img.shields.io/github/repo-size/Mateuzkl/NexaMap-Editor?style=flat-square)](https://github.com/Mateuzkl/NexaMap-Editor)
-[![Issues](https://img.shields.io/github/issues/Mateuzkl/NexaMap-Editor?style=flat-square)](https://github.com/Mateuzkl/NexaMap-Editor/issues)
-[![License](https://img.shields.io/badge/license-see%20LICENSE-F6C445?style=flat-square)](LICENSE.rtf)
+## About
 
-<br />
+NexaMap Editor is an open-source C++ desktop editor for creating, maintaining, testing, and converting OTBM worlds. It supports classic OpenTibia workflows and modern ClientID projects without tying the editor to one server distribution.
 
-![Mapping](https://img.shields.io/badge/MAPPING-OTBM-00B8C8?style=for-the-badge)
-![ClientID](https://img.shields.io/badge/WORKFLOW-ClientID-2563EB?style=for-the-badge)
-![Canary](https://img.shields.io/badge/SUPPORT-Canary-F59E0B?style=for-the-badge)
-![Crystal](https://img.shields.io/badge/SUPPORT-Crystal-8B5CF6?style=for-the-badge)
-![DragonSouls](https://img.shields.io/badge/SUPPORT-Dragon%20Souls-FF4444?style=for-the-badge)
-
-<br />
-<br />
-
-[Repository](https://github.com/Mateuzkl/NexaMap-Editor) ·
-[Showcase](https://mateuzkl.github.io/NexaMap-Showcase/) ·
-[Issues](https://github.com/Mateuzkl/NexaMap-Editor/issues) ·
-[Pull Requests](https://github.com/Mateuzkl/NexaMap-Editor/pulls)
-
-</div>
-
----
-
-## Why NexaMap over standard RME?
-
-NexaMap Editor is a **complete replacement** for the standard RME (Remere's Map Editor) from OTAcademy and similar forks. Here is what sets it apart:
-
-| Feature | Standard RME | NexaMap Editor |
-|---|:---:|:---:|
-| ClientID workflow | ❌ | ✅ |
-| ServerID ↔ ClientID conversion | ❌ | ✅ |
-| Spawn / NPC format conversion | ❌ | ✅ |
-| `appearances.dat` asset support | ❌ | ✅ |
-| OTC sprite resource support | ❌ | ✅ |
-| Canary project support | ❌ | ✅ |
-| Crystal project support | ❌ | ✅ |
-| **Dragon Souls TFS 1.4 map compatibility (uint16)** | ❌ | ✅ |
-| Dark / Light / System themes | ❌ | ✅ |
-| DPI-aware interface | ❌ | ✅ |
-| Welcome screen with recent projects | ❌ | ✅ |
-| Modern C++20 codebase | ❌ | ✅ |
-| Zone editing tools | ❌ | ✅ |
-| Procedural map generation | ❌ | ✅ |
-| Automated CI builds (x86 + x64) | ❌ | ✅ |
-
-NexaMap supports **everything** that the standard RME does — OTBM editing, brushes, palettes, houses, spawns, items — **plus** an entire modern toolset that RME will never have.
-
----
-
-## 🐉 Dragon Souls TFS 1.4 — Map Compatibility
-
-NexaMap Editor includes **native support** for [Dragon Souls TFS 1.4 (Protocol 11.00)](https://github.com/Mateuzkl/Dragon-Souls-TFS-1.4-Protocol-11.00) maps.
-
-Dragon Souls uses a modified OTBM format where **item count and subtype fields are stored as `uint16` (16-bit)** instead of the standard `uint8` (8-bit) used by vanilla TFS/RME. This means:
-
-- Standard RME **cannot correctly open** Dragon Souls maps — it reads corrupted data.
-- Standard RME **cannot correctly save** Dragon Souls maps — it writes the wrong byte format.
-- NexaMap is the **only map editor** that properly supports this format.
-
-### How to use
-
-1. Open **NexaMap Editor**.
-2. Go to **Edit → Preferences → Editor** tab.
-3. **Check** the option: `Dragon Souls map compatibility (16-bit item count/subtype)`.
-4. Open / edit / save your Dragon Souls map normally.
-
-NexaMap will read and write the `uint16` format that Dragon Souls expects. Your server will open the map without issues.
-
-> [!IMPORTANT]
-> **Always enable** this option **before** opening a Dragon Souls map. If you open a Dragon Souls map without this option enabled, the item data will be read incorrectly.
-
-> [!WARNING]
-> **For standard OTBM maps** (vanilla TFS, Canary, Crystal, etc.), leave this option **unchecked**. Enabling it on normal maps will produce incompatible files.
-
-### Quick reference
-
-| Map type | Dragon Souls option |
-|---|---|
-| Dragon Souls TFS 1.4 | ✅ **Enabled** |
-| Standard TFS / OTServ | ❌ Disabled |
-| Canary | ❌ Disabled |
-| Crystal | ❌ Disabled |
-| Other custom servers using uint8 | ❌ Disabled |
-
----
-
-## Overview
-
-Explore the [NexaMap Showcase](https://mateuzkl.github.io/NexaMap-Showcase/) for a visual Portuguese and English overview of the latest features, stability work, validation, and ways to help test the editor.
-
-**NexaMap Editor** is a native C++ desktop application for professional OpenTibia world development.
-
-It combines established OTBM editing workflows with modern conversion tools, ClientID-oriented project support, a responsive wxWidgets interface and optimized handling for large maps.
-
-NexaMap is **not tied to OTG or one specific server distribution**.
-
-It is intended for compatible OpenTibia ecosystems and workflows, including:
-
-- The Forgotten Server-based projects.
-- Canary-based projects.
-- Crystal-based projects.
-- **Dragon Souls TFS 1.4** projects (with 16-bit item count/subtype support).
-- Custom OpenTibia distributions.
-- ClientID-oriented servers and datapacks.
-- Legacy-to-modern map conversion workflows.
-
-The goal is simple: provide one reliable environment for creating, maintaining and converting OpenTibia worlds without unnecessarily coupling the editor to one server base.
-
----
+> See the bilingual [NexaMap 5.0 Showcase](https://mateuzkl.github.io/NexaMap-Showcase/) for a visual tour of the latest update.
 
 ## Highlights
 
-| Area | Capabilities |
+| Area | What NexaMap provides |
 |---|---|
-| Map editing | Create and maintain cities, hunting grounds, dungeons, mountains, castles and complete OTBM worlds |
-| Dragon Souls support | Native 16-bit (uint16) item count/subtype format for Dragon Souls TFS 1.4 maps |
-| ClientID workflow | Work with ClientID-oriented maps, items and modern asset pipelines |
-| Map conversion | Convert supported maps and item identifiers between ServerID and ClientID workflows |
-| Spawn / NPC conversion | Convert supported spawn and NPC formats for TFS, Canary and Crystal-based projects |
-| Asset support | Support for compatible modern client assets, including `appearances.dat` workflows and supported OTC sprite resources |
-| Visual tools | Brushes, palettes, workspaces, search tools, zones and procedural map generation |
-| Navigation | Fast map navigation with responsive zoom support |
-| Interface | DPI-aware native desktop UI with System, Dark and Light editor themes |
-| Performance | Cached visual resources and optimized workflows for large maps |
-| Project access | Open recent maps directly from the welcome screen with keyboard and mouse support |
+| Workspace | Automatic discovery of maps, items, monsters, NPCs, and client assets |
+| Map sessions | Independent resources for each open map tab |
+| Cross-client paste | Analyze and remap items before pasting between clients |
+| Editing tools | Favorites, Command Palette, minimap, diagnostics, tooltips, and container previews |
+| Playtest | Local movement, interaction, HUD, lighting, and weather preview |
+| Multiplayer | Host/Join editing with permissions, locks, chat, reconnection, and resync |
+| Conversion | ServerID ↔ ClientID maps plus TFS, Canary, and Crystal spawn/NPC formats |
+| Performance | Chunk revisions, CPU/GPU caches, atlas tracking, and optimized large-map navigation |
 
----
+## NexaMap 5.0
 
-## Universal OpenTibia Workflow
+- New Client + Server Workspace with persistent project discovery.
+- Independent map tabs with isolated resource sessions.
+- Cross-client copy and paste with a review and remapping flow.
+- Real-time multiplayer editing with authenticated sessions.
+- Local Playtest mode using the active map renderer.
+- Dockable minimap, Favorites 2.0, Command Palette, and Map Diagnostics.
+- Safer ownership, callbacks, threading, socket shutdown, and OpenGL teardown.
+- Windows x86/x64 CI builds, clang-format 16 checks, and an expanded native test suite.
 
-NexaMap is designed as a general-purpose OpenTibia map editor.
+## Compatibility
 
-```text
-OpenTibia Project
-      |
-      +-- TFS
-      |
-      +-- Canary
-      |
-      +-- Crystal
-      |
-      +-- Dragon Souls TFS 1.4 (uint16 mode)
-      |
-      +-- Custom Server
-              |
-              +-- OTBM Maps
-              +-- ServerID / ClientID
-              +-- Spawn / NPC Data
-              +-- Client Assets
-              +-- appearances.dat
-              +-- OTC Sprite Resources
-```
-
-Server-specific data still needs to match the format expected by that server, but the editor itself is not restricted to a single project family.
-
----
-
-## ClientID and Asset Support
-
-Modern OpenTibia projects increasingly use ClientID-oriented asset workflows.
-
-NexaMap provides tooling intended to work with these environments while preserving support for established OTBM editing.
-
-Supported project workflows include:
-
-- ClientID-based item workflows.
-- ServerID-to-ClientID conversion.
-- ClientID-to-supported target conversions.
-- `appearances.dat`-based asset workflows.
-- Supported OTC sprite resources.
-- Compatible client data selected through editor preferences.
-- Canary and Crystal-oriented datapack conversion workflows.
+| Project type | Support |
+|---|---|
+| TFS and classic OTBM | DAT/SPR, OTC resources, items.otb, and ServerID workflows |
+| Canary and Crystal | `appearances.dat`, ClientID resources, maps, monsters, and NPCs |
+| Dragon Souls TFS 1.4 | Native 16-bit item count/subtype compatibility mode |
+| Custom OpenTibia projects | Supported when map, item, client, and server formats are compatible |
 
 > [!IMPORTANT]
-> Client assets, item identifiers and server data must belong to compatible versions.
->
-> Mixing unrelated assets or ID mappings can produce incorrect items, missing sprites or invalid map data.
+> For Dragon Souls maps, enable **Dragon Souls map compatibility (16-bit item count/subtype)** before opening the map. Leave this option disabled for standard TFS, Canary, Crystal, and other regular OTBM maps.
 
----
+Client assets, item identifiers, and server data must use compatible versions. Mixing unrelated resources can produce missing sprites, incorrect items, or invalid map data.
 
-## Performance and Navigation
+## Download and first launch
 
-NexaMap is built for practical work on large OpenTibia maps.
+Successful GitHub Actions runs provide ready-to-use **Windows x86** and **Windows x64** Release artifacts:
 
-Performance-focused behavior includes:
+1. Open [Build Windows](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml).
+2. Select the latest successful run.
+3. Download the artifact for your architecture.
+4. Extract the complete ZIP before starting `NexaMap Editor.exe`.
 
-- Cached visual resources.
-- Optimized editing workflows.
-- Responsive map rendering.
-- Fast navigation across large areas.
-- Zoom support for detailed editing and broader world inspection.
-- Native desktop rendering through wxWidgets and OpenGL.
-- DPI-aware interface behavior.
+On first launch, select a compatible client folder and server folder in the Workspace. NexaMap will discover available maps and resources. Keep a backup before converting or saving important projects.
 
-The editor is intended to remain usable during large-world maintenance, conversion and normal mapping work.
+## Build from source
 
----
+Requirements: Git, CMake 3.10+, a C++20 compiler, OpenGL, and the dependencies declared in [`vcpkg.json`](vcpkg.json).
 
-## Welcome Screen
-
-The NexaMap welcome screen provides direct access to:
-
-- **New Map** — create a new OTBM project.
-- **Open Project** — open an existing map from disk.
-- **Map Converter** — access map and item-ID conversion tools.
-- **Spawn / NPC Converter** — convert supported spawn and NPC formats.
-- **Preferences** — configure editor settings, client assets and appearance.
-- **Recent Projects** — reopen recently used maps from a scrollable project list.
-
-The welcome screen keeps the NexaMap dark visual identity.
-
-The **System**, **Dark** and **Light** options control the main editor appearance after the application is restarted.
-
----
-
-## Conversion Tools
-
-### Map / Item Conversion
-
-NexaMap provides workflows for converting supported maps and item identifiers between server-oriented and client-oriented formats.
-
-Typical use cases:
-
-```text
-Legacy map
-    |
-    +-- ServerID data
-    |
-    +-- NexaMap conversion
-    |
-    +-- ClientID-oriented map
-```
-
-Always validate the converted map with the intended client assets and server datapack.
-
-### Spawn / NPC Conversion
-
-The editor also provides conversion tools for supported spawn and NPC data.
-
-Target workflows can include:
-
-- TFS
-- Canary
-- Crystal
-- Compatible custom server structures
-
----
-
-## Requirements
-
-- C++20-compatible compiler.
-- CMake 3.10 or newer for CMake-based builds.
-- wxWidgets with:
-  - `html`
-  - `aui`
-  - `gl`
-  - `adv`
-  - `core`
-  - `net`
-  - `base`
-- OpenGL.
-- Zlib.
-- Dependencies declared in [`vcpkg.json`](vcpkg.json).
-- Compatible client assets for the protocol/client version you intend to edit.
-
----
-
-# Compilation
-
-## Windows — Visual Studio + vcpkg
-
-Install [vcpkg](https://github.com/microsoft/vcpkg):
-
-```powershell
-git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-cd C:\vcpkg
-.\bootstrap-vcpkg.bat
-.\vcpkg.exe integrate install
-```
-
-Clone the **official NexaMap Editor repository**:
+<details>
+<summary><strong>Windows — CMake + vcpkg</strong></summary>
 
 ```powershell
 git clone https://github.com/Mateuzkl/NexaMap-Editor.git
 cd NexaMap-Editor
-```
 
-Open:
-
-```text
-vcproj/Editor.sln
-```
-
-Recommended configuration:
-
-```text
-Platform: x64
-Configuration: Release
-```
-
-`Debug` can be used for development/debugging.
-
-The Visual Studio project uses manifest mode through [`vcpkg.json`](vcpkg.json), allowing required dependencies to be restored through vcpkg.
-
-Install the MSVC toolset declared by the project, or deliberately retarget the solution to a compatible installed toolset.
-
----
-
-## Windows — CMake
-
-Set `VCPKG_ROOT`:
-
-```powershell
 $env:VCPKG_ROOT = "C:\vcpkg"
+cmake -S . -B build `
+  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+  -DVCPKG_TARGET_TRIPLET=x64-windows
+cmake --build build --config Release --parallel
 ```
 
-Clone and enter the repository:
+The Visual Studio solution is also available at `vcproj/Editor.sln`.
 
-```powershell
-git clone https://github.com/Mateuzkl/NexaMap-Editor.git
-cd NexaMap-Editor
-```
+</details>
 
-Configure:
-
-```powershell
-cmake -S . -B out/build/release -G Ninja `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-```
-
-Build and install:
-
-```powershell
-cmake --build out/build/release
-cmake --install out/build/release --prefix out/install/release
-```
-
----
-
-## Automatic Windows builds
-
-GitHub Actions produces independent Release packages for Windows x86 (32-bit) and x64 (64-bit). Each package contains `NexaMap Editor.exe` and the required runtime resource directories.
-
-- Open **Actions → Build Windows** to download `NexaMap-Editor-Windows-x86-Release` or `NexaMap-Editor-Windows-x64-Release` from a successful run.
-- Use **Run workflow** on that page to start a build manually.
-- Tags matching `v*` (for example, `v5.0.1`) publish both architecture-specific ZIP files to the corresponding GitHub Release.
-
-The workflow validates the PE machine type before uploading, so an x86 artifact must contain a real PE32 executable and an x64 artifact must contain a real PE32+ executable.
-
----
-
-## Linux — CMake + vcpkg
-
-Install Git, CMake, Ninja, a C++20 compiler and development packages required by OpenGL and your desktop environment.
-
-Clone and bootstrap vcpkg:
-
-```bash
-git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
-~/vcpkg/bootstrap-vcpkg.sh
-```
-
-Clone NexaMap Editor:
+<details>
+<summary><strong>Linux — CMake + vcpkg</strong></summary>
 
 ```bash
 git clone https://github.com/Mateuzkl/NexaMap-Editor.git
 cd NexaMap-Editor
-```
 
-Configure:
-
-```bash
-cmake -S . -B out/build/release -G Ninja \
+cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE="$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake"
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+cmake --build build --parallel
 ```
 
-Build and install:
-
-```bash
-cmake --build out/build/release --parallel
-cmake --install out/build/release --prefix out/install/release
-```
-
----
-
-## Resource Layout
-
-Official NexaMap visual resources are stored under:
-
-```text
-data/images/
-data/images/welcome/
-```
-
-During development, the editor resolves welcome-screen resources from the repository.
-
-Do not manually duplicate generated resources inside Visual Studio `Debug` or `Release` output directories unless a specific development workflow requires it.
-
-CMake install rules package required welcome assets for installed builds.
-
----
-
-## First Launch
-
-1. Start **NexaMap Editor**.
-2. Open **Preferences**.
-3. Select/configure the client version used by your project.
-4. Configure compatible client assets.
-5. **If editing Dragon Souls maps**: enable `Dragon Souls map compatibility (16-bit item count/subtype)` in **Editor** preferences.
-6. Create a new map or open an existing `.otbm` file.
-7. Verify sprites/items before editing important areas.
-8. Keep a backup before any conversion.
-
----
-
-## Recommended Project Workflow
-
-```text
-Configure client assets
-        |
-        v
-Enable Dragon Souls mode (if applicable)
-        |
-        v
-Open / create OTBM
-        |
-        v
-Edit map
-        |
-        +-->  Terrain / brushes
-        +-->  Items
-        +-->  Spawns / NPCs
-        +-->  Zones
-        |
-        v
-Optional conversion
-        |
-        +-->  ServerID <-> ClientID workflow
-        +-->  Spawn / NPC conversion
-        |
-        v
-Save
-        |
-        v
-Test with target server + client
-```
-
----
-
-## Conversion Safety
-
-> [!WARNING]
-> Keep backups before converting maps, IDs, spawns, NPCs or client asset mappings.
-
-Recommended:
-
-```text
-world.otbm
-world.backup.otbm
-```
-
-After conversion:
-
-1. Reopen the map.
-2. Inspect representative areas.
-3. Verify item sprites.
-4. Verify borders and ground tiles.
-5. Verify containers and stackable items.
-6. Verify houses.
-7. Verify spawns and NPCs.
-8. Load the map on the target server.
-9. Test it with the intended client.
-
----
-
-## Repository Structure
-
-Important project areas include:
-
-```text
-.github/
-brushes/
-data/
-extensions/
-icons/
-source/
-tests/
-tools/
-vcproj/
-CMakeLists.txt
-vcpkg.json
-```
-
-Visual resources:
-
-```text
-data/images/
-data/images/welcome/
-```
-
----
+</details>
 
 ## Contributing
 
 Bug reports and focused pull requests are welcome.
 
-When contributing:
+- Open an [issue](https://github.com/Mateuzkl/NexaMap-Editor/issues) with clear reproduction steps.
+- Include the NexaMap version, operating system, client/server version, logs, and screenshots when relevant.
+- Keep code changes focused and preserve existing map compatibility.
+- Run clang-format 16, build the project, and test the affected workflow.
+- Submit editor fixes and features through a [pull request](https://github.com/Mateuzkl/NexaMap-Editor/pulls).
 
-- Keep changes limited to a clear purpose.
-- Preserve OTBM compatibility and existing map data unless a migration is explicitly documented.
-- Keep specialized/experimental workflows optional when they are not appropriate for every user.
-- Follow existing C++20 and wxWidgets conventions.
-- Preserve normal parent-owned control lifetime.
-- Preserve keyboard navigation and accessibility.
-- Preserve DPI behavior when changing interface code.
-- Do not commit executables, compiler output, logs or temporary files.
-- Avoid duplicated build resources.
-- Describe the affected workflow.
-- Document manual validation performed for the pull request.
-- Test map-format/conversion changes carefully.
+> [!WARNING]
+> Always keep backups before converting maps, IDs, spawns, NPCs, or asset mappings. Reopen converted maps and test them with the intended server and client.
 
-Before submitting:
+## Project links
 
-```text
-Review diff
-    |
-    +-- Run formatting
-    +-- Build project
-    +-- Test affected workflow
-    +-- Verify map compatibility
-    +-- Open focused PR
-```
-
----
-
-## Bug Reports
-
-Use:
-
-**[GitHub Issues](https://github.com/Mateuzkl/NexaMap-Editor/issues)**
-
-Include:
-
-- NexaMap version.
-- Operating system.
-- Client/protocol version.
-- Server family when relevant: TFS, Canary, Crystal, Dragon Souls or custom.
-- Asset format used.
-- Clear reproduction steps.
-- Expected behavior.
-- Actual behavior.
-- Logs/crash output when available.
-- Screenshot/video when useful.
-- Small test map when the bug depends on map data.
-
----
+| | Link |
+|---|---|
+| Website | [NexaMap 5.0 Showcase](https://mateuzkl.github.io/NexaMap-Showcase/) |
+| Source | [Mateuzkl/NexaMap-Editor](https://github.com/Mateuzkl/NexaMap-Editor) |
+| Windows builds | [GitHub Actions artifacts](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml) |
+| Feedback | [Issues](https://github.com/Mateuzkl/NexaMap-Editor/issues) |
+| Development | [Pull requests](https://github.com/Mateuzkl/NexaMap-Editor/pulls) |
 
 ## Credits
 
-NexaMap Editor is developed by:
-
-- [Mateuzkl](https://github.com/Mateuzkl)
-- [Skyyzyy](https://github.com/Skyyzyy)
-- [SoyFabi](https://github.com/soyfabi)
-
-Thanks to the OpenTibia mapping and development community and the upstream projects that made modern map-editor development possible.
-
----
+Developed by [Mateuzkl](https://github.com/Mateuzkl), [Skyyzyy](https://github.com/Skyyzyy), and [SoyFabi](https://github.com/soyfabi), with help from the OpenTibia mapping and development community.
 
 ## License
 
 See [`LICENSE.rtf`](LICENSE.rtf) for the terms that apply to this repository and its distributions.
-
----
-
-<div align="center">
-
-### NexaMap Editor 5.0.0
-
-**Universal ClientID Map Editor for OpenTibia**
-
-**The only editor with Dragon Souls TFS 1.4 native support.**
-
-Create. Convert. Build Worlds.
-
-[Mateuzkl/NexaMap-Editor](https://github.com/Mateuzkl/NexaMap-Editor)
-
-</div>
