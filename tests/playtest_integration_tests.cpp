@@ -4,18 +4,37 @@
 #include "editor.h"
 #include "editor_resource_session.h"
 #include "copybuffer.h"
+#include "cross_client_clipboard.h"
 #include "complexitem.h"
+#include "graphics.h"
 #include "gui.h"
 #include "map_window.h"
 #include "map_display.h"
 #include "map_drawer.h"
+#include "map_diagnostics_scanner.h"
 #include "ingame_preview/ingame_preview_window.h"
 #include "ingame_preview/playtest_map.h"
 #include "ingame_preview/playtest_weather.h"
 #include "theme.h"
 #include <wx/evtloop.h>
 #include <wx/weakref.h>
+#include <atomic>
 #include <iostream>
+#include <limits>
+
+namespace {
+	class TrackingItem final : public Item {
+	public:
+		explicit TrackingItem(std::atomic<int>& destructions) :
+			Item(100, 1), destructions(destructions) { }
+		~TrackingItem() override {
+			++destructions;
+		}
+
+	private:
+		std::atomic<int>& destructions;
+	};
+}
 
 class PlaytestIntegrationTests {
 	static void check(bool value, const char* message) {
@@ -307,8 +326,95 @@ public:
 		}
 		std::cout << "PASS 100 MapDrawer lifecycles: unpainted, repeated Release, interrupted frame, resized FBO\n";
 	}
+	static void clipboardSessionLifetime() {
+		Definitions definitions;
+		definitions.add(100).group = ITEM_GROUP_GROUND;
+		CopyBuffer source;
+		auto map = std::make_unique<BaseMap>();
+		auto* tile = map->allocator(map->createTileL({ 100, 100, 7 }));
+		tile->addItem(Item::Create(100));
+		map->setTile(tile);
+		source.replace(std::move(map), { 100, 100, 7 });
+		auto session = CreateEditorResourceSession();
+		std::weak_ptr<EditorResourceSession> released = session;
+		CrossClientClipboard clipboard;
+		wxString error;
+		check(clipboard.capture(source, session, error), "Cross-client clipboard capture");
+		session.reset();
+		check(released.expired() && clipboard.canPaste(), "Clipboard retained the complete source resource session");
+		std::cout << "PASS cross-client clipboard releases closed source resource session\n";
+	}
+	static void sharedTabOwnership() {
+		const bool wasClosing = g_gui.IsApplicationClosing();
+		struct RestoreClosingState {
+			bool value;
+			~RestoreClosingState() {
+				g_gui.SetApplicationClosing(value);
+			}
+		} restore { wasClosing };
+		g_gui.SetApplicationClosing(true);
+		Definitions definitions;
+		definitions.add(100).group = ITEM_GROUP_GROUND;
+		CopyBuffer buffer;
+		std::atomic<int> destructions = 0;
+		wxFrame frame(nullptr, wxID_ANY, "Hidden shared tab ownership");
+		auto* tabs = new MapTabbook(&frame, wxID_ANY);
+		for (int cycle = 0; cycle < 100; ++cycle) {
+			auto editor = std::make_unique<Editor>(buffer, nullptr);
+			auto* tile = editor->map.allocator(editor->map.createTileL({ 100, 100, 7 }));
+			tile->addItem(new TrackingItem(destructions));
+			editor->map.setTile(tile);
+			auto* first = new MapTab(tabs, std::move(editor));
+			auto* second = new MapTab(first);
+			check(!first->IsUniqueReference(), "Multiple map views did not share ownership");
+			if (cycle % 2 == 0) {
+				tabs->DeleteTab(0);
+				check(second->IsUniqueReference(), "Closing the first view corrupted shared ownership");
+			} else {
+				tabs->DeleteTab(1);
+				check(first->IsUniqueReference(), "Closing the second view corrupted shared ownership");
+			}
+			check(destructions.load() <= cycle, "Closing a non-final view destroyed the shared editor");
+			tabs->DeleteTab(0);
+		}
+		g_gui.DrainEditorDisposals();
+		check(destructions.load() == 100, "Final views did not drain editor disposal exactly once");
+		std::cout << "PASS 100 shared MapTab lifecycles and deterministic disposal drain\n";
+	}
+	static void visualPreviewMemoryBound() {
+		GameSprite sprite;
+		sprite.width = std::numeric_limits<uint8_t>::max();
+		sprite.height = std::numeric_limits<uint8_t>::max();
+		sprite.layers = 1;
+		std::vector<uint8_t> pixels(4, 0xFF);
+		int width = 0;
+		int height = 0;
+		bool pending = false;
+		check(!sprite.getVisualPreviewRGBA(pixels, width, height, pending, false) && pixels.empty(), "Oversized sprite preview was allowed to allocate hundreds of megabytes");
+		std::cout << "PASS oversized visual preview allocation is bounded\n";
+	}
+	static void diagnosticsReset() {
+		Definitions definitions;
+		definitions.add(100).group = ITEM_GROUP_GROUND;
+		Map map;
+		ground(map, { 100, 100, 7 })->ground->setUniqueID(5001);
+		ground(map, { 101, 100, 7 })->ground->setUniqueID(5001);
+		MapDiagnosticsScanner scanner(map);
+		scanner.Start();
+		while (scanner.IsRunning()) {
+			scanner.Step(64);
+		}
+		check(scanner.IsComplete() && !scanner.GetIssues().empty(), "Diagnostics fixture did not retain scan results");
+		scanner.Reset();
+		check(!scanner.IsRunning() && !scanner.IsComplete() && scanner.GetIssues().empty() && scanner.GetProcessedTileCount() == 0 && scanner.GetTotalTileCount() == 0, "Diagnostics reset retained results or iterators");
+		std::cout << "PASS diagnostics reset releases results and iterator state\n";
+	}
 	static void run() {
 		mapAdapter();
+		clipboardSessionLifetime();
+		sharedTabOwnership();
+		visualPreviewMemoryBound();
+		diagnosticsReset();
 		lifecycle();
 		weatherGL();
 	}
