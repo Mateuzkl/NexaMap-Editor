@@ -1,394 +1,316 @@
-//////////////////////////////////////////////////////////////////////
-// This file is part of Remere's Map Editor
-//////////////////////////////////////////////////////////////////////
-
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "../main.h"
-
 #include "ingame_preview_window.h"
-
+#include "playtest_map.h"
+#include "playtest_hud.h"
+#include "playtest_weather.h"
 #include "../editor.h"
-#include "../complexitem.h"
+#include "../editor_resource_session.h"
 #include "../gui.h"
 #include "../map_display.h"
 #include "../map_tab.h"
 #include "../map_window.h"
-
-#include <algorithm>
-#include <cmath>
-#include <set>
+#include "../theme.h"
+#include <wx/wrapsizer.h>
+#include <wx/weakref.h>
 
 namespace {
-	constexpr int PreviewUpdateIntervalMs = 16;
-	constexpr int PreviewPlayerSpeed = 220;
+	std::optional<Playtest::Facing> KeyDirection(int key) {
+		using Playtest::Facing;
+		switch (key) {
+			case WXK_UP:
+				return Facing::North;
+			case WXK_RIGHT:
+				return Facing::East;
+			case WXK_DOWN:
+				return Facing::South;
+			case WXK_LEFT:
+				return Facing::West;
+			default:
+				return Playtest::LetterDirection(key);
+		}
+	}
 }
-
 IngamePreviewWindow::IngamePreviewWindow(wxWindow* parent) :
-	wxPanel(parent, wxID_ANY),
-	mainSizer(newd wxBoxSizer(wxVERTICAL)),
-	followSelection(newd wxCheckBox(this, wxID_ANY, "Follow selection")),
-	lightingEnabled(newd wxCheckBox(this, wxID_ANY, "Lighting")),
-	statusText(newd wxStaticText(this, wxID_ANY, "Open a map to preview.")),
-	movementStatus(newd wxStaticText(this, wxID_ANY, "Click the preview, then use arrows to walk; Ctrl + arrow turns; Alt ignores collision.")),
-	previewView(nullptr),
-	editor(nullptr),
-	timer(this) {
+	wxPanel(parent, wxID_ANY), timer(this) {
+	SetBackgroundColour(Theme::Get(Theme::Role::Background));
+	SetForegroundColour(Theme::Get(Theme::Role::Text));
+	mainSizer = new wxBoxSizer(wxVERTICAL);
+	auto* header = new wxBoxSizer(wxHORIZONTAL);
+	auto* title = new wxStaticText(this, wxID_ANY, "MAP PLAYTEST");
+	title->SetFont(GetFont().Bold());
+	title->SetForegroundColour(Theme::Get(Theme::Role::Accent));
+	header->Add(title, 1, wxALIGN_CENTER_VERTICAL);
+	auto* exit = new wxButton(this, wxID_ANY, "Exit");
+	exit->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { RequestExit(); });
+	header->Add(exit, 0, wxALIGN_CENTER_VERTICAL);
+	mainSizer->Add(header, 0, wxEXPAND | wxALL, FromDIP(10));
+	hud = new PlaytestHud(this);
+	mainSizer->Add(hud, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
+	auto* controls = new wxWrapSizer(wxHORIZONTAL);
+	followSelection = new wxCheckBox(this, wxID_ANY, "Follow selection");
 	followSelection->SetValue(true);
-	followSelection->SetToolTip("Center the 15 x 11 preview on the current selection, or on the editor camera when nothing is selected.");
-
-	auto* toolbar = newd wxBoxSizer(wxHORIZONTAL);
-	toolbar->Add(followSelection, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 12));
-	toolbar->Add(lightingEnabled, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 12));
-	toolbar->Add(newd wxStaticText(this, wxID_ANY, "Viewport: 15 x 11 | Current floor | In-game rendering"), 0, wxALIGN_CENTER_VERTICAL);
-
-	mainSizer->Add(toolbar, 0, wxEXPAND | wxALL, FROM_DIP(this, 6));
-	mainSizer->Add(movementStatus, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 6));
-	mainSizer->Add(statusText, 0, wxALIGN_CENTER | wxALL, FROM_DIP(this, 12));
+	followSelection->SetToolTip("Follow the selection or editor camera. Walking switches to independent playtest movement.");
+	lightingEnabled = new wxCheckBox(this, wxID_ANY, "Lighting");
+	lightingEnabled->SetValue(true);
+	weatherChoice = new wxChoice(this, wxID_ANY);
+	for (const char* label : { "Weather: Off", "Rain", "Storm", "Fog", "Snow", "Desert Heat" }) {
+		weatherChoice->Append(label);
+	}
+	weatherChoice->SetSelection(0);
+	weatherChoice->SetToolTip("Preview the selected weather in any area. Storm includes occasional lightning. No weather data is saved to the map.");
+	auto* reset = new wxButton(this, wxID_ANY, "Reset view");
+	for (wxWindow* control : { static_cast<wxWindow*>(followSelection), static_cast<wxWindow*>(lightingEnabled), static_cast<wxWindow*>(weatherChoice), static_cast<wxWindow*>(reset) }) {
+		controls->Add(control, 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(4));
+	}
+	mainSizer->Add(controls, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(6));
+	statusText = new wxStaticText(this, wxID_ANY, "Open a map to playtest.", wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
+	statusText->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
+	// The viewport is inserted here; hints and status stay outside the GL view.
+	mainSizer->Add(statusText, 0, wxEXPAND | wxALL, FromDIP(10));
+	auto* hints = new wxStaticText(this, wxID_ANY, "[F6 / ESC] Exit    [WASD / Arrows] Move\n[Right-click / Space] Use    [PgUp / PgDn] Floor");
+	hints->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
+	mainSizer->Add(hints, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
 	SetSizer(mainSizer);
-
+	reset->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ResetToEditor(); FocusView(); });
+	followSelection->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { lastTarget = { -1, -1, -1 }; UpdateState(); });
+	lightingEnabled->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { ApplyPreviewState(); });
+	weatherChoice->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { ApplyPreviewState(); FocusView(); });
 	Bind(wxEVT_TIMER, &IngamePreviewWindow::OnTimer, this);
 	Bind(wxEVT_CHAR_HOOK, &IngamePreviewWindow::OnKeyDown, this);
-	Bind(wxEVT_CLOSE_WINDOW, &IngamePreviewWindow::OnClose, this);
-	Bind(wxEVT_DESTROY, &IngamePreviewWindow::OnDestroy, this);
-	lightingEnabled->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
-		if (previewView) {
-			previewView->GetCanvas()->SetIngamePreviewLighting(lightingEnabled->GetValue());
-		}
-	});
-	timer.Start(PreviewUpdateIntervalMs);
-	UpdateState();
+	Bind(wxEVT_KEY_UP, &IngamePreviewWindow::OnKeyUp, this);
+	Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent&) { RequestExit(); });
+	timer.Start(33);
 }
-
 IngamePreviewWindow::~IngamePreviewWindow() {
+	PrepareForClose();
+}
+void IngamePreviewWindow::PrepareForClose() {
+	closing = true;
 	timer.Stop();
+	input.clear();
+	RemovePreviewView();
+	editor = nullptr;
+	resourceSession.reset();
 }
-
-void IngamePreviewWindow::UpdateState() {
-	if (!IsShownOnScreen()) {
+void IngamePreviewWindow::RequestExit() {
+	if (closing) {
 		return;
 	}
-
-	MapTab* mapTab = g_gui.GetCurrentMapTab();
-	Editor* activeEditor = mapTab ? mapTab->GetEditor() : nullptr;
-	SyncEditor(activeEditor);
-	if (!previewView || !mapTab) {
-		return;
-	}
-
-	MapCanvas* sourceCanvas = mapTab->GetCanvas();
-	const int currentFloor = sourceCanvas->GetFloor();
-	if (!walking && followSelection->GetValue()) {
-		Position target;
-		if (activeEditor->selection.size() != 0) {
-			const Position min = activeEditor->selection.minPosition();
-			const Position max = activeEditor->selection.maxPosition();
-			target.x = min.x + (max.x - min.x) / 2;
-			target.y = min.y + (max.y - min.y) / 2;
-			target.z = currentFloor;
-		} else {
-			target = mapTab->GetScreenCenterPosition();
-			target.z = currentFloor;
-		}
-		if (target.isValid() && target != lastTarget) {
-			playerPosition = target;
-			lastTarget = target;
-			walkQueue.clear();
-		}
-	}
-
-	if (!playerPosition.isValid()) {
-		playerPosition = mapTab->GetScreenCenterPosition();
-		playerPosition.z = currentFloor;
-	}
-
-	UpdateWalk();
-	ApplyPreviewState();
-}
-
-void IngamePreviewWindow::ResetMovement() {
-	walking = false;
-	walkQueue.clear();
-	playerPosition = Position(-1, -1, -1);
-	walkOffsetX = 0;
-	walkOffsetY = 0;
-	animationFrame = 0;
-	playerDirection = SOUTH;
-	lastTarget = Position(-1, -1, -1);
-	movementStatus->SetLabel("Click the preview, then use arrows to walk; Ctrl + arrow turns; Alt ignores collision.");
-}
-
-void IngamePreviewWindow::BufferWalk(Direction direction, bool ignoreCollision) {
-	if (walkQueue.size() >= 2) {
-		return;
-	}
-	if (!walkQueue.empty() && walkQueue.back().direction == direction) {
-		return;
-	}
-	walkQueue.push_back({ direction, ignoreCollision });
-	if (!walking) {
-		UpdateWalk();
-		ApplyPreviewState();
-	}
-}
-
-void IngamePreviewWindow::StartWalk(Direction direction, bool ignoreCollision) {
-	if (walking || !playerPosition.isValid()) {
-		return;
-	}
-
-	Position target = playerPosition;
-	switch (direction) {
-		case NORTH:
-			--target.y;
-			break;
-		case EAST:
-			++target.x;
-			break;
-		case SOUTH:
-			++target.y;
-			break;
-		case WEST:
-			--target.x;
-			break;
-		default:
-			return;
-	}
-	if (!CanWalk(target, ignoreCollision)) {
-		walkQueue.clear();
-		movementStatus->SetLabel(wxString::Format("Blocked at %d, %d, %d%s", target.x, target.y, target.z, ignoreCollision ? "" : " (hold Alt to ignore collision)"));
-		return;
-	}
-
-	playerPosition = target;
-	playerDirection = direction;
-	walkDirection = direction;
-	walking = true;
-	walkStartedAt = wxGetLocalTimeMillis().GetValue();
-	const Tile* targetTile = editor ? editor->map.getTile(target) : nullptr;
-	walkDuration = GetStepDuration(targetTile);
-	walkOffsetX = 0;
-	walkOffsetY = 0;
-	if (direction == NORTH) {
-		walkOffsetY = TileSize;
-	} else if (direction == EAST) {
-		walkOffsetX = -TileSize;
-	} else if (direction == SOUTH) {
-		walkOffsetY = -TileSize;
-	} else if (direction == WEST) {
-		walkOffsetX = TileSize;
-	}
-	const uint16_t groundSpeed = targetTile ? targetTile->getGroundSpeed() : 0;
-	movementStatus->SetLabel(wxString::Format("Walking | ground speed %d | %d ms", groundSpeed == 0 ? 100 : groundSpeed, walkDuration));
-}
-
-void IngamePreviewWindow::UpdateWalk() {
-	if (!walking && !walkQueue.empty()) {
-		const MoveRequest request = walkQueue.front();
-		walkQueue.pop_front();
-		StartWalk(request.direction, request.ignoreCollision);
-	}
-	if (!walking) {
-		return;
-	}
-
-	const long long now = wxGetLocalTimeMillis().GetValue();
-	const float progress = walkDuration <= 0 ? 1.0f : static_cast<float>(now - walkStartedAt) / static_cast<float>(walkDuration);
-	if (progress >= 1.0f) {
-		walking = false;
-		walkOffsetX = 0;
-		walkOffsetY = 0;
-		animationFrame = 0;
-		const bool teleported = ResolveTeleports();
-		if (!teleported) {
-			movementStatus->SetLabel(wxString::Format("Position %d, %d, %d", playerPosition.x, playerPosition.y, playerPosition.z));
-		}
-		g_gui.SetScreenCenterPosition(playerPosition, false);
-		g_gui.UpdateMinimap(true);
-		if (!walkQueue.empty()) {
-			UpdateWalk();
-		}
-		return;
-	}
-
-	const int remainingPixels = static_cast<int>(std::lround(TileSize * (1.0f - std::clamp(progress, 0.0f, 1.0f))));
-	walkOffsetX = 0;
-	walkOffsetY = 0;
-	if (walkDirection == NORTH) {
-		walkOffsetY = remainingPixels;
-	} else if (walkDirection == EAST) {
-		walkOffsetX = -remainingPixels;
-	} else if (walkDirection == SOUTH) {
-		walkOffsetY = -remainingPixels;
-	} else if (walkDirection == WEST) {
-		walkOffsetX = remainingPixels;
-	}
-	animationFrame = 1 + (static_cast<int>(progress * 4.0f) % 2);
-}
-
-void IngamePreviewWindow::ApplyPreviewState() {
-	if (!previewView || !playerPosition.isValid()) {
-		return;
-	}
-	previewView->SetScreenCenterPositionInterpolated(playerPosition, walkOffsetX, walkOffsetY);
-	MapCanvas* canvas = previewView->GetCanvas();
-	canvas->SetIngamePreviewLighting(lightingEnabled->GetValue());
-	canvas->SetIngamePreviewPlayer(playerPosition, playerDirection, walkOffsetX, walkOffsetY, animationFrame);
-}
-
-bool IngamePreviewWindow::CanWalk(const Position& position, bool ignoreCollision) const {
-	if (!position.isValid()) {
-		return false;
-	}
-	if (ignoreCollision) {
-		return true;
-	}
-	const Tile* tile = editor ? editor->map.getTile(position) : nullptr;
-	return tile && tile->hasGround() && !tile->isBlocking();
-}
-
-int IngamePreviewWindow::GetStepDuration(const Tile* tile) const {
-	const int groundSpeed = tile && tile->getGroundSpeed() != 0 ? tile->getGroundSpeed() : 100;
-	return std::clamp(1000 * groundSpeed / PreviewPlayerSpeed, 50, 1000);
-}
-
-bool IngamePreviewWindow::ResolveTeleports() {
-	if (!editor) {
-		return false;
-	}
-
-	bool teleported = false;
-	std::set<Position> visited;
-	for (int jump = 0; jump < 10 && visited.insert(playerPosition).second; ++jump) {
-		const Tile* tile = editor->map.getTile(playerPosition);
-		if (!tile) {
-			break;
-		}
-
-		// Position() is (0,0,0) and isValid(); only jump when a real teleport dest was found.
-		bool foundTeleport = false;
-		Position destination(-1, -1, -1);
-		for (const Item* item : tile->items) {
-			const auto* teleport = dynamic_cast<const Teleport*>(item);
-			if (teleport && teleport->hasDestination()) {
-				destination = teleport->getDestination();
-				foundTeleport = true;
-				break;
+	input.clear();
+	wxWeakRef<IngamePreviewWindow> weak(this);
+	CallAfter([weak] {
+		if (weak && g_gui.ingame_preview == weak.get()) {
+			g_gui.DestroyIngamePreview();
+			if (auto* tab = g_gui.GetCurrentMapTab()) {
+				tab->GetCanvas()->SetFocus();
 			}
 		}
-		if (!foundTeleport || !destination.isValid()) {
-			break;
-		}
-		playerPosition = destination;
-		teleported = true;
-	}
-
-	if (teleported) {
-		movementStatus->SetLabel(wxString::Format("Teleported to %d, %d, %d", playerPosition.x, playerPosition.y, playerPosition.z));
-	}
-	return teleported;
+	});
 }
-
-void IngamePreviewWindow::ReleaseEditor(Editor* closingEditor) {
-	if (editor != closingEditor) {
-		return;
-	}
-
-	// The editor is deleted on a worker immediately after its last map tab
-	// closes. Destroy this canvas synchronously so no queued paint can retain a
-	// reference to that editor.
+bool IngamePreviewWindow::HasInputFocus() const {
+	return previewView && wxWindow::FindFocus() == previewView->GetCanvas() && wxTheApp->IsActive();
+}
+void IngamePreviewWindow::FocusView() {
 	if (previewView) {
-		previewView->Hide();
-		mainSizer->Detach(previewView);
-		MapWindow* closingView = previewView;
-		previewView = nullptr;
-		delete closingView;
+		previewView->GetCanvas()->SetFocus();
 	}
-	editor = nullptr;
-	ResetMovement();
-	statusText->Show();
-	Layout();
 }
-
-void IngamePreviewWindow::SyncEditor(Editor* activeEditor) {
-	if (editor == activeEditor) {
-		return;
-	}
-
-	RemovePreviewView();
-	editor = activeEditor;
-	ResetMovement();
-	if (!editor) {
-		statusText->Show();
-		Layout();
-		return;
-	}
-
-	previewView = newd MapWindow(this, *editor, true);
-	previewView->FitToMap();
-	previewView->GetCanvas()->SetIngamePreviewLighting(lightingEnabled->GetValue());
-	statusText->Hide();
-	mainSizer->Add(previewView, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 6));
-	Layout();
-}
-
 void IngamePreviewWindow::RemovePreviewView() {
 	if (!previewView) {
 		return;
 	}
-	previewView->Hide();
+	// Also used before a resource swap or background editor destruction.
+	// A deferred Destroy would leave queued paints holding the old Editor&.
 	mainSizer->Detach(previewView);
-	previewView->Destroy();
+	delete previewView;
 	previewView = nullptr;
 }
-
-void IngamePreviewWindow::OnKeyDown(wxKeyEvent& event) {
-	Direction direction = SOUTH;
-	switch (event.GetKeyCode()) {
-		case WXK_UP:
-			direction = NORTH;
-			break;
-		case WXK_RIGHT:
-			direction = EAST;
-			break;
-		case WXK_DOWN:
-			direction = SOUTH;
-			break;
-		case WXK_LEFT:
-			direction = WEST;
-			break;
-		default:
-			event.Skip();
-			return;
-	}
-
-	if (!previewView || !playerPosition.isValid()) {
+void IngamePreviewWindow::ReleaseEditor(Editor* closingEditor) {
+	if (closingEditor != editor) {
 		return;
 	}
-	if (event.ControlDown()) {
-		if (!walking) {
-			playerDirection = direction;
-			animationFrame = 0;
-			movementStatus->SetLabel("Turned without moving");
-			ApplyPreviewState();
+	RemovePreviewView();
+	editor = nullptr;
+	resourceSession.reset();
+	controller.reset({ -1, -1, -1 });
+	input.clear();
+	hud->SetPosition(controller.position());
+	statusText->SetLabel("Open a map to playtest.");
+	Layout();
+}
+void IngamePreviewWindow::SyncEditor(Editor* activeEditor) {
+	if (editor == activeEditor && resourceSession.lock() == GetActiveEditorResourceSession()) {
+		return;
+	}
+	RemovePreviewView();
+	editor = activeEditor;
+	resourceSession = GetActiveEditorResourceSession();
+	controller.reset({ -1, -1, -1 });
+	input.clear();
+	lastTarget = { -1, -1, -1 };
+	if (!editor) {
+		hud->SetPosition(controller.position());
+		statusText->SetLabel("Open a map to playtest.");
+		Layout();
+		return;
+	}
+	mapChanges = editor->map.getChunkRevisionTracker().getStats().contentChanges;
+	previewView = new MapWindow(this, *editor, true);
+	previewView->FitToMap();
+	MapCanvas* canvas = previewView->GetCanvas();
+	canvas->Bind(wxEVT_KEY_UP, &IngamePreviewWindow::OnKeyUp, this);
+	canvas->Bind(wxEVT_RIGHT_DOWN, [this, canvas](wxMouseEvent& event) {
+		canvas->SetFocus();
+		int x = 0, y = 0;
+		canvas->ScreenToMap(event.GetX(), event.GetY(), &x, &y);
+		UseAt(Position(x, y, canvas->GetFloor()));
+	});
+	canvas->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& event) { input.clear(); event.Skip(); });
+	mainSizer->Insert(3, previewView, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
+	Layout();
+	ResetToEditor();
+}
+void IngamePreviewWindow::ResetToEditor() {
+	if (!editor) {
+		return;
+	}
+	if (auto* tab = g_gui.GetCurrentMapTab(); tab && tab->GetEditor() == editor) {
+		controller.reset(tab->GetScreenCenterPosition());
+		followSelection->SetValue(true);
+		lastTarget = { -1, -1, -1 };
+		input.clear();
+	}
+}
+void IngamePreviewWindow::UpdateState() {
+	const auto now = std::chrono::steady_clock::now();
+	const double delta = std::chrono::duration<double, std::milli>(now - previousTick).count();
+	previousTick = now;
+	if (closing || !IsShownOnScreen() || !g_gui.IsRenderingEnabled() || g_gui.IsApplicationClosing()) {
+		input.clear();
+		return;
+	}
+	auto* tab = g_gui.GetCurrentMapTab();
+	if (tab && tab->GetResourceSession() != GetActiveEditorResourceSession()) {
+		input.clear();
+		return;
+	}
+	SyncEditor(tab ? tab->GetEditor() : nullptr);
+	if (!editor || !previewView || !tab) {
+		return;
+	}
+	const uint64_t changes = editor->map.getChunkRevisionTracker().getStats().contentChanges;
+	if (changes != mapChanges) {
+		controller.invalidateInteractions();
+		mapChanges = changes;
+	}
+	if (!HasInputFocus()) {
+		input.clear();
+	}
+	if (followSelection->GetValue() && !controller.moving()) {
+		Position target = tab->GetScreenCenterPosition();
+		if (editor->selection.size()) {
+			const Position min = editor->selection.minPosition(), max = editor->selection.maxPosition();
+			target = { min.x + (max.x - min.x) / 2, min.y + (max.y - min.y) / 2, tab->GetCanvas()->GetFloor() };
+		}
+		if (target.isValid() && target != lastTarget) {
+			controller.reset(target);
+			lastTarget = target;
+		}
+	}
+	controller.advance(delta);
+	if (const auto direction = input.direction(); direction && !controller.moving()) {
+		Playtest::MapWorld world(editor->map);
+		controller.move(world, *direction);
+	}
+	elapsed += std::clamp(delta, 0.0, 100.0) / 1000.0;
+	ApplyPreviewState();
+}
+void IngamePreviewWindow::ApplyPreviewState() {
+	if (closing || !previewView || !editor || g_gui.GetCurrentEditor() != editor || resourceSession.lock() != GetActiveEditorResourceSession()) {
+		return;
+	}
+	const Position position = controller.position();
+	if (!position.isValid()) {
+		return;
+	}
+	MapCanvas* canvas = previewView->GetCanvas();
+	const wxSize size = canvas->GetClientSize();
+	const double scale = canvas->GetContentScaleFactor();
+	const double zoom = std::max(480.0 / std::max(1.0, size.x * scale), 352.0 / std::max(1.0, size.y * scale));
+	canvas->SetZoom(std::clamp(zoom, 0.25, 2.0));
+	previewView->SetScreenCenterPositionInterpolated(position, controller.offsetX(), controller.offsetY());
+	canvas->SetIngamePreviewLighting(lightingEnabled->GetValue());
+	canvas->SetPlaytestEffects(static_cast<Playtest::Weather>(std::max(0, weatherChoice->GetSelection())), elapsed, controller.doorOverrides());
+	canvas->SetIngamePreviewPlayer(position, static_cast<Direction>(controller.facing()), controller.offsetX(), controller.offsetY(), controller.animationFrame());
+	hud->SetPosition(position);
+	const wxString status = wxString::FromUTF8(controller.status());
+	if (statusText->GetLabel() != status) {
+		statusText->SetLabel(status);
+		statusText->SetToolTip(status);
+	}
+}
+void IngamePreviewWindow::UseAt(std::optional<Position> target) {
+	input.clear();
+	if (closing || !editor || g_gui.GetCurrentEditor() != editor || resourceSession.lock() != GetActiveEditorResourceSession()) {
+		return;
+	}
+	followSelection->SetValue(false);
+	Playtest::MapWorld world(editor->map);
+	controller.use(world, target);
+	ApplyPreviewState();
+}
+void IngamePreviewWindow::OnKeyDown(wxKeyEvent& event) {
+	const int key = event.GetKeyCode();
+	if (key == WXK_ESCAPE || key == WXK_F6) {
+		RequestExit();
+		return;
+	}
+	if (!HasInputFocus() || !editor || closing || g_gui.GetCurrentEditor() != editor || resourceSession.lock() != GetActiveEditorResourceSession()) {
+		event.Skip();
+		return;
+	}
+	if (const auto direction = KeyDirection(key)) {
+		if (!event.IsAutoRepeat()) {
+			followSelection->SetValue(false);
+			if (event.ControlDown()) {
+				input.clear();
+				controller.turn(*direction);
+			} else {
+				input.press(*direction);
+			}
+			UpdateState();
 		}
 		return;
 	}
-
-	followSelection->SetValue(false);
-	lastTarget = Position(-1, -1, -1);
-	BufferWalk(direction, event.AltDown());
+	if (key == WXK_SPACE) {
+		if (!event.IsAutoRepeat()) {
+			UseAt();
+		}
+		return;
+	}
+	if (key == WXK_PAGEUP || key == WXK_PAGEDOWN) {
+		input.clear();
+		followSelection->SetValue(false);
+		Playtest::MapWorld world(editor->map);
+		if (!event.IsAutoRepeat()) {
+			controller.changeFloor(world, key == WXK_PAGEUP ? -1 : 1);
+		}
+		ApplyPreviewState();
+		return;
+	}
+	// Do not let editor accelerators edit the map through the playtest canvas.
+	if (key == WXK_TAB) {
+		event.Skip();
+	}
 }
-
+void IngamePreviewWindow::OnKeyUp(wxKeyEvent& event) {
+	if (const auto direction = KeyDirection(event.GetKeyCode())) {
+		input.release(*direction);
+	} else {
+		event.Skip();
+	}
+}
 void IngamePreviewWindow::OnTimer(wxTimerEvent&) {
 	UpdateState();
-}
-
-void IngamePreviewWindow::OnClose(wxCloseEvent&) {
-	g_gui.DestroyIngamePreview();
-}
-
-void IngamePreviewWindow::OnDestroy(wxWindowDestroyEvent& event) {
-	if (event.GetEventObject() == this && g_gui.ingame_preview == this) {
-		g_gui.ingame_preview = nullptr;
-	}
-	event.Skip();
 }

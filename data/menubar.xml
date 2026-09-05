@@ -233,7 +233,7 @@
 	<menu name="Window">
 		<item name="Show Favorites" action="SHOW_FAVORITES" help="Show favorite brushes, items, creatures and saved terrains for this resource workspace."/>
 		<item name="Minimap" hotkey="M" action="WIN_MINIMAP" help="Displays the minimap window."/>
-		<item name="In-game Preview" action="WIN_INGAME_PREVIEW" help="Open a dockable 15 x 11 in-game view that follows the current selection."/>
+		<item name="Playtest Mode" action="WIN_INGAME_PREVIEW" hotkey="F6" help="Walk through the map with WASD, inspect transitions and preview lighting/weather. No map edits."/>
 		<item name="New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
 		<item name="Materials Workbench..." action="MATERIALS_WORKBENCH" help="Visually edit XML ground, wall, doodad, carpet, and table brushes."/>
 		<item name="Border Workspace..." action="BORDER_WORKSPACE" help="Visually edit XML autoborder sets and item slots."/>

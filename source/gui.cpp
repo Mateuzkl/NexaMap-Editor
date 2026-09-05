@@ -1653,7 +1653,7 @@ bool GUI::IsMinimapVisible() const {
 //=============================================================================
 
 void GUI::CreateIngamePreview() {
-	if (!IsVersionLoaded() || !aui_manager) {
+	if (!IsVersionLoaded() || !aui_manager || IsApplicationClosing()) {
 		return;
 	}
 
@@ -1661,26 +1661,37 @@ void GUI::CreateIngamePreview() {
 		aui_manager->GetPane(ingame_preview).Show(true);
 	} else {
 		ingame_preview = newd IngamePreviewWindow(root);
+		const int displayIndex = wxDisplay::GetFromWindow(root);
+		const wxSize available = wxDisplay(displayIndex == wxNOT_FOUND ? 0 : displayIndex).GetClientArea().GetSize();
+		const wxSize preferred = FROM_DIP(root, wxSize(740, 680));
+		const wxSize margin = FROM_DIP(root, wxSize(40, 80));
+		const wxSize paneSize(std::min(preferred.x, std::max(240, available.x - margin.x)), std::min(preferred.y, std::max(240, available.y - margin.y)));
+		const wxSize minimum = FROM_DIP(root, wxSize(360, 420));
 		aui_manager->AddPane(
 			ingame_preview,
 			wxAuiPaneInfo()
 				.Name("IngamePreview")
-				.Caption("In-game Preview")
-				.Right()
+				.Caption("Map Playtest")
+				.Float()
 				.Dockable(true)
 				.CloseButton(true)
-				.BestSize(FROM_DIP(root, wxSize(500, 430)))
-				.MinSize(FROM_DIP(root, wxSize(500, 430)))
+				.BestSize(paneSize)
+				.FloatingSize(paneSize)
+				.MinSize(std::min(minimum.x, paneSize.x), std::min(minimum.y, paneSize.y))
 		);
 	}
 	aui_manager->Update();
 	UpdateIngamePreview();
+	if (ingame_preview) {
+		ingame_preview->FocusView();
+	}
 }
 
 void GUI::DestroyIngamePreview() {
 	if (!ingame_preview) {
 		return;
 	}
+	ingame_preview->PrepareForClose();
 	if (aui_manager) {
 		aui_manager->DetachPane(ingame_preview);
 		aui_manager->Update();

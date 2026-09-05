@@ -64,6 +64,13 @@
 using Color = std::tuple<int, int, int>;
 
 namespace {
+	// Stack-only visual definition; never installed in a map or action queue.
+	class PlaytestDoorSprite final : public Item {
+	public:
+		explicit PlaytestDoorSprite(uint16_t id) :
+			Item(id, 1) { }
+	};
+
 	struct PreparedSpritePart {
 		int screen_x;
 		int screen_y;
@@ -373,7 +380,7 @@ void MapDrawer::DrawScene() {
 	const auto started = std::chrono::steady_clock::now();
 	DrawBackground();
 	DrawMap();
-	if (canvas->IsIngamePreview()) {
+	if (canvas->IsIngamePreview() && !editor.map.getTile(canvas->GetIngamePreviewDrawTile())) {
 		DrawIngamePreviewPlayer();
 	}
 	if (options.isDrawLight() && !far_zoom_mode) {
@@ -420,6 +427,18 @@ void MapDrawer::DrawMultiplayer() {
 }
 
 void MapDrawer::DrawOverlays() {
+	if (canvas->IsIngamePreview()) {
+		// Screen-space effects after scene/lighting, using the existing GL batch.
+		// This path never touches the editor's scene FBO or normal map overlays.
+		if (canvas->playtestWeather != Playtest::Weather::Off) {
+			renderer->flush();
+			renderer->setOrtho(0, screensize_x, screensize_y, 0);
+			Playtest::DrawWeather(*renderer, Playtest::BuildWeather(canvas->playtestWeather, screensize_x, screensize_y, canvas->playtestSeconds, canvas->GetDPIScaleFactor()));
+			renderer->flush();
+			renderer->setOrtho(0, screensize_x * zoom, screensize_y * zoom, 0);
+		}
+		return;
+	}
 	DrawMinimapImportOverlay();
 	if (!far_zoom_mode) {
 		DrawDraggingShadow();
@@ -1483,6 +1502,17 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, Item* item,
 
 void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* item, bool ephemeral, int red, int green, int blue, int alpha, const Tile* tile) {
 	RME_PROFILE_SCOPE("MapDrawer::BlitItem(pos)");
+	std::optional<PlaytestDoorSprite> previewDoor;
+	if (canvas->IsIngamePreview() && (item->isDoor() || item->isBrushDoor())) {
+		const auto found = canvas->playtestDoors.find(pos);
+		if (found != canvas->playtestDoors.end() && found->second.original == item->getID()) {
+			const auto& replacement = g_items[found->second.replacement];
+			if (replacement.id && (replacement.isDoor() || replacement.isBrushDoor)) {
+				previewDoor.emplace(replacement.id);
+				item = &*previewDoor;
+			}
+		}
+	}
 	ItemType& it = g_items[item->getID()];
 
 	// Locked door indicator
@@ -2223,6 +2253,9 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 			// monster/npc on tile
 			if (!medium_zoom_mode && tile->creature && options.show_creatures) {
 				BlitCreature(draw_x, draw_y, tile->creature);
+			}
+			if (canvas->IsIngamePreview() && tile->getPosition() == canvas->GetIngamePreviewDrawTile()) {
+				DrawIngamePreviewPlayer();
 			}
 		}
 

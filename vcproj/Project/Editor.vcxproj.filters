@@ -463,6 +463,11 @@
     </ClInclude>
     <ClInclude Include="..\..\source\autoborder_preview.h"><Filter>gui\map window</Filter></ClInclude>
     <ClInclude Include="..\..\source\ingame_preview\ingame_preview_window.h"><Filter>gui\map window</Filter></ClInclude>
+    <ClInclude Include="..\..\source\ingame_preview\playtest_controller.h"><Filter>gui\map window</Filter></ClInclude>
+    <ClInclude Include="..\..\source\ingame_preview\playtest_input.h"><Filter>gui\map window</Filter></ClInclude>
+    <ClInclude Include="..\..\source\ingame_preview\playtest_map.h"><Filter>gui\map window</Filter></ClInclude>
+    <ClInclude Include="..\..\source\ingame_preview\playtest_weather.h"><Filter>gui\map window</Filter></ClInclude>
+    <ClInclude Include="..\..\source\ingame_preview\playtest_hud.h"><Filter>gui\map window</Filter></ClInclude>
     <ClInclude Include="..\..\source\welcome_dialog.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -884,6 +889,10 @@
     </ClCompile>
     <ClCompile Include="..\..\source\autoborder_preview.cpp"><Filter>gui\map window</Filter></ClCompile>
     <ClCompile Include="..\..\source\ingame_preview\ingame_preview_window.cpp"><Filter>gui\map window</Filter></ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\playtest_controller.cpp"><Filter>gui\map window</Filter></ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\playtest_map.cpp"><Filter>gui\map window</Filter></ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\playtest_weather.cpp"><Filter>gui\map window</Filter></ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\playtest_hud.cpp"><Filter>gui\map window</Filter></ClCompile>
     <ClCompile Include="..\..\source\welcome_dialog.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>

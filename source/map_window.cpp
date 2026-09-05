@@ -41,15 +41,13 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 	gem = newd DCButton(this, MAP_WINDOW_GEM, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_16x16, EDITOR_SPRITE_SELECTION_GEM);
 
 	if (ingamePreview) {
-		const wxSize viewportSize = FROM_DIP(this, wxSize(15 * TileSize, 11 * TileSize));
-		canvas->SetMinSize(viewportSize);
-		canvas->SetMaxSize(viewportSize);
+		canvas->SetMinSize(FromDIP(wxSize(240, 176)));
 		vScroll->Hide();
 		hScroll->Hide();
 		gem->Hide();
 
 		auto* previewSizer = newd wxBoxSizer(wxVERTICAL);
-		previewSizer->Add(canvas, 0, wxALIGN_CENTER);
+		previewSizer->Add(canvas, 1, wxEXPAND);
 		SetSizerAndFit(previewSizer);
 		return;
 	}
@@ -204,7 +202,9 @@ void MapWindow::SetScreenCenterPositionInterpolated(const Position& position, in
 		y -= (GROUND_LAYER - position.z) * TileSize;
 	}
 	Scroll(x, y, true);
-	canvas->ChangeFloor(position.z);
+	if (canvas->GetFloor() != position.z) {
+		canvas->ChangeFloor(position.z);
+	}
 }
 
 void MapWindow::GoToPreviousCenterPosition() {
@@ -216,8 +216,10 @@ void MapWindow::Scroll(int x, int y, bool center) {
 		int windowSizeX, windowSizeY;
 
 		canvas->GetSize(&windowSizeX, &windowSizeY);
-		x -= int((windowSizeX * g_gui.GetCurrentZoom()) / 2.0);
-		y -= int((windowSizeY * g_gui.GetCurrentZoom()) / 2.0);
+		const double scale = ingamePreview ? canvas->GetContentScaleFactor() : 1.0;
+		const double viewZoom = ingamePreview ? canvas->GetZoom() : g_gui.GetCurrentZoom();
+		x -= int((windowSizeX * scale * viewZoom) / 2.0);
+		y -= int((windowSizeY * scale * viewZoom) / 2.0);
 	}
 
 	hScroll->SetThumbPosition(x);

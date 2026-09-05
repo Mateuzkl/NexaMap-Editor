@@ -263,9 +263,11 @@ public:
 };
 
 void RunStartupValidationTests();
+void RunPlaytestIntegrationTests();
 
 int RunMultiplayerSessionTests(int argc, char** argv) {
 	const bool startupValidation = argc > 1 && std::string(argv[1]) == "--startup-validation";
+	const bool playtestValidation = argc > 1 && std::string(argv[1]) == "--playtest-validation";
 	if (!wxEntryStart(argc, argv)) {
 		return 1;
 	}
@@ -280,7 +282,9 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 		wxEventLoop loop;
 		wxEventLoopActivator activate(&loop);
 		try {
-			if (startupValidation) {
+			if (playtestValidation) {
+				RunPlaytestIntegrationTests();
+			} else if (startupValidation) {
 				RunStartupValidationTests();
 			} else {
 				MultiplayerSessionTests::run();

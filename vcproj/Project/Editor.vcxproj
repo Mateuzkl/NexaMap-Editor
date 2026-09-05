@@ -236,6 +236,22 @@
     <ClCompile Include="..\..\source\artprovider.cpp" />
     <ClCompile Include="..\..\source\autoborder_preview.cpp" />
     <ClCompile Include="..\..\source\ingame_preview\ingame_preview_window.cpp" />
+    <ClCompile Include="..\..\source\ingame_preview\playtest_controller.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\playtest_map.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\playtest_weather.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\source\ingame_preview\playtest_hud.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
     <ClCompile Include="..\..\source\find_item_window.cpp" />
@@ -263,6 +279,11 @@
     <ClInclude Include="..\..\source\artprovider.h" />
     <ClInclude Include="..\..\source\autoborder_preview.h" />
     <ClInclude Include="..\..\source\ingame_preview\ingame_preview_window.h" />
+    <ClInclude Include="..\..\source\ingame_preview\playtest_controller.h" />
+    <ClInclude Include="..\..\source\ingame_preview\playtest_input.h" />
+    <ClInclude Include="..\..\source\ingame_preview\playtest_map.h" />
+    <ClInclude Include="..\..\source\ingame_preview\playtest_weather.h" />
+    <ClInclude Include="..\..\source\ingame_preview\playtest_hud.h" />
     <ClInclude Include="..\..\source\light_drawer.h" />
     <ClInclude Include="..\..\source\main_toolbar.h" />
     <ClInclude Include="..\..\source\otml.h" />
@@ -358,7 +379,7 @@
     <ClInclude Include="..\..\source\object_pool.h" />
     <ClCompile Include="..\..\source\object_pool.cpp" />
     <ClInclude Include="..\..\source\mt_rand.h" />
-    <ClCompile Include="..\..\source\mt_rand.cpp" />
+    <ClCompile Include="..\..\source\mt_rand.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
     <ClInclude Include="..\..\source\numbertextctrl.h" />
     <ClInclude Include="..\..\source\properties_window.h" />
     <ClInclude Include="..\..\source\raw_brush.h" />

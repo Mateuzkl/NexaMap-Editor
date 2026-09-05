@@ -21,6 +21,8 @@
 #include "action.h"
 #include "tile.h"
 #include "creature.h"
+#include "ingame_preview/playtest_controller.h"
+#include "ingame_preview/playtest_weather.h"
 
 #include <memory>
 
@@ -139,7 +141,9 @@ public:
 	}
 	void SetZoom(double value);
 	void SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame);
+	Position GetIngamePreviewDrawTile() const;
 	void SetIngamePreviewLighting(bool enabled);
+	void SetPlaytestEffects(Playtest::Weather weather, double seconds, const std::map<Position, Playtest::DoorVisual>& doors);
 	void GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const;
 
 	Position GetCursorPosition() const;
@@ -152,6 +156,9 @@ protected:
 	bool floodFill(Map* map, const Position& center, int x, int y, GroundBrush* brush, PositionVector* positions);
 
 private:
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	friend class PlaytestIntegrationTests;
+#endif
 	void RefreshWithoutDirty();
 	void EndSpaceDrag();
 	void CancelSpacePan();
@@ -181,6 +188,9 @@ private:
 	int ingamePreviewWalkOffsetX = 0;
 	int ingamePreviewWalkOffsetY = 0;
 	int ingamePreviewAnimationFrame = 0;
+	Playtest::Weather playtestWeather = Playtest::Weather::Off;
+	double playtestSeconds = 0;
+	std::map<Position, Playtest::DoorVisual> playtestDoors;
 	int keyCode;
 	int countMaxFills = 0;
 

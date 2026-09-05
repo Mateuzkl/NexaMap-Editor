@@ -2471,7 +2471,14 @@ void MainMenuBar::OnMinimapWindow(wxCommandEvent& event) {
 }
 
 void MainMenuBar::OnIngamePreviewWindow(wxCommandEvent& event) {
-	g_gui.CreateIngamePreview();
+	if (g_gui.IsIngamePreviewVisible()) {
+		g_gui.DestroyIngamePreview();
+		if (auto* tab = g_gui.GetCurrentMapTab()) {
+			tab->GetCanvas()->SetFocus();
+		}
+	} else {
+		g_gui.CreateIngamePreview();
+	}
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event) {

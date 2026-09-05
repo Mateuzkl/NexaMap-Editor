@@ -1,66 +1,61 @@
-//////////////////////////////////////////////////////////////////////
-// This file is part of Remere's Map Editor
-//////////////////////////////////////////////////////////////////////
-
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef RME_INGAME_PREVIEW_WINDOW_H_
 #define RME_INGAME_PREVIEW_WINDOW_H_
-
-#include "../creature.h"
-#include "../position.h"
-
-#include <deque>
-
+#include <wx/panel.h>
+#include <wx/timer.h>
+#include <chrono>
+#include <memory>
+#include "playtest_controller.h"
+#include "playtest_input.h"
 class Editor;
+class EditorResourceSession;
 class MapWindow;
-class Tile;
+class PlaytestHud;
+class wxCheckBox;
+class wxChoice;
+class wxStaticText;
+class wxBoxSizer;
 
+// Keep the existing pane/API identity so saved layouts and ActionIDs still work.
 class IngamePreviewWindow final : public wxPanel {
 public:
 	explicit IngamePreviewWindow(wxWindow* parent);
 	~IngamePreviewWindow() override;
-
 	void UpdateState();
 	void ReleaseEditor(Editor* closingEditor);
+	void PrepareForClose();
+	void FocusView();
 
 private:
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	friend class PlaytestIntegrationTests;
+#endif
 	void SyncEditor(Editor* activeEditor);
 	void RemovePreviewView();
-	void ResetMovement();
-	void BufferWalk(Direction direction, bool ignoreCollision);
-	void StartWalk(Direction direction, bool ignoreCollision);
-	void UpdateWalk();
+	void ResetToEditor();
 	void ApplyPreviewState();
-	bool CanWalk(const Position& position, bool ignoreCollision) const;
-	int GetStepDuration(const Tile* tile) const;
-	bool ResolveTeleports();
+	void UseAt(std::optional<Position> target = {});
+	void RequestExit();
 	void OnKeyDown(wxKeyEvent& event);
+	void OnKeyUp(wxKeyEvent& event);
 	void OnTimer(wxTimerEvent& event);
-	void OnClose(wxCloseEvent& event);
-	void OnDestroy(wxWindowDestroyEvent& event);
-
-	wxBoxSizer* mainSizer;
-	wxCheckBox* followSelection;
-	wxCheckBox* lightingEnabled;
-	wxStaticText* statusText;
-	wxStaticText* movementStatus;
-	MapWindow* previewView;
-	Editor* editor;
+	bool HasInputFocus() const;
+	wxBoxSizer* mainSizer = nullptr;
+	wxCheckBox* followSelection = nullptr;
+	wxCheckBox* lightingEnabled = nullptr;
+	wxChoice* weatherChoice = nullptr;
+	wxStaticText* statusText = nullptr;
+	PlaytestHud* hud = nullptr;
+	MapWindow* previewView = nullptr;
+	Editor* editor = nullptr;
+	std::weak_ptr<EditorResourceSession> resourceSession;
 	wxTimer timer;
+	Playtest::Controller controller;
+	Playtest::Input input;
 	Position lastTarget { -1, -1, -1 };
-	Position playerPosition { -1, -1, -1 };
-	Direction playerDirection = SOUTH;
-	Direction walkDirection = SOUTH;
-	bool walking = false;
-	long long walkStartedAt = 0;
-	int walkDuration = 0;
-	int walkOffsetX = 0;
-	int walkOffsetY = 0;
-	int animationFrame = 0;
-	struct MoveRequest {
-		Direction direction;
-		bool ignoreCollision;
-	};
-	std::deque<MoveRequest> walkQueue;
+	std::chrono::steady_clock::time_point previousTick = std::chrono::steady_clock::now();
+	double elapsed = 0;
+	uint64_t mapChanges = 0;
+	bool closing = false;
 };
-
 #endif

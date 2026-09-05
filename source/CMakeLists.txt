@@ -56,6 +56,11 @@ ${CMAKE_CURRENT_LIST_DIR}/house_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/house_paste_transaction.h
 ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/ingame_preview_window.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_controller.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_input.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_map.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_weather.h
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_hud.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.h
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.h
@@ -232,6 +237,10 @@ ${CMAKE_CURRENT_LIST_DIR}/house_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_exit_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/ingame_preview_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_controller.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_weather.cpp
+${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_hud.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iomap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.cpp
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.cpp
@@ -373,3 +382,13 @@ ${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
 PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+# Keep local macros in the legacy RNG and standalone playtest modules isolated.
+set_source_files_properties(
+    ${CMAKE_CURRENT_LIST_DIR}/mt_rand.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_map.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_weather.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_hud.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)

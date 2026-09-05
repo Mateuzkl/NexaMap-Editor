@@ -355,7 +355,28 @@ void MapCanvas::SetIngamePreviewPlayer(const Position& position, Direction direc
 	ingamePreviewWalkOffsetX = walkOffsetX;
 	ingamePreviewWalkOffsetY = walkOffsetY;
 	ingamePreviewAnimationFrame = animationFrame;
-	Refresh();
+	wxGLCanvas::Refresh(false);
+}
+
+Position MapCanvas::GetIngamePreviewDrawTile() const {
+	// Walking north/west leaves part of the avatar over the previous tile.
+	// Submit it after that tile, whose ground is visited later by the QTree
+	// painter (also across 4x4 chunk boundaries), so it cannot erase the avatar.
+	Position tile = ingamePreviewPlayerPosition;
+	tile.x += ingamePreviewWalkOffsetX > 0 ? 1 : 0;
+	tile.y += ingamePreviewWalkOffsetY > 0 ? 1 : 0;
+	return tile;
+}
+
+void MapCanvas::SetPlaytestEffects(Playtest::Weather weather, double seconds, const std::map<Position, Playtest::DoorVisual>& doors) {
+	if (!ingamePreview) {
+		return;
+	}
+	playtestWeather = weather;
+	playtestSeconds = seconds;
+	if (playtestDoors != doors) {
+		playtestDoors = doors;
+	}
 }
 
 void MapCanvas::SetIngamePreviewLighting(bool enabled) {
@@ -380,6 +401,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			options.SetIngame();
 			options.show_lights = ingamePreview && ingamePreviewLighting;
 			options.show_shade = ingamePreview && ingamePreviewLighting;
+			options.show_preview = ingamePreview;
 			options.use_fbo_scene_cache = false;
 		} else {
 			options.transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
@@ -425,7 +447,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		options.dragging = boundbox_selection;
 
 		const bool animate_position_indicator = drawer->GetPositionIndicatorTime() != 0;
-		const bool animate_preview = options.show_preview && zoom <= 2.0;
+		const bool animate_preview = !ingamePreview && options.show_preview && zoom <= 2.0;
 		if (animate_preview && !drawer->isViewportInteractionActive()) {
 			// Mark dirty so the FBO cache is refreshed for the new animation frame
 			drawer->markDirty();
@@ -902,14 +924,14 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
 }
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent& event) {
+	if (ingamePreview) {
+		SetFocus();
+		return;
+	}
 	if (editor.multiplayer && editor.multiplayer->active() && event.AltDown() && event.ControlDown()) {
 		int x, y;
 		ScreenToMap(event.GetX(), event.GetY(), &x, &y);
 		editor.multiplayer->pingLocation({ x, y, floor });
-		return;
-	}
-	if (ingamePreview) {
-		SetFocus();
 		return;
 	}
 	if (space_dragging) {
