@@ -4,10 +4,10 @@ Data da auditoria: 2026-09-05
 
 ## Baseline
 
-- PR: `#25`, branch `codex/nexamap-layout-redesign`.
+- PR: `#25`, branch final `nexamap-layout-redesign`.
 - Base da PR: `e5d75c1c7c8a5d7ecceaffc796d0696d1fc77458` (`main`).
 - HEAD antes das correções: `27a1ec533dc10a920e2c2afb41358490722fb235`.
-- HEAD da branch com todas as correções e testes desta auditoria: `af89f17ea6fcd6505c67b40c0659e5c7e14a126f`.
+- HEAD de código com todas as correções, testes e clang-format desta auditoria: `fa8154e518a48919ef22e88b6c118cba660cb2a7`.
 - Escopo original: 38 commits, 519 arquivos no diff de PR (`main...HEAD`), 21.522 adições e 1.813.897 remoções.
 - Escopo final de código/teste: 524 arquivos no diff de PR, 21.950 adições e 1.813.979 remoções. A maior parte das remoções é a retirada de bancos de itens versionados na própria PR.
 - Método: inventário dos 38 commits por intenção e arquivos, busca automatizada no diff agregado e revisão manual dos pontos de ownership, callbacks, threads, sockets, sessões, clipboard, diagnósticos, minimapa, playtest e OpenGL no estado final da árvore. A árvore final foi tratada como autoridade quando um caminho intermediário já havia sido substituído.
@@ -53,7 +53,7 @@ O destrutor do `MapCanvas` torna o contexto compartilhado atual antes de destrui
 - **Problema:** dois helpers com o mesmo nome e assinatura caíam na mesma unidade Unity.
 - **Por que era perigoso:** impedia a compilação Release x64 do executável principal, embora alguns alvos de teste usassem agrupamentos Unity diferentes e compilassem.
 - **Prova:** o build baseline falhou exatamente quando o Unity unit 15 reuniu os dois arquivos.
-- **Correção:** o helper específico do conversor foi renomeado para `IsRegularSpawnFile` e seus usos foram atualizados.
+- **Correção:** os helpers receberam nomes específicos, `IsRegularSpawnFile` no conversor e `IsServerWorkspaceFile` no workspace, e seus usos foram atualizados. Duas definições `inline` nos `.cpp` ainda colidiriam dentro da mesma translation unit Unity.
 - **Teste de regressão:** build completo Release x64 passou, incluindo `NexaMap Editor.exe`.
 
 ### F-02 — P0: término duplicado de frame no `MapDrawer`
@@ -274,7 +274,7 @@ Nenhuma otimização de hot path foi aplicada sem benchmark. `makeRoom` mantém 
 | `4586005` | playtest local | window, weak refs e GL teardown |
 | `27a1ec5` | Collections por resource session | registry/window lifetime |
 
-Os oito commits seguintes são as correções/testes desta auditoria na branch: `7f1fcc8`, `11d89c0`, `229fe5f`, `d2a24c6`, `ddc4d3d`, `8de336b`, `da10b7b` e `af89f17`.
+Os dez commits de correção, testes e estilo desta auditoria na branch são: `7f1fcc8`, `11d89c0`, `229fe5f`, `d2a24c6`, `ddc4d3d`, `8de336b`, `da10b7b`, `af89f17`, `035dfe9` e `fa8154e`.
 
 ## Testes e comandos
 
