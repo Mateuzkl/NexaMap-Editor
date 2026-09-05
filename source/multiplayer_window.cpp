@@ -6,13 +6,14 @@
 #include "editor.h"
 #include "map_tab.h"
 #include <wx/notebook.h>
+#include <wx/clipbrd.h>
 #include <wx/numdlg.h>
 #include <wx/choicdlg.h>
 
 bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSession::Options& options) {
 	wxDialog dialog(parent, wxID_ANY, hosting ? "Host multiplayer session" : "Join multiplayer session", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
 	auto* layout = new wxBoxSizer(wxVERTICAL);
-	auto* form = new wxFlexGridSizer(2, 8, 12);
+	auto* form = new wxFlexGridSizer(2, dialog.FromDIP(8), dialog.FromDIP(12));
 	form->AddGrowableCol(1);
 	auto field = [&](const wxString& label, wxWindow* input) { form->Add(new wxStaticText(&dialog, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL); form->Add(input, 1, wxEXPAND); };
 	auto* name = new wxTextCtrl(&dialog, wxID_ANY, wxstr(options.name));
@@ -21,12 +22,13 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 	wxTextCtrl* address = nullptr;
 	if (!hosting) {
 		address = new wxTextCtrl(&dialog, wxID_ANY, wxstr(options.address));
+		address->SetHint("Host LAN/VPN IPv4 or hostname");
 		field("Host / IP", address);
 	}
 	auto* port = new wxSpinCtrl(&dialog, wxID_ANY);
 	port->SetRange(1, 65535);
 	port->SetValue(options.port);
-	field("Port", port);
+	field(hosting ? "Listening port" : "Port", port);
 	auto* password = new wxTextCtrl(&dialog, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
 	password->SetMaxLength(256);
 	field("Session password", password);
@@ -53,9 +55,33 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 		autosave->SetValue(options.autosaveMinutes);
 		field("Backup interval in minutes (0 = off)", autosave);
 	}
+	if (hosting) {
+		auto* endpoints = new wxChoice(&dialog, wxID_ANY);
+		const auto addresses = Multiplayer::localIPv4Addresses();
+		auto updateAddresses = [=] {
+			endpoints->Clear();
+			for (const auto& ip : addresses) {
+				endpoints->Append(wxstr(ip + ":" + std::to_string(port->GetValue())));
+			}
+			endpoints->Append(wxString::Format("127.0.0.1:%d (same PC only)", port->GetValue()));
+			endpoints->SetSelection(0);
+		};
+		updateAddresses();
+		port->Bind(wxEVT_SPINCTRL, [=](wxSpinEvent&) { updateAddresses(); });
+		field("Local / LAN / VPN addresses", endpoints);
+		auto* copy = new wxButton(&dialog, wxID_ANY, "Copy connection address");
+		copy->Bind(wxEVT_BUTTON, [=](wxCommandEvent&) {
+			const auto endpoint = endpoints->GetStringSelection().BeforeFirst(' ');
+			if (!endpoint.empty() && wxTheClipboard->Open()) {
+				wxTheClipboard->SetData(new wxTextDataObject(endpoint));
+				wxTheClipboard->Close();
+			}
+		});
+		field("", copy);
+	}
 	layout->Add(form, 1, wxEXPAND | wxALL, 16);
-	auto* help = new wxStaticText(&dialog, wxID_ANY, "Use the same NexaMap build and client/item definitions on every PC.\nConnect over your LAN or VPN. Password authentication does not encrypt map/chat traffic.");
-	help->Wrap(510);
+	auto* help = new wxStaticText(&dialog, wxID_ANY, "Use the same NexaMap build and client/item definitions on every PC.\nSame PC: 127.0.0.1. LAN: host IPv4. VPN: host VPN IP.\nDirect Internet: configure firewall, NAT and port forwarding.\nThe host starts listening after OK. Password authentication does not encrypt map/chat traffic.");
+	help->Wrap(dialog.FromDIP(540));
 	layout->Add(help, 0, wxLEFT | wxRIGHT | wxBOTTOM, 16);
 	layout->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxALL, 12);
 	dialog.SetSizerAndFit(layout);
@@ -68,7 +94,15 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 	options.password = nstr(password->GetValue());
 	options.port = static_cast<uint16_t>(port->GetValue());
 	if (address) {
-		options.address = nstr(address->GetValue());
+		wxString endpoint = address->GetValue().Trim().Trim(false);
+		if (endpoint.Find(':') != wxNOT_FOUND && endpoint.Find(':') == endpoint.Find(':', true)) {
+			unsigned long copiedPort = 0;
+			if (endpoint.AfterLast(':').ToULong(&copiedPort) && copiedPort > 0 && copiedPort <= 65535) {
+				options.port = static_cast<uint16_t>(copiedPort);
+				endpoint = endpoint.BeforeLast(':');
+			}
+		}
+		options.address = nstr(endpoint);
 	}
 	if (hosting) {
 		options.maxPlayers = maxPlayers->GetValue();
@@ -84,6 +118,27 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 	auto* layout = new wxBoxSizer(wxVERTICAL);
 	diagnostics = new wxStaticText(panel, wxID_ANY, "");
 	layout->Add(diagnostics, 0, wxEXPAND | wxALL, 12);
+	if (live.isHost()) {
+		auto* endpoints = new wxChoice(panel, wxID_ANY);
+		for (const auto& ip : Multiplayer::localIPv4Addresses()) {
+			endpoints->Append(wxstr(ip + ":" + std::to_string(live.settings().port)));
+		}
+		endpoints->Append(wxstr("127.0.0.1:" + std::to_string(live.settings().port) + " (same PC only)"));
+		endpoints->SetSelection(0);
+		auto* copy = new wxButton(panel, wxID_ANY, "Copy connection address");
+		copy->Bind(wxEVT_BUTTON, [endpoints](wxCommandEvent&) {
+			const auto endpoint = endpoints->GetStringSelection().BeforeFirst(' ');
+			if (wxTheClipboard->Open()) {
+				wxTheClipboard->SetData(new wxTextDataObject(endpoint));
+				wxTheClipboard->Close();
+			}
+		});
+		auto* connection = new wxBoxSizer(wxHORIZONTAL);
+		connection->Add(new wxStaticText(panel, wxID_ANY, wxString::Format("Listening port: %u", live.settings().port)), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+		connection->Add(endpoints, 1, wxRIGHT, FromDIP(8));
+		connection->Add(copy);
+		layout->Add(connection, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+	}
 	auto* book = new wxNotebook(panel, wxID_ANY);
 	auto* playerPage = new wxPanel(book);
 	auto* playerLayout = new wxBoxSizer(wxVERTICAL);
@@ -98,7 +153,7 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 	auto* buttons = new wxBoxSizer(wxHORIZONTAL);
 	auto button = [](wxWindow* parent, wxSizer* layout, const wxString& title, auto callback) { auto* b = new wxButton(parent, wxID_ANY, title); b->Bind(wxEVT_BUTTON, callback); layout->Add(b, 0, wxRIGHT, 6); return b; };
 	button(playerPage, buttons, "Jump to player", [this](wxCommandEvent&) { if (!session){ return;
-} auto p = session->players().find(selectedPlayer()); if (p != session->players().end() && g_gui.GetCurrentEditor() == &session->getEditor()){ g_gui.SetScreenCenterPosition(p->second.cursor);
+} auto p = session->players().find(selectedPlayer()); if (p != session->players().end() && g_gui.GetCurrentEditor() == &session->getEditor()){ const Position position = p->second.cursor; g_gui.SetScreenCenterPosition(position);
 } });
 	auto* role = button(playerPage, buttons, "Change role", [this](wxCommandEvent&) {
 		if (!session) {
@@ -147,7 +202,7 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 	approvals->AppendColumn("Status", wxLIST_FORMAT_LEFT, 100);
 	approvalLayout->Add(approvals, 1, wxEXPAND | wxALL, 8);
 	auto* approvalButtons = new wxBoxSizer(wxHORIZONTAL);
-	button(approvalPage, approvalButtons, "Jump to location", [this](wxCommandEvent&) { if (!session){ return;
+	button(approvalPage, approvalButtons, "Jump to location", [this](wxCommandEvent&) { if (!session || g_gui.GetCurrentEditor() != &session->getEditor()){ return;
 } auto found = session->approvalRequests().find(selectedApproval()); if (found != session->approvalRequests().end() && !found->second.transaction.tiles.empty()) { auto key = found->second.transaction.tiles.front().key; g_gui.SetScreenCenterPosition({Multiplayer::tileX(key), Multiplayer::tileY(key), Multiplayer::tileZ(key)}); } });
 	button(approvalPage, approvalButtons, "Approve", [this](wxCommandEvent&) { if (session){ session->approve(selectedApproval(), true);
 } });

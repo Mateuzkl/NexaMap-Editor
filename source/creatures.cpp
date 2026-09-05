@@ -399,6 +399,8 @@ bool CreatureDatabase::loadFromXML(const FileName& filename, bool standard, wxSt
 
 	const size_t total = static_cast<size_t>(std::distance(node.begin(), node.end()));
 	size_t processed = 0;
+	size_t sharedCatalogNames = 0;
+	size_t identicalEntries = 0;
 	auto lastPump = started;
 	for (pugi::xml_node creatureNode = node.first_child(); creatureNode; creatureNode = creatureNode.next_sibling()) {
 		++processed;
@@ -411,16 +413,29 @@ bool CreatureDatabase::loadFromXML(const FileName& filename, bool standard, wxSt
 			continue;
 		}
 
-		CreatureType* creatureType = CreatureType::loadFromXML(creatureNode, warnings);
+		std::unique_ptr<CreatureType> creatureType(CreatureType::loadFromXML(creatureNode, warnings));
 		if (creatureType) {
 			creatureType->standard = standard;
-			if ((*this)[creatureType->name]) {
-				warnings.push_back("Duplicate creature type name \"" + wxstr(creatureType->name) + "\"! Discarding...");
-				delete creatureType;
+			if (const CreatureType* current = (*this)[creatureType->name]) {
+				if (!current->missing && current->isNpc == creatureType->isNpc && current->outfit == creatureType->outfit) {
+					++identicalEntries;
+				} else if (standard && current->standard && current->isNpc != creatureType->isNpc) {
+					// The bundled monster and NPC catalogs legitimately share names.
+					// The current name-based database keeps its first fallback; the
+					// active server Lua import still updates it afterwards in place.
+					++sharedCatalogNames;
+				} else {
+					warnings.push_back("Duplicate creature type name \"" + wxstr(creatureType->name) + "\" in " + filename.GetFullName() + ": conflicting definition; keeping the existing " + (current->isNpc ? "NPC" : "monster") + " definition.");
+				}
 			} else {
-				creature_map[as_lower_str(creatureType->name)] = creatureType;
+				const std::string key = as_lower_str(creatureType->name);
+				creature_map.emplace(key, creatureType.get());
+				creatureType.release();
 			}
 		}
+	}
+	if (sharedCatalogNames || identicalEntries) {
+		wxLogMessage("Creature catalog %s: %zu identical entries merged; %zu shared monster/NPC names kept with the first catalog definition. Active server imports take precedence.", filename.GetFullName(), identicalEntries, sharedCatalogNames);
 	}
 	if (progress) {
 		progress(wxString::Format("%s: %zu / %zu entries", label, processed, total));

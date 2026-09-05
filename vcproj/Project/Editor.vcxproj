@@ -620,7 +620,13 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\source\multiplayer_transport.h" />
     <ClInclude Include="..\..\source\multiplayer_protocol.h" />
+    <ClCompile Include="..\..\source\multiplayer_transport.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="..\..\source\multiplayer_protocol.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <IncludeInUnityFile>false</IncludeInUnityFile>

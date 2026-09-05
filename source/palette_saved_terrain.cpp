@@ -87,8 +87,9 @@ END_EVENT_TABLE()
 SavedTerrainPalettePanel::SavedTerrainPalettePanel(wxWindow* parent, wxWindowID id) :
 	PalettePanel(parent, id) {
 	auto* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Saved Terrains");
+	wxWindow* box = sidesizer->GetStaticBox();
 
-	stamp_list = newd wxListCtrl(this, PALETTE_SAVED_TERRAIN_LISTBOX, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_NO_HEADER | wxLC_VRULES);
+	stamp_list = newd wxListCtrl(box, PALETTE_SAVED_TERRAIN_LISTBOX, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_NO_HEADER | wxLC_VRULES);
 	stamp_list->InsertColumn(0, "Name", wxLIST_FORMAT_LEFT, 180);
 	stamp_list->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, [this](wxListEvent& event) {
 		if (!FavoriteResources::IsCurrentPalette(this) || event.GetIndex() < 0) {
@@ -103,18 +104,18 @@ SavedTerrainPalettePanel::SavedTerrainPalettePanel(wxWindow* parent, wxWindowID 
 	sidesizer->Add(stamp_list, 1, wxEXPAND);
 
 	auto* row1 = newd wxBoxSizer(wxHORIZONTAL);
-	row1->Add(save_button = newd wxButton(this, PALETTE_SAVED_TERRAIN_SAVE, "Save from Selection"), 1, wxEXPAND | wxRIGHT, 2);
-	row1->Add(place_button = newd wxButton(this, PALETTE_SAVED_TERRAIN_PLACE, "Place"), 1, wxEXPAND | wxLEFT, 2);
+	row1->Add(save_button = newd wxButton(box, PALETTE_SAVED_TERRAIN_SAVE, "Save from Selection"), 1, wxEXPAND | wxRIGHT, 2);
+	row1->Add(place_button = newd wxButton(box, PALETTE_SAVED_TERRAIN_PLACE, "Place"), 1, wxEXPAND | wxLEFT, 2);
 	sidesizer->Add(row1, 0, wxEXPAND | wxTOP, 4);
 
 	auto* row2 = newd wxBoxSizer(wxHORIZONTAL);
-	row2->Add(rename_button = newd wxButton(this, PALETTE_SAVED_TERRAIN_RENAME, "Rename"), 1, wxEXPAND | wxRIGHT, 2);
-	row2->Add(delete_button = newd wxButton(this, PALETTE_SAVED_TERRAIN_DELETE, "Delete"), 1, wxEXPAND | wxLEFT, 2);
+	row2->Add(rename_button = newd wxButton(box, PALETTE_SAVED_TERRAIN_RENAME, "Rename"), 1, wxEXPAND | wxRIGHT, 2);
+	row2->Add(delete_button = newd wxButton(box, PALETTE_SAVED_TERRAIN_DELETE, "Delete"), 1, wxEXPAND | wxLEFT, 2);
 	sidesizer->Add(row2, 0, wxEXPAND | wxTOP, 4);
 
 	auto* row3 = newd wxBoxSizer(wxHORIZONTAL);
-	row3->Add(import_button = newd wxButton(this, PALETTE_SAVED_TERRAIN_IMPORT, "Import"), 1, wxEXPAND | wxRIGHT, 2);
-	row3->Add(export_button = newd wxButton(this, PALETTE_SAVED_TERRAIN_EXPORT, "Export"), 1, wxEXPAND | wxLEFT, 2);
+	row3->Add(import_button = newd wxButton(box, PALETTE_SAVED_TERRAIN_IMPORT, "Import"), 1, wxEXPAND | wxRIGHT, 2);
+	row3->Add(export_button = newd wxButton(box, PALETTE_SAVED_TERRAIN_EXPORT, "Export"), 1, wxEXPAND | wxLEFT, 2);
 	sidesizer->Add(row3, 0, wxEXPAND | wxTOP, 4);
 
 	SetSizerAndFit(sidesizer);

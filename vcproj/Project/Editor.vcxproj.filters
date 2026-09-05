@@ -986,7 +986,9 @@
     <Filter Include="multiplayer\Header Files">
       <UniqueIdentifier>{8D44E68E-44E7-432D-B1B5-67DAD30460B2}</UniqueIdentifier>
     </Filter>
+    <ClInclude Include="..\..\source\multiplayer_transport.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
     <ClInclude Include="..\..\source\multiplayer_protocol.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
+    <ClCompile Include="..\..\source\multiplayer_transport.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
     <ClCompile Include="..\..\source\multiplayer_protocol.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
     <ClInclude Include="..\..\source\multiplayer_crypto.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
     <ClCompile Include="..\..\source\multiplayer_crypto.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>

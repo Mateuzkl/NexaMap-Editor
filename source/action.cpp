@@ -588,6 +588,7 @@ BatchAction::BatchAction(Editor& editor, ActionIdentifier ident) :
 	type(ident) {
 	if (editor.multiplayer && editor.multiplayer->active() && !editor.multiplayer->internalChange()) {
 		multiplayerGroup = editor.multiplayer.get();
+		multiplayerLifetime = multiplayerGroup->lifetimeToken();
 		multiplayerGroup->beginActionGroup();
 	}
 }
@@ -597,7 +598,7 @@ BatchAction::~BatchAction() {
 		delete action;
 	}
 	batch.clear();
-	if (multiplayerGroup) {
+	if (multiplayerGroup && !multiplayerLifetime.expired()) {
 		multiplayerGroup->endActionGroup();
 	}
 }

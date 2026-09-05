@@ -49,8 +49,8 @@ NamedEntityPalettePanel::NamedEntityPalettePanel(wxWindow* parent, wxWindowID id
 	////
 }
 
-wxListCtrl* NamedEntityPalettePanel::createEntityList(wxWindowID listId) {
-	auto* list = newd wxListCtrl(this, listId, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_EDIT_LABELS | wxLC_NO_HEADER);
+wxListCtrl* NamedEntityPalettePanel::createEntityList(wxWindow* parent, wxWindowID listId) {
+	auto* list = newd wxListCtrl(parent, listId, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_EDIT_LABELS | wxLC_NO_HEADER);
 	list->InsertColumn(0, "UNNAMED", wxLIST_FORMAT_LEFT, 200);
 	return list;
 }
@@ -114,7 +114,8 @@ void PalettePanel::LoadAllContents() {
 }
 
 void PalettePanel::AddToolPanel(PalettePanel* panel) {
-	wxSizer* sp_sizer = newd wxStaticBoxSizer(wxVERTICAL, this, panel->GetName());
+	auto* sp_sizer = newd wxStaticBoxSizer(wxVERTICAL, this, panel->GetName());
+	panel->Reparent(sp_sizer->GetStaticBox());
 	sp_sizer->Add(panel, 0, wxEXPAND);
 	GetSizer()->Add(sp_sizer, 0, wxEXPAND);
 

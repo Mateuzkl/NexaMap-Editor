@@ -3,10 +3,14 @@
 #define NEXAMAP_MULTIPLAYER_SESSION_H
 #include "multiplayer_protocol.h"
 #include "position.h"
+#include "multiplayer_transport.h"
+#include <wx/weakref.h>
 #include <wx/event.h>
 #include <wx/timer.h>
 #include <memory>
 #include <optional>
+#include <functional>
+#include <wx/window.h>
 
 class Editor;
 class Map;
@@ -21,11 +25,16 @@ class EditorResourceSession;
 
 class MultiplayerSession final : public wxEvtHandler {
 public:
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	static void activateForTests(MultiplayerSession* session);
+	void exerciseQueueLimitForTests();
+	friend class MultiplayerSessionTests;
+#endif
 	struct Options {
 		std::string name = "Mapper";
-		std::string address = "127.0.0.1";
+		std::string address;
 		std::string password;
-		uint16_t port = 7171;
+		uint16_t port = Multiplayer::DefaultPort;
 		uint32_t maxPlayers = 8;
 		Multiplayer::Role defaultRole = Multiplayer::Role::Editor;
 		bool approvals = true;
@@ -72,6 +81,9 @@ public:
 	bool internalChange() const {
 		return applying;
 	}
+	std::weak_ptr<void> lifetimeToken() const {
+		return lifetime;
+	}
 	void beginActionGroup() {
 		++editDepth;
 	}
@@ -87,6 +99,7 @@ public:
 	uint64_t lockRegion(const Multiplayer::Region& region);
 	void unlockRegion(uint64_t id);
 	bool ownsLock(uint64_t id) const;
+	bool deferPropertyEdit(wxWindow* owner, const Position& position, std::function<void()> callback);
 	void changeRole(uint32_t id, Multiplayer::Role role);
 	void kick(uint32_t id);
 	void approve(uint64_t id, bool accept, uint16_t replacementUniqueId = 0);
@@ -134,7 +147,7 @@ public:
 		}
 
 	private:
-		MultiplayerSession* session = nullptr;
+		wxWeakRef<MultiplayerSession> session;
 		Multiplayer::Bytes before;
 		std::map<uint64_t, Multiplayer::Bytes> tiles;
 		uint64_t base = 0;
@@ -149,13 +162,19 @@ public:
 		}
 
 	private:
-		MultiplayerSession* session = nullptr;
+		wxWeakRef<MultiplayerSession> session;
 		uint64_t lock = 0;
 		bool permitted = true;
 	};
 
 private:
 	struct Peer;
+	struct PropertyRequest {
+		wxWeakRef<wxWindow> owner;
+		uint64_t lock;
+		uint64_t deadline;
+		std::function<void()> callback;
+	};
 	struct History {
 		Multiplayer::Transaction forward;
 		Multiplayer::Transaction inverse;
@@ -172,10 +191,13 @@ private:
 	struct IdentityState {
 		uint32_t id;
 		uint64_t generation;
+		Multiplayer::Role role;
 	};
 	void onSocket(wxSocketEvent& event);
 	void onTimer(wxTimerEvent& event);
 	void connectClient();
+	void finishResolve();
+	void setStatus(const std::string& status);
 	void configureSocket(Peer& peer);
 	void read(Peer& peer);
 	void write(Peer& peer);
@@ -186,7 +208,7 @@ private:
 	void process(Peer& peer, const Multiplayer::Bytes& bytes);
 	void challenge(Peer& peer);
 	void login(Peer& peer, Multiplayer::Reader& in);
-	void drop(Peer& peer, const std::string& reason, bool reconnect = true);
+	void drop(Peer& peer, const std::string& reason, bool reconnect = true, bool notifyRemote = false);
 	void startSnapshot(Peer& peer);
 	void pumpSnapshot(Peer& peer);
 	void finishCatchup(Peer& peer);
@@ -204,10 +226,14 @@ private:
 	bool hasSensitiveChanges(const Multiplayer::Transaction& tx) const;
 	void finishMetadataEdit(const Multiplayer::Bytes& before, const std::map<uint64_t, Multiplayer::Bytes>& tiles, uint64_t base);
 
+	std::shared_ptr<void> lifetime = std::make_shared<int>(0);
 	Editor& editor;
 	Options options;
 	wxTimer timer;
 	wxSocketServer* listener = nullptr;
+	int listenerEventId = wxID_ANY;
+	std::shared_ptr<Multiplayer::AddressResolution> resolution;
+	uint64_t resolveDeadline = 0;
 	std::map<wxSocketBase*, std::unique_ptr<Peer>> peers;
 	std::map<Multiplayer::Identity, IdentityState> identities;
 	std::map<uint32_t, Participant> participants;
@@ -215,6 +241,7 @@ private:
 	std::vector<Multiplayer::Lease> visibleLocks;
 	std::map<uint64_t, Multiplayer::Region> heldLocks;
 	std::vector<uint64_t> unlockAfterAck;
+	std::vector<PropertyRequest> propertyRequests;
 	std::vector<Ping> locationPings;
 	std::deque<std::string> logLines;
 	std::shared_ptr<EditorResourceSession> resources;
@@ -236,6 +263,8 @@ private:
 	uint64_t lastAcceptedTransaction = 0;
 	uint32_t metadataSize = 0;
 	Position cursor;
+	bool synchronizedBaseline = false;
+	bool processingTimer = false, peersChanged = false;
 	bool running = false, hosting = false, ready = false, applying = false, cursorDirty = false, needsRefresh = false, receivingSnapshot = false;
 	unsigned editDepth = 0;
 	std::string connectionStatus = "Disconnected";

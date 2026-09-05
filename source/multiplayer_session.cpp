@@ -50,7 +50,7 @@ namespace {
 			flag = previous;
 		}
 	};
-	constexpr int SocketEventId = wxID_HIGHEST + 4100;
+
 	constexpr uint64_t IdleTimeout = 45000;
 	constexpr size_t TransferChunk = 128 * 1024;
 }
@@ -63,6 +63,7 @@ struct MultiplayerSession::Peer {
 		Digest digest;
 	};
 	wxSocketBase* socket = nullptr;
+	int eventId = wxNewId();
 	FrameReader frames;
 	std::deque<Bytes> writes;
 	std::deque<Transfer> transfers;
@@ -89,7 +90,6 @@ struct MultiplayerSession::Peer {
 	~Peer() {
 		if (socket) {
 			socket->Notify(false);
-			socket->Close();
 			socket->Destroy();
 		}
 	}
@@ -98,10 +98,11 @@ struct MultiplayerSession::Peer {
 MultiplayerSession::MultiplayerSession(Editor& editor) :
 	editor(editor), timer(this) {
 	identity = randomIdentity();
-	Bind(wxEVT_SOCKET, &MultiplayerSession::onSocket, this, SocketEventId);
+	Bind(wxEVT_SOCKET, &MultiplayerSession::onSocket, this);
 	Bind(wxEVT_TIMER, &MultiplayerSession::onTimer, this);
 }
 MultiplayerSession::~MultiplayerSession() {
+	lifetime.reset();
 	disconnect();
 	if (window) {
 		window->detach();
@@ -110,6 +111,29 @@ MultiplayerSession::~MultiplayerSession() {
 	}
 	DeletePendingEvents();
 }
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+void MultiplayerSession::activateForTests(MultiplayerSession* session) {
+	activeSession = session;
+}
+void MultiplayerSession::exerciseQueueLimitForTests() {
+	for (auto& [socket, peer] : peers) {
+		if (peer->dead) {
+			continue;
+		}
+		Transaction tx;
+		tx.session = session;
+		tx.author = localId;
+		tx.id = nextTransaction;
+		sendTransaction(*peer, tx);
+		peer->writes.assign(MaxPendingPackets, Bytes {});
+		peer->pendingBytes = 0;
+		pumpTransactions(*peer);
+		if (!peer->dead || !peer->transfers.empty()) {
+			throw Error("Queue overflow did not release the peer");
+		}
+	}
+}
+#endif
 MultiplayerSession* MultiplayerSession::current() {
 	return activeSession;
 }
@@ -119,9 +143,10 @@ bool MultiplayerSession::permitsResourceSession(const std::shared_ptr<EditorReso
 bool MultiplayerSession::host(const Options& opts, std::string& error) {
 	try {
 		if (activeSession) {
-			throw Error("Disconnect the existing multiplayer session first.");
+			error = "Disconnect the existing multiplayer session first.";
+			return false;
 		}
-		if (!validText(opts.name, MaxName) || opts.password.size() > 256 || !opts.port || opts.maxPlayers < 2 || opts.maxPlayers > MaxPlayers) {
+		if (!validText(opts.name, MaxName) || opts.password.size() > 256 || !opts.port || opts.maxPlayers < 2 || opts.maxPlayers > MaxPlayers || opts.defaultRole < Role::Editor || opts.defaultRole > Role::Viewer) {
 			throw Error("Invalid session settings.");
 		}
 		options = opts;
@@ -138,7 +163,8 @@ bool MultiplayerSession::host(const Options& opts, std::string& error) {
 		if (!listener->IsOk()) {
 			throw Error("Cannot listen on this port. Check whether another session is using it.");
 		}
-		listener->SetEventHandler(*this, SocketEventId);
+		listenerEventId = wxNewId();
+		listener->SetEventHandler(*this, listenerEventId);
 		listener->SetNotify(wxSOCKET_CONNECTION_FLAG);
 		listener->Notify(true);
 		editor.actionQueue->clear();
@@ -160,7 +186,8 @@ bool MultiplayerSession::host(const Options& opts, std::string& error) {
 bool MultiplayerSession::join(const Options& opts, std::string& error) {
 	try {
 		if (activeSession) {
-			throw Error("Disconnect the existing multiplayer session first.");
+			error = "Disconnect the existing multiplayer session first.";
+			return false;
 		}
 		if (!validText(opts.name, MaxName) || opts.address.empty() || opts.address.size() > 253 || opts.password.size() > 256 || !opts.port) {
 			throw Error("Invalid connection settings.");
@@ -190,6 +217,7 @@ void MultiplayerSession::disconnect(const std::string& reason) {
 	timer.Stop();
 	running = ready = false;
 	reconnectAt = 0;
+	resolution.reset();
 	if (listener) {
 		listener->Notify(false);
 		listener->Close();
@@ -198,15 +226,26 @@ void MultiplayerSession::disconnect(const std::string& reason) {
 	}
 	for (auto& [socket, peer] : peers) {
 		if (!peer->dead) {
-			try {
-				Writer out;
-				out.string(reason);
-				send(*peer, Packet::Disconnect, out);
-				write(*peer);
-			} catch (...) { }
+			closeSocket(std::exchange(peer->socket, nullptr), std::move(peer->writes), peer->writeOffset, hosting ? "Host disconnected: " + reason : reason);
 		}
 	}
 	peers.clear();
+	DeletePendingEvents();
+	heldLocks.clear();
+	unlockAfterAck.clear();
+	propertyRequests.clear();
+	regionLocks = Locks {};
+	revisions = Revisions {};
+	journal = Journal {};
+	identities.clear();
+	metadata.clear();
+	incomingMetadata.clear();
+	session = {};
+	synchronizedBaseline = receivingSnapshot = false;
+	acknowledgedRevision = 0;
+	nextClientId = 1;
+	nextTransaction = nextApproval = nextLock = 1;
+	reconnectDelay = 1000;
 	participants.clear();
 	visibleLocks.clear();
 	locationPings.clear();
@@ -226,23 +265,38 @@ void MultiplayerSession::disconnect(const std::string& reason) {
 void MultiplayerSession::configureSocket(Peer& peer) {
 	auto* socket = peer.socket;
 	socket->SetFlags(wxSOCKET_NOWAIT);
-	socket->SetEventHandler(*this, SocketEventId);
+	socket->SetEventHandler(*this, peer.eventId);
 	socket->SetNotify(wxSOCKET_INPUT_FLAG | wxSOCKET_OUTPUT_FLAG | wxSOCKET_LOST_FLAG | wxSOCKET_CONNECTION_FLAG);
 	socket->Notify(true);
+	if (!socket->IsConnected()) {
+		return;
+	}
 	int enabled = 1;
 	socket->SetOption(IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
 	socket->SetOption(SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled));
+}
+void MultiplayerSession::setStatus(const std::string& value) {
+	connectionStatus = value;
+	log(value);
 }
 void MultiplayerSession::connectClient() {
 	if (!running || hosting) {
 		return;
 	}
-	connectionStatus = "Connecting";
 	reconnectAt = 0;
 	++generation;
+	setStatus("Connecting to " + options.address + ":" + std::to_string(options.port));
+	resolveDeadline = nowMs() + 15000;
+	resolution = resolveIPv4(options.address);
+	if (resolution->done.load(std::memory_order_acquire)) {
+		finishResolve();
+	}
+}
+void MultiplayerSession::finishResolve() {
+	const auto resolved = std::exchange(resolution, {});
 	wxIPV4address address;
-	if (!address.Hostname(wxstr(options.address))) {
-		throw Error("Cannot resolve the host address.");
+	if (!resolved || resolved->address.empty() || !address.Hostname(wxstr(resolved->address))) {
+		throw Error("Invalid hostname or unable to resolve host: " + options.address);
 	}
 	address.Service(options.port);
 	auto peer = std::make_unique<Peer>();
@@ -250,10 +304,16 @@ void MultiplayerSession::connectClient() {
 	peer->socket = socket;
 	peer->connecting = true;
 	configureSocket(*peer);
+	auto* ptr = peer.get();
 	peers.emplace(socket, std::move(peer));
-	if (!socket->Connect(address, false) && socket->LastError() != wxSOCKET_WOULDBLOCK && !socket->IsConnected()) {
-		// A nonblocking connect can finish later via wxSOCKET_CONNECTION.
-		log("Connecting to " + options.address + ":" + std::to_string(options.port) + "...");
+	if (socket->Connect(address, false) || socket->IsConnected()) {
+		ptr->connecting = false;
+		configureSocket(*ptr);
+		setStatus("Authenticating");
+	} else if (socket->LastError() != wxSOCKET_WOULDBLOCK) {
+		const auto reason = socketFailure(*socket, true);
+		drop(*ptr, reason, false);
+		throw Error(reason);
 	}
 }
 void MultiplayerSession::send(Peer& peer, Packet type, const Writer& payload) {
@@ -301,7 +361,7 @@ void MultiplayerSession::write(Peer& peer) {
 void MultiplayerSession::read(Peer& peer) {
 	std::array<uint8_t, 16384> buffer;
 	size_t budget = 256 * 1024;
-	while (!peer.dead && budget) {
+	while (!peer.dead && peer.socket && budget) {
 		auto n = std::min({ buffer.size(), peer.frames.needed(), budget });
 		peer.socket->Read(buffer.data(), static_cast<wxUint32>(n));
 		auto got = peer.socket->LastReadCount();
@@ -312,7 +372,7 @@ void MultiplayerSession::read(Peer& peer) {
 		}
 		if (peer.frames.ready()) {
 			auto bytes = peer.frames.take();
-			if (editDepth && bytes[0] != uint8_t(Packet::Ping) && bytes[0] != uint8_t(Packet::Pong)) {
+			if (editDepth && bytes[0] != uint8_t(Packet::Ping) && bytes[0] != uint8_t(Packet::Pong) && bytes[0] != uint8_t(Packet::Disconnect)) {
 				if (peer.deferredBytes + bytes.size() > MaxPendingBytes) {
 					throw Error("Incoming queue limit reached during local operation.");
 				}
@@ -322,8 +382,11 @@ void MultiplayerSession::read(Peer& peer) {
 				process(peer, bytes);
 			}
 		}
+		if (peer.dead || !peer.socket) {
+			return;
+		}
 		if (peer.socket->Error() && peer.socket->LastError() != wxSOCKET_WOULDBLOCK) {
-			drop(peer, "Connection read failed.");
+			drop(peer, hosting ? "Participant disconnected." : "Host disconnected or the connection was lost.", peer.authenticated);
 			break;
 		}
 		if (!got) {
@@ -336,13 +399,13 @@ void MultiplayerSession::onSocket(wxSocketEvent& event) {
 		return;
 	}
 	auto* socket = event.GetSocket();
-	if (listener && socket == listener && event.GetSocketEvent() == wxSOCKET_CONNECTION) {
+	if (listener && socket == listener && event.GetId() == listenerEventId && event.GetSocketEvent() == wxSOCKET_CONNECTION) {
 		auto* accepted = listener->Accept(false);
 		if (!accepted) {
 			return;
 		}
 		if (peers.size() >= options.maxPlayers + 4) {
-			accepted->Destroy();
+			closeSocket(accepted, {}, 0, "Session full: too many pending connections.");
 			return;
 		}
 		auto peer = std::make_unique<Peer>();
@@ -354,12 +417,12 @@ void MultiplayerSession::onSocket(wxSocketEvent& event) {
 			challenge(*ptr);
 			write(*ptr);
 		} catch (const std::exception& e) {
-			drop(*ptr, e.what());
+			drop(*ptr, e.what(), false, true);
 		}
 		return;
 	}
 	const auto found = peers.find(socket);
-	if (found == peers.end() || found->second->dead) {
+	if (found == peers.end() || found->second->dead || event.GetId() != found->second->eventId) {
 		return;
 	}
 	auto& peer = *found->second;
@@ -368,7 +431,7 @@ void MultiplayerSession::onSocket(wxSocketEvent& event) {
 			case wxSOCKET_CONNECTION:
 				peer.connecting = false;
 				configureSocket(peer);
-				connectionStatus = "Authenticating";
+				setStatus("Authenticating");
 				break;
 			case wxSOCKET_INPUT:
 				read(peer);
@@ -377,20 +440,36 @@ void MultiplayerSession::onSocket(wxSocketEvent& event) {
 				write(peer);
 				break;
 			case wxSOCKET_LOST:
-				drop(peer, "Connection lost.");
+				if (peer.connecting) {
+					drop(peer, socketFailure(*peer.socket, true), false);
+					break;
+				}
+				// A Disconnect frame may precede FIN in the same native event batch.
+				read(peer);
+				if (!peer.dead && peer.socket) {
+					const auto reason = socketFailure(*peer.socket, peer.connecting);
+					drop(peer, reason, peer.authenticated);
+				}
 				break;
 		}
 	} catch (const std::exception& e) {
-		drop(peer, e.what(), false);
+		drop(peer, e.what(), false, true);
 	}
 }
-void MultiplayerSession::drop(Peer& peer, const std::string& reason, bool reconnect) {
+void MultiplayerSession::drop(Peer& peer, const std::string& reason, bool reconnect, bool notifyRemote) {
 	if (peer.dead) {
 		return;
 	}
 	peer.dead = true;
-	peer.socket->Notify(false);
-	peer.socket->Close();
+	auto* closing = std::exchange(peer.socket, nullptr);
+	if (closing) {
+		closing->Notify(false);
+		if (notifyRemote) {
+			closeSocket(closing, std::move(peer.writes), peer.writeOffset, reason);
+		} else {
+			closing->Destroy();
+		}
+	}
 	peer.writes.clear();
 	peer.transfers.clear();
 	peer.pendingBytes = peer.transferBytes = 0;
@@ -403,17 +482,22 @@ void MultiplayerSession::drop(Peer& peer, const std::string& reason, bool reconn
 		regionLocks.releaseOwner(id);
 		std::erase_if(approvals, [id](const auto& pair) { return pair.second.transaction.author == id; });
 		log((peer.name.empty() ? "Connection" : peer.name) + ": " + reason);
-		sendPlayers();
-		sendLocks();
+		peersChanged = true;
 	} else {
 		ready = false;
 		participants.clear();
 		visibleLocks.clear();
+		heldLocks.clear();
+		unlockAfterAck.clear();
+		propertyRequests.clear();
+		if (receivingSnapshot) {
+			synchronizedBaseline = false;
+		}
 		receivingSnapshot = false;
-		if (reconnect && running) {
+		if (reconnect && running && peer.authenticated) {
 			reconnectAt = nowMs() + reconnectDelay;
 			reconnectDelay = std::min<uint64_t>(30000, reconnectDelay * 2);
-			connectionStatus = "Reconnecting";
+			connectionStatus = "Reconnecting: " + reason;
 		} else {
 			connectionStatus = "Disconnected: " + reason;
 			reconnectAt = 0;
@@ -423,6 +507,9 @@ void MultiplayerSession::drop(Peer& peer, const std::string& reason, bool reconn
 	needsRefresh = true;
 }
 void MultiplayerSession::sendTransaction(Peer& peer, const Transaction& tx) {
+	if (peer.dead) {
+		return;
+	}
 	auto bytes = std::make_shared<const Bytes>(encodeTransaction(tx));
 	if (peer.transferBytes + bytes->size() > MaxJournalBytes || peer.transfers.size() >= 1024) {
 		drop(peer, "Slow connection: transaction queue limit reached.");
@@ -439,6 +526,9 @@ void MultiplayerSession::pumpTransactions(Peer& peer) {
 			out.u32(static_cast<uint32_t>(transfer.bytes->size()));
 			out.raw(transfer.digest);
 			send(peer, Packet::TransactionBegin, out);
+			if (peer.dead) {
+				return;
+			}
 			transfer.started = true;
 		}
 		auto n = std::min(TransferChunk, transfer.bytes->size() - transfer.offset);
@@ -446,13 +536,16 @@ void MultiplayerSession::pumpTransactions(Peer& peer) {
 		chunk.u32(static_cast<uint32_t>(transfer.offset));
 		chunk.raw(std::span(*transfer.bytes).subspan(transfer.offset, n));
 		send(peer, Packet::TransactionChunk, chunk);
-		transfer.offset += n;
 		if (peer.dead) {
 			return;
 		}
+		transfer.offset += n;
 		if (transfer.offset == transfer.bytes->size()) {
 			Writer out;
 			send(peer, Packet::TransactionEnd, out);
+			if (peer.dead) {
+				return;
+			}
 			peer.transferBytes -= transfer.bytes->size();
 			peer.transfers.pop_front();
 		}
@@ -498,7 +591,7 @@ void MultiplayerSession::login(Peer& peer, Reader& in) {
 	auto lastRevision = hello.u64();
 	auto name = hello.string(MaxName);
 	hello.finish();
-	if (!validText(name, MaxName) || !clientGeneration) {
+	if (!validText(name, MaxName) || !clientGeneration || clientIdentity == Identity {}) {
 		throw Error("Invalid participant identity/name.");
 	}
 	auto known = identities.find(clientIdentity);
@@ -506,6 +599,10 @@ void MultiplayerSession::login(Peer& peer, Reader& in) {
 		if (clientGeneration <= known->second.generation) {
 			throw Error("Stale connection generation.");
 		}
+		if (!participants.contains(known->second.id) && participants.size() >= options.maxPlayers) {
+			throw Error("Session full.");
+		}
+		peer.role = known->second.role;
 		peer.id = known->second.id;
 		known->second.generation = clientGeneration;
 		for (auto& [socket, previous] : peers) {
@@ -518,12 +615,12 @@ void MultiplayerSession::login(Peer& peer, Reader& in) {
 			throw Error("Session is full.");
 		}
 		peer.id = nextClientId++;
-		identities.emplace(clientIdentity, IdentityState { peer.id, clientGeneration });
+		peer.role = options.defaultRole;
+		identities.emplace(clientIdentity, IdentityState { peer.id, clientGeneration, peer.role });
 	}
 	peer.identity = clientIdentity;
 	peer.generation = clientGeneration;
 	peer.name = name;
-	peer.role = options.defaultRole;
 	peer.authenticated = true;
 	peer.challenge.clear();
 	participants[peer.id] = { peer.id, name, peer.role, {}, playerColor(peer.id) };
@@ -592,7 +689,7 @@ void MultiplayerSession::process(Peer& peer, const Bytes& bytes) {
 		body.raw(signature);
 		body.raw(identity);
 		body.u64(generation);
-		body.raw(previousSession);
+		body.raw(synchronizedBaseline ? previousSession : Identity {});
 		body.u64(acknowledgedRevision);
 		body.string(options.name, MaxName);
 		Writer signedData;
@@ -627,7 +724,7 @@ void MultiplayerSession::process(Peer& peer, const Bytes& bytes) {
 		peer.challenge.clear();
 		nextTransaction = std::max(nextTransaction, lastAcceptedTransaction + 1);
 		participants[localId] = { localId, options.name, peer.role, cursor, playerColor(localId) };
-		connectionStatus = "Synchronizing";
+		setStatus("Synchronizing");
 		return;
 	}
 	if (!peer.authenticated) {
@@ -680,6 +777,7 @@ void MultiplayerSession::process(Peer& peer, const Bytes& bytes) {
 				throw Error("Snapshot metadata exceeds its size limit.");
 			}
 			in.finish();
+			synchronizedBaseline = false;
 			resetClientMap();
 			editor.map.setWidth(width);
 			editor.map.setHeight(height);
@@ -799,7 +897,8 @@ void MultiplayerSession::process(Peer& peer, const Bytes& bytes) {
 				ready = true;
 				peer.live = true;
 				reconnectDelay = 1000;
-				connectionStatus = "Connected";
+				synchronizedBaseline = true;
+				setStatus("Connected");
 				log("Map synchronized at revision " + std::to_string(revision) + ".");
 				if (pending) {
 					if (lastAcceptedTransaction >= pending->transaction.id) {
@@ -1127,6 +1226,9 @@ void MultiplayerSession::finishCatchup(Peer& peer) {
 	Writer readyMessage;
 	readyMessage.u64(revisions.current());
 	send(peer, Packet::Ready, readyMessage);
+	if (peer.dead) {
+		return;
+	}
 	peer.catchup = false;
 	peer.live = true;
 }
@@ -1470,17 +1572,30 @@ void MultiplayerSession::reject(Peer* peer, uint64_t id, const std::string& reas
 }
 
 void MultiplayerSession::onTimer(wxTimerEvent&) {
-	if (!running) {
+	if (!running || processingTimer) {
 		return;
 	}
+	BoolScope timerScope(processingTimer);
 	const auto now = nowMs();
+	if (resolution) {
+		try {
+			if (resolution->done.load(std::memory_order_acquire)) {
+				finishResolve();
+			} else if (now >= resolveDeadline) {
+				resolution.reset();
+				throw Error("Host name resolution timed out.");
+			}
+		} catch (const std::exception& e) {
+			setStatus("Disconnected: " + std::string(e.what()));
+		}
+	}
 	std::erase_if(peers, [](const auto& pair) { return pair.second->dead; });
 	if (!hosting && peers.empty() && reconnectAt && now >= reconnectAt) {
 		try {
 			connectClient();
 		} catch (const std::exception& e) {
-			log(e.what());
-			reconnectAt = now + reconnectDelay;
+			setStatus("Disconnected: " + std::string(e.what()));
+			reconnectAt = 0;
 		}
 	}
 	const bool heartbeat = now - lastHeartbeat >= 5000;
@@ -1516,27 +1631,57 @@ void MultiplayerSession::onTimer(wxTimerEvent&) {
 				ping.u64(now);
 				send(*peer, Packet::Ping, ping);
 			}
-			if (now - peer->lastReceived > (peer->authenticated ? IdleTimeout : 15000)) {
-				drop(*peer, "Connection timed out.");
+			if (now >= peer->lastReceived && now - peer->lastReceived > (peer->authenticated ? IdleTimeout : 15000)) {
+				drop(*peer, peer->connecting ? "Connection timed out." : "Authentication or heartbeat timed out.", peer->authenticated, true);
 			}
-			if (peer->receivingSize && now - peer->receivingSince > 60000 && !editDepth) {
+			if (peer->receivingSize && now >= peer->receivingSince && now - peer->receivingSince > 60000 && !editDepth) {
 				drop(*peer, "Transaction transfer timed out.");
 			}
 		} catch (const std::exception& e) {
-			try {
-				Writer failure;
-				failure.string(std::string(e.what()).substr(0, MaxChat));
-				send(*peer, Packet::Disconnect, failure);
-				write(*peer);
-			} catch (...) { }
-			drop(*peer, e.what(), !hosting);
+			drop(*peer, e.what(), false, true);
 		}
+	}
+	// Complete property requests without nesting the GUI event loop or sleeping.
+	auto requests = std::exchange(propertyRequests, {});
+	for (auto& request : requests) {
+		if (!request.owner || request.owner->IsBeingDeleted() || now >= request.deadline || !ready) {
+			unlockRegion(request.lock);
+			log("Tile property lock request cancelled or timed out.");
+		} else if (ownsLock(request.lock)) {
+			wxWeakRef<MultiplayerSession> weak(this);
+			// Queue on the session so destroying the window still releases the lease.
+			CallAfter([weak, request = std::move(request)]() mutable {
+				if (!weak || !weak->running) {
+					return;
+				}
+				if (request.owner && !request.owner->IsBeingDeleted() && weak->canEdit() && weak->ownsLock(request.lock)) {
+					request.callback();
+				}
+				if (weak && !weak->pending) {
+					weak->unlockRegion(request.lock);
+				}
+			});
+		} else {
+			propertyRequests.push_back(std::move(request));
+		}
+	}
+	if (!pending && !unlockAfterAck.empty()) {
+		auto release = std::exchange(unlockAfterAck, {});
+		for (auto id : release) {
+			unlockRegion(id);
+		}
+	}
+	if (peersChanged) {
+		peersChanged = false;
+		sendPlayers();
+		sendLocks();
 	}
 	if (hosting && regionLocks.expire(now)) {
 		sendLocks();
 	}
 	if (heartbeat) {
-		for (const auto& [id, region] : heldLocks) {
+		const auto locksToRenew = heldLocks;
+		for (const auto& [id, region] : locksToRenew) {
 			if (hosting) {
 				regionLocks.acquire(localId, id, region, now);
 			} else {
@@ -1596,6 +1741,7 @@ void MultiplayerSession::onTimer(wxTimerEvent&) {
 	}
 }
 void MultiplayerSession::log(const std::string& message) {
+	std::clog << "[multiplayer] " << message << std::endl;
 	logLines.push_back(message);
 	while (logLines.size() > 500) {
 		logLines.pop_front();
@@ -1606,6 +1752,9 @@ void MultiplayerSession::log(const std::string& message) {
 	needsRefresh = true;
 }
 void MultiplayerSession::refresh() {
+	if (!g_gui.root || g_gui.IsApplicationClosing()) {
+		return;
+	}
 	g_gui.RefreshView();
 	g_gui.RefreshPalettes();
 	g_gui.UpdateMenus();
@@ -1767,6 +1916,9 @@ void MultiplayerSession::changeRole(uint32_t id, Role role) {
 	for (auto& [socket, peer] : peers) {
 		if (peer->id == id && !peer->dead) {
 			peer->role = role;
+			if (auto known = identities.find(peer->identity); known != identities.end()) {
+				known->second.role = role;
+			}
 			participants[id].role = role;
 			if (role != Role::Editor) {
 				regionLocks.releaseOwner(id);
@@ -1784,11 +1936,7 @@ void MultiplayerSession::kick(uint32_t id) {
 	}
 	for (auto& [socket, peer] : peers) {
 		if (peer->id == id && !peer->dead) {
-			Writer out;
-			out.string("Disconnected by the host.");
-			send(*peer, Packet::Disconnect, out);
-			write(*peer);
-			drop(*peer, "Disconnected by the host.", false);
+			drop(*peer, "Disconnected by the host.", false, true);
 			return;
 		}
 	}
@@ -1976,6 +2124,34 @@ void MultiplayerSession::finishMetadataEdit(const Bytes& before, const std::map<
 		log(std::string("Metadata edit failed: ") + e.what());
 	}
 }
+bool MultiplayerSession::deferPropertyEdit(wxWindow* owner, const Position& position, std::function<void()> callback) {
+	if (!running || applying) {
+		return false;
+	}
+	if (!canEdit() || !position.isValid()) {
+		log("Properties are unavailable until synchronization/approval finishes.");
+		return true;
+	}
+	if (hosting) {
+		return false;
+	}
+	for (const auto& [id, held] : heldLocks) {
+		if (held.x1 == position.x && held.x2 == position.x && held.y1 == position.y && held.y2 == position.y && held.z == position.z && ownsLock(id)) {
+			return false;
+		}
+	}
+	for (const auto& request : propertyRequests) {
+		if (request.owner == owner) {
+			return true;
+		}
+	}
+	const auto lock = lockRegion({ static_cast<uint16_t>(position.x), static_cast<uint16_t>(position.y), static_cast<uint16_t>(position.x), static_cast<uint16_t>(position.y), static_cast<uint8_t>(position.z) });
+	if (lock) {
+		propertyRequests.push_back({ owner, lock, nowMs() + 5000, std::move(callback) });
+		log("Waiting for tile property lock...");
+	}
+	return true;
+}
 MultiplayerSession::PropertyEdit::PropertyEdit(Map* map, const Position& position) {
 	auto* live = MultiplayerSession::current();
 	if (!live || &live->editor.map != map || live->applying) {
@@ -1987,16 +2163,16 @@ MultiplayerSession::PropertyEdit::PropertyEdit(Map* map, const Position& positio
 		return;
 	}
 	Region region { static_cast<uint16_t>(position.x), static_cast<uint16_t>(position.y), static_cast<uint16_t>(position.x), static_cast<uint16_t>(position.y), static_cast<uint8_t>(position.z) };
-	lock = live->lockRegion(region);
-	const auto deadline = nowMs() + 5000;
-	while (lock && live->running && !live->ownsLock(lock) && nowMs() < deadline) {
-		wxYieldIfNeeded();
-		wxMilliSleep(10);
+	for (const auto& [id, held] : live->heldLocks) {
+		if (held.x1 == region.x1 && held.y1 == region.y1 && held.x2 == region.x2 && held.y2 == region.y2 && held.z == region.z && live->ownsLock(id)) {
+			lock = id;
+			break;
+		}
+	}
+	if (!lock && live->hosting) {
+		lock = live->lockRegion(region);
 	}
 	if (!lock || !live->ownsLock(lock)) {
-		if (lock) {
-			live->unlockRegion(lock);
-		}
 		permitted = false;
 		live->log("Could not acquire this tile's property lock.");
 		return;

@@ -137,8 +137,19 @@ namespace {
 		std::streambuf* logBuffer;
 	};
 
-	class ConsoleLogTarget final : public wxLog {
+	class ConsoleLogTarget final : public wxLogInterposer {
 	protected:
+		void DoLogRecord(wxLogLevel level, const wxString& message, const wxLogRecordInfo& info) override {
+			if (level == wxLOG_Debug || level == wxLOG_Trace) {
+				// Forwarding debug to both loggers prints it twice through wx's
+				// default debug sink and bypasses our UTF-8 diagnostic file stream.
+				DoLogText(message);
+				return;
+			}
+			// Preserve normal wxWidgets warning/error dialogs as well as logging.
+			wxLogInterposer::DoLogRecord(level, message, info);
+		}
+
 		void DoLogText(const wxString& message) override {
 			const wxScopedCharBuffer utf8 = message.ToUTF8();
 			std::cerr << "[wx] " << (utf8 ? utf8.data() : "") << std::endl;
@@ -302,8 +313,19 @@ namespace {
 
 } // namespace
 
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+wxLog* CreateDiagnosticLogTargetForTests() {
+	return new ConsoleLogTarget();
+}
+
+int RunMultiplayerSessionTests(int argc, char** argv);
+#endif
 int main(int argc, char** argv) {
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	return RunMultiplayerSessionTests(argc, argv);
+#else
 	return RunApplication([&] { return wxEntry(argc, argv); });
+#endif
 }
 
 #ifdef __WINDOWS__
@@ -337,8 +359,7 @@ bool Application::OnInit() {
 		if (StartDiagnostics(executablePath)) {
 			// Keep the normal wxWidgets UI logger and mirror all messages to the
 			// diagnostic console/file stream.
-			wxLog::GetActiveTarget();
-			new wxLogChain(new ConsoleLogTarget());
+			new ConsoleLogTarget();
 		}
 	}
 #if wxUSE_ON_FATAL_EXCEPTION

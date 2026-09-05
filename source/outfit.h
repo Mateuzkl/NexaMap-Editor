@@ -34,6 +34,7 @@ struct Outfit {
 	int lookMountBody;
 	int lookMountLegs;
 	int lookMountFeet;
+	bool operator==(const Outfit&) const = default;
 
 	uint32_t getColorHash() const {
 		return static_cast<uint32_t>(lookHead) << 24 | static_cast<uint32_t>(lookBody) << 16 | static_cast<uint32_t>(lookLegs) << 8 | static_cast<uint32_t>(lookFeet);

@@ -143,13 +143,12 @@ namespace {
 
 	void AppendActionableDedicatedCreatureWarnings(wxArrayString& target, const wxArrayString& catalogWarnings) {
 		for (const wxString& warning : catalogWarnings) {
-			const bool sharedMonsterNpcName = warning.StartsWith("Duplicate creature type name \"");
+			const bool conflictingOverlayName = warning.StartsWith("Duplicate creature type name \"");
 			const bool unsupportedCatalogOutfit = warning.StartsWith("Invalid creature \"") && warning.Contains("\" look type #");
-			if (sharedMonsterNpcName || unsupportedCatalogOutfit) {
-				// Canary/Crystal legitimately contains some identical monster/NPC
-				// names, and the bundled catalog can be newer than the selected
-				// appearance package. Both cases are non-fatal and remain available
-				// in the diagnostic log without interrupting workspace opening.
+			if (conflictingOverlayName || unsupportedCatalogOutfit) {
+				// A stale user overlay may conflict with the catalog, and the catalog
+				// may be newer than the selected appearance package. Keep details in
+				// the diagnostic log; the active server import follows this fallback.
 				wxLogDebug("Canary/Crystal creature catalog: " + warning);
 				continue;
 			}

@@ -103,7 +103,7 @@ public:
 
 protected:
 	// Creates the standard single-selection, editable, header-less list control.
-	wxListCtrl* createEntityList(wxWindowID listId);
+	wxListCtrl* createEntityList(wxWindow* parent, wxWindowID listId);
 
 	// Disables hotkeys before inline label editing begins.
 	void OnBeginEditLabel(wxListEvent& event);

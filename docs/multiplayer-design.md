@@ -103,3 +103,37 @@ reescrevem o mapa fora de transaÃ§Ãµes devem exigir encerrar a sessÃ£o.
 O teste manual prolongado com host e dois clientes, corte de conexÃ£o, save/reopen
 e assets reais Ã© necessÃ¡rio antes de declarar estabilidade. Compilar ou passar
 testes isolados nÃ£o comprova essa estabilidade.
+
+## Correções de conexão e lifetime
+
+A porta padrão é 49171 e Join começa sem endereço. A interface diferencia
+loopback, LAN e VPN, lista IPv4 de interfaces locais e copia o endpoint sem
+consultar um serviço web. DNS e conexão têm prazo; os estados e motivos finais
+são registrados no diagnóstico.
+
+Cada socket tem um ID de evento próprio. Eventos antigos precisam coincidir com
+o socket e esse ID, evitando aceitar um evento de uma conexão anterior quando
+um endereço de memória for reutilizado. Rejeições transferem a propriedade do
+socket para um handler independente, com prazo de dois segundos. Ele completa
+um eventual frame parcial, escreve Disconnect e envia FIN, sem sleep, sem manter
+referências ao Peer/Session e sem apagar a sessão dentro de um callback.
+
+O fechamento da aba destrói a sessão, timers e janela na thread da GUI, antes de
+liberar o mapa em background. Guards de operações usam referências fracas; lotes
+de ações possuem um token de lifetime. Transferências deixam de acessar a frente
+da fila depois que um limite provoca drop. Alterações de participantes/locks
+causadas por drop são publicadas pelo timer, evitando broadcast recursivo.
+
+O timer compara timestamps antes de subtrair valores sem sinal: um socket criado
+durante o tick não pode ganhar um timeout imediato por underflow.
+
+Um snapshot interrompido invalida a base para resume. Uma reconexão só usa o
+journal quando houve sincronização completa; caso contrário recebe novo snapshot.
+Papéis persistem na identidade autenticada e a contagem máxima também vale para
+uma identidade conhecida que retorna após sair.
+
+Propriedades aguardam o lock por eventos e revalidam posição/seleção antes do
+diálogo; callbacks guardam janela/sessão por referência fraca. Locks são liberados
+ao cancelar/terminar ou após a confirmação/rejeição de uma transação pendente.
+
+Ver [roteiro e testes de rede](tests/multiplayer-network.md).

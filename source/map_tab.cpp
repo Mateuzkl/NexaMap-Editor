@@ -25,6 +25,7 @@
 #include "editor_tabs.h"
 #include "editor_resource_session.h"
 #include "map_display.h"
+#include "multiplayer_session.h"
 
 #include <thread>
 
@@ -59,6 +60,8 @@ MapTab::~MapTab() {
 	if (iref->owner_count <= 0) {
 		Editor* ed = iref->editor;
 		g_gui.ReleaseIngamePreviewEditor(ed);
+		// wx sockets, timers and session windows belong to the GUI thread.
+		ed->multiplayer.reset();
 		iref->editor = nullptr;
 		delete iref;
 

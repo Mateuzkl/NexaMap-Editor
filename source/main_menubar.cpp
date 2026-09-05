@@ -879,7 +879,7 @@ void MainMenuBar::OnMultiplayerHost(wxCommandEvent&) {
 		return;
 	}
 	MultiplayerSession::Options options;
-	if (!MultiplayerWindow::configure(frame, true, options)) {
+	if (!MultiplayerWindow::configure(frame, true, options) || g_gui.GetCurrentEditor() != editor || MultiplayerSession::current() || g_gui.IsApplicationClosing()) {
 		return;
 	}
 	try {
@@ -901,7 +901,7 @@ void MainMenuBar::OnMultiplayerJoin(wxCommandEvent&) {
 		return;
 	}
 	MultiplayerSession::Options options;
-	if (!MultiplayerWindow::configure(frame, false, options)) {
+	if (!MultiplayerWindow::configure(frame, false, options) || MultiplayerSession::current() || g_gui.IsApplicationClosing()) {
 		return;
 	}
 	Editor* editor = g_gui.GetCurrentEditor();
@@ -910,6 +910,9 @@ void MainMenuBar::OnMultiplayerJoin(wxCommandEvent&) {
 			return;
 		}
 		editor = g_gui.GetCurrentEditor();
+	}
+	if (!editor || MultiplayerSession::current() || g_gui.IsApplicationClosing()) {
+		return;
 	}
 	try {
 		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor);

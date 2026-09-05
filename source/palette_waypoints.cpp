@@ -38,14 +38,15 @@ END_EVENT_TABLE()
 
 WaypointPalettePanel::WaypointPalettePanel(wxWindow* parent, wxWindowID id) :
 	NamedEntityPalettePanel(parent, id) {
-	wxSizer* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Waypoints");
+	auto* sidesizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Waypoints");
+	wxWindow* box = sidesizer->GetStaticBox();
 
-	waypoint_list = createEntityList(PALETTE_WAYPOINT_LISTBOX);
+	waypoint_list = createEntityList(box, PALETTE_WAYPOINT_LISTBOX);
 	sidesizer->Add(waypoint_list, 1, wxEXPAND);
 
 	wxSizer* tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
-	tmpsizer->Add(add_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_ADD_WAYPOINT, "Add", wxDefaultPosition, wxSize(50, -1)), 1, wxEXPAND);
-	tmpsizer->Add(remove_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_REMOVE_WAYPOINT, "Remove", wxDefaultPosition, wxSize(70, -1)), 1, wxEXPAND);
+	tmpsizer->Add(add_waypoint_button = newd wxButton(box, PALETTE_WAYPOINT_ADD_WAYPOINT, "Add", wxDefaultPosition, wxSize(50, -1)), 1, wxEXPAND);
+	tmpsizer->Add(remove_waypoint_button = newd wxButton(box, PALETTE_WAYPOINT_REMOVE_WAYPOINT, "Remove", wxDefaultPosition, wxSize(70, -1)), 1, wxEXPAND);
 	sidesizer->Add(tmpsizer, 0, wxEXPAND);
 
 	SetSizerAndFit(sidesizer);

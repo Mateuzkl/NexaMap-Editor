@@ -69,6 +69,7 @@ if(ENABLE_UNITY_BUILD)
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/gl_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/post_process_renderer.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format_map.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/source/spawn_format.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/procedural_map_generator_window.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/source/minimap_import_window.cpp"
@@ -104,6 +105,26 @@ else()
 endif()
 
 if(BUILD_TESTING)
+	option(ENABLE_MULTIPLAYER_SESSION_TESTS "Build full editor wxSocket session integration tests (no visible windows)" OFF)
+	if(ENABLE_MULTIPLAYER_SESSION_TESTS)
+		add_executable(multiplayer_session_tests tests/multiplayer_session_tests.cpp tests/startup_validation_tests.cpp ${rme_SRC})
+		target_include_directories(multiplayer_session_tests PRIVATE source)
+		target_compile_features(multiplayer_session_tests PRIVATE cxx_std_20)
+		target_compile_definitions(multiplayer_session_tests PRIVATE NEXAMAP_MULTIPLAYER_TESTS)
+		target_link_libraries(multiplayer_session_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+		set_target_properties(multiplayer_session_tests PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
+		if(MSVC)
+			target_compile_options(multiplayer_session_tests PRIVATE /bigobj /utf-8)
+			target_link_libraries(multiplayer_session_tests PRIVATE bcrypt iphlpapi)
+		else()
+			target_link_libraries(multiplayer_session_tests PRIVATE OpenSSL::Crypto)
+		endif()
+		add_test(NAME multiplayer_session_tests COMMAND multiplayer_session_tests)
+		set_tests_properties(multiplayer_session_tests PROPERTIES TIMEOUT 90)
+		# Reuse the full editor test harness without running the network suite.
+		add_test(NAME startup_validation_tests COMMAND multiplayer_session_tests --startup-validation)
+		set_tests_properties(startup_validation_tests PROPERTIES TIMEOUT 30)
+	endif()
 	add_executable(map_overlay_text_tests tests/map_overlay_text_tests.cpp)
 	target_include_directories(map_overlay_text_tests PRIVATE source)
 	target_link_libraries(map_overlay_text_tests PRIVATE ${wxWidgets_LIBRARIES})

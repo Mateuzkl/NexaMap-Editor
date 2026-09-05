@@ -21,6 +21,7 @@
 #include "position.h"
 
 #include <deque>
+#include <memory>
 #include <string>
 
 class Editor;
@@ -194,6 +195,7 @@ protected:
 	ActionIdentifier type;
 	ActionVector batch;
 	MultiplayerSession* multiplayerGroup = nullptr;
+	std::weak_ptr<void> multiplayerLifetime;
 
 	friend class ActionQueue;
 	friend class MultiplayerSession;

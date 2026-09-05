@@ -168,6 +168,7 @@ private:
 
 	static bool processed[BLOCK_SIZE * BLOCK_SIZE];
 
+	void EditTileProperties(Position position, bool browse, bool topItem);
 	Editor& editor;
 	MapDrawer* drawer;
 	std::shared_ptr<const MinimapImportDocument> minimap_import_overlay;

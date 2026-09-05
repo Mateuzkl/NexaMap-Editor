@@ -39,6 +39,9 @@ class Editor {
 public:
 	Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPolicy clientVersionPolicy = EditorClientVersionPolicy::DetectFromMap, const ItemIdCodec* readCodec = nullptr, bool detachedDecodedView = false);
 	Editor(CopyBuffer& copybuffer);
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	Editor(CopyBuffer& copybuffer, std::nullptr_t);
+#endif
 	~Editor();
 
 public:
