@@ -26,7 +26,7 @@ namespace {
 		}
 	}
 
-	bool IsRegularFile(const std::filesystem::path& path) {
+	bool IsRegularSpawnFile(const std::filesystem::path& path) {
 		if (path.empty()) {
 			return false;
 		}
@@ -162,7 +162,7 @@ namespace {
 	bool LoadDocument(const std::filesystem::path& file, SpawnXmlLayout expectedLayout, SpawnXmlDocument& document, size_t& additionalAttributes, std::string& error) {
 		document = {};
 		additionalAttributes = 0;
-		if (!IsRegularFile(file)) {
+		if (!IsRegularSpawnFile(file)) {
 			error = "Spawn XML file was not found: " + file.string();
 			return false;
 		}
@@ -401,7 +401,7 @@ namespace {
 
 SpawnXmlInspection SpawnXmlConverter::Inspect(const std::filesystem::path& file) {
 	SpawnXmlInspection inspection;
-	if (!IsRegularFile(file)) {
+	if (!IsRegularSpawnFile(file)) {
 		inspection.error = "Spawn XML file was not found: " + file.string();
 		return inspection;
 	}
@@ -471,8 +471,8 @@ SpawnXmlConversionResult SpawnXmlConverter::ConvertCanaryToTfs(
 			finish();
 			return result;
 		}
-		const bool hasMonsterFile = IsRegularFile(monsterFile);
-		const bool hasNpcFile = IsRegularFile(npcFile);
+		const bool hasMonsterFile = IsRegularSpawnFile(monsterFile);
+		const bool hasNpcFile = IsRegularSpawnFile(npcFile);
 		if (!hasMonsterFile && !hasNpcFile) {
 			result.error = "No valid Canary/Crystal spawn XML was provided. Select at least one existing <monsters> or <npcs> file.";
 			finish();
@@ -606,7 +606,7 @@ SpawnXmlConversionResult SpawnXmlConverter::ConvertTfsToCanary(
 			finish();
 			return result;
 		}
-		if (!IsRegularFile(sourceFile)) {
+		if (!IsRegularSpawnFile(sourceFile)) {
 			result.error = "TFS spawn XML file was not found: " + sourceFile.string();
 			finish();
 			return result;
