@@ -74,6 +74,9 @@ ${CMAKE_CURRENT_LIST_DIR}/main.h
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.h
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.h
 ${CMAKE_CURRENT_LIST_DIR}/map.h
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics.h
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_scanner.h
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_format.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.h
@@ -244,6 +247,9 @@ ${CMAKE_CURRENT_LIST_DIR}/light_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.cpp
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_scanner.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.cpp

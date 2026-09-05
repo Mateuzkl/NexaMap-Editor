@@ -158,6 +158,15 @@
     <ClInclude Include="..\..\source\quick_command_palette.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\map_diagnostics.h">
+      <Filter>editor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\map_diagnostics_scanner.h">
+      <Filter>editor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\map_diagnostics_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\favorites_manager.h">
       <Filter>gui</Filter>
     </ClInclude>
@@ -802,6 +811,15 @@
       <Filter>gui</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\quick_command_palette.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\map_diagnostics.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\map_diagnostics_scanner.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\map_diagnostics_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\favorites_manager.cpp">

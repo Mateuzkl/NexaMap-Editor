@@ -130,6 +130,7 @@
 		<item name="Cleanup..." action="MAP_CLEANUP" help="Removes all items that do not exist in the OTB file (red tiles the server can't load)."/>
 		<item name="Remove Duplicated Items..." action="REMOVE_ON_MAP_DUPLICATED_ITEMS" help="Removes duplicated items from the map."/>
 		<item name="Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
+		<item name="Map Diagnostics..." action="MAP_DIAGNOSTICS" help="Scan the active map for invalid items, duplicate IDs, broken teleports, and structural problems."/>
 		<item name="Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
 	</menu>
 	<menu name="Selection">

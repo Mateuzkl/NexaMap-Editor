@@ -133,6 +133,11 @@ if(BUILD_TESTING)
 	target_compile_features(favorites_manager_tests PRIVATE cxx_std_20)
 	add_test(NAME favorites_manager_tests COMMAND favorites_manager_tests)
 
+	add_executable(map_diagnostics_tests tests/map_diagnostics_tests.cpp source/map_diagnostics.cpp)
+	target_include_directories(map_diagnostics_tests PRIVATE source)
+	target_compile_features(map_diagnostics_tests PRIVATE cxx_std_20)
+	add_test(NAME map_diagnostics_tests COMMAND map_diagnostics_tests)
+
 	add_executable(multiplayer_protocol_tests tests/multiplayer_protocol_tests.cpp source/multiplayer_protocol.cpp source/multiplayer_crypto.cpp)
 	target_include_directories(multiplayer_protocol_tests PRIVATE source)
 	target_compile_features(multiplayer_protocol_tests PRIVATE cxx_std_20)

@@ -190,6 +190,7 @@ namespace MenuBar {
 		SHOW_FAVORITES,
 		USE_CPU_GEOMETRY_CACHE,
 		USE_GPU_GROUND_CACHE,
+		MAP_DIAGNOSTICS,
 	};
 }
 
@@ -309,6 +310,7 @@ public:
 	void OnMultiplayerLockSelection(wxCommandEvent& event);
 	void OnMultiplayerUnlock(wxCommandEvent& event);
 	void OnMapStatistics(wxCommandEvent& event);
+	void OnMapDiagnostics(wxCommandEvent& event);
 
 	// View Menu
 	void OnToolbars(wxCommandEvent& event);

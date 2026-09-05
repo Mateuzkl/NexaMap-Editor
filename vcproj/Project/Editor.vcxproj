@@ -435,6 +435,12 @@
     <ClCompile Include="..\..\source\quick_command_palette.cpp" />
     <ClInclude Include="..\..\source\main_menubar.h" />
     <ClCompile Include="..\..\source\main_menubar.cpp" />
+    <ClInclude Include="..\..\source\map_diagnostics.h" />
+    <ClInclude Include="..\..\source\map_diagnostics_scanner.h" />
+    <ClInclude Include="..\..\source\map_diagnostics_window.h" />
+    <ClCompile Include="..\..\source\map_diagnostics.cpp" />
+    <ClCompile Include="..\..\source\map_diagnostics_scanner.cpp" />
+    <ClCompile Include="..\..\source\map_diagnostics_window.cpp" />
     <ClInclude Include="..\..\source\map_tab.h" />
     <ClCompile Include="..\..\source\map_tab.cpp" />
     <ClInclude Include="..\..\source\new_map_tab_dialog.h" />

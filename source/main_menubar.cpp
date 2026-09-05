@@ -31,6 +31,7 @@
 #include "border_workspace_window.h"
 #include "materials_workbench_window.h"
 #include "map_item_id_converter_window.h"
+#include "map_diagnostics_window.h"
 #include "minimap_import_window.h"
 #include "png_map_import_window.h"
 #include "map_display.h"
@@ -152,6 +153,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(MAP_CLEAN_HOUSE_ITEMS, wxITEM_NORMAL, OnMapCleanHouseItems);
 	MAKE_ACTION(MAP_PROPERTIES, wxITEM_NORMAL, OnMapProperties);
 	MAKE_ACTION(MAP_STATISTICS, wxITEM_NORMAL, OnMapStatistics);
+	MAKE_ACTION(MAP_DIAGNOSTICS, wxITEM_NORMAL, OnMapDiagnostics);
 
 	MAKE_ACTION(VIEW_TOOLBARS_BRUSHES, wxITEM_CHECK, OnToolbars);
 	MAKE_ACTION(VIEW_TOOLBARS_POSITION, wxITEM_CHECK, OnToolbars);
@@ -491,6 +493,7 @@ void MainMenuBar::Update() {
 	EnableItem(MAP_CLEANUP, is_local);
 	EnableItem(MAP_PROPERTIES, is_local);
 	EnableItem(MAP_STATISTICS, is_local);
+	EnableItem(MAP_DIAGNOSTICS, is_local);
 
 	EnableItem(NEW_VIEW, has_map);
 	EnableItem(ZOOM_IN, has_map);
@@ -2294,6 +2297,15 @@ void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event)) {
 	dg.Centre(wxBOTH);
 
 	dg.ShowModal();
+}
+
+void MainMenuBar::OnMapDiagnostics(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	MapDiagnosticsWindow diagnostics(frame, g_gui.GetCurrentMap());
+	diagnostics.ShowModal();
 }
 
 void MainMenuBar::OnMapCleanup(wxCommandEvent& WXUNUSED(event)) {
