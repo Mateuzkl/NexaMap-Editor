@@ -30,7 +30,10 @@ void MapChunkRenderCache::beginPass(uint64_t map, uint64_t resources, bool activ
 }
 
 bool MapChunkRenderCache::makeRoom(size_t additionalBytes, uint32_t protectedKey, bool adding) {
-	while ((adding && entries.size() >= maximumChunks) || additionalBytes > budgetBytes - residentBytes) {
+	auto exceedsBudget = [&] {
+		return residentBytes > budgetBytes || additionalBytes > budgetBytes - residentBytes;
+	};
+	while ((adding && entries.size() >= maximumChunks) || exceedsBudget()) {
 		if (order.empty()) {
 			return false;
 		}

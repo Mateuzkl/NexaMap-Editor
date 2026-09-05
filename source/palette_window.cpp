@@ -243,8 +243,13 @@ void PaletteWindow::RefreshCollectionPalette(bool rebuild) {
 	wxEventBlocker block(choicebook);
 	if (collection_palette) {
 		const int index = choicebook->FindPage(collection_palette);
+		BrushPalettePanel* previous = collection_palette;
 		collection_palette = nullptr;
-		choicebook->DeletePage(index);
+		if (index != wxNOT_FOUND) {
+			choicebook->DeletePage(index);
+		} else {
+			previous->Destroy();
+		}
 	}
 	if (available) {
 		collection_palette = static_cast<BrushPalettePanel*>(CreateCollectionPalette(choicebook, g_materials.tilesets));
