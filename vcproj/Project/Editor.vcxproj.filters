@@ -225,6 +225,9 @@
     <ClInclude Include="..\..\source\map_display.h">
       <Filter>gui\map window</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\map_overlay_text.h">
+      <Filter>gui\map window</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\map_drawer.h">
       <Filter>gui\map window</Filter>
     </ClInclude>

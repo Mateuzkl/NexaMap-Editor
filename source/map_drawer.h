@@ -38,18 +38,11 @@ class EditorResourceSession;
 class GameSprite;
 
 struct MapTooltip {
-	enum TextLength {
-		MAX_CHARS_PER_LINE = 40,
-		MAX_CHARS = 255,
-	};
-
 	MapTooltip(int x, int y, std::string text, uint8_t r, uint8_t g, uint8_t b) :
-		x(x), y(y), text(std::move(text)), r(r), g(g), b(b) {
-		ellipsis = (this->text.length() - 3) > MAX_CHARS;
-	}
+		x(x), y(y), text(std::move(text)), r(r), g(g), b(b) { }
 
 	void checkLineEnding() {
-		if (text.at(text.size() - 1) == '\n') {
+		if (!text.empty() && text.back() == '\n') {
 			text.resize(text.size() - 1);
 		}
 	}
@@ -57,7 +50,6 @@ struct MapTooltip {
 	int x, y;
 	std::string text;
 	uint8_t r, g, b;
-	bool ellipsis;
 };
 
 // Storage during drawing, for option caching
@@ -275,6 +267,18 @@ class MapDrawer {
 protected:
 	std::unordered_map<unsigned int, std::vector<FinderPosition>> zoneTiles;
 	std::vector<MapTooltip> tooltips;
+	struct OverlayTextTexture {
+		std::string text;
+		int maxWidth, maxHeight, fontPixels;
+		wxColour foreground, background;
+		GLuint texture;
+		int width, height;
+	};
+	std::vector<OverlayTextTexture> overlay_text_cache;
+	size_t overlay_text_cache_bytes = 0;
+	const OverlayTextTexture& GetOverlayText(const std::string& text, int maxWidth, int maxHeight);
+	void ClearOverlayTextCache();
+	void DrawHoverTooltip();
 	std::ostringstream tooltip;
 	wxStopWatch pos_indicator_timer;
 	Position pos_indicator;
@@ -373,7 +377,7 @@ protected:
 	void DrawHookIndicator(int x, int y, const ItemType& type);
 	void DrawIndicator(int x, int y, int indicator, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
 	void DrawPositionIndicator(int z);
-	void WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile);
+	void WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile, bool hover = false);
 	void WriteTooltip(Waypoint* item, std::ostringstream& stream);
 	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
 	void DrawContainerPreview();

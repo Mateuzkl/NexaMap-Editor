@@ -683,6 +683,7 @@ void GUI::ShowNewMapTabDialog() {
 }
 
 bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
+	const auto creatureProgress = [this](const wxString& status) { SetLoadIndeterminate(status); };
 	const wxString editorDataDirectory = GetEditorDataDirectory();
 	if (editorDataDirectory.empty()) {
 		error = "The canonical NexaMap editor data directory (data/editor) was not found.";
@@ -758,50 +759,50 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		warnings.push_back("Server items.xml was not found. The workspace loaded directly from items.otb without optional XML metadata.");
 	}
 
-	g_gui.SetLoadDone(45, "Loading creatures.xml ...");
-	if (!g_creatures.loadFromXML(editorDataDirectory + "creatures.xml", true, error, warnings)) {
+	g_gui.SetLoadIndeterminate("Loading creatures.xml ...");
+	if (!g_creatures.loadFromXML(editorDataDirectory + "creatures.xml", true, error, warnings, creatureProgress)) {
 		warnings.push_back("Couldn't load creatures.xml: " + error);
 	}
 
-	g_gui.SetLoadDone(45, "Loading user creatures.xml ...");
+	g_gui.SetLoadIndeterminate("Loading user creatures.xml ...");
 	{
 		FileName cdb = getLoadedVersion()->getLocalDataPath();
 		cdb.SetFullName("creatures.xml");
 		wxString nerr;
 		wxArrayString nwarn;
-		g_creatures.loadFromXML(cdb, false, nerr, nwarn);
+		g_creatures.loadFromXML(cdb, false, nerr, nwarn, creatureProgress);
 	}
 
 	if (!workspace.monstersDirectory.empty()) {
 		wxString importError;
-		if (!g_creatures.importMonstersFromLuaDir(WorkspacePath(workspace.monstersDirectory), importError, warnings)) {
+		if (!g_creatures.importMonstersFromLuaDir(WorkspacePath(workspace.monstersDirectory), importError, warnings, creatureProgress, false)) {
 			warnings.push_back("Couldn't import monsters from the Server Workspace: " + importError);
 		}
 	}
 	if (!workspace.npcsDirectory.empty()) {
 		wxString importError;
-		if (!g_creatures.importNpcsFromLuaDir(WorkspacePath(workspace.npcsDirectory), importError, warnings)) {
+		if (!g_creatures.importNpcsFromLuaDir(WorkspacePath(workspace.npcsDirectory), importError, warnings, creatureProgress, false)) {
 			warnings.push_back("Couldn't import NPCs from the Server Workspace: " + importError);
 		}
 	}
 
-	g_gui.SetLoadDone(50, "Loading materials.xml ...");
+	g_gui.SetLoadIndeterminate("Loading materials.xml ...");
 	wxArrayString materialWarnings;
 	if (!g_materials.loadMaterials(editorDataDirectory + "materials.xml", error, materialWarnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + error);
 	}
 	AppendActionableMaterialWarnings(warnings, materialWarnings);
 
-	g_gui.SetLoadDone(70, "Loading extensions...");
+	g_gui.SetLoadIndeterminate("Loading extensions...");
 	wxArrayString extensionWarnings;
 	if (!g_materials.loadExtensions(extension_path, error, extensionWarnings)) {
 		// warnings.push_back("Couldn't load extensions: " + error);
 	}
 	AppendActionableMaterialWarnings(warnings, extensionWarnings);
 
-	g_gui.SetLoadDone(70, "Finishing...");
+	g_gui.SetLoadIndeterminate("Initializing editor brushes...");
 	g_brushes.init();
-	g_materials.createOtherTileset();
+	g_materials.createOtherTileset([this](size_t completed, size_t total) { SetLoadIndeterminate(wxString::Format("Building palettes: %zu / %zu resource entries", completed, total)); });
 
 	g_gui.SetLoadDone(100, "Classic resources ready.");
 	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
@@ -809,6 +810,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 }
 
 bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
+	const auto creatureProgress = [this](const wxString& status) { SetLoadIndeterminate(status); };
 	const wxString assetsDataDirectory = GetCanaryCrystalBundledDataDirectory();
 	if (!wxDir::Exists(assetsDataDirectory)) {
 		error = "Missing bundled Canary/Crystal data directory: " + assetsDataDirectory;
@@ -817,7 +819,7 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 
 	gfx.client_version = getLoadedVersion();
 	CreateLoadBar("Loading Canary/Crystal Assets");
-	SetLoadDone(0, "Validating package and catalog...");
+	SetLoadIndeterminate("Validating package and catalog...");
 	wxLogMessage("Canary/Crystal: validating client package and catalog.");
 
 	if (!ClientAssets::load(error, warnings)) {
@@ -826,7 +828,7 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		return false;
 	}
 
-	SetLoadDone(35, "Loading item metadata...");
+	SetLoadIndeterminate("Loading item metadata...");
 	wxLogMessage("Canary/Crystal: loading dedicated item metadata.");
 	wxString supplementalError;
 	const ServerWorkspace& workspace = g_workspace.getServer();
@@ -839,15 +841,15 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		warnings.push_back("Server items.xml was not found. Canary/Crystal item properties are limited to appearances.dat metadata.");
 	}
 
-	SetLoadDone(50, "Loading creatures...");
+	SetLoadIndeterminate("Loading creatures...");
 	wxLogMessage("Canary/Crystal: loading dedicated monsters and NPCs.");
 	wxArrayString catalogWarnings;
 	supplementalError.clear();
-	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/monsters.xml", true, supplementalError, catalogWarnings)) {
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/monsters.xml", true, supplementalError, catalogWarnings, creatureProgress)) {
 		warnings.push_back("Couldn't load Canary/Crystal monsters.xml: " + supplementalError);
 	}
 	supplementalError.clear();
-	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/npcs.xml", true, supplementalError, catalogWarnings)) {
+	if (!g_creatures.loadFromXML(assetsDataDirectory + "creatures/npcs.xml", true, supplementalError, catalogWarnings, creatureProgress)) {
 		warnings.push_back("Couldn't load Canary/Crystal npcs.xml: " + supplementalError);
 	}
 	AppendActionableDedicatedCreatureWarnings(warnings, catalogWarnings);
@@ -856,7 +858,7 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		userCreatures.SetFullName("creatures.xml");
 		wxString userError;
 		wxArrayString userWarnings;
-		g_creatures.loadFromXML(userCreatures, false, userError, userWarnings);
+		g_creatures.loadFromXML(userCreatures, false, userError, userWarnings, creatureProgress);
 		// Older NexaMap versions persisted creatures imported from an entire
 		// server into this shared overlay. It can contain both stale duplicates
 		// and outfits newer than the selected appearance package; neither should
@@ -869,7 +871,7 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		: wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
 	if (!monstersDirectory.empty() && wxDir::Exists(monstersDirectory)) {
 		wxString luaError;
-		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings)) {
+		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings, creatureProgress, false)) {
 			warnings.push_back("Couldn't import the configured monsters Lua directory: " + luaError);
 		}
 	}
@@ -878,12 +880,12 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 		: wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
 	if (!npcsDirectory.empty() && wxDir::Exists(npcsDirectory)) {
 		wxString luaError;
-		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings)) {
+		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings, creatureProgress, false)) {
 			warnings.push_back("Couldn't import the configured NPCs Lua directory: " + luaError);
 		}
 	}
 
-	SetLoadDone(65, "Loading materials...");
+	SetLoadIndeterminate("Loading materials...");
 	wxLogMessage("Canary/Crystal: loading dedicated materials and borders.");
 	supplementalError.clear();
 	wxArrayString dedicatedMaterialWarnings;
@@ -895,12 +897,12 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	// Legacy extensions are tied to versioned TFS ServerIDs and may redefine
 	// brushes from the dedicated ClientID material set. Do not mix them into an
 	// Assets session.
-	SetLoadDone(85, "Initializing Canary/Crystal brushes...");
+	SetLoadIndeterminate("Initializing Canary/Crystal brushes...");
 	wxLogMessage("Canary/Crystal: initializing editor brushes.");
 	g_brushes.init();
-	SetLoadDone(95, "Building Canary/Crystal palettes...");
+	SetLoadIndeterminate("Building Canary/Crystal palettes...");
 	wxLogMessage("Canary/Crystal: building item and creature palettes.");
-	g_materials.createOtherTileset();
+	g_materials.createOtherTileset([this](size_t completed, size_t total) { SetLoadIndeterminate(wxString::Format("Building palettes: %zu / %zu resource entries", completed, total)); });
 	wxLogMessage("Canary/Crystal: dedicated data load completed.");
 	SetLoadDone(100, "Canary/Crystal palettes ready.");
 	GetActiveEditorResourceSession()->favoritesContext = FavoriteResources::CaptureContext();
@@ -1756,7 +1758,7 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 		wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0)
 	);
 
-	progressBar->SetSize(280, -1);
+	progressBar->SetSize(root->FromDIP(480), -1);
 	progressBar->Show(true);
 
 	progressUpdating = true;
@@ -1771,6 +1773,26 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 void GUI::SetLoadScale(int32_t from, int32_t to) {
 	progressFrom = from;
 	progressTo = to;
+}
+
+bool GUI::SetLoadIndeterminate(const wxString& message) {
+	if (!progressBar || progressUpdating) {
+		return true;
+	}
+	const auto now = std::chrono::steady_clock::now();
+	if (message == progressText && currentProgress == -1 && now - lastProgressPump < std::chrono::milliseconds(100)) {
+		return true;
+	}
+	progressText = message;
+	currentProgress = -1;
+	lastProgressPump = now;
+	progressUpdating = true;
+	const bool shouldContinue = progressBar->Pulse(message);
+	progressUpdating = false;
+	if (destroyPending) {
+		DestroyLoadBar();
+	}
+	return shouldContinue;
 }
 
 bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {

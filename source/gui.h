@@ -150,6 +150,8 @@ public:
 	 * abort the loading.
 	 */
 	bool SetLoadDone(int32_t done, const wxString& newMessage = "");
+	// A busy stage with no meaningful overall percentage. Also pumps UI events.
+	bool SetLoadIndeterminate(const wxString& message);
 
 	/**
 	 * Sets the scale of the loading bar.

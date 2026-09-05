@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include <chrono>
 
 #include <wx/dir.h>
 
@@ -336,15 +337,26 @@ bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node no
 	return true;
 }
 
-void Materials::createOtherTileset() {
+void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& progress) {
 	// Skip the expensive full item-DB + creature rescan when nothing changed since the
 	// last build. This runs on every palette refresh (CreaturePalettePanel::OnUpdate),
 	// so rebuilding unconditionally re-scans every item id and every creature each time.
 	const size_t cur_creature_count = g_creatures.size();
 	const int32_t cur_item_maxid = g_items.getMaxID();
+	const size_t total = static_cast<size_t>(cur_item_maxid) + 1 + cur_creature_count;
+	auto lastPump = std::chrono::steady_clock::now();
+	auto report = [&](size_t completed, bool force = false) {
+		const auto now = std::chrono::steady_clock::now();
+		if (progress && (force || now - lastPump >= std::chrono::milliseconds(100))) {
+			lastPump = now;
+			progress(completed, total);
+		}
+	};
+	report(0, true);
 	if (tilesets.count("Others") && tilesets.count("NPCs")
 		&& cur_creature_count == other_tileset_creature_count
 		&& cur_item_maxid == other_tileset_item_maxid) {
+		report(total, true);
 		return;
 	}
 
@@ -369,6 +381,7 @@ void Materials::createOtherTileset() {
 
 	// There should really be an iterator to do this
 	for (int32_t id = 0; id <= g_items.getMaxID(); ++id) {
+		report(static_cast<size_t>(id));
 		ItemType& it = g_items[id];
 		if (it.id == 0) {
 			continue;
@@ -395,7 +408,9 @@ void Materials::createOtherTileset() {
 		}
 	}
 
+	size_t completed = static_cast<size_t>(cur_item_maxid) + 1;
 	for (auto iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
+		report(completed++);
 		CreatureType* type = iter->second;
 		if (type->in_other_tileset) {
 			if (type->isNpc) {
@@ -418,6 +433,7 @@ void Materials::createOtherTileset() {
 
 	other_tileset_creature_count = cur_creature_count;
 	other_tileset_item_maxid = cur_item_maxid;
+	report(total, true);
 }
 
 bool Materials::unserializeTileset(pugi::xml_node node, wxArrayString& warnings) {

@@ -83,6 +83,7 @@ ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_allocator.h
 ${CMAKE_CURRENT_LIST_DIR}/map_display.h
 ${CMAKE_CURRENT_LIST_DIR}/map_drawer.h
+${CMAKE_CURRENT_LIST_DIR}/map_overlay_text.h
 ${CMAKE_CURRENT_LIST_DIR}/map_region.h
 ${CMAKE_CURRENT_LIST_DIR}/map_chunk_revision.h
 ${CMAKE_CURRENT_LIST_DIR}/map_chunk_geometry_cache.h

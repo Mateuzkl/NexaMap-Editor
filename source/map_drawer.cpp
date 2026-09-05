@@ -20,6 +20,8 @@
 #include "profiling.h"
 
 #include "bitmap_font.h"
+#include "map_overlay_text.h"
+#include <wx/dcmemory.h>
 #include "theme.h"
 
 #ifdef __WINDOWS__
@@ -275,6 +277,7 @@ MapDrawer::MapDrawer(MapCanvas* canvas) :
 
 MapDrawer::~MapDrawer() {
 	Release();
+	ClearOverlayTextCache();
 	minimap_page_cache.releaseGL();
 }
 
@@ -432,13 +435,20 @@ void MapDrawer::DrawOverlays() {
 	if (options.show_ingame_box) {
 		DrawIngameBox();
 	}
-	if (!medium_zoom_mode && !far_zoom_mode && !isViewportInteractionActive()) {
-		if (options.show_container_preview || options.isTooltips()) {
+	if (!isViewportInteractionActive()) {
+		// Text and preview sprites are screen-space overlays, outside the scene
+		// FBO/LOD passes. Only the hovered tile is queried at distant zooms.
+		renderer->flush();
+		renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
+		if (options.show_container_preview) {
 			DrawContainerPreview();
 		}
 		if (options.show_tooltips) {
+			DrawHoverTooltip();
 			DrawTooltips();
 		}
+		renderer->flush();
+		renderer->setOrtho(0.0f, screensize_x * zoom, screensize_y * zoom, 0.0f);
 	}
 	for (int map_z = start_z; map_z >= superend_z; --map_z) {
 		DrawPositionIndicator(map_z);
@@ -1898,7 +1908,7 @@ void MapDrawer::DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8
 	BlitSpriteType(screenx, screeny, spr, r, g, b, alpha);
 }
 
-void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile) {
+void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile, bool hover) {
 	if (item == nullptr) {
 		return;
 	}
@@ -1923,7 +1933,12 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	}
 
 	auto* tp = dynamic_cast<Teleport*>(item);
-	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty()) {
+	const auto* container = dynamic_cast<const Container*>(item);
+	const bool hoveredContainerContents = hover && item == tile->getTopItem() && container && container->getItemCount() > 0;
+	// Hover must not introduce labels for ordinary floors/items. Only show
+	// existing attributes or a container's contents, even at reduced zoom.
+	const bool sceneZoneInfo = !hover && !zoneIds.empty();
+	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && !sceneZoneInfo && !hoveredContainerContents) {
 		return;
 	}
 
@@ -1931,7 +1946,7 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 		stream << "\n";
 	}
 
-	if (!zoneIds.empty()) {
+	if (!zoneIds.empty() && !hover) {
 		const FinderPosition position(tile->getX(), tile->getY(), tile->getZ());
 		for (auto& zoneId : zoneIds) {
 			auto& positions = zoneTiles[zoneId];
@@ -1939,9 +1954,11 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 				positions.push_back(position);
 			}
 		}
-	} else {
-		stream << "Item ID: " << id << "\n";
 	}
+	if (!item->getName().empty()) {
+		stream << item->getName() << "\n";
+	}
+	stream << "Item ID: " << id << "\n";
 
 	if (action > 0) {
 		stream << "Action ID: " << action << "\n";
@@ -2240,9 +2257,9 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 			// tooltips
 			if (show_tooltips) {
 				if (location->getWaypointCount() > 0) {
-					MakeTooltip(draw_x, draw_y, tooltip.str(), 0, 255, 0);
+					MakeTooltip(map_x * TileSize - view_scroll_x - offset, map_y * TileSize - view_scroll_y - offset, tooltip.str(), 0, 255, 0);
 				} else {
-					MakeTooltip(draw_x, draw_y, tooltip.str());
+					MakeTooltip(map_x * TileSize - view_scroll_x - offset, map_y * TileSize - view_scroll_y - offset, tooltip.str());
 				}
 			}
 			tooltip.str("");
@@ -2362,135 +2379,142 @@ void MapDrawer::DrawPositionIndicator(int z) {
 	drawRect(x + borderOffset + 1, y + borderOffset + 1, size - 2, size - 2, *wxBLACK, 2);
 }
 
-void MapDrawer::DrawTooltips() {
-	for (auto it = tooltips.cbegin(); it != tooltips.cend(); ++it) {
-		const MapTooltip& tip = *it;
-		const char* text = tip.text.c_str();
-		float line_width = 0.0f;
-		float width = 2.0f;
-		float height = 14.0f;
-		int char_count = 0;
-		int line_char_count = 0;
+void MapDrawer::ClearOverlayTextCache() {
+	// Called only while this canvas's GL context is current. Flush before
+	// deleting textures that may still be referenced by queued overlay quads.
+	renderer->flushAndUnbind();
+	for (const auto& entry : overlay_text_cache) {
+		glDeleteTextures(1, &entry.texture);
+	}
+	overlay_text_cache.clear();
+	overlay_text_cache_bytes = 0;
+}
 
-		for (const char* c = text; *c != '\0'; c++) {
-			if (*c == '\n' || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
-				height += 14.0f;
-				line_width = 0.0f;
-				line_char_count = 0;
-			} else {
-				line_width += bitmapCharWidth(rme_bitmap_helvetica_12, *c);
-			}
-			width = std::max<float>(width, line_width);
-			char_count++;
-			line_char_count++;
-
-			if (tip.ellipsis && char_count > (MapTooltip::MAX_CHARS + 3)) {
-				break;
-			}
+const MapDrawer::OverlayTextTexture& MapDrawer::GetOverlayText(const std::string& text, int maxWidth, int maxHeight) {
+	const int fontPixels = std::max(1, static_cast<int>(canvas->FromDIP(12) * canvas->GetContentScaleFactor()));
+	const wxColour foreground = Theme::Get(Theme::Role::TooltipValue);
+	const wxColour background = Theme::Get(Theme::Role::TooltipBackground);
+	maxWidth = std::max(1, maxWidth);
+	maxHeight = std::max(1, maxHeight);
+	for (const auto& entry : overlay_text_cache) {
+		if (entry.text == text && entry.maxWidth == maxWidth && entry.maxHeight == maxHeight && entry.fontPixels == fontPixels && entry.foreground == foreground && entry.background == background) {
+			return entry;
 		}
+	}
 
-		float scale = zoom < 1.0f ? zoom : 1.0f;
+	wxBitmap measureBitmap(1, 1, 24);
+	wxMemoryDC dc(measureBitmap);
+	dc.SetFont(wxFont(wxFontInfo(wxSize(0, fontPixels)).Family(wxFONTFAMILY_SWISS)));
+	const auto layout = LayoutMapOverlayText(dc, wxString::FromUTF8(text), maxWidth, maxHeight);
+	dc.SelectObject(wxNullBitmap);
+	wxBitmap bitmap(layout.width, layout.height, 24);
+	dc.SelectObject(bitmap);
+	dc.SetBackground(wxBrush(background));
+	dc.Clear();
+	dc.SetTextForeground(foreground);
+	for (size_t i = 0; i < layout.lines.size(); ++i) {
+		dc.DrawText(layout.lines[i], 0, static_cast<int>(i) * layout.lineHeight);
+	}
+	dc.SelectObject(wxNullBitmap);
+	const wxImage pixels = bitmap.ConvertToImage();
+	const size_t bytes = static_cast<size_t>(layout.width) * layout.height * 3;
+	renderer->flushAndUnbind();
+	while (!overlay_text_cache.empty() && (overlay_text_cache.size() >= 128 || overlay_text_cache_bytes + bytes > 8 * 1024 * 1024)) {
+		const auto& oldest = overlay_text_cache.front();
+		glDeleteTextures(1, &oldest.texture);
+		overlay_text_cache_bytes -= static_cast<size_t>(oldest.width) * oldest.height * 3;
+		overlay_text_cache.erase(overlay_text_cache.begin());
+	}
+	GLuint texture = 0;
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE (legacy Windows headers)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+	GLint alignment = 4;
+	glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, layout.width, layout.height, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels.GetData());
+	glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	overlay_text_cache.push_back({ text, maxWidth, maxHeight, fontPixels, foreground, background, texture, layout.width, layout.height });
+	overlay_text_cache_bytes += bytes;
+	return overlay_text_cache.back();
+}
 
-		width = (width + 8.0f) * scale;
-		height = (height + 4.0f) * scale;
-
-		float x = tip.x + (TileSize / 2.0f);
-		float y = tip.y;
-		float center = width / 2.0f;
-		float space = (7.0f * scale);
-		float startx = x - center;
-		float endx = x + center;
-		float starty = y - (height + space);
-		float endy = y - space;
-
-		// 7----0----1
-		// |         |
-		// 6--5  3--2
-		//     \/
-		//     4
-		float vertexes[9][2] = {
-			{ x, starty }, // 0
-			{ endx, starty }, // 1
-			{ endx, endy }, // 2
-			{ x + space, endy }, // 3
-			{ x, y }, // 4
-			{ x - space, endy }, // 5
-			{ startx, endy }, // 6
-			{ startx, starty }, // 7
-			{ x, starty }, // 0
-		};
-
-		// background
-		{
-			const wxColour background = Theme::Get(Theme::Role::TooltipBackground);
-			float poly[16];
-			for (int i = 0; i < 8; ++i) {
-				poly[i * 2] = vertexes[i][0];
-				poly[i * 2 + 1] = vertexes[i][1];
-			}
-			renderer->drawPolygon(poly, 8, background.Red(), background.Green(), background.Blue(), 245);
+void MapDrawer::DrawHoverTooltip() {
+	if (!options.isTooltips() || options.ingame || canvas->space_held || canvas->drawing || dragging || dragging_draw || !canvas->GetScreenRect().Contains(wxGetMousePosition())) {
+		return;
+	}
+	Tile* tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
+	const Item* item = tile ? tile->getTopItem() : nullptr;
+	if (!item || (options.show_only_modified && !tile->isModified()) || (!options.show_items && g_items[item->getID()].pickupable)) {
+		return;
+	}
+	const int offset = floor <= GROUND_LAYER ? (GROUND_LAYER - floor) * TileSize : 0;
+	const int x = mouse_map_x * TileSize - view_scroll_x - offset;
+	const int y = mouse_map_y * TileSize - view_scroll_y - offset;
+	// The hovered tile is resolved each overlay pass, including FBO cache hits
+	// and the medium/far LOD paths. Never retain Item* across frames/sessions.
+	std::ostringstream text;
+	WriteTooltip(tile, tile->ground, text, tile->isHouseTile(), true);
+	for (Item* entry : tile->items) {
+		if (options.show_items || !g_items[entry->getID()].pickupable) {
+			WriteTooltip(tile, entry, text, tile->isHouseTile(), true);
 		}
-
-		// borders
-		{
-			const wxColour themedBorder = Theme::Get(Theme::Role::TooltipBorder);
-			const bool defaultBorder = tip.r == 255 && tip.g == 255 && tip.b == 255;
-			const uint8_t borderR = defaultBorder ? themedBorder.Red() : tip.r;
-			const uint8_t borderG = defaultBorder ? themedBorder.Green() : tip.g;
-			const uint8_t borderB = defaultBorder ? themedBorder.Blue() : tip.b;
-			float seg[32];
-			for (int i = 0; i < 8; ++i) {
-				seg[i * 4] = vertexes[i][0];
-				seg[i * 4 + 1] = vertexes[i][1];
-				seg[i * 4 + 2] = vertexes[i + 1][0];
-				seg[i * 4 + 3] = vertexes[i + 1][1];
-			}
-			renderer->drawLines(seg, 8, borderR, borderG, borderB, 255, 1.5f);
-		}
-
-		// text
-		if (zoom <= 1.0) {
-			const wxColour labelColour = Theme::Get(Theme::Role::TooltipLabel);
-			const wxColour valueColour = Theme::Get(Theme::Role::TooltipValue);
-			renderer->flushAndUnbind();
-			startx += (3.0f * scale);
-			starty += (14.0f * scale);
-			glColor4ub(labelColour.Red(), labelColour.Green(), labelColour.Blue(), 255);
-			glRasterPos2f(startx, starty);
-			char_count = 0;
-			line_char_count = 0;
-			bool valuePart = false;
-			for (const char* c = text; *c != '\0'; c++) {
-				const bool explicitLineBreak = *c == '\n';
-				if (explicitLineBreak || (line_char_count >= MapTooltip::MAX_CHARS_PER_LINE && *c == ' ')) {
-					starty += (14.0f * scale);
-					glRasterPos2f(startx, starty);
-					line_char_count = 0;
-					if (explicitLineBreak) {
-						valuePart = false;
-					}
+	}
+	if (const auto* container = dynamic_cast<const Container*>(item); container && container->getItemCount() > 0) {
+		text << "Container contents (" << container->getItemCount() << "/" << container->getVolume() << "):\n";
+		for (size_t i = 0; i < container->getItemCount(); ++i) {
+			if (const Item* child = container->getItem(i)) {
+				text << "  " << (child->getName().empty() ? "Item" : child->getName()) << " (Item ID: " << child->getID();
+				if (g_items[child->getID()].stackable) {
+					text << ", count: " << child->getCount();
 				}
-				char_count++;
-				line_char_count++;
-
-				if (tip.ellipsis && char_count >= MapTooltip::MAX_CHARS) {
-					drawBitmapChar(rme_bitmap_helvetica_18, '.');
-					if (char_count >= (MapTooltip::MAX_CHARS + 2)) {
-						break;
-					}
-				} else if (!iscntrl(*c)) {
-					const wxColour& colour = valuePart ? valueColour : labelColour;
-					glColor4ub(colour.Red(), colour.Green(), colour.Blue(), 255);
-					drawBitmapChar(rme_bitmap_helvetica_12, *c);
-					if (*c == ':') {
-						valuePart = true;
-					}
+				if (child->getActionID()) {
+					text << ", Action ID: " << child->getActionID();
 				}
+				if (child->getUniqueID()) {
+					text << ", Unique ID: " << child->getUniqueID();
+				}
+				text << ")\n";
 			}
 		}
 	}
+	if (text.tellp() == 0) {
+		return;
+	}
+	// Replace the tile's scene label, then draw hover last for readability.
+	std::erase_if(tooltips, [&](const MapTooltip& tip) { return tip.x == x && tip.y == y; });
+	MakeTooltip(x, y, text.str());
 }
 
+void MapDrawer::DrawTooltips() {
+	const int padding = std::max(2, static_cast<int>(canvas->FromDIP(5) * canvas->GetContentScaleFactor()));
+	if (screensize_x <= 4 * padding || screensize_y <= 4 * padding) {
+		return;
+	}
+	for (const MapTooltip& tip : tooltips) {
+		const int maxWidth = std::min(screensize_x - 4 * padding, static_cast<int>(canvas->FromDIP(460) * canvas->GetContentScaleFactor()));
+		const auto& text = GetOverlayText(tip.text, maxWidth, screensize_y - 4 * padding);
+		const float width = text.width + 2 * padding;
+		const float height = text.height + 2 * padding;
+		const float anchorX = (tip.x + TileSize / 2.0f) / zoom;
+		const float anchorY = tip.y / zoom;
+		const float x = std::clamp(std::round(anchorX - width / 2), 0.0f, std::max(0.0f, screensize_x - width));
+		float y = anchorY - height - padding;
+		if (y < 0) {
+			y = anchorY + TileSize / zoom + padding;
+		}
+		y = std::clamp(std::round(y), 0.0f, std::max(0.0f, screensize_y - height));
+		const wxColour background = Theme::Get(Theme::Role::TooltipBackground);
+		const wxColour border = tip.r == 255 && tip.g == 255 && tip.b == 255 ? Theme::Get(Theme::Role::TooltipBorder) : wxColour(tip.r, tip.g, tip.b);
+		renderer->drawColoredQuad(x, y, width, height, { background.Red(), background.Green(), background.Blue(), 255 });
+		renderer->drawRect(x, y, width, height, { border.Red(), border.Green(), border.Blue(), 255 }, 1.0f);
+		renderer->drawTexturedQuad(x + padding, y + padding, text.width, text.height, text.texture, { 255, 255, 255, 255 });
+	}
+}
 void MapDrawer::DrawLight() {
 	// draw in-game light
 	light_drawer->draw(start_x, start_y, end_x, end_y, view_scroll_x, view_scroll_y, options.experimental_fog, renderer.get());
@@ -2519,47 +2543,23 @@ void MapDrawer::DrawContainerPreview() {
 	}
 	const size_t itemCount = container->getItemCount();
 	const int offset = floor <= GROUND_LAYER ? (GROUND_LAYER - floor) * TileSize : 0;
-	const int tileX = mouse_map_x * TileSize - view_scroll_x - offset;
-	const int tileY = mouse_map_y * TileSize - view_scroll_y - offset;
+	const float tileX = (mouse_map_x * TileSize - view_scroll_x - offset) / zoom;
+	const float tileY = (mouse_map_y * TileSize - view_scroll_y - offset) / zoom;
 	const std::string name = container->getName().empty() ? "Container " + std::to_string(container->getID()) : container->getName();
 
-	if (options.isTooltips()) {
-		std::ostringstream contents;
-		contents << name << "\nContents (" << itemCount << "/" << container->getVolume() << "):\n";
-		const size_t textCount = std::min<size_t>(itemCount, 12);
-		for (size_t i = 0; i < textCount; ++i) {
-			if (const Item* item = container->getItem(i)) {
-				contents << "  " << (item->getName().empty() ? "Item " + std::to_string(item->getID()) : item->getName());
-				if (g_items[item->getID()].stackable && item->getCount() > 1) {
-					contents << " (" << item->getCount() << ")";
-				}
-				contents << "\n";
-			}
-		}
-		if (textCount < itemCount) {
-			contents << "... " << itemCount - textCount << " more items\n";
-		}
-		auto existing = std::find_if(tooltips.begin(), tooltips.end(), [&](const MapTooltip& tip) { return tip.x == tileX && tip.y == tileY; });
-		if (existing != tooltips.end()) {
-			existing->text += "\n" + contents.str();
-			existing->ellipsis = existing->text.size() > MapTooltip::MAX_CHARS;
-			existing->checkLineEnding();
-		} else {
-			MakeTooltip(tileX, tileY, contents.str());
-		}
-	}
 	if (!options.show_container_preview) {
 		return;
 	}
 
-	// Convert DIP to the renderer's zoomed pixel coordinates. Bound both
+	// Screen-space DIP sizing, independent of map zoom. Bound both
 	// dimensions and work per frame even for oversized/malformed containers.
-	const float unit = static_cast<float>(canvas->FromDIP(100) / 100.0 * canvas->GetContentScaleFactor()) * zoom;
+	const float unit = static_cast<float>(canvas->FromDIP(100) / 100.0 * canvas->GetContentScaleFactor());
 	const float padding = 4.0f * unit;
-	const float headerHeight = 20.0f * unit;
+	const auto title = GetOverlayText(name, static_cast<int>(std::min(screensize_x - 4 * padding, 320 * unit)), screensize_y / 3);
+	const float headerHeight = title.height + padding;
 	const float slotSize = 36.0f * unit;
-	const float viewWidth = screensize_x * zoom;
-	const float viewHeight = screensize_y * zoom;
+	const float viewWidth = screensize_x;
+	const float viewHeight = screensize_y;
 	const int maxCols = std::min(6, static_cast<int>((viewWidth - 2 * padding) / slotSize));
 	const int maxRows = std::min(6, static_cast<int>((viewHeight - 2 * padding - 2 * headerHeight) / slotSize));
 	if (maxCols <= 0 || maxRows <= 0) {
@@ -2569,12 +2569,12 @@ void MapDrawer::DrawContainerPreview() {
 	const int cols = std::min(visibleCount, maxCols);
 	const int rows = (visibleCount + cols - 1) / cols;
 	const bool truncated = static_cast<size_t>(visibleCount) < itemCount;
-	const float totalWidth = cols * slotSize + 2 * padding;
+	const float totalWidth = std::min(viewWidth, std::max({ cols * slotSize, static_cast<float>(title.width), truncated ? 180 * unit : 0.0f }) + 2 * padding);
 	const float totalHeight = rows * slotSize + 2 * padding + headerHeight * (truncated ? 2 : 1);
-	const float x = std::clamp(tileX + TileSize / 2.0f - totalWidth / 2, 0.0f, std::max(0.0f, viewWidth - totalWidth));
-	float y = options.isTooltips() ? tileY + TileSize + padding : tileY - totalHeight - padding;
+	const float x = std::clamp(tileX + TileSize / (2.0f * zoom) - totalWidth / 2, 0.0f, std::max(0.0f, viewWidth - totalWidth));
+	float y = options.isTooltips() ? tileY + TileSize / zoom + padding : tileY - totalHeight - padding;
 	if (y < 0 || y + totalHeight > viewHeight) {
-		y = options.isTooltips() ? tileY - totalHeight - padding : tileY + TileSize + padding;
+		y = options.isTooltips() ? tileY - totalHeight - padding : tileY + TileSize / zoom + padding;
 	}
 	y = std::clamp(y, 0.0f, std::max(0.0f, viewHeight - totalHeight));
 	const wxColour bg = Theme::Get(Theme::Role::TooltipBackground);
@@ -2614,35 +2614,22 @@ void MapDrawer::DrawContainerPreview() {
 		}
 	}
 
-	// Submit sprites before text, with one batch boundary for the whole grid.
-	renderer->flushAndUnbind();
-	const BitmapFont& font = unit / zoom >= 1.5f ? rme_bitmap_helvetica_18 : rme_bitmap_helvetica_12;
-	const wxColour textColour = Theme::Get(Theme::Role::TooltipValue);
-	glColor4ub(textColour.Red(), textColour.Green(), textColour.Blue(), 255);
-	auto drawText = [&](float textX, float textY, const std::string& text, float availableWidth) {
-		glRasterPos2f(textX, textY);
-		float usedWidth = 0;
-		for (unsigned char ch : text) {
-			usedWidth += bitmapCharWidth(font, ch) * zoom;
-			if (usedWidth > availableWidth) {
-				break;
-			}
-			if (ch >= 32) {
-				drawBitmapChar(font, ch);
-			}
-		}
+	// Cached, measured Unicode text uses the same screen-space projection.
+	auto drawText = [&](float textX, float textY, const std::string& value, float availableWidth, float availableHeight) {
+		const auto& text = GetOverlayText(value, static_cast<int>(availableWidth), static_cast<int>(availableHeight));
+		renderer->drawTexturedQuad(std::round(textX), std::round(textY), text.width, text.height, text.texture, { 255, 255, 255, 255 });
 	};
-	drawText(x + padding, y + headerHeight - padding, name, totalWidth - 2 * padding);
+	drawText(x + padding, y + padding, name, std::min(viewWidth - 4 * padding, 320 * unit), screensize_y / 3);
 	for (int i = 0; i < visibleCount; ++i) {
 		const Item* item = container->getItem(static_cast<size_t>(i));
 		if (item && g_items[item->getID()].stackable && item->getCount() > 1) {
 			const float textX = x + padding * 2 + (i % cols) * slotSize;
 			const float textY = y + headerHeight + (i / cols + 1) * slotSize;
-			drawText(textX, textY, std::to_string(item->getCount()), slotSize - 2 * padding);
+			drawText(textX, textY - 16 * unit, std::to_string(item->getCount()), slotSize - 2 * padding, 20 * unit);
 		}
 	}
 	if (truncated) {
-		drawText(x + padding, y + totalHeight - padding * 2, "+ " + std::to_string(itemCount - visibleCount) + " more items", totalWidth - 2 * padding);
+		drawText(x + padding, y + totalHeight - headerHeight, "+ " + std::to_string(itemCount - visibleCount) + " more items", totalWidth - 2 * padding, headerHeight);
 	}
 }
 
