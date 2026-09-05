@@ -8,7 +8,7 @@
 #include <mutex>
 #include <thread>
 #ifdef __linux__
-#include <malloc.h>
+	#include <malloc.h>
 #endif
 
 // GUI-owned service. Submit only after every view and the multiplayer session
