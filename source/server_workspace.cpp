@@ -67,7 +67,7 @@ namespace {
 		return error ? absolute.lexically_normal() : canonical;
 	}
 
-	bool IsRegularFile(const std::filesystem::path& path) {
+	bool IsServerWorkspaceFile(const std::filesystem::path& path) {
 		std::error_code error;
 		return std::filesystem::is_regular_file(path, error) && !error;
 	}
@@ -124,13 +124,13 @@ namespace {
 			const std::filesystem::path otb = directory / "items.otb";
 			const std::filesystem::path xml = directory / "items.xml";
 			const std::filesystem::path appearances = directory / "appearances.dat";
-			if (IsRegularFile(otb) && files.otb.empty()) {
+			if (IsServerWorkspaceFile(otb) && files.otb.empty()) {
 				files.otb = Normalize(otb);
 			}
-			if (IsRegularFile(xml) && files.xml.empty()) {
+			if (IsServerWorkspaceFile(xml) && files.xml.empty()) {
 				files.xml = Normalize(xml);
 			}
-			if (IsRegularFile(appearances) && files.appearances.empty()) {
+			if (IsServerWorkspaceFile(appearances) && files.appearances.empty()) {
 				files.appearances = Normalize(appearances);
 			}
 		}
@@ -178,7 +178,7 @@ namespace {
 
 	bool HasFile(const std::filesystem::path& root, std::initializer_list<const char*> candidates) {
 		return std::any_of(candidates.begin(), candidates.end(), [&](const char* relative) {
-			return IsRegularFile(root / relative);
+			return IsServerWorkspaceFile(root / relative);
 		});
 	}
 
@@ -199,13 +199,13 @@ namespace {
 	};
 
 	ProfileEvidence DetectProfileEvidence(const std::filesystem::path& root, const std::filesystem::path& mapPath = {}) {
-		const bool hasClassicItemsOtb = IsRegularFile(root / "data/items/items.otb");
+		const bool hasClassicItemsOtb = IsServerWorkspaceFile(root / "data/items/items.otb");
 		const bool hasAlternateItemsOtb = HasFile(root, { "data/items.otb", "items/items.otb", "items.otb" });
 		const bool hasItemsOtb = hasClassicItemsOtb || hasAlternateItemsOtb;
-		const bool hasClassicItemsXml = IsRegularFile(root / "data/items/items.xml");
+		const bool hasClassicItemsXml = IsServerWorkspaceFile(root / "data/items/items.xml");
 		const bool hasAlternateItemsXml = HasFile(root, { "data/items.xml", "items/items.xml", "items.xml" });
 		const bool hasAppearances = HasFile(root, { "data/items/appearances.dat", "data/appearances.dat", "items/appearances.dat", "appearances.dat" });
-		const bool hasConfig = IsRegularFile(root / "config.lua") || IsRegularFile(root / "config.lua.dist");
+		const bool hasConfig = IsServerWorkspaceFile(root / "config.lua") || IsServerWorkspaceFile(root / "config.lua.dist");
 		const bool hasMonsters = HasDirectory(root, { "data/monster", "data/monsters", "monster", "monsters" });
 		const bool hasNpcs = HasDirectory(root, { "data/npc", "data/npcs", "npc", "npcs" });
 		const bool mapInDataWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "data/world");
@@ -239,10 +239,10 @@ namespace {
 		int modernScore = hasAppearances ? 30 : 0;
 		ServerType modernType = ServerType::CanaryCrystal;
 		std::filesystem::path config = root / "config.lua";
-		if (!IsRegularFile(config)) {
+		if (!IsServerWorkspaceFile(config)) {
 			config = root / "config.lua.dist";
 		}
-		if (IsRegularFile(config)) {
+		if (IsServerWorkspaceFile(config)) {
 			const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
 			if (configuredDataPack) {
 				const std::filesystem::path relativeDataPack(*configuredDataPack);
@@ -333,10 +333,10 @@ namespace {
 
 	void DetectConfiguredMap(ServerWorkspace& workspace, const ServerDetectionOptions& options) {
 		std::filesystem::path config = workspace.rootPath / "config.lua";
-		if (!IsRegularFile(config)) {
+		if (!IsServerWorkspaceFile(config)) {
 			config = workspace.rootPath / "config.lua.dist";
 		}
-		if (!IsRegularFile(config)) {
+		if (!IsServerWorkspaceFile(config)) {
 			return;
 		}
 
@@ -391,7 +391,7 @@ namespace {
 
 		for (const std::filesystem::path& directory : mapDirectories) {
 			const std::filesystem::path primaryMap = directory / mapName;
-			if (!IsRegularFile(primaryMap)) {
+			if (!IsServerWorkspaceFile(primaryMap)) {
 				continue;
 			}
 			workspace.primaryMapPath = Normalize(primaryMap);
@@ -421,7 +421,7 @@ namespace {
 	}
 
 	void AddMap(ServerWorkspace& workspace, const std::filesystem::path& path, std::size_t maximumMaps) {
-		if (workspace.maps.size() >= maximumMaps || !IsRegularFile(path)) {
+		if (workspace.maps.size() >= maximumMaps || !IsServerWorkspaceFile(path)) {
 			return;
 		}
 		const std::filesystem::path normalized = Normalize(path);
