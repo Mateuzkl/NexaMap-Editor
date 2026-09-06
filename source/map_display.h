@@ -98,6 +98,7 @@ public:
 	void OnSelectCarpetBrush(wxCommandEvent& event);
 	void OnSelectTableBrush(wxCommandEvent& event);
 	void OnSelectCreatureBrush(wxCommandEvent& event);
+	void OnEditMonster(wxCommandEvent& event);
 	void OnSelectSpawnBrush(wxCommandEvent& event);
 	void OnSelectHouseBrush(wxCommandEvent& event);
 	void OnSelectCollectionBrush(wxCommandEvent& event);

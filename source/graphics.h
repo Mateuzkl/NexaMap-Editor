@@ -126,7 +126,16 @@ public:
 	void unloadDC() override;
 
 	void clean(int time);
-	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync = true, const Outfit* outfit = nullptr);
+	bool getVisualPreviewRGBA(
+		std::vector<uint8_t>& pixels,
+		int& pixelWidth,
+		int& pixelHeight,
+		bool& pending,
+		bool allowAsync = true,
+		const Outfit* outfit = nullptr,
+		int direction = 2,
+		int frame = 0
+	);
 	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 
 	int getDrawHeight() const;

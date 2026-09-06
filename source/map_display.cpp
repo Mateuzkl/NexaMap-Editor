@@ -217,6 +217,7 @@ EVT_MENU(MAP_POPUP_MENU_SELECT_WALL_BRUSH, MapCanvas::OnSelectWallBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_CARPET_BRUSH, MapCanvas::OnSelectCarpetBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_TABLE_BRUSH, MapCanvas::OnSelectTableBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, MapCanvas::OnSelectCreatureBrush)
+EVT_MENU(MAP_POPUP_MENU_EDIT_MONSTER, MapCanvas::OnEditMonster)
 EVT_MENU(MAP_POPUP_MENU_SELECT_SPAWN_BRUSH, MapCanvas::OnSelectSpawnBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_HOUSE_BRUSH, MapCanvas::OnSelectHouseBrush)
 EVT_MENU(MAP_POPUP_MENU_MOVE_TO_TILESET, MapCanvas::OnSelectMoveTo)
@@ -2817,6 +2818,16 @@ void MapCanvas::OnSelectCreatureBrush(wxCommandEvent& WXUNUSED(event)) {
 	}
 }
 
+void MapCanvas::OnEditMonster(wxCommandEvent& WXUNUSED(event)) {
+	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
+		return;
+	}
+	Tile* tile = PopupSelectedTile(editor);
+	if (tile && tile->creature && !tile->creature->isNpc()) {
+		g_gui.ShowMonsterEditor(tile->creature->getName());
+	}
+}
+
 void MapCanvas::OnSelectSpawnBrush(wxCommandEvent& WXUNUSED(event)) {
 	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
 		return;
@@ -3106,6 +3117,9 @@ void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 
 				if (topCreature) {
 					Append(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, "Select Creature", "Uses the current creature as a creature brush");
+					if (!topCreature->isNpc()) {
+						Append(MAP_POPUP_MENU_EDIT_MONSTER, "Edit Monster...", "Open the source definition from the active Server Workspace");
+					}
 				}
 
 				if (topSpawn) {

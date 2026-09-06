@@ -56,6 +56,7 @@
 #include "new_map_tab_dialog.h"
 #include "cross_client_clipboard.h"
 #include "cross_client_paste_dialog.h"
+#include "monster_editor_dialog.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -2830,6 +2831,78 @@ void GUI::ShowTextBox(wxWindow* parent, const wxString& title, const wxString& c
 	dlg.SetSizerAndFit(topsizer);
 
 	dlg.ShowModal();
+}
+
+void GUI::ShowMonsterEditor(const std::string& monsterName) {
+	if (!IsEditorOpen() || monsterName.empty()) {
+		return;
+	}
+	ServerContentLookupResult lookup = g_workspace.getServerContent().findExact(ServerContentKind::Monster, monsterName);
+	if (lookup.empty()) {
+		lookup = g_workspace.getServerContent().findCaseInsensitive(ServerContentKind::Monster, monsterName);
+	}
+	if (lookup.empty()) {
+		wxMessageBox(
+			"NexaMap could not locate the source definition for " + wxString::FromUTF8(monsterName) + " in the active Server Workspace.",
+			"Monster source not found",
+			wxOK | wxICON_INFORMATION,
+			root
+		);
+		return;
+	}
+	const ServerContentSource* resolvedSource = lookup.value();
+	if (!resolvedSource) {
+		resolvedSource = lookup.uniqueRegisteredValue();
+	}
+	if (!resolvedSource) {
+		wxString message = "More than one source defines " + wxString::FromUTF8(monsterName) + ". NexaMap will not choose one automatically:\n\n";
+		for (const ServerContentSource* source : lookup.matches) {
+			message += WorkspacePath(source->declarationPath) + "\n";
+		}
+		wxMessageBox(message, "Ambiguous monster source", wxOK | wxICON_WARNING, root);
+		return;
+	}
+
+	const std::filesystem::path workspaceRoot = g_workspace.getServer().rootPath;
+	const ServerContentSource source = *resolvedSource;
+	std::string error;
+	auto document = MonsterDefinitionDocument::Load(source, error);
+	if (!document) {
+		wxMessageBox(wxString::FromUTF8(error), "Could not open monster", wxOK | wxICON_ERROR, root);
+		return;
+	}
+
+	MonsterEditorDialog dialog(root, std::move(document));
+	if (dialog.ShowModal() != wxID_OK || !dialog.wasSaved()) {
+		return;
+	}
+	if (g_workspace.getServer().rootPath != workspaceRoot) {
+		wxMessageBox("The active workspace changed while the editor was open. The source was saved, but the current palette was not refreshed.", "Monster saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+
+	wxString scanError;
+	if (!g_workspace.rescanServer(scanError)) {
+		wxMessageBox("The monster was saved, but the Server Workspace could not be reindexed:\n" + scanError, "Monster saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	wxString importError;
+	wxArrayString warnings;
+	const FileName filename(WorkspacePath(source.declarationPath));
+	const bool imported = source.format == ServerContentFormat::Xml
+		? g_creatures.importXMLFromOT(filename, importError, warnings)
+		: g_creatures.importLuaFromOT(filename, importError, warnings);
+	if (!imported) {
+		wxMessageBox("The source was saved, but the creature palette could not reload it:\n" + importError, "Monster saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	g_materials.createOtherTileset();
+	RefreshPalettes(nullptr, true, false);
+	RefreshView();
+	if (!warnings.empty()) {
+		ListDialog(root, "Monster reload warnings", warnings);
+	}
+	SetStatusText("Saved monster " + wxString::FromUTF8(dialog.savedDefinition().name));
 }
 
 void GUI::SetHotkey(int index, Hotkey& hotkey) {

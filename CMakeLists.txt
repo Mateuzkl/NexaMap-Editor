@@ -331,6 +331,22 @@ if(BUILD_TESTING)
 	endif()
 	add_test(NAME server_content_index_tests COMMAND server_content_index_tests)
 
+	add_executable(monster_definition_provider_tests
+		tests/monster_definition_provider_tests.cpp
+		source/monster_definition.cpp
+		source/server_content_index.cpp
+		source/server_workspace.cpp
+	)
+	target_include_directories(monster_definition_provider_tests PRIVATE source)
+	set_target_properties(monster_definition_provider_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	if(MSVC)
+		target_compile_options(monster_definition_provider_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME monster_definition_provider_tests COMMAND monster_definition_provider_tests)
+
 	add_executable(editor_data_layout_tests
 		tests/editor_data_layout_tests.cpp
 	)

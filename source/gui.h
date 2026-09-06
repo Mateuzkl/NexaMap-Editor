@@ -225,6 +225,7 @@ public:
 	void ShowTextBox(const wxString& title, const wxString& contents) {
 		ShowTextBox(nullptr, title, contents);
 	}
+	void ShowMonsterEditor(const std::string& monsterName);
 
 	// Get the current GL context
 	// Param is required if the context is to be created.

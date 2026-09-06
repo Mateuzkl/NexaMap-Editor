@@ -852,6 +852,20 @@ const ServerContentSource* ServerContentLookupResult::value() const {
 	return unique() ? matches.front() : nullptr;
 }
 
+const ServerContentSource* ServerContentLookupResult::uniqueRegisteredValue() const {
+	const ServerContentSource* registered = nullptr;
+	for (const ServerContentSource* match : matches) {
+		if (!match->registered) {
+			continue;
+		}
+		if (registered) {
+			return nullptr;
+		}
+		registered = match;
+	}
+	return registered;
+}
+
 ServerContentIndex ServerContentIndex::Build(const ServerWorkspace& workspace, const ServerContentIndex* previous, const ServerContentScanOptions& options) {
 	ServerContentIndex index;
 	auto cacheState = std::make_shared<CacheState>();

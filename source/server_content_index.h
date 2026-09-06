@@ -91,6 +91,7 @@ struct ServerContentLookupResult {
 	[[nodiscard]] bool unique() const;
 	[[nodiscard]] bool ambiguous() const;
 	[[nodiscard]] const ServerContentSource* value() const;
+	[[nodiscard]] const ServerContentSource* uniqueRegisteredValue() const;
 };
 
 class ServerContentIndex {
