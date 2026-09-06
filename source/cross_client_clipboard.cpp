@@ -610,13 +610,13 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 				const bool visualCompared = row.source.previewAvailable && previewAvailable;
 				const double similarity = visualCompared
 					? PreviewSimilarity(
-						  row.source.previewRgba,
-						  row.source.previewWidth,
-						  row.source.previewHeight,
-						  previewRgba,
-						  previewWidth,
-						  previewHeight
-					  )
+						row.source.previewRgba,
+						row.source.previewWidth,
+						row.source.previewHeight,
+						previewRgba,
+						previewWidth,
+						previewHeight
+					)
 					: 0.0;
 				AddRecommendation(row.recommendations, row.source, candidate, similarity, visualCompared);
 			}
