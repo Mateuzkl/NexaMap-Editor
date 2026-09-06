@@ -101,6 +101,7 @@ ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.h
 ${CMAKE_CURRENT_LIST_DIR}/monster_definition.h
+${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.h
 ${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.h
 ${CMAKE_CURRENT_LIST_DIR}/monster_editor_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/monster_spell_area.h
@@ -279,6 +280,7 @@ ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/materials.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/monster_definition.cpp
+${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.cpp
 ${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.cpp
 ${CMAKE_CURRENT_LIST_DIR}/monster_editor_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/monster_editor_sections.cpp
@@ -392,6 +394,7 @@ ${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
 set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_definition.cpp
+	${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_editor_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_editor_sections.cpp

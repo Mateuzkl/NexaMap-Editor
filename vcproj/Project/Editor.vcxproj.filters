@@ -325,6 +325,9 @@
 	<ClInclude Include="..\..\source\monster_definition.h">
 	  <Filter>common</Filter>
 	</ClInclude>
+	<ClInclude Include="..\..\source\monster_definition_creation.h">
+	  <Filter>common</Filter>
+	</ClInclude>
 	<ClInclude Include="..\..\source\monster_section_codec.h">
 	  <Filter>common</Filter>
 	</ClInclude>
@@ -639,6 +642,9 @@
 	  <Filter>common</Filter>
 	</ClCompile>
 	<ClCompile Include="..\..\source\monster_definition.cpp">
+	  <Filter>common</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\monster_definition_creation.cpp">
 	  <Filter>common</Filter>
 	</ClCompile>
 	<ClCompile Include="..\..\source\monster_section_codec.cpp">

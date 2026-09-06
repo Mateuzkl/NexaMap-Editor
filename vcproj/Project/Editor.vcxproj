@@ -280,6 +280,10 @@
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
 	</ClCompile>
+	<ClCompile Include="..\..\source\monster_definition_creation.cpp">
+	  <IncludeInUnityFile>false</IncludeInUnityFile>
+	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
+	</ClCompile>
 	<ClCompile Include="..\..\source\monster_section_codec.cpp">
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -645,6 +649,7 @@
 	<ClInclude Include="..\..\source\welcome_dialog.h" />
 	<ClInclude Include="..\..\source\server_content_index.h" />
 	<ClInclude Include="..\..\source\monster_definition.h" />
+	<ClInclude Include="..\..\source\monster_definition_creation.h" />
 	<ClInclude Include="..\..\source\monster_section_codec.h" />
 	<ClInclude Include="..\..\source\monster_editor_dialog.h" />
 	<ClInclude Include="..\..\source\monster_spell_area.h" />

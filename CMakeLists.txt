@@ -334,6 +334,7 @@ if(BUILD_TESTING)
 	add_executable(monster_definition_provider_tests
 		tests/monster_definition_provider_tests.cpp
 		source/monster_definition.cpp
+		source/monster_definition_creation.cpp
 		source/monster_section_codec.cpp
 		source/server_content_index.cpp
 		source/server_workspace.cpp

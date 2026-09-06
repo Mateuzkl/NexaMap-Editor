@@ -1,4 +1,5 @@
 #include "monster_definition.h"
+#include "monster_definition_creation.h"
 #include "server_content_index.h"
 #include "server_workspace.h"
 
@@ -333,6 +334,48 @@ namespace {
 		Check(ValidateMonsterDefinition(definition, error), "valid advanced monster sections pass validation");
 	}
 
+	void TestNewMonsterCreation() {
+		TemporaryDirectory xmlServer;
+		const std::filesystem::path xmlDirectory = xmlServer.path / "data/monster/custom";
+		std::filesystem::create_directories(xmlDirectory);
+		xmlServer.write("data/monster/monsters.xml", "<?xml version=\"1.0\"?>\n<monsters>\n</monsters>\n");
+		ServerWorkspace xmlWorkspace;
+		xmlWorkspace.rootPath = xmlServer.path;
+		xmlWorkspace.monstersDirectory = xmlServer.path / "data/monster";
+		ServerContentIndex xmlIndex = ServerContentIndex::Build(xmlWorkspace);
+		MonsterCreationRequest request { "Test & Guardian", ServerContentFormat::Xml, xmlDirectory };
+		MonsterCreationResult created;
+		std::string error;
+		Check(CreateMonsterDefinition(xmlWorkspace, xmlIndex, request, created, error), "new XML monster and registry entry are created: " + error);
+		Check(std::filesystem::is_regular_file(xmlDirectory / "test_guardian.xml"), "new XML monster receives a safe filename");
+		const std::string registry = xmlServer.read("data/monster/monsters.xml");
+		Check(registry.find("name=\"Test &amp; Guardian\"") != std::string::npos && registry.find("custom/test_guardian.xml") != std::string::npos, "new XML monster is registered with escaped metadata");
+		auto document = MonsterDefinitionDocument::Load(created.source, error);
+		Check(document != nullptr, "created XML monster opens in the visual editor provider: " + error);
+		if (document) {
+			Check(document->definition().capability(MonsterField::Health).editable, "created XML Main fields are editable");
+			Check(document->definition().capability(MonsterSection::Attacks).editable, "created XML attack section is editable");
+		}
+		xmlIndex = ServerContentIndex::Build(xmlWorkspace, &xmlIndex);
+		Check(!CreateMonsterDefinition(xmlWorkspace, xmlIndex, request, created, error) && error.find("already exists") != std::string::npos, "duplicate XML monster names are rejected");
+
+		TemporaryDirectory luaServer;
+		const std::filesystem::path luaDirectory = luaServer.path / "data/monsters/custom";
+		std::filesystem::create_directories(luaDirectory);
+		ServerWorkspace luaWorkspace;
+		luaWorkspace.rootPath = luaServer.path;
+		luaWorkspace.monstersDirectory = luaServer.path / "data/monsters";
+		const ServerContentIndex luaIndex = ServerContentIndex::Build(luaWorkspace);
+		request = { "Lua Sentinel", ServerContentFormat::Lua, luaDirectory };
+		Check(CreateMonsterDefinition(luaWorkspace, luaIndex, request, created, error), "new Lua monster is created: " + error);
+		document = MonsterDefinitionDocument::Load(created.source, error);
+		Check(document != nullptr, "created Lua monster opens in the visual editor provider: " + error);
+		if (document) {
+			Check(document->definition().name == "Lua Sentinel" && document->definition().capability(MonsterField::LookType).editable, "created Lua Main and Look fields are editable");
+			Check(document->definition().capability(MonsterSection::Loot).editable, "created Lua loot section is editable");
+		}
+	}
+
 	void TestRealServers(const std::filesystem::path& modernRoot, const std::filesystem::path& xmlRoot) {
 		const ServerDetectionResult modernDetection = ServerResourceDetector::Detect(modernRoot);
 		const ServerContentIndex modern = ServerContentIndex::Build(modernDetection.workspace);
@@ -413,6 +456,7 @@ int main(int argc, char** argv) {
 	TestLuaPreservingSave();
 	TestAmbiguousAndExternalChanges();
 	TestAdvancedValidation();
+	TestNewMonsterCreation();
 	if (argc == 3) {
 		TestRealServers(std::filesystem::path(argv[1]), std::filesystem::path(argv[2]));
 	} else if (argc != 1) {

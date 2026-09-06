@@ -20,6 +20,7 @@
 #include <wx/display.h>
 #include <wx/dir.h>
 #include <wx/choicdlg.h>
+#include <wx/dirdlg.h>
 
 #include <utility>
 #include <tuple>
@@ -58,6 +59,7 @@
 #include "new_map_tab_dialog.h"
 #include "cross_client_clipboard.h"
 #include "cross_client_paste_dialog.h"
+#include "monster_definition_creation.h"
 #include "monster_editor_dialog.h"
 
 #ifdef __WXOSX__
@@ -91,6 +93,107 @@ namespace {
 		return wxString::FromUTF8(path.string());
 #endif
 	}
+
+	class NewMonsterDialog final : public wxDialog {
+	public:
+		NewMonsterDialog(wxWindow* parent, const ServerWorkspace& workspace, const ServerContentCapabilities& capabilities) :
+			wxDialog(parent, wxID_ANY, "Create New Monster", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+			monsterRoot(workspace.monstersDirectory) {
+			SetBackgroundColour(Theme::Get(Theme::Role::Surface));
+			auto* top = newd wxBoxSizer(wxVERTICAL);
+			auto* heading = newd wxStaticText(this, wxID_ANY, "Create a monster definition in the active Server Workspace.");
+			heading->SetForegroundColour(Theme::Get(Theme::Role::Text));
+			top->Add(heading, wxSizerFlags().Expand().Border(wxALL, 12));
+
+			auto* form = newd wxFlexGridSizer(2, 8, 10);
+			form->AddGrowableCol(1, 1);
+			form->Add(newd wxStaticText(this, wxID_ANY, "Monster name:"), wxSizerFlags().CenterVertical());
+			name = newd wxTextCtrl(this, wxID_ANY);
+			form->Add(name, wxSizerFlags().Expand());
+
+			form->Add(newd wxStaticText(this, wxID_ANY, "Source format:"), wxSizerFlags().CenterVertical());
+			format = newd wxChoice(this, wxID_ANY);
+			if (capabilities.monsters.xmlDefinitions) {
+				formats.push_back(ServerContentFormat::Xml);
+				format->Append("TFS XML");
+			}
+			if (capabilities.monsters.luaDefinitions) {
+				formats.push_back(ServerContentFormat::Lua);
+				format->Append("Lua / revscriptsys");
+			}
+			if (formats.empty()) {
+				formats.push_back(workspace.serverType == ServerType::Tfs ? ServerContentFormat::Xml : ServerContentFormat::Lua);
+				format->Append(formats.front() == ServerContentFormat::Xml ? "TFS XML" : "Lua / revscriptsys");
+			}
+			format->SetSelection(0);
+			form->Add(format, wxSizerFlags().Expand());
+
+			form->Add(newd wxStaticText(this, wxID_ANY, "Destination folder:"), wxSizerFlags().CenterVertical());
+			auto* folderRow = newd wxBoxSizer(wxHORIZONTAL);
+			directory = newd wxTextCtrl(this, wxID_ANY, WorkspacePath(monsterRoot), wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
+			folderRow->Add(directory, wxSizerFlags(1).Expand());
+			auto* browse = newd wxButton(this, wxID_ANY, "Browse...");
+			folderRow->Add(browse, wxSizerFlags().Border(wxLEFT, 8));
+			form->Add(folderRow, wxSizerFlags().Expand());
+			top->Add(form, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 12));
+
+			auto* note = newd wxStaticText(
+				this,
+				wxID_ANY,
+				"NexaMap creates a starter definition, registers XML monsters automatically, and opens the visual editor."
+			);
+			note->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
+			top->Add(note, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 12));
+			auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
+			if (auto* create = wxDynamicCast(FindWindow(wxID_OK), wxButton)) {
+				create->SetLabel("Create and Edit");
+			}
+			top->Add(buttons, wxSizerFlags().Expand().Border(wxALL, 12));
+			SetSizerAndFit(top);
+			SetMinSize(FromDIP(wxSize(620, 260)));
+			SetSize(FromDIP(wxSize(720, 300)));
+			CentreOnParent();
+			name->SetFocus();
+
+			browse->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+				wxDirDialog chooser(
+					this,
+					"Choose a folder inside the workspace monster directory",
+					directory->GetValue(),
+					wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST | wxDD_NEW_DIR_BUTTON
+				);
+				if (chooser.ShowModal() == wxID_OK) {
+					directory->ChangeValue(chooser.GetPath());
+				}
+			});
+		}
+
+		[[nodiscard]] std::string monsterName() const {
+			return nstr(name->GetValue());
+		}
+
+		[[nodiscard]] ServerContentFormat sourceFormat() const {
+			const int selection = format->GetSelection();
+			return selection >= 0 && static_cast<std::size_t>(selection) < formats.size()
+				? formats[static_cast<std::size_t>(selection)]
+				: ServerContentFormat::Unknown;
+		}
+
+		[[nodiscard]] std::filesystem::path destinationDirectory() const {
+#ifdef __WINDOWS__
+			return std::filesystem::path(directory->GetValue().ToStdWstring());
+#else
+			return std::filesystem::path(directory->GetValue().ToStdString());
+#endif
+		}
+
+	private:
+		std::filesystem::path monsterRoot;
+		wxTextCtrl* name = nullptr;
+		wxChoice* format = nullptr;
+		wxTextCtrl* directory = nullptr;
+		std::vector<ServerContentFormat> formats;
+	};
 
 	bool RefreshRequiredServerWorkspace(wxString& error, bool& changed, WorkspaceClientMode expectedClientMode) {
 		changed = false;
@@ -2880,19 +2983,59 @@ void GUI::ShowMonsterEditorBrowser() {
 	std::sort(monsters.begin(), monsters.end(), [](const ServerContentSource* left, const ServerContentSource* right) {
 		return std::tie(left->name, left->declarationPath) < std::tie(right->name, right->declarationPath);
 	});
-	if (monsters.empty()) {
-		wxMessageBox("No monster definitions were found in the active Server Workspace.", "Monster Editor", wxOK | wxICON_INFORMATION, root);
-		return;
-	}
 	wxArrayString choices;
+	choices.Add("Create a new monster...");
 	for (const ServerContentSource* source : monsters) {
 		choices.Add(wxString::FromUTF8(source->name) + "  —  " + wxString::FromUTF8(ServerContentFormatName(source->format)) + "  —  " + WorkspacePath(source->declarationPath));
 	}
-	wxSingleChoiceDialog chooser(root, "Choose a monster definition from the active Server Workspace.", "Monster Editor", choices);
+	wxSingleChoiceDialog chooser(root, "Create a new monster or choose an existing definition.", "Monster Editor", choices);
 	chooser.SetSize(root->FromDIP(wxSize(820, 560)));
 	if (chooser.ShowModal() == wxID_OK && chooser.GetSelection() >= 0) {
-		ShowMonsterEditor(*monsters[static_cast<std::size_t>(chooser.GetSelection())]);
+		if (chooser.GetSelection() == 0) {
+			ShowNewMonsterEditor();
+		} else {
+			ShowMonsterEditor(*monsters[static_cast<std::size_t>(chooser.GetSelection() - 1)]);
+		}
 	}
+}
+
+void GUI::ShowNewMonsterEditor() {
+	if (!IsEditorOpen()) {
+		return;
+	}
+	const ServerWorkspace& workspace = g_workspace.getServer();
+	if (workspace.monstersDirectory.empty()) {
+		wxMessageBox("The active Server Workspace has no detected monster directory.", "Create New Monster", wxOK | wxICON_INFORMATION, root);
+		return;
+	}
+
+	NewMonsterDialog dialog(root, workspace, g_workspace.getServerContent().capabilities());
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+	MonsterCreationRequest request;
+	request.name = dialog.monsterName();
+	request.format = dialog.sourceFormat();
+	request.destinationDirectory = dialog.destinationDirectory();
+	MonsterCreationResult created;
+	std::string creationError;
+	if (!CreateMonsterDefinition(workspace, g_workspace.getServerContent(), request, created, creationError)) {
+		wxMessageBox(wxString::FromUTF8(creationError), "Could not create monster", wxOK | wxICON_ERROR, root);
+		return;
+	}
+
+	wxString scanError;
+	if (!g_workspace.rescanServer(scanError)) {
+		wxMessageBox("The monster was created, but the Server Workspace could not be reindexed:\n" + scanError, "Monster created", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	const auto found = std::find_if(g_workspace.getServerContent().entries().begin(), g_workspace.getServerContent().entries().end(), [&created](const ServerContentSource& source) {
+		return source.kind == ServerContentKind::Monster
+			&& source.declarationPath.lexically_normal() == created.source.declarationPath.lexically_normal();
+	});
+	const ServerContentSource source = found == g_workspace.getServerContent().entries().end() ? created.source : *found;
+	SetStatusText("Created monster " + wxString::FromUTF8(source.name));
+	ShowMonsterEditor(source);
 }
 
 void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {

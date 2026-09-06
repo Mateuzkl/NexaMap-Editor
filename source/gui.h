@@ -229,6 +229,7 @@ public:
 	void ShowMonsterEditor(const std::string& monsterName);
 	void ShowMonsterEditor(const ServerContentSource& source);
 	void ShowMonsterEditorBrowser();
+	void ShowNewMonsterEditor();
 
 	// Get the current GL context
 	// Param is required if the context is to be created.
