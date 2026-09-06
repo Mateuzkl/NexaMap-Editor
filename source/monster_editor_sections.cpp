@@ -286,6 +286,7 @@ namespace {
 }
 
 void MonsterEditorDialog::addAdvancedPages(wxNotebook* notebook) {
+	addAttackPage(notebook);
 	auto* defensesPage = newd wxPanel(notebook);
 	auto* defensesSizer = newd wxBoxSizer(wxVERTICAL);
 	defensesSizer->Add(

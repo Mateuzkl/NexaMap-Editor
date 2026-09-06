@@ -19,8 +19,10 @@
 
 #include <wx/display.h>
 #include <wx/dir.h>
+#include <wx/choicdlg.h>
 
 #include <utility>
+#include <tuple>
 
 #include "gui.h"
 #include "favorites_manager.h"
@@ -2862,9 +2864,44 @@ void GUI::ShowMonsterEditor(const std::string& monsterName) {
 		wxMessageBox(message, "Ambiguous monster source", wxOK | wxICON_WARNING, root);
 		return;
 	}
+	ShowMonsterEditor(*resolvedSource);
+}
+
+void GUI::ShowMonsterEditorBrowser() {
+	if (!IsEditorOpen()) {
+		return;
+	}
+	std::vector<const ServerContentSource*> monsters;
+	for (const ServerContentSource& source : g_workspace.getServerContent().entries()) {
+		if (source.kind == ServerContentKind::Monster && source.declarationExists) {
+			monsters.push_back(&source);
+		}
+	}
+	std::sort(monsters.begin(), monsters.end(), [](const ServerContentSource* left, const ServerContentSource* right) {
+		return std::tie(left->name, left->declarationPath) < std::tie(right->name, right->declarationPath);
+	});
+	if (monsters.empty()) {
+		wxMessageBox("No monster definitions were found in the active Server Workspace.", "Monster Editor", wxOK | wxICON_INFORMATION, root);
+		return;
+	}
+	wxArrayString choices;
+	for (const ServerContentSource* source : monsters) {
+		choices.Add(wxString::FromUTF8(source->name) + "  —  " + wxString::FromUTF8(ServerContentFormatName(source->format)) + "  —  " + WorkspacePath(source->declarationPath));
+	}
+	wxSingleChoiceDialog chooser(root, "Choose a monster definition from the active Server Workspace.", "Monster Editor", choices);
+	chooser.SetSize(root->FromDIP(wxSize(820, 560)));
+	if (chooser.ShowModal() == wxID_OK && chooser.GetSelection() >= 0) {
+		ShowMonsterEditor(*monsters[static_cast<std::size_t>(chooser.GetSelection())]);
+	}
+}
+
+void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
+	if (!IsEditorOpen() || selectedSource.kind != ServerContentKind::Monster) {
+		return;
+	}
+	const ServerContentSource source = selectedSource;
 
 	const std::filesystem::path workspaceRoot = g_workspace.getServer().rootPath;
-	const ServerContentSource source = *resolvedSource;
 	std::string error;
 	auto document = MonsterDefinitionDocument::Load(source, error);
 	if (!document) {

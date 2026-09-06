@@ -348,6 +348,14 @@ if(BUILD_TESTING)
 	endif()
 	add_test(NAME monster_definition_provider_tests COMMAND monster_definition_provider_tests)
 
+	add_executable(monster_spell_area_tests
+		tests/monster_spell_area_tests.cpp
+		source/monster_spell_area.cpp
+	)
+	target_include_directories(monster_spell_area_tests PRIVATE source)
+	target_compile_features(monster_spell_area_tests PRIVATE cxx_std_20)
+	add_test(NAME monster_spell_area_tests COMMAND monster_spell_area_tests)
+
 	add_executable(editor_data_layout_tests
 		tests/editor_data_layout_tests.cpp
 	)

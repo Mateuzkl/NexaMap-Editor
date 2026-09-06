@@ -80,6 +80,7 @@ namespace {
 										"  <targetchange interval=\"4000\" chance=\"20\" />\r\n"
 										"  <strategy attack=\"100\" defense=\"0\" />\r\n"
 										"  <flags><flag attackable=\"1\"/><flag hostile=\"1\"/><flag canpushitems=\"1\"/><flag lightlevel=\"2\"/></flags>\r\n"
+										"  <attacks custom=\"kept\"><attack name=\"fire\" interval=\"1500\" chance=\"15\" range=\"7\" radius=\"4\" target=\"1\" min=\"-60\" max=\"-110\"><attribute key=\"shootEffect\" value=\"fire\"/><attribute key=\"areaEffect\" value=\"firearea\"/><condition kind=\"kept\"/></attack><attack name=\"fire\" interval=\"2000\" chance=\"8\" length=\"8\" spread=\"3\" min=\"-90\" max=\"-170\"/></attacks>\r\n"
 										"  <defenses armor=\"44\" defense=\"43\" mitigation=\"0.9\"><defense name=\"healing\" interval=\"1000\" chance=\"25\" min=\"50\" max=\"80\"><attribute key=\"areaEffect\" value=\"blueshimmer\"/></defense></defenses>\r\n"
 										"  <elements><element firePercent=\"30\" custom=\"kept\"/></elements>\r\n"
 										"  <immunities><immunity invisible=\"1\"/></immunities>\r\n"
@@ -104,6 +105,7 @@ namespace {
 		Check(document->definition().strategyAttack == 100 && document->definition().lightLevel == 2, "XML strategy and light flags are normalized");
 		Check(document->definition().capability(MonsterField::Health).editable, "XML literal health is editable");
 		Check(!document->definition().capability(MonsterField::ManaCost).editable, "absent XML field is read-only");
+		Check(document->definition().attacks.size() == 2 && document->definition().attacks.front().area.radius == 4 && document->definition().attacks.back().area.shape == MonsterAreaShape::Beam, "XML attacks, target radius and beam are normalized");
 		Check(
 			document->definition().defenseActions.size() == 1 && document->definition().defenseActions.front().preservedChildren.find("areaEffect") != std::string::npos,
 			"XML defense actions and custom child attributes are normalized"
@@ -139,6 +141,8 @@ namespace {
 		edited.loot.front().children.front().maxCount = 50;
 		edited.summons.front().chance = 55;
 		edited.voices.entries.push_back({ "Run!", false, {} });
+		edited.attacks.front().projectile = "energy";
+		edited.attacks.back().area.spread = 5;
 		Check(document->save(edited, error), "supported XML fields save transactionally: " + error);
 		const std::string saved = server.read("data/monster/demons/Demon.xml");
 		Check(saved.find("<!-- keep this exact comment -->") != std::string::npos, "XML comments are preserved");
@@ -158,6 +162,7 @@ namespace {
 				&& saved.find("sentence=\"Run!\"") != std::string::npos,
 			"XML advanced section edits are serialized"
 		);
+		Check(saved.find("shootEffect\" value=\"energy") != std::string::npos && saved.find("spread=\"5\"") != std::string::npos && saved.find("condition kind=\"kept\"") != std::string::npos, "XML attack edits and unknown child content are preserved");
 		Check(server.read("data/monster/monsters.xml").find("name=\"Demon Prime\"") != std::string::npos, "registered XML name is updated in the same transaction");
 		Check(
 			document->definition().loot.front().children.front().maxCount == 50 && document->definition().voices.entries.size() == 2,
@@ -180,6 +185,10 @@ namespace {
 								   "monster.outfit = { lookType = 35, lookHead = 0, lookBody = 1, lookLegs = 2, lookFeet = 3, lookAddons = 0 }\n"
 								   "monster.flags = { attackable = true, hostile = true, targetDistance = 1, customFlag = computeFlag() }\n"
 								   "monster.changeTarget = { interval = 4000, chance = 20 }\n"
+								   "monster.attacks = {\n"
+								   "\t{ name = \"combat\", interval = 2000, chance = 20, type = COMBAT_EARTHDAMAGE, minDamage = -15, maxDamage = -120, length = 8, spread = 0, effect = CONST_ME_CARNIPHILA, target = false, condition = { type = CONDITION_CURSED } }, -- earth beam\n"
+								   "\t{ name = \"combat\", interval = 2000, chance = 15, type = COMBAT_FIREDAMAGE, minDamage = -70, maxDamage = -180, range = 7, radius = 5, shootEffect = CONST_ANI_FIRE, target = true },\n"
+								   "}\n"
 								   "monster.defenses = {\n"
 								   "\tdefense = 30, armor = 25, mitigation = 0.99,\n"
 								   "\t{ name = \"combat\", interval = 2000, chance = 15, type = COMBAT_HEALING, minDamage = 40, maxDamage = 70, effect = CONST_ME_MAGIC_BLUE, target = false, custom = compute() },\n"
@@ -205,6 +214,7 @@ namespace {
 		Check(document->definition().health == 8200 && document->definition().outfit.body == 1, "Lua Main and Look values are normalized");
 		Check(!document->definition().capability(MonsterField::Description).editable, "computed Lua value is read-only");
 		Check(document->definition().capability(MonsterField::Name).editable, "coordinated Lua name literals are editable");
+		Check(document->definition().attacks.size() == 2 && document->definition().attacks.front().area.shape == MonsterAreaShape::Beam && document->definition().attacks.back().projectile == "CONST_ANI_FIRE", "Lua attacks, constants and areas are normalized");
 		Check(
 			document->definition().defenseActions.size() == 1 && document->definition().defenseActions.front().type == "COMBAT_HEALING",
 			"Lua defense actions and constants are normalized"
@@ -238,6 +248,8 @@ namespace {
 		edited.loot.back().children.front().chance = 2000;
 		edited.summons.front().force = false;
 		edited.voices.entries.push_back({ "Run!", false, {} });
+		edited.attacks.front().effect = "CONST_ME_FIREAREA";
+		edited.attacks.back().area.radius = 4;
 		Check(document->save(edited, error), "supported Lua literals save transactionally: " + error);
 		const std::string saved = server.read("data/monsters/demon.lua");
 		Check(saved.find("Game.createMonsterType(\"Demon Prime\")") != std::string::npos && saved.find("monster.name = \"Demon Prime\"") != std::string::npos, "coordinated Lua name literals stay consistent");
@@ -255,6 +267,7 @@ namespace {
 				&& saved.find("text = \"Run!\"") != std::string::npos,
 			"Lua advanced section edits are serialized"
 		);
+		Check(saved.find("effect = CONST_ME_FIREAREA") != std::string::npos && saved.find("radius = 4") != std::string::npos && saved.find("condition = { type = CONDITION_CURSED }") != std::string::npos && saved.find("-- earth beam") != std::string::npos, "Lua attack edits preserve nested custom expressions and comments");
 		Check(
 			document->definition().loot.back().children.front().chance == 2000 && document->definition().voices.entries.size() == 2,
 			"Lua advanced sections reload after save"
@@ -338,14 +351,15 @@ namespace {
 		Check(document != nullptr, "real modern Lua Dragon advanced sections open: " + error);
 		if (document) {
 			Check(
-				!document->definition().loot.empty() && !document->definition().defenseActions.empty()
+				!document->definition().loot.empty() && !document->definition().defenseActions.empty() && !document->definition().attacks.empty()
 					&& !document->definition().resistances.empty() && !document->definition().voices.entries.empty(),
 				"real modern Lua Dragon exposes loot, defenses, elements and voices"
 			);
 			Check(
 				document->definition().capability(MonsterSection::Loot).editable
-					&& document->definition().capability(MonsterSection::Defenses).editable,
-				"real modern Lua advanced sections are structurally editable"
+					&& document->definition().capability(MonsterSection::Defenses).editable
+					&& document->definition().capability(MonsterSection::Attacks).editable,
+				"real modern Lua advanced and attack sections are structurally editable"
 			);
 		}
 
@@ -379,15 +393,16 @@ namespace {
 		Check(document != nullptr, "real XML Dragon advanced sections open: " + error);
 		if (document) {
 			Check(
-				!document->definition().loot.empty() && !document->definition().loot.back().children.empty()
+				!document->definition().loot.empty() && !document->definition().loot.back().children.empty() && !document->definition().attacks.empty()
 					&& !document->definition().defenseActions.empty() && !document->definition().resistances.empty()
 					&& !document->definition().immunities.empty() && !document->definition().voices.entries.empty(),
 				"real XML Dragon exposes nested loot, defenses, elements, immunities and voices"
 			);
 			Check(
 				document->definition().capability(MonsterSection::Loot).editable
-					&& document->definition().capability(MonsterSection::Defenses).editable,
-				"real XML advanced sections are structurally editable"
+					&& document->definition().capability(MonsterSection::Defenses).editable
+					&& document->definition().capability(MonsterSection::Attacks).editable,
+				"real XML advanced and attack sections are structurally editable"
 			);
 		}
 	}

@@ -290,6 +290,16 @@
 	<ClCompile Include="..\..\source\monster_editor_sections.cpp">
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	</ClCompile>
+	<ClCompile Include="..\..\source\monster_editor_attacks.cpp">
+	  <IncludeInUnityFile>false</IncludeInUnityFile>
+	</ClCompile>
+	<ClCompile Include="..\..\source\monster_spell_area.cpp">
+	  <IncludeInUnityFile>false</IncludeInUnityFile>
+	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
+	</ClCompile>
+	<ClCompile Include="..\..\source\monster_spell_preview.cpp">
+	  <IncludeInUnityFile>false</IncludeInUnityFile>
+	</ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
 	<ClCompile Include="..\..\source\workspace_session.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
@@ -637,6 +647,8 @@
 	<ClInclude Include="..\..\source\monster_definition.h" />
 	<ClInclude Include="..\..\source\monster_section_codec.h" />
 	<ClInclude Include="..\..\source\monster_editor_dialog.h" />
+	<ClInclude Include="..\..\source\monster_spell_area.h" />
+	<ClInclude Include="..\..\source\monster_spell_preview.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />
 	<ClInclude Include="..\..\source\workspace_session.h" />
     <ClInclude Include="..\..\source\version_info.h" />

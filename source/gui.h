@@ -40,6 +40,7 @@ class EditorResourceSession;
 class FavoritesManager;
 class CrossClientClipboard;
 class EditorDisposalQueue;
+struct ServerContentSource;
 
 enum class EditorClientVersionPolicy;
 class Editor;
@@ -226,6 +227,8 @@ public:
 		ShowTextBox(nullptr, title, contents);
 	}
 	void ShowMonsterEditor(const std::string& monsterName);
+	void ShowMonsterEditor(const ServerContentSource& source);
+	void ShowMonsterEditorBrowser();
 
 	// Get the current GL context
 	// Param is required if the context is to be created.

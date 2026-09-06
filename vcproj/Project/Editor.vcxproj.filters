@@ -331,6 +331,12 @@
 	<ClInclude Include="..\..\source\monster_editor_dialog.h">
 	  <Filter>gui\dialogs</Filter>
 	</ClInclude>
+	<ClInclude Include="..\..\source\monster_spell_area.h">
+	  <Filter>common</Filter>
+	</ClInclude>
+	<ClInclude Include="..\..\source\monster_spell_preview.h">
+	  <Filter>gui\dialogs</Filter>
+	</ClInclude>
 	<ClInclude Include="..\..\source\workspace_session.h">
 	  <Filter>common</Filter>
 	</ClInclude>
@@ -642,6 +648,15 @@
 	  <Filter>gui\dialogs</Filter>
 	</ClCompile>
 	<ClCompile Include="..\..\source\monster_editor_sections.cpp">
+	  <Filter>gui\dialogs</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\monster_editor_attacks.cpp">
+	  <Filter>gui\dialogs</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\monster_spell_area.cpp">
+	  <Filter>common</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\monster_spell_preview.cpp">
 	  <Filter>gui\dialogs</Filter>
 	</ClCompile>
 	<ClCompile Include="..\..\source\workspace_session.cpp">

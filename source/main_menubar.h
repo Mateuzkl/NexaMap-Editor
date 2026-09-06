@@ -194,6 +194,7 @@ namespace MenuBar {
 		USE_GPU_GROUND_CACHE,
 		MAP_DIAGNOSTICS,
 		SHOW_CONTAINER_PREVIEW,
+		SERVER_MONSTER_EDITOR,
 	};
 }
 
@@ -243,6 +244,7 @@ public:
 	void OnMapItemIdConverter(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSpawnNpcConverter(wxCommandEvent& event);
+	void OnServerMonsterEditor(wxCommandEvent& event);
 	void OnImportMonsterData(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);
 	void OnExportTilesets(wxCommandEvent& event);

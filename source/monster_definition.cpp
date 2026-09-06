@@ -1411,6 +1411,7 @@ const char* MonsterSectionName(MonsterSection section) {
 		"Loot",
 		"Summons",
 		"Voices",
+		"Attacks",
 	};
 	const std::size_t index = static_cast<std::size_t>(section);
 	return index < Names.size() ? Names[index] : "Unknown";
@@ -1432,6 +1433,19 @@ bool ValidateMonsterDefinition(const MonsterDefinition& definition, std::string&
 		}
 		return true;
 	};
+	for (const MonsterAttackDefinition& attack : definition.attacks) {
+		if (attack.name.empty() && attack.type.empty()) {
+			error = "Every attack needs a name or combat type.";
+			return false;
+		}
+		if (!validInterval(attack.interval, "Attack") || !validChance(attack.chance, "Attack")) {
+			return false;
+		}
+		if (attack.area.range < 0 || attack.area.radius < 0 || attack.area.ring < 0 || attack.area.length < 0 || attack.area.spread < 0) {
+			error = "Attack range and area values cannot be negative.";
+			return false;
+		}
+	}
 	for (const MonsterDefenseAction& action : definition.defenseActions) {
 		if (action.name.empty() && action.type.empty()) {
 			error = "Every defense action needs a name or type.";

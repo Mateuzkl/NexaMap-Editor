@@ -584,6 +584,8 @@ namespace {
 				return "summons";
 			case MonsterSection::Voices:
 				return "voices";
+			case MonsterSection::Attacks:
+				return "attacks";
 			default:
 				return {};
 		}
@@ -605,6 +607,8 @@ namespace {
 					|| original.summons != edited.summons;
 			case MonsterSection::Voices:
 				return original.voices != edited.voices;
+			case MonsterSection::Attacks:
+				return original.attackProperties != edited.attackProperties || original.attacks != edited.attacks;
 			default:
 				return false;
 		}
@@ -691,6 +695,74 @@ namespace {
 		target = *value;
 		used = true;
 		return true;
+	}
+
+	void ResolveAttackShape(MonsterAttackDefinition& attack) {
+		if (attack.area.length > 0) {
+			attack.area.shape = MonsterAreaShape::Beam;
+		} else if (attack.area.ring > 0) {
+			attack.area.shape = MonsterAreaShape::Ring;
+		} else if (attack.area.radius > 0) {
+			attack.area.shape = MonsterAreaShape::Radius;
+		} else if (attack.area.target || attack.area.range > 0) {
+			attack.area.shape = MonsterAreaShape::Target;
+		} else {
+			attack.area.shape = MonsterAreaShape::Single;
+		}
+	}
+
+	std::optional<MonsterAttackDefinition> ParseXmlAttack(const pugi::xml_node& node, std::string& limitation) {
+		MonsterAttackDefinition attack;
+		if (const pugi::xml_attribute value = FindXmlAttribute(node, { "name" })) {
+			attack.name = value.value();
+		}
+		if (const pugi::xml_attribute value = FindXmlAttribute(node, { "type" })) {
+			attack.type = value.value();
+		}
+		bool targetUsed = false;
+		if (!XmlIntegerAliases(node, { "interval" }, attack.interval, limitation)
+			|| !XmlIntegerAliases(node, { "chance" }, attack.chance, limitation)
+			|| !XmlIntegerAliases(node, { "min", "mindamage" }, attack.minDamage, limitation)
+			|| !XmlIntegerAliases(node, { "max", "maxdamage" }, attack.maxDamage, limitation)
+			|| !XmlIntegerAliases(node, { "skill" }, attack.skill, limitation)
+			|| !XmlIntegerAliases(node, { "attack" }, attack.attack, limitation)
+			|| !XmlIntegerAliases(node, { "range" }, attack.area.range, limitation)
+			|| !XmlIntegerAliases(node, { "radius" }, attack.area.radius, limitation)
+			|| !XmlIntegerAliases(node, { "ring" }, attack.area.ring, limitation)
+			|| !XmlIntegerAliases(node, { "length" }, attack.area.length, limitation)
+			|| !XmlIntegerAliases(node, { "spread" }, attack.area.spread, limitation)
+			|| !XmlBooleanAliases(node, { "target" }, attack.area.target, targetUsed, limitation)) {
+			return std::nullopt;
+		}
+		attack.customProperties = XmlCustomAttributes(
+			node,
+			{ "name", "type", "interval", "chance", "min", "mindamage", "max", "maxdamage", "skill", "attack", "range", "radius", "ring", "length", "spread", "target" }
+		);
+		for (const pugi::xml_node& child : node.children()) {
+			if (child.type() == pugi::node_comment) {
+				attack.annotation += XmlNodeText(child);
+				continue;
+			}
+			if (child.type() != pugi::node_element) {
+				continue;
+			}
+			if (LowerAscii(child.name()) == "attribute") {
+				const pugi::xml_attribute key = FindXmlAttribute(child, { "key" });
+				const pugi::xml_attribute value = FindXmlAttribute(child, { "value" });
+				const std::string lowered = key ? LowerAscii(key.value()) : std::string();
+				if (value && lowered == "areaeffect") {
+					attack.effect = value.value();
+					continue;
+				}
+				if (value && lowered == "shooteffect") {
+					attack.projectile = value.value();
+					continue;
+				}
+			}
+			attack.preservedChildren += XmlNodeText(child);
+		}
+		ResolveAttackShape(attack);
+		return attack;
 	}
 
 	std::optional<MonsterLootEntry> ParseXmlLootEntry(const pugi::xml_node& node, std::string& limitation) {
@@ -804,6 +876,7 @@ namespace {
 			{ MonsterSection::Loot, "loot" },
 			{ MonsterSection::Summons, "summons" },
 			{ MonsterSection::Voices, "voices" },
+			{ MonsterSection::Attacks, "attacks" },
 		} };
 		for (const auto& [section, name] : names) {
 			for (const XmlTagSpan& span : spans) {
@@ -827,7 +900,24 @@ namespace {
 			}
 			const std::string name = LowerAscii(section.name());
 			std::string limitation;
-			if (name == "defenses") {
+			if (name == "attacks") {
+				definition.attackProperties = XmlCustomAttributes(section, {});
+				for (const pugi::xml_node& attackNode : section.children()) {
+					if (attackNode.type() == pugi::node_comment) {
+						continue;
+					}
+					if (attackNode.type() != pugi::node_element || LowerAscii(attackNode.name()) != "attack") {
+						codec.limitation(definition, MonsterSection::Attacks, "The attacks section contains an unsupported child node.");
+						break;
+					}
+					auto attack = ParseXmlAttack(attackNode, limitation);
+					if (!attack) {
+						codec.limitation(definition, MonsterSection::Attacks, limitation);
+						break;
+					}
+					definition.attacks.push_back(std::move(*attack));
+				}
+			} else if (name == "defenses") {
 				SectionState& state = codec.states[Index(MonsterSection::Defenses)];
 				if (!state.editable) {
 					continue;
@@ -1048,6 +1138,42 @@ namespace {
 		return true;
 	}
 
+	bool ParseLuaAttack(const LuaEntry& entry, MonsterAttackDefinition& attack, std::string& limitation) {
+		if (entry.key || entry.value.kind != LuaValue::Kind::Table) {
+			limitation = "The attacks table contains an unsupported entry.";
+			return false;
+		}
+		const LuaTable& table = *entry.value.table;
+		if (!ReadLuaText(table, "name", attack.name, limitation)
+			|| !LuaTextOrIdentifier(table, "type", attack.type, limitation)
+			|| !ReadLuaInteger(table, "interval", attack.interval, limitation)
+			|| !ReadLuaInteger(table, "chance", attack.chance, limitation)
+			|| !ReadLuaInteger(table, "minDamage", attack.minDamage, limitation)
+			|| !ReadLuaInteger(table, "maxDamage", attack.maxDamage, limitation)
+			|| !ReadLuaInteger(table, "skill", attack.skill, limitation)
+			|| !ReadLuaInteger(table, "attack", attack.attack, limitation)
+			|| !ReadLuaInteger(table, "range", attack.area.range, limitation)
+			|| !ReadLuaInteger(table, "radius", attack.area.radius, limitation)
+			|| !ReadLuaInteger(table, "ring", attack.area.ring, limitation)
+			|| !ReadLuaInteger(table, "length", attack.area.length, limitation)
+			|| !ReadLuaInteger(table, "spread", attack.area.spread, limitation)
+			|| !LuaTextOrIdentifier(table, "effect", attack.effect, limitation)
+			|| !LuaTextOrIdentifier(table, "shootEffect", attack.projectile, limitation)) {
+			return false;
+		}
+		bool targetUsed = false;
+		if (!ReadLuaBoolean(table, "target", attack.area.target, targetUsed, limitation)) {
+			return false;
+		}
+		attack.customProperties = LuaCustomFields(
+			table,
+			{ "name", "type", "interval", "chance", "mindamage", "maxdamage", "skill", "attack", "range", "radius", "ring", "length", "spread", "target", "effect", "shooteffect" }
+		);
+		attack.annotation = entry.annotation;
+		ResolveAttackShape(attack);
+		return true;
+	}
+
 	bool ParseLuaLootEntry(const LuaTable& table, MonsterLootEntry& entry, std::string& limitation) {
 		if (const LuaEntry* name = FindLuaField(table, "name")) {
 			if (name->value.kind != LuaValue::Kind::String) {
@@ -1108,6 +1234,19 @@ namespace {
 		std::string& limitation
 	) {
 		switch (section) {
+			case MonsterSection::Attacks:
+				definition.attackProperties = LuaCustomFields(table, {});
+				for (const LuaEntry& entry : table.entries) {
+					if (entry.key) {
+						continue;
+					}
+					MonsterAttackDefinition attack;
+					if (!ParseLuaAttack(entry, attack, limitation)) {
+						return false;
+					}
+					definition.attacks.push_back(std::move(attack));
+				}
+				return true;
 			case MonsterSection::Defenses:
 				if (!ReadLuaInteger(table, "defense", definition.defense, limitation)
 					|| !ReadLuaInteger(table, "armor", definition.armor, limitation)) {
@@ -1299,6 +1438,8 @@ namespace {
 				section = MonsterSection::Summons;
 			} else if (member == "voices") {
 				section = MonsterSection::Voices;
+			} else if (member == "attacks") {
+				section = MonsterSection::Attacks;
 			}
 			if (!section) {
 				continue;
@@ -1382,6 +1523,68 @@ namespace {
 		std::string output;
 		const std::string child = indent + "\t";
 		switch (section) {
+			case MonsterSection::Attacks:
+				output = "<attacks";
+				for (const MonsterCustomProperty& property : definition.attackProperties) {
+					AppendXmlProperty(output, property);
+				}
+				if (definition.attacks.empty()) {
+					return output + "/>";
+				}
+				output += ">" + newline;
+				for (const MonsterAttackDefinition& attack : definition.attacks) {
+					output += child + "<attack";
+					if (!attack.name.empty()) {
+						output += " name=\"" + EncodeXml(attack.name) + "\"";
+					}
+					if (!attack.type.empty()) {
+						output += " type=\"" + EncodeXml(attack.type) + "\"";
+					}
+					output += " interval=\"" + std::to_string(attack.interval) + "\" chance=\"" + std::to_string(attack.chance)
+						+ "\" min=\"" + std::to_string(attack.minDamage) + "\" max=\"" + std::to_string(attack.maxDamage) + "\"";
+					if (attack.skill != 0) {
+						output += " skill=\"" + std::to_string(attack.skill) + "\"";
+					}
+					if (attack.attack != 0) {
+						output += " attack=\"" + std::to_string(attack.attack) + "\"";
+					}
+					if (attack.area.range != 0) {
+						output += " range=\"" + std::to_string(attack.area.range) + "\"";
+					}
+					if (attack.area.radius != 0) {
+						output += " radius=\"" + std::to_string(attack.area.radius) + "\"";
+					}
+					if (attack.area.ring != 0) {
+						output += " ring=\"" + std::to_string(attack.area.ring) + "\"";
+					}
+					if (attack.area.length != 0) {
+						output += " length=\"" + std::to_string(attack.area.length) + "\"";
+					}
+					if (attack.area.spread != 0) {
+						output += " spread=\"" + std::to_string(attack.area.spread) + "\"";
+					}
+					if (attack.area.target) {
+						output += " target=\"1\"";
+					}
+					for (const MonsterCustomProperty& property : attack.customProperties) {
+						AppendXmlProperty(output, property);
+					}
+					const bool hasChildren = !attack.effect.empty() || !attack.projectile.empty() || !attack.preservedChildren.empty() || !attack.annotation.empty();
+					if (!hasChildren) {
+						output += "/>" + newline;
+						continue;
+					}
+					output += ">";
+					if (!attack.effect.empty()) {
+						output += "<attribute key=\"areaEffect\" value=\"" + EncodeXml(attack.effect) + "\"/>";
+					}
+					if (!attack.projectile.empty()) {
+						output += "<attribute key=\"shootEffect\" value=\"" + EncodeXml(attack.projectile) + "\"/>";
+					}
+					output += attack.preservedChildren + attack.annotation + "</attack>" + newline;
+				}
+				output += indent + "</attacks>";
+				return output;
 			case MonsterSection::Defenses:
 				output = "<defenses armor=\"" + std::to_string(definition.armor) + "\" defense=\""
 					+ std::to_string(definition.defense) + "\"";
@@ -1587,6 +1790,63 @@ namespace {
 			}
 		};
 		switch (section) {
+			case MonsterSection::Attacks:
+				for (const MonsterCustomProperty& property : definition.attackProperties) {
+					begin();
+					output += field + property.name + " = " + LuaPropertyValue(property) + "," + newline;
+				}
+				for (const MonsterAttackDefinition& attack : definition.attacks) {
+					begin();
+					output += field + "{" + newline;
+					const std::string nested = field + "\t";
+					if (!attack.name.empty()) {
+						output += nested + "name = \"" + EncodeLua(attack.name) + "\"," + newline;
+					}
+					if (!attack.type.empty()) {
+						output += nested + "type = " + LuaEnumOrString(attack.type) + "," + newline;
+					}
+					output += nested + "interval = " + std::to_string(attack.interval) + "," + newline;
+					output += nested + "chance = " + std::to_string(attack.chance) + "," + newline;
+					output += nested + "minDamage = " + std::to_string(attack.minDamage) + "," + newline;
+					output += nested + "maxDamage = " + std::to_string(attack.maxDamage) + "," + newline;
+					if (attack.skill != 0) {
+						output += nested + "skill = " + std::to_string(attack.skill) + "," + newline;
+					}
+					if (attack.attack != 0) {
+						output += nested + "attack = " + std::to_string(attack.attack) + "," + newline;
+					}
+					if (attack.area.range != 0) {
+						output += nested + "range = " + std::to_string(attack.area.range) + "," + newline;
+					}
+					if (attack.area.radius != 0) {
+						output += nested + "radius = " + std::to_string(attack.area.radius) + "," + newline;
+					}
+					if (attack.area.ring != 0) {
+						output += nested + "ring = " + std::to_string(attack.area.ring) + "," + newline;
+					}
+					if (attack.area.length != 0) {
+						output += nested + "length = " + std::to_string(attack.area.length) + "," + newline;
+					}
+					if (attack.area.spread != 0) {
+						output += nested + "spread = " + std::to_string(attack.area.spread) + "," + newline;
+					}
+					if (attack.area.target) {
+						output += nested + "target = true," + newline;
+					}
+					if (!attack.effect.empty()) {
+						output += nested + "effect = " + LuaEnumOrString(attack.effect) + "," + newline;
+					}
+					if (!attack.projectile.empty()) {
+						output += nested + "shootEffect = " + LuaEnumOrString(attack.projectile) + "," + newline;
+					}
+					AppendLuaProperties(output, attack.customProperties, nested, newline);
+					output += field + "},";
+					if (!attack.annotation.empty()) {
+						output += " " + attack.annotation;
+					}
+					output += newline;
+				}
+				break;
 			case MonsterSection::Defenses:
 				begin();
 				output += field + "defense = " + std::to_string(definition.defense) + "," + newline;

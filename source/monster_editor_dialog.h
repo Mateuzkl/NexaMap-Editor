@@ -24,6 +24,7 @@ class wxStaticBitmap;
 class wxTextCtrl;
 class wxTreeCtrl;
 class wxWindow;
+class MonsterSpellPreview;
 
 class MonsterEditorDialog final : public wxDialog {
 public:
@@ -38,15 +39,19 @@ private:
 	wxWindow* addBooleanField(wxWindow* parent, wxFlexGridSizer* grid, MonsterField field, bool value);
 	void applyCapability(wxWindow* control, MonsterField field);
 	void addAdvancedPages(wxNotebook* notebook);
+	void addAttackPage(wxNotebook* notebook);
 	void applySectionCapability(wxWindow* page, MonsterSection section);
 	void readControls();
 	void refreshPreview();
 	void refreshDefenseList();
+	void refreshAttackList();
+	void refreshAttackPreview();
 	void refreshResistanceLists();
 	void refreshLootTree();
 	void refreshSummonList();
 	void refreshVoiceList();
 	bool editDefense(MonsterDefenseAction& action);
+	bool editAttack(MonsterAttackDefinition& attack);
 	bool editResistance(MonsterResistance& resistance);
 	bool editImmunity(MonsterImmunity& immunity);
 	bool editLoot(MonsterLootEntry& entry);
@@ -67,6 +72,9 @@ private:
 	wxChoice* directionChoice = nullptr;
 	wxSpinCtrl* frame = nullptr;
 	wxListCtrl* defenseList = nullptr;
+	wxListCtrl* attackList = nullptr;
+	wxChoice* attackDirection = nullptr;
+	MonsterSpellPreview* attackPreview = nullptr;
 	wxListCtrl* resistanceList = nullptr;
 	wxListCtrl* immunityList = nullptr;
 	wxTreeCtrl* lootTree = nullptr;

@@ -82,6 +82,45 @@ struct MonsterCustomProperty {
 	friend bool operator==(const MonsterCustomProperty&, const MonsterCustomProperty&) = default;
 };
 
+enum class MonsterAreaShape : uint8_t {
+	Single = 0,
+	Target,
+	Radius,
+	Ring,
+	Beam,
+};
+
+struct MonsterAttackArea {
+	MonsterAreaShape shape = MonsterAreaShape::Single;
+	int range = 0;
+	int radius = 0;
+	int ring = 0;
+	int length = 0;
+	int spread = 0;
+	bool target = false;
+
+	friend bool operator==(const MonsterAttackArea&, const MonsterAttackArea&) = default;
+};
+
+struct MonsterAttackDefinition {
+	std::string name;
+	std::string type;
+	int interval = 2000;
+	int chance = 100;
+	int minDamage = 0;
+	int maxDamage = 0;
+	int skill = 0;
+	int attack = 0;
+	MonsterAttackArea area;
+	std::string effect;
+	std::string projectile;
+	std::vector<MonsterCustomProperty> customProperties;
+	std::string preservedChildren;
+	std::string annotation;
+
+	friend bool operator==(const MonsterAttackDefinition&, const MonsterAttackDefinition&) = default;
+};
+
 struct MonsterDefenseAction {
 	std::string name;
 	std::string type;
@@ -167,6 +206,7 @@ enum class MonsterSection : uint8_t {
 	Loot,
 	Summons,
 	Voices,
+	Attacks,
 	Count,
 };
 
@@ -216,6 +256,8 @@ struct MonsterDefinition {
 	std::vector<MonsterCustomProperty> summonProperties;
 	std::vector<MonsterSummon> summons;
 	MonsterVoiceDefinition voices;
+	std::vector<MonsterCustomProperty> attackProperties;
+	std::vector<MonsterAttackDefinition> attacks;
 	std::array<MonsterFieldCapability, static_cast<std::size_t>(MonsterField::Count)> capabilities;
 	std::array<MonsterSectionCapability, static_cast<std::size_t>(MonsterSection::Count)> sectionCapabilities;
 
