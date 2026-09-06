@@ -60,6 +60,7 @@ struct ServerWorkspace {
 	std::filesystem::path primaryMapPath;
 	std::filesystem::path monstersDirectory;
 	std::filesystem::path npcsDirectory;
+	std::filesystem::path spellsDirectory;
 
 	ResourceFingerprint itemsOtbFingerprint;
 	ResourceFingerprint itemsXmlFingerprint;

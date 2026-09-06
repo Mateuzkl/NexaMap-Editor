@@ -627,18 +627,26 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	};
 	static constexpr std::array<const char*, 4> monsterDirectories { "data/monster", "data/monsters", "monster", "monsters" };
 	static constexpr std::array<const char*, 4> npcDirectories { "data/npc", "data/npcs", "npc", "npcs" };
+	// Prefer the legacy registry root when both layouts exist. Some XML servers
+	// also carry a data/scripts/spells example directory that is not their
+	// active spell registry.
+	static constexpr std::array<const char*, 4> spellDirectories { "data/spells", "data/scripts/spells", "spells", "scripts/spells" };
 	if (workspace.mapsDirectory.empty()) {
 		workspace.mapsDirectory = FirstExistingDirectory(root, mapDirectories);
 	}
 	if (!workspace.activeDataDirectory.empty()) {
 		workspace.monstersDirectory = FirstExistingDirectory(workspace.activeDataDirectory, monsterDirectories);
 		workspace.npcsDirectory = FirstExistingDirectory(workspace.activeDataDirectory, npcDirectories);
+		workspace.spellsDirectory = FirstExistingDirectory(workspace.activeDataDirectory, spellDirectories);
 	}
 	if (workspace.monstersDirectory.empty()) {
 		workspace.monstersDirectory = FirstExistingDirectory(root, monsterDirectories);
 	}
 	if (workspace.npcsDirectory.empty()) {
 		workspace.npcsDirectory = FirstExistingDirectory(root, npcDirectories);
+	}
+	if (workspace.spellsDirectory.empty()) {
+		workspace.spellsDirectory = FirstExistingDirectory(root, spellDirectories);
 	}
 
 	std::deque<QueueEntry> queue;
@@ -680,6 +688,9 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 			}
 			if (workspace.npcsDirectory.empty() && (directoryName == "npc" || directoryName == "npcs")) {
 				workspace.npcsDirectory = Normalize(entry.path());
+			}
+			if (workspace.spellsDirectory.empty() && directoryName == "spells") {
+				workspace.spellsDirectory = Normalize(entry.path());
 			}
 			queue.push_back({ entry.path(), current.depth + 1 });
 		}

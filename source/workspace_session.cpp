@@ -45,7 +45,7 @@ namespace {
 	}
 
 	bool SameServerWorkspace(const ServerWorkspace& left, const ServerWorkspace& right) {
-		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.itemIdMode == right.itemIdMode && left.serverType == right.serverType && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
+		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.spellsDirectory == right.spellsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.itemIdMode == right.itemIdMode && left.serverType == right.serverType && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
 	}
 
 	bool ApplyDetectedMapSelection(ServerWorkspace& workspace, const std::filesystem::path& path) {
@@ -97,10 +97,12 @@ void WorkspaceSession::swap(WorkspaceSession& other) noexcept {
 	using std::swap;
 	swap(client, other.client);
 	swap(server, other.server);
+	swap(serverContent, other.serverContent);
 	swap(selectedDetectedMapPath, other.selectedDetectedMapPath);
 	swap(serverError, other.serverError);
 	swap(idModePreference, other.idModePreference);
 	swap(generation, other.generation);
+	swap(contentGeneration, other.contentGeneration);
 	swap(persistenceEnabled, other.persistenceEnabled);
 }
 
@@ -175,12 +177,18 @@ bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bo
 	if (!selectedDetectedMapPath.empty() && !ApplyDetectedMapSelection(detection.workspace, selectedDetectedMapPath)) {
 		selectedDetectedMapPath.clear();
 	}
+	ServerContentIndex detectedContent = ServerContentIndex::Build(detection.workspace, &serverContent);
 	const bool changed = !SameServerWorkspace(server, detection.workspace) || serverError != wxstr(detection.error);
+	const bool contentChanged = !serverContent.sameContentAs(detectedContent);
 	server = detection.workspace;
+	serverContent = std::move(detectedContent);
 	serverError = wxstr(detection.error);
 	error = serverError;
 	if (changed) {
 		++generation;
+	}
+	if (contentChanged) {
+		++contentGeneration;
 	}
 	if (persist && persistenceEnabled) {
 		if (options.diagnosticLogging) {
@@ -316,6 +324,10 @@ const ServerWorkspace& WorkspaceSession::getServer() const {
 	return server;
 }
 
+const ServerContentIndex& WorkspaceSession::getServerContent() const {
+	return serverContent;
+}
+
 const wxString& WorkspaceSession::getServerError() const {
 	return serverError;
 }
@@ -361,6 +373,10 @@ std::vector<wxString> WorkspaceSession::getDetectedMaps() const {
 
 uint64_t WorkspaceSession::getGeneration() const {
 	return generation;
+}
+
+uint64_t WorkspaceSession::getContentGeneration() const {
+	return contentGeneration;
 }
 
 void WorkspaceSession::persistPaths() {

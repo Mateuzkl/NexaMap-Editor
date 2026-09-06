@@ -319,6 +319,9 @@
 	<ClInclude Include="..\..\source\server_workspace.h">
 	  <Filter>common</Filter>
 	</ClInclude>
+	<ClInclude Include="..\..\source\server_content_index.h">
+	  <Filter>common</Filter>
+	</ClInclude>
 	<ClInclude Include="..\..\source\workspace_session.h">
 	  <Filter>common</Filter>
 	</ClInclude>
@@ -615,6 +618,9 @@
 	  <Filter>common</Filter>
 	</ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp">
+	  <Filter>common</Filter>
+	</ClCompile>
+	<ClCompile Include="..\..\source\server_content_index.cpp">
 	  <Filter>common</Filter>
 	</ClCompile>
 	<ClCompile Include="..\..\source\workspace_session.cpp">

@@ -81,6 +81,7 @@ int main() {
 		server.write("data/cache/maps/world.houses.otbm");
 		server.write("data/monster/rat.lua");
 		server.write("data/npc/guide.lua");
+		server.write("data/spells/spells.xml", "<spells/>");
 
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
 		check(detection.validRoot, "standard TFS root is valid");
@@ -95,6 +96,7 @@ int main() {
 		check(!detection.workspace.usesCanaryCrystalLoader(), "TFS 1.4 never enables the dedicated Canary/Crystal loader");
 		check(!detection.workspace.monstersDirectory.empty(), "standard TFS monsters are detected");
 		check(!detection.workspace.npcsDirectory.empty(), "standard TFS NPCs are detected");
+		check(!detection.workspace.spellsDirectory.empty(), "standard TFS spells are detected");
 	}
 
 	{
@@ -104,10 +106,12 @@ int main() {
 		server.write("data/world/world.otbm");
 		server.write("data/monsters/rat.lua");
 		server.write("data/npc/guide.lua");
+		server.write("data/scripts/spells/light.lua");
 
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
 		check(detection.workspace.serverType == ServerType::Tfs, "TFS 1.8 structure is detected as TFS");
 		check(detection.workspace.serverProfile == "TFS", "TFS 1.8 has the stable display label");
+		check(detection.workspace.spellsDirectory.filename() == "spells", "TFS 1.8 revscript spell root is detected");
 	}
 
 	{

@@ -6,6 +6,7 @@
 #define NEXAMAP_WORKSPACE_SESSION_H_
 
 #include "client_version.h"
+#include "server_content_index.h"
 #include "server_workspace.h"
 
 #include <wx/string.h>
@@ -46,6 +47,7 @@ public:
 
 	[[nodiscard]] const WorkspaceClientSelection& getClient() const;
 	[[nodiscard]] const ServerWorkspace& getServer() const;
+	[[nodiscard]] const ServerContentIndex& getServerContent() const;
 	[[nodiscard]] const wxString& getServerError() const;
 	[[nodiscard]] bool hasServerSelection() const;
 	[[nodiscard]] bool hasCompatibleServerResources() const;
@@ -54,16 +56,19 @@ public:
 	[[nodiscard]] std::optional<DetectedMap> getDetectedMap(const wxString& path) const;
 	[[nodiscard]] std::vector<wxString> getDetectedMaps() const;
 	[[nodiscard]] uint64_t getGeneration() const;
+	[[nodiscard]] uint64_t getContentGeneration() const;
 
 private:
 	void persistPaths();
 
 	WorkspaceClientSelection client;
 	ServerWorkspace server;
+	ServerContentIndex serverContent;
 	std::filesystem::path selectedDetectedMapPath;
 	wxString serverError;
 	ItemIdModePreference idModePreference = ItemIdModePreference::Auto;
 	uint64_t generation = 0;
+	uint64_t contentGeneration = 0;
 	bool persistenceEnabled = true;
 };
 
