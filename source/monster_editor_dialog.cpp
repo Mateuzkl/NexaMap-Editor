@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////
-// Native Main/Look/Source editor for an indexed monster definition.
+// Native source-preserving editor for an indexed monster definition.
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
@@ -169,6 +169,8 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	lookPage->SetSizer(lookSizer);
 	notebook->AddPage(lookPage, "Look");
 
+	addAdvancedPages(notebook);
+
 	auto* sourcePage = newd wxPanel(notebook);
 	auto* sourceSizer = newd wxBoxSizer(wxVERTICAL);
 	wxString metadata = "Format: " + Utf8(ServerContentFormatName(document->source().format))
@@ -205,6 +207,8 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	SetSize(FromDIP(wxSize(900, 700)));
 	CentreOnParent();
 	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onSave, this, wxID_OK);
+	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onCancel, this, wxID_CANCEL);
+	Bind(wxEVT_CLOSE_WINDOW, &MonsterEditorDialog::onClose, this);
 	refreshPreview();
 }
 
@@ -326,6 +330,13 @@ void MonsterEditorDialog::readControls() {
 	assignBoolean(MonsterField::Pushable, edited.pushable);
 	assignBoolean(MonsterField::CanPushItems, edited.canPushItems);
 	assignBoolean(MonsterField::CanPushCreatures, edited.canPushCreatures);
+	if (maxSummons && edited.capability(MonsterSection::Summons).editable) {
+		edited.maxSummons = maxSummons->GetValue();
+	}
+	if (voiceInterval && voiceChance && edited.capability(MonsterSection::Voices).editable) {
+		edited.voices.interval = voiceInterval->GetValue();
+		edited.voices.chance = voiceChance->GetValue();
+	}
 }
 
 void MonsterEditorDialog::refreshPreview() {
@@ -387,6 +398,34 @@ void MonsterEditorDialog::onSave(wxCommandEvent& WXUNUSED(event)) {
 	}
 	saved = true;
 	EndModal(wxID_OK);
+}
+
+bool MonsterEditorDialog::confirmDiscard() {
+	readControls();
+	if (!document->hasChanges(edited)) {
+		return true;
+	}
+	return wxMessageBox(
+			   "Discard the unsaved monster changes?",
+			   "Monster Editor",
+			   wxYES_NO | wxNO_DEFAULT | wxICON_WARNING,
+			   this
+		   )
+		== wxYES;
+}
+
+void MonsterEditorDialog::onCancel(wxCommandEvent& WXUNUSED(event)) {
+	if (confirmDiscard()) {
+		EndModal(wxID_CANCEL);
+	}
+}
+
+void MonsterEditorDialog::onClose(wxCloseEvent& event) {
+	if (!IsModal() || confirmDiscard()) {
+		event.Skip();
+	} else {
+		event.Veto();
+	}
 }
 
 void MonsterEditorDialog::onLookChanged(wxCommandEvent& WXUNUSED(event)) {

@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 enum class MonsterField : uint8_t {
 	Name = 0,
@@ -72,6 +74,108 @@ struct MonsterOutfitDefinition {
 	friend bool operator==(const MonsterOutfitDefinition&, const MonsterOutfitDefinition&) = default;
 };
 
+struct MonsterCustomProperty {
+	std::string name;
+	std::string value;
+	bool rawValue = false;
+
+	friend bool operator==(const MonsterCustomProperty&, const MonsterCustomProperty&) = default;
+};
+
+struct MonsterDefenseAction {
+	std::string name;
+	std::string type;
+	int interval = 2000;
+	int chance = 100;
+	int minDamage = 0;
+	int maxDamage = 0;
+	std::string effect;
+	bool target = false;
+	std::vector<MonsterCustomProperty> customProperties;
+	std::string preservedChildren;
+
+	friend bool operator==(const MonsterDefenseAction&, const MonsterDefenseAction&) = default;
+};
+
+struct MonsterResistance {
+	std::string type;
+	int percent = 0;
+	std::vector<MonsterCustomProperty> customProperties;
+
+	friend bool operator==(const MonsterResistance&, const MonsterResistance&) = default;
+};
+
+struct MonsterImmunity {
+	std::string type;
+	bool combat = false;
+	bool condition = true;
+	bool usesCombat = false;
+	bool usesCondition = true;
+	std::vector<MonsterCustomProperty> customProperties;
+
+	friend bool operator==(const MonsterImmunity&, const MonsterImmunity&) = default;
+};
+
+struct MonsterLootEntry {
+	int itemId = 0;
+	std::string itemName;
+	bool usesName = false;
+	int chance = 100000;
+	int maxCount = 1;
+	int subtype = 0;
+	int actionId = 0;
+	std::string text;
+	std::vector<MonsterCustomProperty> customProperties;
+	std::vector<MonsterLootEntry> children;
+	std::string annotation;
+
+	friend bool operator==(const MonsterLootEntry&, const MonsterLootEntry&) = default;
+};
+
+struct MonsterSummon {
+	std::string name;
+	int interval = 2000;
+	int chance = 100;
+	int max = 0;
+	bool force = false;
+	std::vector<MonsterCustomProperty> customProperties;
+
+	friend bool operator==(const MonsterSummon&, const MonsterSummon&) = default;
+};
+
+struct MonsterVoice {
+	std::string text;
+	bool yell = false;
+	std::vector<MonsterCustomProperty> customProperties;
+
+	friend bool operator==(const MonsterVoice&, const MonsterVoice&) = default;
+};
+
+struct MonsterVoiceDefinition {
+	int interval = 5000;
+	int chance = 10;
+	std::vector<MonsterVoice> entries;
+	std::vector<MonsterCustomProperty> customProperties;
+
+	friend bool operator==(const MonsterVoiceDefinition&, const MonsterVoiceDefinition&) = default;
+};
+
+enum class MonsterSection : uint8_t {
+	Defenses = 0,
+	Resistances,
+	Immunities,
+	Loot,
+	Summons,
+	Voices,
+	Count,
+};
+
+struct MonsterSectionCapability {
+	bool present = false;
+	bool editable = false;
+	std::string limitation;
+};
+
 struct MonsterDefinition {
 	std::string name;
 	std::string description;
@@ -102,9 +206,21 @@ struct MonsterDefinition {
 	int lightColor = 0;
 	int runOnHealth = 0;
 	MonsterOutfitDefinition outfit;
+	std::vector<MonsterCustomProperty> defenseProperties;
+	std::vector<MonsterDefenseAction> defenseActions;
+	std::vector<MonsterResistance> resistances;
+	std::vector<MonsterImmunity> immunities;
+	std::vector<MonsterCustomProperty> lootProperties;
+	std::vector<MonsterLootEntry> loot;
+	int maxSummons = 0;
+	std::vector<MonsterCustomProperty> summonProperties;
+	std::vector<MonsterSummon> summons;
+	MonsterVoiceDefinition voices;
 	std::array<MonsterFieldCapability, static_cast<std::size_t>(MonsterField::Count)> capabilities;
+	std::array<MonsterSectionCapability, static_cast<std::size_t>(MonsterSection::Count)> sectionCapabilities;
 
 	[[nodiscard]] const MonsterFieldCapability& capability(MonsterField field) const;
+	[[nodiscard]] const MonsterSectionCapability& capability(MonsterSection section) const;
 };
 
 class MonsterDefinitionDocument {
@@ -131,5 +247,7 @@ private:
 };
 
 [[nodiscard]] const char* MonsterFieldName(MonsterField field);
+[[nodiscard]] const char* MonsterSectionName(MonsterSection section);
+[[nodiscard]] bool ValidateMonsterDefinition(const MonsterDefinition& definition, std::string& error);
 
 #endif // NEXAMAP_MONSTER_DEFINITION_H_

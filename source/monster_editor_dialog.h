@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////
-// Native Main/Look/Source editor for an indexed monster definition.
+// Native source-preserving editor for an indexed monster definition.
 //////////////////////////////////////////////////////////////////////
 
 #ifndef NEXAMAP_MONSTER_EDITOR_DIALOG_H_
@@ -10,15 +10,19 @@
 #include <wx/dialog.h>
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <string>
 
 class wxFlexGridSizer;
 class wxChoice;
+class wxCloseEvent;
+class wxListCtrl;
 class wxNotebook;
 class wxSpinCtrl;
 class wxStaticBitmap;
 class wxTextCtrl;
+class wxTreeCtrl;
 class wxWindow;
 
 class MonsterEditorDialog final : public wxDialog {
@@ -33,8 +37,25 @@ private:
 	wxSpinCtrl* addNumberField(wxWindow* parent, wxFlexGridSizer* grid, MonsterField field, int value, int minimum = 0, int maximum = 2000000000);
 	wxWindow* addBooleanField(wxWindow* parent, wxFlexGridSizer* grid, MonsterField field, bool value);
 	void applyCapability(wxWindow* control, MonsterField field);
+	void addAdvancedPages(wxNotebook* notebook);
+	void applySectionCapability(wxWindow* page, MonsterSection section);
 	void readControls();
 	void refreshPreview();
+	void refreshDefenseList();
+	void refreshResistanceLists();
+	void refreshLootTree();
+	void refreshSummonList();
+	void refreshVoiceList();
+	bool editDefense(MonsterDefenseAction& action);
+	bool editResistance(MonsterResistance& resistance);
+	bool editImmunity(MonsterImmunity& immunity);
+	bool editLoot(MonsterLootEntry& entry);
+	bool editSummon(MonsterSummon& summon);
+	bool editVoice(MonsterVoice& voice);
+	bool confirmDiscard();
+	void moveSelected(wxListCtrl* list, std::size_t size, bool up, const std::function<void(std::size_t, std::size_t)>& move);
+	void onCancel(wxCommandEvent& event);
+	void onClose(wxCloseEvent& event);
 	void onSave(wxCommandEvent& event);
 	void onLookChanged(wxCommandEvent& event);
 	void onRotate(wxCommandEvent& event);
@@ -45,6 +66,15 @@ private:
 	wxStaticBitmap* preview = nullptr;
 	wxChoice* directionChoice = nullptr;
 	wxSpinCtrl* frame = nullptr;
+	wxListCtrl* defenseList = nullptr;
+	wxListCtrl* resistanceList = nullptr;
+	wxListCtrl* immunityList = nullptr;
+	wxTreeCtrl* lootTree = nullptr;
+	wxSpinCtrl* maxSummons = nullptr;
+	wxListCtrl* summonList = nullptr;
+	wxSpinCtrl* voiceInterval = nullptr;
+	wxSpinCtrl* voiceChance = nullptr;
+	wxListCtrl* voiceList = nullptr;
 	int direction = 2;
 	bool saved = false;
 };

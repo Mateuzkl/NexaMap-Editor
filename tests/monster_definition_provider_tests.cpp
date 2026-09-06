@@ -2,6 +2,7 @@
 #include "server_content_index.h"
 #include "server_workspace.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -79,7 +80,12 @@ namespace {
 										"  <targetchange interval=\"4000\" chance=\"20\" />\r\n"
 										"  <strategy attack=\"100\" defense=\"0\" />\r\n"
 										"  <flags><flag attackable=\"1\"/><flag hostile=\"1\"/><flag canpushitems=\"1\"/><flag lightlevel=\"2\"/></flags>\r\n"
-										"  <defenses armor=\"44\" defense=\"43\"><defense name=\"custom\"/></defenses>\r\n"
+										"  <defenses armor=\"44\" defense=\"43\" mitigation=\"0.9\"><defense name=\"healing\" interval=\"1000\" chance=\"25\" min=\"50\" max=\"80\"><attribute key=\"areaEffect\" value=\"blueshimmer\"/></defense></defenses>\r\n"
+										"  <elements><element firePercent=\"30\" custom=\"kept\"/></elements>\r\n"
+										"  <immunities><immunity invisible=\"1\"/></immunities>\r\n"
+										"  <summons maxSummons=\"2\"><summon name=\"Fire Elemental\" interval=\"2000\" chance=\"40\" force=\"1\"/></summons>\r\n"
+										"  <voices interval=\"2000\" chance=\"5\"><voice sentence=\"Burn!\" yell=\"1\" custom=\"kept\"/></voices>\r\n"
+										"  <loot custom=\"kept\"><!-- rare bag --><item id=\"1987\" chance=\"100000\"><inside><item name=\"gold coin\" countmax=\"20\" chance=\"50000\"/></inside></item></loot>\r\n"
 										"  <unknown foo=\"bar\" />\r\n"
 										"</monster>\r\n";
 		const std::filesystem::path monster = server.write("data/monster/demons/Demon.xml", declaration);
@@ -98,6 +104,22 @@ namespace {
 		Check(document->definition().strategyAttack == 100 && document->definition().lightLevel == 2, "XML strategy and light flags are normalized");
 		Check(document->definition().capability(MonsterField::Health).editable, "XML literal health is editable");
 		Check(!document->definition().capability(MonsterField::ManaCost).editable, "absent XML field is read-only");
+		Check(
+			document->definition().defenseActions.size() == 1 && document->definition().defenseActions.front().preservedChildren.find("areaEffect") != std::string::npos,
+			"XML defense actions and custom child attributes are normalized"
+		);
+		Check(
+			document->definition().resistances.size() == 1 && document->definition().immunities.size() == 1,
+			"XML resistances and immunities are normalized"
+		);
+		Check(
+			document->definition().loot.size() == 1 && document->definition().loot.front().children.size() == 1,
+			"XML nested container loot is normalized"
+		);
+		Check(
+			document->definition().summons.size() == 1 && document->definition().voices.entries.size() == 1,
+			"XML summons and voices are normalized"
+		);
 
 		const std::string originalRegistry = server.read("data/monster/monsters.xml");
 		Check(document->save(document->definition(), error), "unchanged XML save succeeds");
@@ -111,6 +133,12 @@ namespace {
 		edited.outfit.lookType = 36;
 		edited.attackable = false;
 		edited.strategyDefense = 25;
+		edited.defenseActions.front().chance = 30;
+		edited.resistances.front().percent = 45;
+		edited.immunities.push_back({ "paralyze", false, true, false, true, {} });
+		edited.loot.front().children.front().maxCount = 50;
+		edited.summons.front().chance = 55;
+		edited.voices.entries.push_back({ "Run!", false, {} });
 		Check(document->save(edited, error), "supported XML fields save transactionally: " + error);
 		const std::string saved = server.read("data/monster/demons/Demon.xml");
 		Check(saved.find("<!-- keep this exact comment -->") != std::string::npos, "XML comments are preserved");
@@ -119,7 +147,22 @@ namespace {
 		Check(saved.find("nameDescription='a demon &amp; guardian'") != std::string::npos, "XML text is escaped without changing quote style");
 		Check(saved.find("attackable=\"0\"") != std::string::npos, "XML boolean representation is preserved");
 		Check(saved.find("defense=\"25\"") != std::string::npos, "XML strategy is saved in place");
+		Check(
+			saved.find("mitigation=\"0.9\"") != std::string::npos && saved.find("areaEffect") != std::string::npos
+				&& saved.find("custom=\"kept\"") != std::string::npos,
+			"unknown XML section properties and defense children survive structured edits"
+		);
+		Check(
+			saved.find("firePercent=\"45\"") != std::string::npos && saved.find("paralyze=\"1\"") != std::string::npos
+				&& saved.find("countmax=\"50\"") != std::string::npos && saved.find("chance=\"55\"") != std::string::npos
+				&& saved.find("sentence=\"Run!\"") != std::string::npos,
+			"XML advanced section edits are serialized"
+		);
 		Check(server.read("data/monster/monsters.xml").find("name=\"Demon Prime\"") != std::string::npos, "registered XML name is updated in the same transaction");
+		Check(
+			document->definition().loot.front().children.front().maxCount == 50 && document->definition().voices.entries.size() == 2,
+			"XML advanced sections reload after save"
+		);
 	}
 
 	void TestLuaPreservingSave() {
@@ -137,6 +180,15 @@ namespace {
 								   "monster.outfit = { lookType = 35, lookHead = 0, lookBody = 1, lookLegs = 2, lookFeet = 3, lookAddons = 0 }\n"
 								   "monster.flags = { attackable = true, hostile = true, targetDistance = 1, customFlag = computeFlag() }\n"
 								   "monster.changeTarget = { interval = 4000, chance = 20 }\n"
+								   "monster.defenses = {\n"
+								   "\tdefense = 30, armor = 25, mitigation = 0.99,\n"
+								   "\t{ name = \"combat\", interval = 2000, chance = 15, type = COMBAT_HEALING, minDamage = 40, maxDamage = 70, effect = CONST_ME_MAGIC_BLUE, target = false, custom = compute() },\n"
+								   "}\n"
+								   "monster.elements = { { type = COMBAT_FIREDAMAGE, percent = 100, custom = \"kept\" } }\n"
+								   "monster.immunities = { { type = \"paralyze\", condition = true }, { type = \"physical\", combat = true } }\n"
+								   "monster.loot = { customLoot = makeLoot(), { name = \"gold coin\", chance = 89920, maxCount = 102 }, { id = 1987, chance = 100000, childLoot = { { id = 2160, chance = 1000 } } } }\n"
+								   "monster.summons = { maxSummons = 2, customSummons = setting(), { name = \"Fire Elemental\", interval = 2000, chance = 40, force = true } }\n"
+								   "monster.voices = { interval = 5000, chance = 10, customVoice = value(), { text = \"Burn!\", yell = true } }\n"
 								   "monster.custom = makeCustom({ nested = true })\n"
 								   "mType:register(monster)\n";
 		const std::filesystem::path monster = server.write("data/monsters/demon.lua", source);
@@ -149,6 +201,22 @@ namespace {
 		Check(document->definition().health == 8200 && document->definition().outfit.body == 1, "Lua Main and Look values are normalized");
 		Check(!document->definition().capability(MonsterField::Description).editable, "computed Lua value is read-only");
 		Check(document->definition().capability(MonsterField::Name).editable, "coordinated Lua name literals are editable");
+		Check(
+			document->definition().defenseActions.size() == 1 && document->definition().defenseActions.front().type == "COMBAT_HEALING",
+			"Lua defense actions and constants are normalized"
+		);
+		Check(
+			document->definition().resistances.size() == 1 && document->definition().immunities.size() == 2,
+			"Lua elements and immunities are normalized"
+		);
+		Check(
+			document->definition().loot.size() == 2 && document->definition().loot.back().children.size() == 1,
+			"Lua nested childLoot is normalized"
+		);
+		Check(
+			document->definition().summons.size() == 1 && document->definition().voices.entries.size() == 1,
+			"Lua summons and voices are normalized"
+		);
 
 		MonsterDefinition invalid = document->definition();
 		invalid.description = "unsafe rewrite";
@@ -160,11 +228,33 @@ namespace {
 		edited.health = 9001;
 		edited.outfit.body = 7;
 		edited.attackable = false;
+		edited.defenseActions.front().chance = 25;
+		edited.resistances.front().percent = 80;
+		std::reverse(edited.immunities.begin(), edited.immunities.end());
+		edited.loot.back().children.front().chance = 2000;
+		edited.summons.front().force = false;
+		edited.voices.entries.push_back({ "Run!", false, {} });
 		Check(document->save(edited, error), "supported Lua literals save transactionally: " + error);
 		const std::string saved = server.read("data/monsters/demon.lua");
 		Check(saved.find("Game.createMonsterType(\"Demon Prime\")") != std::string::npos && saved.find("monster.name = \"Demon Prime\"") != std::string::npos, "coordinated Lua name literals stay consistent");
 		Check(saved.find("monster.health = 9001") != std::string::npos && saved.find("lookBody = 7") != std::string::npos, "known Lua literals are replaced in place");
 		Check(saved.find("customFlag = computeFlag()") != std::string::npos && saved.find("monster.custom = makeCustom({ nested = true })") != std::string::npos, "custom Lua expressions are preserved");
+		Check(
+			saved.find("mitigation = 0.99") != std::string::npos && saved.find("custom = compute()") != std::string::npos
+				&& saved.find("customLoot = makeLoot()") != std::string::npos
+				&& saved.find("customSummons = setting()") != std::string::npos
+				&& saved.find("customVoice = value()") != std::string::npos,
+			"unknown Lua section expressions survive structured edits"
+		);
+		Check(
+			saved.find("percent = 80") != std::string::npos && saved.find("chance = 2000") != std::string::npos
+				&& saved.find("text = \"Run!\"") != std::string::npos,
+			"Lua advanced section edits are serialized"
+		);
+		Check(
+			document->definition().loot.back().children.front().chance == 2000 && document->definition().voices.entries.size() == 2,
+			"Lua advanced sections reload after save"
+		);
 	}
 
 	void TestAmbiguousAndExternalChanges() {
@@ -206,6 +296,24 @@ namespace {
 
 		const std::filesystem::path malformed = server.write("broken.xml", "<monster name=\"Broken\">");
 		Check(!MonsterDefinitionDocument::Load(SourceFor(ServerContentFormat::Xml, malformed), error), "malformed XML is rejected");
+	}
+
+	void TestAdvancedValidation() {
+		MonsterDefinition definition;
+		std::string error;
+		definition.loot.push_back({ 0, "", false });
+		Check(!ValidateMonsterDefinition(definition, error) && error.find("loot") != std::string::npos, "loot requires a valid item identity");
+		definition.loot.front().itemId = 2160;
+		definition.resistances.push_back({ "fire", 101 });
+		Check(!ValidateMonsterDefinition(definition, error) && error.find("Resistance") != std::string::npos, "resistance percent is range validated");
+		definition.resistances.front().percent = 100;
+		definition.summons.push_back({ "", 2000, 100 });
+		Check(!ValidateMonsterDefinition(definition, error) && error.find("summon") != std::string::npos, "summons require a creature name");
+		definition.summons.front().name = "Fire Elemental";
+		definition.voices.entries.push_back({ "", false });
+		Check(!ValidateMonsterDefinition(definition, error) && error.find("Voice") != std::string::npos, "voices require text");
+		definition.voices.entries.front().text = "Burn!";
+		Check(ValidateMonsterDefinition(definition, error), "valid advanced monster sections pass validation");
 	}
 
 	void TestRealServers(const std::filesystem::path& modernRoot, const std::filesystem::path& xmlRoot) {
@@ -252,6 +360,7 @@ int main(int argc, char** argv) {
 	TestXmlPreservingSave();
 	TestLuaPreservingSave();
 	TestAmbiguousAndExternalChanges();
+	TestAdvancedValidation();
 	if (argc == 3) {
 		TestRealServers(std::filesystem::path(argv[1]), std::filesystem::path(argv[2]));
 	} else if (argc != 1) {

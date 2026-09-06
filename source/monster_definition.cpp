@@ -6,6 +6,7 @@
 
 #include "ext/pugixml.hpp"
 #include "file_transaction.h"
+#include "monster_section_codec.h"
 
 #include <algorithm>
 #include <array>
@@ -960,6 +961,7 @@ struct MonsterDefinitionDocument::Impl {
 	std::vector<SourceFile> files;
 	std::array<std::vector<SourceLocation>, FieldCount> locations;
 	std::array<bool, FieldCount> assigned {};
+	std::unique_ptr<MonsterSectionCodec> sections;
 
 	void markUnsupported(MonsterField field, const std::string& reason) {
 		auto& capability = original.capabilities[Index(field)];
@@ -1170,6 +1172,10 @@ const MonsterFieldCapability& MonsterDefinition::capability(MonsterField field) 
 	return capabilities[Index(field)];
 }
 
+const MonsterSectionCapability& MonsterDefinition::capability(MonsterSection section) const {
+	return sectionCapabilities[static_cast<std::size_t>(section)];
+}
+
 std::unique_ptr<MonsterDefinitionDocument> MonsterDefinitionDocument::Load(const ServerContentSource& source, std::string& error) {
 	error.clear();
 	if (source.kind != ServerContentKind::Monster || (source.format != ServerContentFormat::Xml && source.format != ServerContentFormat::Lua)) {
@@ -1212,6 +1218,11 @@ std::unique_ptr<MonsterDefinitionDocument> MonsterDefinitionDocument::Load(const
 		}
 	}
 
+	implementation->sections = MonsterSectionCodec::Parse(source.format, implementation->files.front().bytes, implementation->original, error);
+	if (!implementation->sections) {
+		return nullptr;
+	}
+
 	for (std::size_t field = 0; field < FieldCount; ++field) {
 		auto& capability = implementation->original.capabilities[field];
 		if (!capability.present) {
@@ -1247,28 +1258,56 @@ bool MonsterDefinitionDocument::hasChanges(const MonsterDefinition& edited) cons
 			return true;
 		}
 	}
-	return false;
+	return implementation->sections && implementation->sections->hasChanges(implementation->original, edited);
 }
 
 bool MonsterDefinitionDocument::save(const MonsterDefinition& edited, std::string& error) {
 	error.clear();
+	if (!ValidateMonsterDefinition(edited, error)) {
+		return false;
+	}
 	struct Patch {
 		std::size_t begin = 0;
 		std::size_t end = 0;
 		std::string replacement;
 	};
 	std::vector<std::vector<Patch>> patches(implementation->files.size());
+	std::vector<MonsterTextPatch> sectionPatches;
+	if (implementation->sections
+		&& !implementation->sections->buildPatches(implementation->original, edited, sectionPatches, error)) {
+		return false;
+	}
+	for (MonsterTextPatch& patch : sectionPatches) {
+		patches.front().push_back({ patch.begin, patch.end, std::move(patch.replacement) });
+	}
+	const auto coveredBySectionPatch = [&sectionPatches](const SourceLocation& location) {
+		return location.file == 0
+			&& std::any_of(sectionPatches.begin(), sectionPatches.end(), [&location](const MonsterTextPatch& patch) {
+				   return patch.begin < patch.end && location.begin >= patch.begin && location.end <= patch.end;
+			   });
+	};
 	for (std::size_t index = 0; index < FieldCount; ++index) {
 		const auto field = static_cast<MonsterField>(index);
 		if (FieldValue(implementation->original, field) == FieldValue(edited, field)) {
 			continue;
 		}
 		const auto& capability = implementation->original.capabilities[index];
+		const bool replacedBySection = std::any_of(
+			implementation->locations[index].begin(),
+			implementation->locations[index].end(),
+			coveredBySectionPatch
+		);
+		if (replacedBySection) {
+			continue;
+		}
 		if (!capability.editable || implementation->locations[index].empty()) {
 			error = std::string(MonsterFieldName(field)) + " cannot be saved safely: " + capability.limitation;
 			return false;
 		}
 		for (const SourceLocation& location : implementation->locations[index]) {
+			if (coveredBySectionPatch(location)) {
+				continue;
+			}
 			patches[location.file].push_back({ location.begin, location.end, implementation->replacement(edited, field, location) });
 		}
 	}
@@ -1362,4 +1401,108 @@ const char* MonsterFieldName(MonsterField field) {
 	};
 	const std::size_t index = Index(field);
 	return index < Names.size() ? Names[index] : "Unknown";
+}
+
+const char* MonsterSectionName(MonsterSection section) {
+	static constexpr std::array<const char*, static_cast<std::size_t>(MonsterSection::Count)> Names {
+		"Defenses",
+		"Resistances",
+		"Immunities",
+		"Loot",
+		"Summons",
+		"Voices",
+	};
+	const std::size_t index = static_cast<std::size_t>(section);
+	return index < Names.size() ? Names[index] : "Unknown";
+}
+
+bool ValidateMonsterDefinition(const MonsterDefinition& definition, std::string& error) {
+	error.clear();
+	const auto validChance = [&error](int chance, const std::string& label) {
+		if (chance < 0 || chance > 100000000) {
+			error = label + " chance must be between 0 and 100000000.";
+			return false;
+		}
+		return true;
+	};
+	const auto validInterval = [&error](int interval, const std::string& label) {
+		if (interval < 0) {
+			error = label + " interval cannot be negative.";
+			return false;
+		}
+		return true;
+	};
+	for (const MonsterDefenseAction& action : definition.defenseActions) {
+		if (action.name.empty() && action.type.empty()) {
+			error = "Every defense action needs a name or type.";
+			return false;
+		}
+		if (!validInterval(action.interval, "Defense action") || !validChance(action.chance, "Defense action")) {
+			return false;
+		}
+	}
+	for (const MonsterResistance& resistance : definition.resistances) {
+		if (resistance.type.empty()) {
+			error = "Every resistance needs a type.";
+			return false;
+		}
+		if (resistance.percent < -100 || resistance.percent > 100) {
+			error = "Resistance percent must be between -100 and 100.";
+			return false;
+		}
+	}
+	for (const MonsterImmunity& immunity : definition.immunities) {
+		if (immunity.type.empty()) {
+			error = "Every immunity needs a type.";
+			return false;
+		}
+	}
+	const auto validateLoot = [&](const auto& self, const std::vector<MonsterLootEntry>& entries) -> bool {
+		for (const MonsterLootEntry& entry : entries) {
+			if ((entry.usesName && entry.itemName.empty()) || (!entry.usesName && entry.itemId <= 0)) {
+				error = "Every loot entry needs a valid item name or ID.";
+				return false;
+			}
+			if (!validChance(entry.chance, "Loot item")) {
+				return false;
+			}
+			if (entry.maxCount < 1) {
+				error = "Loot max count must be at least 1.";
+				return false;
+			}
+			if (!self(self, entry.children)) {
+				return false;
+			}
+		}
+		return true;
+	};
+	if (!validateLoot(validateLoot, definition.loot)) {
+		return false;
+	}
+	if (definition.maxSummons < 0) {
+		error = "Maximum summons cannot be negative.";
+		return false;
+	}
+	for (const MonsterSummon& summon : definition.summons) {
+		if (summon.name.empty()) {
+			error = "Every summon needs a creature name.";
+			return false;
+		}
+		if (!validInterval(summon.interval, "Summon") || !validChance(summon.chance, "Summon") || summon.max < 0) {
+			if (error.empty()) {
+				error = "Summon max cannot be negative.";
+			}
+			return false;
+		}
+	}
+	if (!validInterval(definition.voices.interval, "Voices") || !validChance(definition.voices.chance, "Voices")) {
+		return false;
+	}
+	for (const MonsterVoice& voice : definition.voices.entries) {
+		if (voice.text.empty()) {
+			error = "Voice text cannot be empty.";
+			return false;
+		}
+	}
+	return true;
 }
