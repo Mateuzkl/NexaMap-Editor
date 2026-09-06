@@ -44,6 +44,7 @@ struct CrossClientItemRecommendation {
 	uint16_t destinationClientId = 0;
 	std::string destinationName;
 	uint8_t confidence = 0;
+	bool automatic = false;
 };
 
 struct CrossClientPasteRow {

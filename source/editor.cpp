@@ -124,21 +124,17 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	wxArrayString warnings;
 	bool ok = true;
 
-	if (!g_gui.IsCanaryCrystalAssetsLoaded()) {
+	// A new map belongs to the resource session that is active when its tab is
+	// created. Loading a different default here would close every existing tab,
+	// including maps owned by other independent resource sessions.
+	if (!g_gui.IsCanaryCrystalAssetsLoaded() && g_gui.GetCurrentVersionID() == CLIENT_VERSION_NONE) {
 		auto defaultVersion = ClientVersionID(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION));
 		if (defaultVersion == CLIENT_VERSION_NONE) {
 			defaultVersion = ClientVersion::getLatestVersion()->getID();
 		}
-
-		if (g_gui.GetCurrentVersionID() != defaultVersion) {
-			if (g_gui.CloseAllEditors()) {
-				ok = g_gui.LoadVersion(defaultVersion, error, warnings);
-				g_gui.PopupDialog("Error", error, wxOK);
-				g_gui.ListDialog("Warnings", warnings);
-			} else {
-				throw std::runtime_error("All maps of different versions were not closed.");
-			}
-		}
+		ok = g_gui.LoadVersion(defaultVersion, error, warnings);
+		g_gui.PopupDialog("Error", error, wxOK);
+		g_gui.ListDialog("Warnings", warnings);
 	}
 
 	if (!ok) {

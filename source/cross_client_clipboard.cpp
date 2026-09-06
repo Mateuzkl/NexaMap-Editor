@@ -11,6 +11,7 @@
 #include "workspace_session.h"
 
 #include <algorithm>
+#include <bit>
 #include <cstdlib>
 #include <filesystem>
 #include <limits>
@@ -41,8 +42,19 @@ namespace {
 		SpriteVisualFingerprint visual;
 	};
 
-	constexpr int StoredPreviewExtent = 16;
+	// Keep enough source detail for the review dialog's enlarged hover preview.
+	// Similarity checks still sample a fixed 16x16 grid, so this does not make
+	// candidate comparison more expensive.
+	constexpr int StoredPreviewExtent = 64;
+	constexpr int AutomaticConfidenceThreshold = 88;
 	constexpr size_t MaximumRetainedPreviewBytes = 64u * 1024u * 1024u;
+	constexpr uint64_t SemanticRoleMask = (uint64_t(0x7) << 8) | (uint64_t(0xFF) << 14) | (uint64_t(0x3FFF) << 27);
+	constexpr uint64_t SemanticPropertyMask = (uint64_t(0x3FFF) << 0) | (uint64_t(0xFF) << 14) | (uint64_t(0x7) << 24) | (uint64_t(0x7FFF) << 27);
+
+	size_t CrossClientMaximumItemId() {
+		const size_t storedMaximum = g_items.items.size() > 0 ? g_items.items.size() - 1 : 0;
+		return std::min<size_t>(std::max<size_t>(g_items.getMaxID(), storedMaximum), std::numeric_limits<uint16_t>::max());
+	}
 
 	bool LoadStoredPreview(GameSprite* sprite, std::vector<uint8_t>& pixels, int& width, int& height, bool& pending) {
 		if (!sprite || !sprite->getVisualPreviewRGBA(pixels, width, height, pending, false)) {
@@ -116,6 +128,21 @@ namespace {
 		add(item.isSplash(), 20);
 		add(item.isPodium(), 21);
 		flags |= static_cast<uint64_t>(item.alwaysOnTopOrder & 0x7) << 24;
+		add(item.isWall, 27);
+		add(item.isBorder, 28);
+		add(item.isOptionalBorder, 29);
+		add(item.isBrushDoor, 30);
+		add(item.isOpen, 31);
+		add(item.isLocked, 32);
+		add(item.isTable, 33);
+		add(item.isCarpet, 34);
+		add(item.floorChange, 35);
+		add(item.floorChangeDown, 36);
+		add(item.floorChangeNorth, 37);
+		add(item.floorChangeSouth, 38);
+		add(item.floorChangeEast, 39);
+		add(item.floorChangeWest, 40);
+		add(item.blockPickupable, 41);
 		return flags;
 	}
 
@@ -178,7 +205,19 @@ namespace {
 	}
 
 	bool StructurallyCompatible(const CrossClientItemSnapshot& source, const TargetCandidate& target) {
-		return source.group == target.group && source.type == target.type;
+		return source.group == target.group && source.type == target.type
+			&& (source.semanticFlags & SemanticRoleMask) == (target.semanticFlags & SemanticRoleMask);
+	}
+
+	bool SameName(const std::string& source, const std::string& target) {
+		return !source.empty() && !target.empty()
+			&& wxString::FromUTF8(source).CmpNoCase(wxString::FromUTF8(target)) == 0;
+	}
+
+	int PropertySimilarity(uint64_t source, uint64_t target) {
+		const unsigned int propertyCount = std::popcount(SemanticPropertyMask);
+		const unsigned int differences = std::popcount((source ^ target) & SemanticPropertyMask);
+		return propertyCount == 0 ? 100 : static_cast<int>((propertyCount - differences) * 100 / propertyCount);
 	}
 
 	double PreviewSimilarity(
@@ -233,17 +272,34 @@ namespace {
 		return std::clamp(alphaScore * 0.55 + colourScore * 0.4 + widthRatio * heightRatio * 0.05, 0.0, 1.0);
 	}
 
-	void AddRecommendation(std::vector<CrossClientItemRecommendation>& recommendations, const TargetCandidate& target, double similarity) {
-		if (similarity < 0.45) {
+	void AddRecommendation(
+		std::vector<CrossClientItemRecommendation>& recommendations,
+		const CrossClientItemSnapshot& source,
+		const TargetCandidate& target,
+		double visualSimilarity,
+		bool visualCompared
+	) {
+		const bool sameName = SameName(source.name, target.name);
+		const int propertySimilarity = PropertySimilarity(source.semanticFlags, target.semanticFlags);
+		const bool automatic = sameName && propertySimilarity >= 95;
+		if (!automatic && (!visualCompared || visualSimilarity < 0.45)) {
 			return;
 		}
 		CrossClientItemRecommendation recommendation;
 		recommendation.destinationId = target.id;
 		recommendation.destinationClientId = target.clientId;
 		recommendation.destinationName = target.name;
-		recommendation.confidence = static_cast<uint8_t>(std::clamp(static_cast<int>(similarity * 100.0 + 0.5), 0, 100));
+		const int visualScore = visualCompared ? static_cast<int>(visualSimilarity * 65.0 + 0.5) : 0;
+		const int propertyWeight = visualCompared ? 25 : 75;
+		const int nameScore = sameName ? (visualCompared ? 10 : 25) : 0;
+		const int confidence = visualScore + propertySimilarity * propertyWeight / 100 + nameScore;
+		recommendation.confidence = static_cast<uint8_t>(std::clamp(automatic ? std::max(AutomaticConfidenceThreshold, confidence) : confidence, 0, 100));
+		recommendation.automatic = automatic;
 		recommendations.push_back(std::move(recommendation));
 		std::sort(recommendations.begin(), recommendations.end(), [](const CrossClientItemRecommendation& left, const CrossClientItemRecommendation& right) {
+			if (left.automatic != right.automatic) {
+				return left.automatic;
+			}
 			return left.confidence == right.confidence ? left.destinationId < right.destinationId : left.confidence > right.confidence;
 		});
 		if (recommendations.size() > 16) {
@@ -415,7 +471,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			sourcePreviews.insert(source.previewVisual);
 		}
 	}
-	const size_t maximumId = std::min<size_t>(g_items.getMaxID(), std::numeric_limits<uint16_t>::max());
+	const size_t maximumId = CrossClientMaximumItemId();
 	const size_t totalProgress = maximumId > std::numeric_limits<size_t>::max() / 2 ? maximumId : maximumId * 2;
 	for (size_t id = 1; id <= maximumId; ++id) {
 		if (progress && id % 32 == 0 && !progress(id, totalProgress)) {
@@ -514,7 +570,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 	}
 
 	const bool needsRecommendations = std::any_of(analysis.rows.begin(), analysis.rows.end(), [](const CrossClientPasteRow& row) {
-		return row.state == CrossClientMatchState::Missing && row.source.previewAvailable;
+		return row.state == CrossClientMatchState::Missing;
 	});
 	if (needsRecommendations) {
 		for (size_t id = 1; id <= maximumId; ++id) {
@@ -537,9 +593,8 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			std::vector<uint8_t> previewRgba;
 			int previewWidth = 0;
 			int previewHeight = 0;
-			if (!LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending)) {
-				continue;
-			}
+			const bool previewAvailable = !sourcePreviews.empty()
+				&& LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending);
 
 			TargetCandidate candidate;
 			candidate.id = static_cast<uint16_t>(id);
@@ -549,21 +604,21 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			candidate.semanticFlags = SemanticFlags(item);
 			candidate.name = item.name;
 			for (CrossClientPasteRow& row : analysis.rows) {
-				if (row.state != CrossClientMatchState::Missing || !row.source.previewAvailable || !StructurallyCompatible(row.source, candidate)) {
+				if (row.state != CrossClientMatchState::Missing || !StructurallyCompatible(row.source, candidate)) {
 					continue;
 				}
-				double similarity = PreviewSimilarity(
-					row.source.previewRgba,
-					row.source.previewWidth,
-					row.source.previewHeight,
-					previewRgba,
-					previewWidth,
-					previewHeight
-				);
-				if (row.source.semanticFlags == candidate.semanticFlags) {
-					similarity = std::min(1.0, similarity + 0.03);
-				}
-				AddRecommendation(row.recommendations, candidate, similarity);
+				const bool visualCompared = row.source.previewAvailable && previewAvailable;
+				const double similarity = visualCompared
+					? PreviewSimilarity(
+						  row.source.previewRgba,
+						  row.source.previewWidth,
+						  row.source.previewHeight,
+						  previewRgba,
+						  previewWidth,
+						  previewHeight
+					  )
+					: 0.0;
+				AddRecommendation(row.recommendations, row.source, candidate, similarity, visualCompared);
 			}
 		}
 	}
@@ -578,7 +633,8 @@ bool CrossClientClipboard::isCompatibleDestination(const CrossClientItemSnapshot
 		return false;
 	}
 	const ItemType& item = g_items[destinationId];
-	return source.group == static_cast<uint16_t>(item.group) && source.type == static_cast<uint16_t>(item.type);
+	return source.group == static_cast<uint16_t>(item.group) && source.type == static_cast<uint16_t>(item.type)
+		&& (source.semanticFlags & SemanticRoleMask) == (SemanticFlags(item) & SemanticRoleMask);
 }
 
 bool CrossClientClipboard::resolveMapping(CrossClientPasteAnalysis& analysis, size_t rowIndex, uint16_t destinationId, wxString& error) {

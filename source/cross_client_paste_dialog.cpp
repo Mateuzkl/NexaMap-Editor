@@ -21,7 +21,7 @@
 #include <wx/listctrl.h>
 #include <wx/msgdlg.h>
 #include <wx/panel.h>
-#include <wx/settings.h>
+#include <wx/popupwin.h>
 #include <wx/spinctrl.h>
 #include <wx/srchctrl.h>
 #include <wx/statbmp.h>
@@ -47,17 +47,34 @@ namespace {
 		if (item.previewWidth <= 0 || item.previewHeight <= 0 || item.previewRgba.size() != static_cast<size_t>(item.previewWidth) * item.previewHeight * 4) {
 			return EmptyBitmap(size);
 		}
-		wxImage image(item.previewWidth, item.previewHeight, false);
+
+		const double scale = std::min(
+			static_cast<double>(size) / item.previewWidth,
+			static_cast<double>(size) / item.previewHeight
+		);
+		const int scaledWidth = std::max(1, static_cast<int>(item.previewWidth * scale + 0.5));
+		const int scaledHeight = std::max(1, static_cast<int>(item.previewHeight * scale + 0.5));
+		const int offsetX = (size - scaledWidth) / 2;
+		const int offsetY = (size - scaledHeight) / 2;
+
+		wxImage image(size, size, true);
 		image.InitAlpha();
+		std::memset(image.GetData(), 0, static_cast<size_t>(size) * size * 3);
+		std::memset(image.GetAlpha(), 0, static_cast<size_t>(size) * size);
 		unsigned char* rgb = image.GetData();
 		unsigned char* alpha = image.GetAlpha();
-		for (size_t pixel = 0; pixel < static_cast<size_t>(item.previewWidth) * item.previewHeight; ++pixel) {
-			rgb[pixel * 3 + 0] = item.previewRgba[pixel * 4 + 0];
-			rgb[pixel * 3 + 1] = item.previewRgba[pixel * 4 + 1];
-			rgb[pixel * 3 + 2] = item.previewRgba[pixel * 4 + 2];
-			alpha[pixel] = item.previewRgba[pixel * 4 + 3];
+		for (int y = 0; y < scaledHeight; ++y) {
+			const int sourceY = std::min(item.previewHeight - 1, y * item.previewHeight / scaledHeight);
+			for (int x = 0; x < scaledWidth; ++x) {
+				const int sourceX = std::min(item.previewWidth - 1, x * item.previewWidth / scaledWidth);
+				const size_t source = (static_cast<size_t>(sourceY) * item.previewWidth + sourceX) * 4;
+				const size_t destination = (static_cast<size_t>(offsetY + y) * size + offsetX + x);
+				rgb[destination * 3 + 0] = item.previewRgba[source + 0];
+				rgb[destination * 3 + 1] = item.previewRgba[source + 1];
+				rgb[destination * 3 + 2] = item.previewRgba[source + 2];
+				alpha[destination] = item.previewRgba[source + 3];
+			}
 		}
-		image.Rescale(size, size, wxIMAGE_QUALITY_HIGH);
 		return wxBitmap(image);
 	}
 
@@ -77,6 +94,11 @@ namespace {
 		return text.Lower().Find(value.Lower()) != wxNOT_FOUND;
 	}
 
+	size_t CrossClientResolverMaximumItemId() {
+		const size_t storedMaximum = g_items.items.size() > 0 ? g_items.items.size() - 1 : 0;
+		return std::min<size_t>(std::max<size_t>(g_items.getMaxID(), storedMaximum), std::numeric_limits<uint16_t>::max());
+	}
+
 	class CrossClientItemResolverDialog final : public wxDialog {
 	public:
 		CrossClientItemResolverDialog(wxWindow* parent, const CrossClientPasteRow& row) :
@@ -85,6 +107,12 @@ namespace {
 			BuildCatalog();
 			BuildLayout();
 			RefreshItems();
+			const uint16_t preferredId = !row.recommendations.empty()
+				? row.recommendations.front().destinationId
+				: (catalog.empty() ? 0 : catalog.front().item.serverId.value);
+			if (preferredId != 0) {
+				SelectDestination(preferredId);
+			}
 		}
 
 		uint16_t GetDestinationId() const noexcept {
@@ -111,7 +139,7 @@ namespace {
 				}
 			}
 
-			const size_t maximumId = std::min<size_t>(g_items.getMaxID(), std::numeric_limits<uint16_t>::max());
+			const size_t maximumId = CrossClientResolverMaximumItemId();
 			for (size_t id = 1; id <= maximumId; ++id) {
 				if (!g_items.typeExists(static_cast<int>(id)) || !CrossClientClipboard::isCompatibleDestination(row.source, static_cast<uint16_t>(id))) {
 					continue;
@@ -202,7 +230,7 @@ namespace {
 			sourcePanel->SetSizer(sourceSizer);
 			root->Add(sourcePanel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 14));
 
-			auto* explanation = newd wxStaticText(this, wxID_ANY, "Choose an existing destination item. Recommended matches are visual suggestions; review the ID before applying.");
+			auto* explanation = newd wxStaticText(this, wxID_ANY, "Choose a compatible destination item. The list is filtered by item role and placement properties.");
 			StyleText(explanation, subtle, surface);
 			root->Add(explanation, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 14));
 
@@ -303,7 +331,9 @@ namespace {
 					}
 					ReplaceLibraryItem suggested = found->item;
 					const wxString destinationName = wxString::FromUTF8(found->item.name);
-					suggested.name = wxString::Format("%u%%  %s", recommendation.confidence, destinationName.c_str()).ToStdString();
+					suggested.name = recommendation.automatic
+						? wxString::Format("Auto  %s", destinationName.c_str()).ToStdString()
+						: wxString::Format("%u%%  %s", recommendation.confidence, destinationName.c_str()).ToStdString();
 					visible.push_back(std::move(suggested));
 				}
 			} else {
@@ -374,7 +404,7 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 	StyleText(title, text, surface);
 	root->Add(title, 0, wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 16));
 
-	auto* explanation = newd wxStaticText(this, wxID_ANY, "Review exact matches, choose destination IDs for missing items, then apply the converted paste.");
+	auto* explanation = newd wxStaticText(this, wxID_ANY, "Review matches by graphics, item role and placement properties before applying the converted paste.");
 	StyleText(explanation, subtle, surface);
 	root->Add(explanation, 0, wxLEFT | wxRIGHT | wxTOP, FROM_DIP(this, 6));
 
@@ -416,21 +446,21 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 	summaryPanel->SetMinSize(wxSize(-1, FROM_DIP(this, 34)));
 	root->Add(summaryPanel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 16));
 
-	itemList = newd wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_VRULES | wxBORDER_SIMPLE);
+	itemList = newd wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_HRULES | wxLC_VRULES | wxBORDER_SIMPLE);
 	itemList->SetBackgroundColour(background);
 	itemList->SetForegroundColour(text);
 	itemList->InsertColumn(0, "Source item");
 	itemList->InsertColumn(1, "Destination item");
 	itemList->InsertColumn(2, "Result");
-	itemList->InsertColumn(3, "Uses", wxLIST_FORMAT_RIGHT);
+	itemList->InsertColumn(3, "Uses", wxLIST_FORMAT_CENTRE);
 	itemList->InsertColumn(4, "Action");
 	root->Add(itemList, 1, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 16));
 
 	auto* actionRow = newd wxBoxSizer(wxHORIZONTAL);
 	auto* actionHint = newd wxStaticText(this, wxID_ANY, "Double-click any row to choose or change its destination ID.");
 	StyleText(actionHint, subtle, surface);
-	recommendedButton = newd wxButton(this, wxID_ANY, "Map High-Confidence");
-	recommendedButton->SetToolTip("Preview-map missing rows whose best visual recommendation is at least 88% similar. You can still review every result before pasting.");
+	recommendedButton = newd wxButton(this, wxID_ANY, "Auto-Map Compatible");
+	recommendedButton->SetToolTip("Map missing rows when graphics are highly similar or when name, role and placement properties provide a safe match.");
 	resolveButton = newd wxButton(this, wxID_ANY, "Choose Destination...");
 	actionRow->Add(actionHint, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 12));
 	actionRow->Add(recommendedButton, 0, wxRIGHT, FROM_DIP(this, 8));
@@ -448,8 +478,8 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 	root->Add(footer, 0, wxEXPAND | wxALL, FROM_DIP(this, 16));
 
 	SetSizer(root);
-	SetMinClientSize(FROM_DIP(this, wxSize(720, 440)));
-	SetClientSize(FROM_DIP(this, wxSize(820, 520)));
+	SetMinClientSize(FROM_DIP(this, wxSize(760, 460)));
+	SetClientSize(FROM_DIP(this, wxSize(900, 560)));
 	CentreOnParent();
 	applyButton->SetDefault();
 
@@ -465,6 +495,18 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 		const bool missing = rowIndex < this->analysis.rows.size() && this->analysis.rows[rowIndex].state == CrossClientMatchState::Missing;
 		resolveButton->SetLabel(missing ? wxString("Choose Destination...") : wxString("Change Mapping..."));
 	});
+	itemList->Bind(wxEVT_MOTION, [this](wxMouseEvent& event) {
+		UpdateItemPreview(event.GetPosition());
+		event.Skip();
+	});
+	itemList->Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent& event) {
+		HideItemPreview();
+		event.Skip();
+	});
+	itemList->Bind(wxEVT_MOUSEWHEEL, [this](wxMouseEvent& event) {
+		HideItemPreview();
+		event.Skip();
+	});
 	resolveButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
 		ResolveSelected();
 	});
@@ -472,6 +514,10 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 		ApplyRecommendedMappings();
 	});
 	RefreshState();
+}
+
+CrossClientPasteDialog::~CrossClientPasteDialog() {
+	HideItemPreview();
 }
 
 void CrossClientPasteDialog::PopulateRows() {
@@ -507,9 +553,13 @@ void CrossClientPasteDialog::PopulateRows() {
 			selectionToRestore = listIndex;
 		}
 		if (row.state == CrossClientMatchState::Missing) {
-			const wxString recommendation = row.recommendations.empty()
-				? wxString("Not found")
-				: wxString::Format("Suggested: %u (%u%%)", row.recommendations.front().destinationId, row.recommendations.front().confidence);
+			wxString recommendation = "Not found";
+			if (!row.recommendations.empty()) {
+				const CrossClientItemRecommendation& best = row.recommendations.front();
+				recommendation = best.automatic
+					? wxString::Format("Auto: %u (properties)", best.destinationId)
+					: wxString::Format("Suggested: %u (%u%%)", best.destinationId, best.confidence);
+			}
 			itemList->SetItem(listIndex, 1, recommendation);
 			itemList->SetItem(listIndex, 2, "!  Missing");
 			itemList->SetItem(listIndex, 4, "Choose ID...");
@@ -542,10 +592,11 @@ void CrossClientPasteDialog::RefreshState() {
 	matchedValue->SetLabel(wxString::Format("Matched %u", analysis.matched));
 	remappedValue->SetLabel(wxString::Format("Remapped %u", analysis.remapped));
 	missingValue->SetLabel(wxString::Format("Missing %u", analysis.missing));
-	const bool hasHighConfidence = std::any_of(analysis.rows.begin(), analysis.rows.end(), [](const CrossClientPasteRow& row) {
-		return row.state == CrossClientMatchState::Missing && !row.recommendations.empty() && row.recommendations.front().confidence >= HighConfidenceThreshold;
+	const bool hasAutomaticMapping = std::any_of(analysis.rows.begin(), analysis.rows.end(), [](const CrossClientPasteRow& row) {
+		return row.state == CrossClientMatchState::Missing && !row.recommendations.empty()
+			&& (row.recommendations.front().automatic || row.recommendations.front().confidence >= HighConfidenceThreshold);
 	});
-	recommendedButton->Enable(hasHighConfidence);
+	recommendedButton->Enable(hasAutomaticMapping);
 	resolveButton->Enable(!analysis.rows.empty());
 
 	const bool canApply = analysis.canApply();
@@ -607,17 +658,18 @@ void CrossClientPasteDialog::ApplyRecommendedMappings() {
 	std::vector<std::pair<size_t, uint16_t>> mappings;
 	for (size_t rowIndex = 0; rowIndex < analysis.rows.size(); ++rowIndex) {
 		const CrossClientPasteRow& row = analysis.rows[rowIndex];
-		if (row.state == CrossClientMatchState::Missing && !row.recommendations.empty() && row.recommendations.front().confidence >= HighConfidenceThreshold) {
+		if (row.state == CrossClientMatchState::Missing && !row.recommendations.empty()
+			&& (row.recommendations.front().automatic || row.recommendations.front().confidence >= HighConfidenceThreshold)) {
 			mappings.emplace_back(rowIndex, row.recommendations.front().destinationId);
 		}
 	}
 	if (mappings.empty()) {
-		wxMessageBox("No unresolved item currently has a visual recommendation above the safe threshold.", "No high-confidence matches", wxOK | wxICON_INFORMATION, this);
+		wxMessageBox("No unresolved item currently has a safe graphics or property match.", "No compatible automatic matches", wxOK | wxICON_INFORMATION, this);
 		return;
 	}
 	const int answer = wxMessageBox(
-		wxString::Format("Map %zu missing item types to their best visual recommendations?\n\nThis only updates the review. You can inspect or change every mapping before Apply & Paste.", mappings.size()),
-		"Review recommended mappings",
+		wxString::Format("Map %zu missing item types using their best compatible graphics and property matches?\n\nThis only updates the review. You can inspect or change every mapping before Apply & Paste.", mappings.size()),
+		"Review automatic mappings",
 		wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION,
 		this
 	);
@@ -635,12 +687,9 @@ void CrossClientPasteDialog::UpdateColumnWidths() {
 	if (!itemList) {
 		return;
 	}
-	int scrollbarWidth = wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, itemList);
-	if (scrollbarWidth <= 0) {
-		scrollbarWidth = FROM_DIP(this, 17);
-	}
-	const int rightGutter = scrollbarWidth + FROM_DIP(this, 12);
-	const int available = std::max(FROM_DIP(this, 650), itemList->GetClientSize().x - rightGutter);
+	// wxListCtrl::GetClientSize() already excludes its native vertical scrollbar.
+	// Subtracting it again left an empty strip between Action and the scrollbar.
+	const int available = std::max(FROM_DIP(this, 650), itemList->GetClientSize().x);
 	const int usesWidth = FROM_DIP(this, 62);
 	const int resultWidth = FROM_DIP(this, 108);
 	const int actionWidth = FROM_DIP(this, 96);
@@ -650,6 +699,94 @@ void CrossClientPasteDialog::UpdateColumnWidths() {
 	itemList->SetColumnWidth(2, resultWidth);
 	itemList->SetColumnWidth(3, usesWidth);
 	itemList->SetColumnWidth(4, std::max(actionWidth, available - resourceWidth * 2 - resultWidth - usesWidth));
+}
+
+void CrossClientPasteDialog::UpdateItemPreview(const wxPoint& position) {
+	int flags = 0;
+	const long listRow = itemList->HitTest(position, flags);
+	if (listRow == wxNOT_FOUND || (flags & wxLIST_HITTEST_ONITEM) == 0) {
+		HideItemPreview();
+		return;
+	}
+	if (listRow == previewListRow && itemPreview) {
+		return;
+	}
+
+	HideItemPreview();
+	const size_t rowIndex = static_cast<size_t>(itemList->GetItemData(listRow));
+	if (rowIndex >= analysis.rows.size()) {
+		return;
+	}
+	const CrossClientPasteRow& row = analysis.rows[rowIndex];
+	previewListRow = listRow;
+	itemPreview = newd wxPopupWindow(this, wxBORDER_SIMPLE);
+	const wxColour surface = Theme::GetDark(Theme::Role::RaisedSurface);
+	const wxColour text = Theme::GetDark(Theme::Role::Text);
+	const wxColour subtle = Theme::GetDark(Theme::Role::TextSubtle);
+	itemPreview->SetBackgroundColour(surface);
+
+	auto* root = newd wxBoxSizer(wxHORIZONTAL);
+	const int previewSize = FROM_DIP(this, 112);
+	auto* bitmap = newd wxStaticBitmap(itemPreview, wxID_ANY, PreviewBitmap(row.source, previewSize));
+	bitmap->SetMinSize(wxSize(previewSize, previewSize));
+	root->Add(bitmap, 0, wxALL | wxALIGN_CENTER_VERTICAL, FROM_DIP(this, 10));
+
+	auto* details = newd wxBoxSizer(wxVERTICAL);
+	wxString name = row.source.name.empty() ? wxString("Unnamed source item") : wxString::FromUTF8(row.source.name);
+	auto* title = newd wxStaticText(itemPreview, wxID_ANY, name);
+	wxFont titleFont = title->GetFont();
+	titleFont.SetWeight(wxFONTWEIGHT_BOLD);
+	title->SetFont(titleFont);
+	StyleText(title, text, surface);
+	details->Add(title, 0, wxBOTTOM, FROM_DIP(this, 7));
+
+	wxString metadata;
+	metadata << wxString::Format("Server ID  %u\nClient ID    %u\nUses         %u", row.source.sourceId, row.source.sourceClientId, row.source.occurrences);
+	if (row.state == CrossClientMatchState::Missing) {
+		if (row.recommendations.empty()) {
+			metadata << "\n\nNo compatible destination found";
+		} else {
+			const CrossClientItemRecommendation& recommendation = row.recommendations.front();
+			metadata << wxString::Format("\n\nBest destination  %u", recommendation.destinationId);
+			if (!recommendation.destinationName.empty()) {
+				metadata << "  " << wxString::FromUTF8(recommendation.destinationName);
+			}
+			metadata << (recommendation.automatic ? wxString("\nSafe property match") : wxString::Format("\nVisual confidence  %u%%", recommendation.confidence));
+		}
+	} else {
+		metadata << wxString::Format("\n\nDestination  %u", row.destinationId);
+		if (!row.destinationName.empty()) {
+			metadata << "  " << wxString::FromUTF8(row.destinationName);
+		}
+	}
+	auto* metadataLabel = newd wxStaticText(itemPreview, wxID_ANY, metadata);
+	StyleText(metadataLabel, subtle, surface);
+	details->Add(metadataLabel, 0);
+	root->Add(details, 1, wxTOP | wxRIGHT | wxBOTTOM | wxALIGN_CENTER_VERTICAL, FROM_DIP(this, 12));
+	itemPreview->SetSizerAndFit(root);
+
+	const wxPoint mouseScreen = itemList->ClientToScreen(position);
+	wxPoint popupPosition = mouseScreen + FROM_DIP(this, wxPoint(18, 20));
+	const wxRect display = wxGetClientDisplayRect();
+	const wxSize popupSize = itemPreview->GetSize();
+	if (popupPosition.x + popupSize.x > display.GetRight()) {
+		popupPosition.x = mouseScreen.x - popupSize.x - FROM_DIP(this, 12);
+	}
+	if (popupPosition.y + popupSize.y > display.GetBottom()) {
+		popupPosition.y = display.GetBottom() - popupSize.y;
+	}
+	popupPosition.x = std::max(display.GetLeft(), popupPosition.x);
+	popupPosition.y = std::max(display.GetTop(), popupPosition.y);
+	itemPreview->Move(popupPosition);
+	itemPreview->Show();
+}
+
+void CrossClientPasteDialog::HideItemPreview() {
+	previewListRow = -1;
+	if (itemPreview) {
+		itemPreview->Destroy();
+		itemPreview = nullptr;
+	}
 }
 
 wxString CrossClientPasteDialog::CompactPath(const wxString& path) const {

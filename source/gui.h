@@ -539,6 +539,7 @@ protected:
 	friend class EditorResourceSession;
 #ifdef NEXAMAP_MULTIPLAYER_TESTS
 	friend class CollectionsPaletteTests;
+	friend class ResourceSessionTabTests;
 #endif
 	friend MapTab::MapTab(MapTabbook*, std::unique_ptr<Editor>);
 	friend MapTab::MapTab(const MapTab*);
