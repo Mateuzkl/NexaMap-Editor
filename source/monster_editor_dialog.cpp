@@ -63,7 +63,7 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 		newd wxStaticText(
 			header,
 			wxID_ANY,
-			Utf8(ServerContentFormatName(document->source().format)) + "  •  " + DisplayPath(document->source().declarationPath)
+			Utf8(ServerContentFormatName(document->source().format)) + "  |  " + DisplayPath(document->source().declarationPath)
 		),
 		0,
 		wxEXPAND
@@ -382,7 +382,7 @@ void MonsterEditorDialog::refreshPreview() {
 	const int target = FromDIP(160);
 	const double scale = static_cast<double>(target) / std::max(width, height);
 	preview->SetBitmap(wxBitmap(image.Scale(std::max(1, static_cast<int>(width * scale)), std::max(1, static_cast<int>(height * scale)), wxIMAGE_QUALITY_NEAREST)));
-	preview->SetToolTip(wxString::Format("Active client • direction %d • frame %d", direction, frame ? frame->GetValue() : 0));
+	preview->SetToolTip(wxString::Format("Active client | direction %d | frame %d", direction, frame ? frame->GetValue() : 0));
 }
 
 void MonsterEditorDialog::onSave(wxCommandEvent& WXUNUSED(event)) {

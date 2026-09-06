@@ -132,7 +132,7 @@ void MonsterEditorDialog::refreshAttackList() {
 		attackList->SetItem(row, 1, Utf8(attack.type));
 		attackList->SetItem(row, 2, wxString::Format("%d", attack.interval));
 		attackList->SetItem(row, 3, wxString::Format("%d%%", attack.chance));
-		attackList->SetItem(row, 4, wxString::Format("%d … %d", attack.minDamage, attack.maxDamage));
+		attackList->SetItem(row, 4, wxString::Format("%d to %d", attack.minDamage, attack.maxDamage));
 		attackList->SetItem(row, 5, Utf8(DescribeMonsterArea(attack.area)));
 		attackList->SetItem(row, 6, Utf8(attack.effect));
 		attackList->SetItem(row, 7, Utf8(attack.projectile));

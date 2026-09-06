@@ -67,7 +67,7 @@ std::string DescribeMonsterArea(const MonsterAttackArea& area) {
 	if (shape == MonsterAreaShape::Beam) {
 		description << " " << area.length;
 		if (area.spread > 0) {
-			description << " × " << area.spread;
+			description << " x " << area.spread;
 		}
 	} else if (shape == MonsterAreaShape::Radius) {
 		description << " " << area.radius;
@@ -75,7 +75,7 @@ std::string DescribeMonsterArea(const MonsterAttackArea& area) {
 		description << " " << area.ring;
 	}
 	if (area.range > 0) {
-		description << " · range " << area.range;
+		description << " | range " << area.range;
 	}
 	return description.str();
 }

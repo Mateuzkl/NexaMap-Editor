@@ -177,7 +177,7 @@ namespace {
 		if (entry.usesName) {
 			identity = Utf8(entry.itemName);
 			if (itemId > 0) {
-				identity += wxString::Format("  [Server %d • Client %u]", itemId, g_items[itemId].clientID);
+				identity += wxString::Format("  [Server %d | Client %u]", itemId, g_items[itemId].clientID);
 			}
 		} else if (itemId > 0 && g_items.typeExists(itemId)) {
 			const ItemType& type = g_items[itemId];
@@ -185,7 +185,7 @@ namespace {
 		} else {
 			identity = wxString::Format("%d  (not found in active client)", entry.itemId);
 		}
-		return wxString::Format("%s  • chance %d  • max %d", identity, entry.chance, entry.maxCount);
+		return wxString::Format("%s  | chance %d  | max %d", identity, entry.chance, entry.maxCount);
 	}
 
 	int ResolveLootItemId(const MonsterLootEntry& entry) {
@@ -728,8 +728,8 @@ void MonsterEditorDialog::refreshResistanceLists() {
 		for (std::size_t index = 0; index < edited.immunities.size(); ++index) {
 			const MonsterImmunity& immunity = edited.immunities[index];
 			const long row = immunityList->InsertItem(static_cast<long>(index), Utf8(immunity.type));
-			immunityList->SetItem(row, 1, immunity.usesCombat ? (immunity.combat ? "Yes" : "No") : "—");
-			immunityList->SetItem(row, 2, immunity.usesCondition ? (immunity.condition ? "Yes" : "No") : "—");
+			immunityList->SetItem(row, 1, immunity.usesCombat ? (immunity.combat ? "Yes" : "No") : "-");
+			immunityList->SetItem(row, 2, immunity.usesCondition ? (immunity.condition ? "Yes" : "No") : "-");
 		}
 	}
 }
@@ -895,7 +895,7 @@ bool MonsterEditorDialog::editLoot(MonsterLootEntry& entry) {
 		if (selected > 0 && g_items.typeExists(selected)) {
 			previewText->SetLabel(
 				wxString::Format(
-					"%s\nServer ID %d  •  Client ID %u",
+					"%s\nServer ID %d  |  Client ID %u",
 					Utf8(g_items[selected].name),
 					selected,
 					g_items[selected].clientID
@@ -918,7 +918,7 @@ bool MonsterEditorDialog::editLoot(MonsterLootEntry& entry) {
 				name->SetValue(Utf8(g_items[selected].name));
 				choose->SetToolTip(
 					wxString::Format(
-						"Server ID %d • Client ID %u • %s",
+						"Server ID %d | Client ID %u | %s",
 						selected,
 						g_items[selected].clientID,
 						Utf8(g_items[selected].name)

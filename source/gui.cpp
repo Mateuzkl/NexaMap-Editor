@@ -2986,7 +2986,7 @@ void GUI::ShowMonsterEditorBrowser() {
 	wxArrayString choices;
 	choices.Add("Create a new monster...");
 	for (const ServerContentSource* source : monsters) {
-		choices.Add(wxString::FromUTF8(source->name) + "  —  " + wxString::FromUTF8(ServerContentFormatName(source->format)) + "  —  " + WorkspacePath(source->declarationPath));
+		choices.Add(wxString::FromUTF8(source->name) + "  |  " + wxString::FromUTF8(ServerContentFormatName(source->format)) + "  |  " + WorkspacePath(source->declarationPath));
 	}
 	wxSingleChoiceDialog chooser(root, "Create a new monster or choose an existing definition.", "Monster Editor", choices);
 	chooser.SetSize(root->FromDIP(wxSize(820, 560)));
