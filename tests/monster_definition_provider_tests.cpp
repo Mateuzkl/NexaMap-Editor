@@ -149,7 +149,7 @@ namespace {
 		Check(saved.find("defense=\"25\"") != std::string::npos, "XML strategy is saved in place");
 		Check(
 			saved.find("mitigation=\"0.9\"") != std::string::npos && saved.find("areaEffect") != std::string::npos
-				&& saved.find("custom=\"kept\"") != std::string::npos,
+				&& saved.find("custom=\"kept\"") != std::string::npos && saved.find("rare bag") != std::string::npos,
 			"unknown XML section properties and defense children survive structured edits"
 		);
 		Check(
@@ -186,7 +186,11 @@ namespace {
 								   "}\n"
 								   "monster.elements = { { type = COMBAT_FIREDAMAGE, percent = 100, custom = \"kept\" } }\n"
 								   "monster.immunities = { { type = \"paralyze\", condition = true }, { type = \"physical\", combat = true } }\n"
-								   "monster.loot = { customLoot = makeLoot(), { name = \"gold coin\", chance = 89920, maxCount = 102 }, { id = 1987, chance = 100000, childLoot = { { id = 2160, chance = 1000 } } } }\n"
+								   "monster.loot = {\n"
+								   "\tcustomLoot = makeLoot(),\n"
+								   "\t{ name = \"gold coin\", chance = 89920, maxCount = 102 }, -- rare coin\n"
+								   "\t{ id = 1987, chance = 100000, childLoot = { { id = 2160, chance = 1000 } } },\n"
+								   "}\n"
 								   "monster.summons = { maxSummons = 2, customSummons = setting(), { name = \"Fire Elemental\", interval = 2000, chance = 40, force = true } }\n"
 								   "monster.voices = { interval = 5000, chance = 10, customVoice = value(), { text = \"Burn!\", yell = true } }\n"
 								   "monster.custom = makeCustom({ nested = true })\n"
@@ -243,7 +247,7 @@ namespace {
 			saved.find("mitigation = 0.99") != std::string::npos && saved.find("custom = compute()") != std::string::npos
 				&& saved.find("customLoot = makeLoot()") != std::string::npos
 				&& saved.find("customSummons = setting()") != std::string::npos
-				&& saved.find("customVoice = value()") != std::string::npos,
+				&& saved.find("customVoice = value()") != std::string::npos && saved.find("-- rare coin") != std::string::npos,
 			"unknown Lua section expressions survive structured edits"
 		);
 		Check(
@@ -328,6 +332,22 @@ namespace {
 			Check(document->definition().capability(MonsterField::Health).editable, "real modern Lua health is editable");
 			Check(document->definition().capability(MonsterField::LookType).editable, "real modern Lua lookType is editable");
 		}
+		const auto modernDragon = modern.findExact(ServerContentKind::Monster, "Dragon");
+		const ServerContentSource* modernDragonSource = modernDragon.value() ? modernDragon.value() : modernDragon.uniqueRegisteredValue();
+		document = modernDragonSource ? MonsterDefinitionDocument::Load(*modernDragonSource, error) : nullptr;
+		Check(document != nullptr, "real modern Lua Dragon advanced sections open: " + error);
+		if (document) {
+			Check(
+				!document->definition().loot.empty() && !document->definition().defenseActions.empty()
+					&& !document->definition().resistances.empty() && !document->definition().voices.entries.empty(),
+				"real modern Lua Dragon exposes loot, defenses, elements and voices"
+			);
+			Check(
+				document->definition().capability(MonsterSection::Loot).editable
+					&& document->definition().capability(MonsterSection::Defenses).editable,
+				"real modern Lua advanced sections are structurally editable"
+			);
+		}
 
 		const ServerDetectionResult xmlDetection = ServerResourceDetector::Detect(xmlRoot);
 		const ServerContentIndex xml = ServerContentIndex::Build(xmlDetection.workspace);
@@ -352,6 +372,23 @@ namespace {
 		if (document) {
 			Check(document->definition().capability(MonsterField::Health).editable, "real XML health is editable");
 			Check(document->definition().capability(MonsterField::LookType).editable, "real XML lookType is editable");
+		}
+		const auto xmlDragon = xml.findExact(ServerContentKind::Monster, "Dragon");
+		const ServerContentSource* xmlDragonSource = xmlDragon.value() ? xmlDragon.value() : xmlDragon.uniqueRegisteredValue();
+		document = xmlDragonSource ? MonsterDefinitionDocument::Load(*xmlDragonSource, error) : nullptr;
+		Check(document != nullptr, "real XML Dragon advanced sections open: " + error);
+		if (document) {
+			Check(
+				!document->definition().loot.empty() && !document->definition().loot.back().children.empty()
+					&& !document->definition().defenseActions.empty() && !document->definition().resistances.empty()
+					&& !document->definition().immunities.empty() && !document->definition().voices.entries.empty(),
+				"real XML Dragon exposes nested loot, defenses, elements, immunities and voices"
+			);
+			Check(
+				document->definition().capability(MonsterSection::Loot).editable
+					&& document->definition().capability(MonsterSection::Defenses).editable,
+				"real XML advanced sections are structurally editable"
+			);
 		}
 	}
 }

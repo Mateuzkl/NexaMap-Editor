@@ -394,6 +394,7 @@ namespace {
 	struct LuaEntry {
 		std::optional<std::string> key;
 		LuaValue value;
+		std::string annotation;
 	};
 
 	struct LuaTable {
@@ -476,8 +477,19 @@ namespace {
 				}
 			}
 			table->entries.push_back(std::move(entry));
+			std::size_t triviaBegin = tokens[index - 1].end;
 			if (index < tokens.size() && Symbol(tokens[index], ",")) {
+				triviaBegin = tokens[index].end;
 				++index;
+			}
+			const std::size_t triviaEnd = index < tokens.size() ? tokens[index].begin : source.size();
+			if (triviaEnd > triviaBegin) {
+				const std::string_view trivia = source.substr(triviaBegin, triviaEnd - triviaBegin);
+				const std::size_t comment = trivia.find("--");
+				if (comment != std::string_view::npos) {
+					const std::size_t lineEnd = trivia.find_first_of("\r\n", comment);
+					table->entries.back().annotation = Trim(trivia.substr(comment, lineEnd == std::string_view::npos ? trivia.size() - comment : lineEnd - comment));
+				}
 			}
 		}
 		if (index >= tokens.size()) {
@@ -728,6 +740,12 @@ namespace {
 			if (childName == "inside") {
 				for (const pugi::xml_node& inside : child.children()) {
 					if (inside.type() == pugi::node_comment) {
+						if (!entry.children.empty()) {
+							if (!entry.children.back().annotation.empty()) {
+								entry.children.back().annotation += " ";
+							}
+							entry.children.back().annotation += "<!--" + std::string(inside.value()) + "-->";
+						}
 						continue;
 					}
 					if (inside.type() != pugi::node_element || LowerAscii(inside.name()) != "item") {
@@ -922,10 +940,14 @@ namespace {
 				std::string pendingAnnotation;
 				for (const pugi::xml_node& itemNode : section.children()) {
 					if (itemNode.type() == pugi::node_comment) {
-						if (!pendingAnnotation.empty()) {
-							pendingAnnotation += " ";
+						if (!definition.loot.empty()) {
+							if (!definition.loot.back().annotation.empty()) {
+								definition.loot.back().annotation += " ";
+							}
+							definition.loot.back().annotation += "<!--" + std::string(itemNode.value()) + "-->";
+						} else {
+							pendingAnnotation += "<!--" + std::string(itemNode.value()) + "-->";
 						}
-						pendingAnnotation += "<!--" + std::string(itemNode.value()) + "-->";
 						continue;
 					}
 					if (itemNode.type() != pugi::node_element || LowerAscii(itemNode.name()) != "item") {
@@ -937,7 +959,9 @@ namespace {
 						codec.limitation(definition, MonsterSection::Loot, limitation);
 						break;
 					}
-					entry->annotation = std::exchange(pendingAnnotation, {});
+					if (!pendingAnnotation.empty()) {
+						entry->annotation += std::exchange(pendingAnnotation, {});
+					}
 					definition.loot.push_back(std::move(*entry));
 				}
 			} else if (name == "summons") {
@@ -1069,6 +1093,7 @@ namespace {
 				if (!ParseLuaLootEntry(*child.value.table, nested, limitation)) {
 					return false;
 				}
+				nested.annotation = child.annotation;
 				entry.children.push_back(std::move(nested));
 			}
 		}
@@ -1175,6 +1200,7 @@ namespace {
 					if (!ParseLuaLootEntry(*entry.value.table, loot, limitation)) {
 						return false;
 					}
+					loot.annotation = entry.annotation;
 					definition.loot.push_back(std::move(loot));
 				}
 				return true;
@@ -1306,9 +1332,6 @@ namespace {
 		const std::string& indent,
 		const std::string& newline
 	) {
-		if (!entry.annotation.empty()) {
-			output += indent + entry.annotation + newline;
-		}
 		output += indent + "<item";
 		if (entry.usesName) {
 			output += " name=\"" + EncodeXml(entry.itemName) + "\"";
@@ -1332,14 +1355,22 @@ namespace {
 			AppendXmlProperty(output, property);
 		}
 		if (entry.children.empty()) {
-			output += "/>" + newline;
+			output += "/>";
+			if (!entry.annotation.empty()) {
+				output += entry.annotation;
+			}
+			output += newline;
 			return;
 		}
 		output += ">" + newline + indent + "\t<inside>" + newline;
 		for (const MonsterLootEntry& child : entry.children) {
 			SerializeXmlLoot(output, child, indent + "\t\t", newline);
 		}
-		output += indent + "\t</inside>" + newline + indent + "</item>" + newline;
+		output += indent + "\t</inside>" + newline + indent + "</item>";
+		if (!entry.annotation.empty()) {
+			output += entry.annotation;
+		}
+		output += newline;
 	}
 
 	std::string SerializeXmlSection(
@@ -1533,7 +1564,11 @@ namespace {
 			}
 			output += field + "}," + newline;
 		}
-		output += indent + "}," + newline;
+		output += indent + "},";
+		if (!entry.annotation.empty()) {
+			output += " " + entry.annotation;
+		}
+		output += newline;
 	}
 
 	std::string SerializeLuaSection(

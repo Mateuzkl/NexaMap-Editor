@@ -7,16 +7,21 @@
 #include "monster_editor_dialog.h"
 
 #include "find_item_window.h"
+#include "graphics.h"
+#include "gui.h"
 #include "items.h"
 #include "workspace_session.h"
 
+#include <wx/imaglist.h>
 #include <wx/listctrl.h>
 #include <wx/notebook.h>
 #include <wx/treectrl.h>
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <sstream>
+#include <unordered_map>
 
 namespace {
 	wxString Utf8(const std::string& value) {
@@ -167,24 +172,98 @@ namespace {
 		return current;
 	}
 
-	wxString LootLabel(const MonsterLootEntry& entry) {
+	wxString LootLabel(const MonsterLootEntry& entry, int itemId) {
 		wxString identity;
 		if (entry.usesName) {
 			identity = Utf8(entry.itemName);
-		} else if (entry.itemId > 0 && g_items.typeExists(entry.itemId)) {
-			const ItemType& type = g_items[entry.itemId];
-			identity = wxString::Format("%d  %s  [Client %u]", entry.itemId, Utf8(type.name), type.clientID);
+			if (itemId > 0) {
+				identity += wxString::Format("  [Server %d • Client %u]", itemId, g_items[itemId].clientID);
+			}
+		} else if (itemId > 0 && g_items.typeExists(itemId)) {
+			const ItemType& type = g_items[itemId];
+			identity = wxString::Format("%d  %s  [Client %u]", itemId, Utf8(type.name), type.clientID);
 		} else {
 			identity = wxString::Format("%d  (not found in active client)", entry.itemId);
 		}
 		return wxString::Format("%s  • chance %d  • max %d", identity, entry.chance, entry.maxCount);
 	}
 
-	void AppendLootNodes(wxTreeCtrl* tree, const wxTreeItemId& parent, const std::vector<MonsterLootEntry>& entries, std::vector<std::size_t> path) {
+	int ResolveLootItemId(const MonsterLootEntry& entry) {
+		if (!entry.usesName) {
+			return entry.itemId;
+		}
+		const wxString wanted = Utf8(entry.itemName).Lower();
+		for (int id = 1; id <= g_items.getMaxID(); ++id) {
+			if (g_items.typeExists(id) && Utf8(g_items[id].name).Lower() == wanted) {
+				return id;
+			}
+		}
+		return 0;
+	}
+
+	wxBitmap EmptyItemBitmap(int size) {
+		wxImage image(size, size, true);
+		image.InitAlpha();
+		std::memset(image.GetData(), 0, static_cast<std::size_t>(size) * size * 3);
+		std::memset(image.GetAlpha(), 0, static_cast<std::size_t>(size) * size);
+		return wxBitmap(image);
+	}
+
+	wxBitmap ItemBitmap(int itemId, int size) {
+		if (itemId <= 0 || !g_items.typeExists(itemId)) {
+			return EmptyItemBitmap(size);
+		}
+		auto* sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(g_items[itemId].clientID));
+		if (!sprite) {
+			return EmptyItemBitmap(size);
+		}
+		std::vector<uint8_t> rgba;
+		int width = 0;
+		int height = 0;
+		bool pending = false;
+		if (!sprite->getVisualPreviewRGBA(rgba, width, height, pending, false) || width <= 0 || height <= 0) {
+			return EmptyItemBitmap(size);
+		}
+		const double scale = std::min(static_cast<double>(size) / width, static_cast<double>(size) / height);
+		const int scaledWidth = std::max(1, static_cast<int>(width * scale));
+		const int scaledHeight = std::max(1, static_cast<int>(height * scale));
+		const int offsetX = (size - scaledWidth) / 2;
+		const int offsetY = (size - scaledHeight) / 2;
+		wxImage image(size, size, true);
+		image.InitAlpha();
+		std::memset(image.GetData(), 0, static_cast<std::size_t>(size) * size * 3);
+		std::memset(image.GetAlpha(), 0, static_cast<std::size_t>(size) * size);
+		for (int y = 0; y < scaledHeight; ++y) {
+			const int sourceY = std::min(height - 1, y * height / scaledHeight);
+			for (int x = 0; x < scaledWidth; ++x) {
+				const int sourceX = std::min(width - 1, x * width / scaledWidth);
+				const std::size_t source = (static_cast<std::size_t>(sourceY) * width + sourceX) * 4;
+				const std::size_t target = static_cast<std::size_t>(offsetY + y) * size + offsetX + x;
+				std::copy_n(rgba.data() + source, 3, image.GetData() + target * 3);
+				image.GetAlpha()[target] = rgba[source + 3];
+			}
+		}
+		return wxBitmap(image);
+	}
+
+	void AppendLootNodes(
+		wxTreeCtrl* tree,
+		wxImageList* images,
+		std::unordered_map<int, int>& imageIndexes,
+		int imageSize,
+		const wxTreeItemId& parent,
+		const std::vector<MonsterLootEntry>& entries,
+		std::vector<std::size_t> path
+	) {
 		for (std::size_t index = 0; index < entries.size(); ++index) {
 			path.push_back(index);
-			const wxTreeItemId item = tree->AppendItem(parent, LootLabel(entries[index]), -1, -1, newd LootTreeData(path));
-			AppendLootNodes(tree, item, entries[index].children, path);
+			const int itemId = ResolveLootItemId(entries[index]);
+			auto image = imageIndexes.find(itemId);
+			if (image == imageIndexes.end()) {
+				image = imageIndexes.emplace(itemId, images->Add(ItemBitmap(itemId, imageSize))).first;
+			}
+			const wxTreeItemId item = tree->AppendItem(parent, LootLabel(entries[index], itemId), image->second, image->second, newd LootTreeData(path));
+			AppendLootNodes(tree, images, imageIndexes, imageSize, item, entries[index].children, path);
 			path.pop_back();
 		}
 	}
@@ -379,6 +458,14 @@ void MonsterEditorDialog::addAdvancedPages(wxNotebook* notebook) {
 		FromDIP(8)
 	);
 	lootTree = newd wxTreeCtrl(lootPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTR_HAS_BUTTONS | wxTR_LINES_AT_ROOT | wxTR_SINGLE);
+	lootTree->SetToolTip("Double-click an item to replace it or edit its loot values.");
+	lootTree->Bind(wxEVT_TREE_ITEM_ACTIVATED, [this](wxTreeEvent& event) {
+		auto* data = dynamic_cast<LootTreeData*>(lootTree->GetItemData(event.GetItem()));
+		MonsterLootEntry* entry = data ? LootAt(edited.loot, data->path) : nullptr;
+		if (entry && editLoot(*entry)) {
+			refreshLootTree();
+		}
+	});
 	lootSizer->Add(lootTree, 1, wxEXPAND | wxBOTTOM, FromDIP(8));
 	auto* lootButtons = newd wxBoxSizer(wxHORIZONTAL);
 	const auto lootButton = [&](const wxString& label, const std::function<void()>& action) {
@@ -651,8 +738,13 @@ void MonsterEditorDialog::refreshLootTree() {
 		return;
 	}
 	lootTree->DeleteAllItems();
-	const wxTreeItemId root = lootTree->AddRoot(wxString::Format("Loot (%zu entries)", edited.loot.size()));
-	AppendLootNodes(lootTree, root, edited.loot, {});
+	const int imageSize = FromDIP(36);
+	auto* images = newd wxImageList(imageSize, imageSize, true, static_cast<int>(std::max<std::size_t>(1, edited.loot.size())));
+	std::unordered_map<int, int> imageIndexes;
+	imageIndexes.emplace(0, images->Add(EmptyItemBitmap(imageSize)));
+	lootTree->AssignImageList(images);
+	const wxTreeItemId root = lootTree->AddRoot(wxString::Format("Loot (%zu entries)", edited.loot.size()), 0, 0);
+	AppendLootNodes(lootTree, images, imageIndexes, imageSize, root, edited.loot, {});
 	lootTree->ExpandAll();
 }
 
@@ -749,19 +841,26 @@ bool MonsterEditorDialog::editImmunity(MonsterImmunity& immunity) {
 bool MonsterEditorDialog::editLoot(MonsterLootEntry& entry) {
 	wxDialog dialog(this, wxID_ANY, "Loot item", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
 	auto* root = newd wxBoxSizer(wxVERTICAL);
+	auto* previewRow = newd wxBoxSizer(wxHORIZONTAL);
+	const int previewSize = dialog.FromDIP(64);
+	auto* preview = newd wxStaticBitmap(&dialog, wxID_ANY, ItemBitmap(ResolveLootItemId(entry), previewSize));
+	auto* previewText = newd wxStaticText(&dialog, wxID_ANY, "Select an item from the active client.");
+	previewRow->Add(preview, 0, wxRIGHT, dialog.FromDIP(12));
+	previewRow->Add(previewText, 1, wxALIGN_CENTER_VERTICAL);
+	root->Add(previewRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, dialog.FromDIP(12));
 	auto* grid = newd wxFlexGridSizer(2, 8, 12);
 	grid->AddGrowableCol(1, 1);
 	grid->Add(newd wxStaticText(&dialog, wxID_ANY, "Server item ID"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* id = newd wxSpinCtrl(
 		&dialog,
 		wxID_ANY,
-		wxString::Format("%d", entry.itemId),
+		wxString::Format("%d", ResolveLootItemId(entry)),
 		wxDefaultPosition,
 		wxDefaultSize,
 		wxSP_ARROW_KEYS,
 		0,
 		std::numeric_limits<uint16_t>::max(),
-		entry.itemId
+		ResolveLootItemId(entry)
 	);
 	grid->Add(id, 1, wxEXPAND);
 	grid->Add(newd wxStaticText(&dialog, wxID_ANY, "Item name"), 0, wxALIGN_CENTER_VERTICAL);
@@ -789,6 +888,25 @@ bool MonsterEditorDialog::editLoot(MonsterLootEntry& entry) {
 	grid->Add(custom, 1, wxEXPAND);
 	root->Add(grid, 1, wxEXPAND | wxALL, dialog.FromDIP(12));
 	auto* choose = newd wxButton(&dialog, wxID_ANY, "Choose from active items...");
+	const auto updatePreview = [&]() {
+		const int selected = id->GetValue();
+		preview->SetBitmap(ItemBitmap(selected, previewSize));
+		if (selected > 0 && g_items.typeExists(selected)) {
+			previewText->SetLabel(
+				wxString::Format(
+					"%s\nServer ID %d  •  Client ID %u",
+					Utf8(g_items[selected].name),
+					selected,
+					g_items[selected].clientID
+				)
+			);
+		} else {
+			previewText->SetLabel("This item does not exist in the active client/server item database.");
+		}
+		previewRow->Layout();
+	};
+	id->Bind(wxEVT_SPINCTRL, [updatePreview](wxCommandEvent&) { updatePreview(); });
+	id->Bind(wxEVT_TEXT, [updatePreview](wxCommandEvent&) { updatePreview(); });
 	choose->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
 		FindItemDialog chooser(&dialog, "Choose loot item");
 		chooser.setSearchMode(FindItemDialog::ServerIDs);
@@ -806,6 +924,7 @@ bool MonsterEditorDialog::editLoot(MonsterLootEntry& entry) {
 					)
 				);
 			}
+			updatePreview();
 		}
 	});
 	root->Add(choose, 0, wxLEFT | wxRIGHT | wxBOTTOM, dialog.FromDIP(12));
@@ -813,6 +932,7 @@ bool MonsterEditorDialog::editLoot(MonsterLootEntry& entry) {
 	dialog.SetSizerAndFit(root);
 	dialog.SetMinSize(dialog.FromDIP(wxSize(520, 500)));
 	dialog.CentreOnParent();
+	updatePreview();
 	if (dialog.ShowModal() != wxID_OK) {
 		return false;
 	}
