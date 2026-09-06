@@ -56,6 +56,7 @@ namespace MenuBar {
 		SEARCH_ON_MAP_CONTAINER,
 		SEARCH_ON_MAP_WRITEABLE,
 		SEARCH_ON_MAP_DUPLICATED_ITEMS,
+		SEARCH_ON_MAP_CORPSES,
 		SEARCH_ON_SELECTION_EVERYTHING,
 		SEARCH_ON_SELECTION_ZONES,
 		SEARCH_ON_SELECTION_UNIQUE,
@@ -94,6 +95,7 @@ namespace MenuBar {
 		MAP_REMOVE_UNREACHABLE_TILES,
 		MAP_REMOVE_EMPTY_SPAWNS,
 		MAP_CLEAN_HOUSE_ITEMS,
+		MAP_CLEAR_ACTION_UNIQUE_IDS,
 		MAP_PROPERTIES,
 		MAP_STATISTICS,
 		VIEW_TOOLBARS_BRUSHES,
@@ -281,6 +283,7 @@ public:
 	void OnSearchForDuplicatedItemsOnMap(wxCommandEvent& event);
 	void OnRemoveDuplicatedItemsOnMap(wxCommandEvent& event);
 	void OnSearchForWallsUponWallsOnMap(wxCommandEvent& event);
+	void OnSearchForCorpsesOnMap(wxCommandEvent& event);
 
 	// Select menu
 	void OnSearchForStuffOnSelection(wxCommandEvent& event);
@@ -302,6 +305,7 @@ public:
 	// Map menu
 	void OnMapEditTowns(wxCommandEvent& event);
 	void OnMapCleanHouseItems(wxCommandEvent& event);
+	void OnMapClearActionUniqueIds(wxCommandEvent& event);
 	void OnMapCleanup(wxCommandEvent& event);
 	void OnMapProperties(wxCommandEvent& event);
 	void OnMultiplayerHost(wxCommandEvent& event);

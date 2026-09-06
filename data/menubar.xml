@@ -94,6 +94,7 @@
             <item name="Remove empty spawns" action="MAP_REMOVE_EMPTY_SPAWNS" help="Removes all empty spawns from the map."/>
 			<item name="Clear Invalid Houses" action="CLEAR_INVALID_HOUSES" help="Clears house tiles not belonging to any house."/>
 			<item name="Clear Modified State" action="CLEAR_MODIFIED_STATE" help="Clears the modified state from all tiles."/>
+			<item name="Clear Action/Unique IDs..." action="MAP_CLEAR_ACTION_UNIQUE_IDS" help="Removes all Action IDs and Unique IDs from every item on the map."/>
 		</menu>
 		<separator/>
 		<item name="Cut" hotkey="Ctrl+X" action="CUT" help="Cut a part of the map."/>
@@ -121,6 +122,7 @@
 		<item name="Find Writeable" action="SEARCH_ON_MAP_WRITEABLE" help="Find all writeable items on map."/>
 		<item name="Find Duplicated Items" action="SEARCH_ON_MAP_DUPLICATED_ITEMS" help="Find all positions where there are duplicated items on the map."/>
 		<item name="Find Walls Upon Walls" action="SEARCH_ON_MAP_WALLS_UPON_WALLS" help="Find all positions where there are walls or doors on walls or doors on the map."/>
+		<item name="Find Corpses" action="SEARCH_ON_MAP_CORPSES" help="Find all corpses on the map and report their decay status from items.xml."/>
 		<separator/>
 		<item name="Find Everything" action="SEARCH_ON_MAP_EVERYTHING" help="Find all unique/action/text/container items."/>
 	</menu>

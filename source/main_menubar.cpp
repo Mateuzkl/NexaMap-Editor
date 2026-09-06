@@ -45,9 +45,14 @@
 #include "hotkey_manager.h"
 #include "quick_command_palette.h"
 
+#include <memory>
 #include <unordered_set>
 
+#include <wx/button.h>
 #include <wx/dir.h>
+#include <wx/file.h>
+#include <wx/filedlg.h>
+#include <wx/textctrl.h>
 #include <wx/weakref.h>
 
 #include "editor.h"
@@ -101,6 +106,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SEARCH_ON_MAP_DUPLICATED_ITEMS, wxITEM_NORMAL, OnSearchForDuplicatedItemsOnMap);
 	MAKE_ACTION(REMOVE_ON_MAP_DUPLICATED_ITEMS, wxITEM_NORMAL, OnRemoveDuplicatedItemsOnMap);
 	MAKE_ACTION(SEARCH_ON_MAP_WALLS_UPON_WALLS, wxITEM_NORMAL, OnSearchForWallsUponWallsOnMap);
+	MAKE_ACTION(SEARCH_ON_MAP_CORPSES, wxITEM_NORMAL, OnSearchForCorpsesOnMap);
 	MAKE_ACTION(SEARCH_ON_SELECTION_EVERYTHING, wxITEM_NORMAL, OnSearchForStuffOnSelection);
 	MAKE_ACTION(SEARCH_ON_SELECTION_ZONES, wxITEM_NORMAL, OnSearchForZonesOnSelection);
 	MAKE_ACTION(SEARCH_ON_SELECTION_UNIQUE, wxITEM_NORMAL, OnSearchForUniqueOnSelection);
@@ -151,6 +157,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(MAP_REMOVE_EMPTY_SPAWNS, wxITEM_NORMAL, OnMapRemoveEmptySpawns);
 	MAKE_ACTION(MAP_CLEANUP, wxITEM_NORMAL, OnMapCleanup);
 	MAKE_ACTION(MAP_CLEAN_HOUSE_ITEMS, wxITEM_NORMAL, OnMapCleanHouseItems);
+	MAKE_ACTION(MAP_CLEAR_ACTION_UNIQUE_IDS, wxITEM_NORMAL, OnMapClearActionUniqueIds);
 	MAKE_ACTION(MAP_PROPERTIES, wxITEM_NORMAL, OnMapProperties);
 	MAKE_ACTION(MAP_STATISTICS, wxITEM_NORMAL, OnMapStatistics);
 	MAKE_ACTION(MAP_DIAGNOSTICS, wxITEM_NORMAL, OnMapDiagnostics);
@@ -454,6 +461,7 @@ void MainMenuBar::Update() {
 	EnableItem(SEARCH_ON_MAP_DUPLICATED_ITEMS, is_host);
 	EnableItem(REMOVE_ON_MAP_DUPLICATED_ITEMS, is_local);
 	EnableItem(SEARCH_ON_MAP_WALLS_UPON_WALLS, is_host);
+	EnableItem(SEARCH_ON_MAP_CORPSES, is_host);
 	EnableItem(SEARCH_ON_SELECTION_EVERYTHING, has_selection && is_host);
 	EnableItem(SEARCH_ON_SELECTION_UNIQUE, has_selection && is_host);
 	EnableItem(SEARCH_ON_SELECTION_ACTION, has_selection && is_host);
@@ -488,6 +496,7 @@ void MainMenuBar::Update() {
 	EnableItem(MAP_REMOVE_EMPTY_SPAWNS, is_local);
 	EnableItem(CLEAR_INVALID_HOUSES, is_local);
 	EnableItem(CLEAR_MODIFIED_STATE, is_local);
+	EnableItem(MAP_CLEAR_ACTION_UNIQUE_IDS, is_local);
 
 	EnableItem(EDIT_TOWNS, has_map && (!this_session || live->canEdit()));
 
@@ -1389,9 +1398,7 @@ namespace OnSearchForStuff {
 				if (item->getActionID() > 0) {
 					label << "AID: " << item->getActionID() << " ";
 				}
-				if (item->getUniqueID() > 0 || item->getActionID() > 0) {
-					label << "ID: " << item->getID() << " ";
-				}
+				label << "ID: " << item->getID() << " ";
 
 				label << wxstr(item->getName());
 
@@ -1473,6 +1480,137 @@ void MainMenuBar::OnRemoveDuplicatedItemsOnMap(wxCommandEvent& WXUNUSED(event)) 
 
 void MainMenuBar::OnSearchForWallsUponWallsOnMap(wxCommandEvent& WXUNUSED(event)) {
 	SearchWallsUponWalls(false);
+}
+
+namespace CorpseSearch {
+	struct Occurrence {
+		Position position;
+		uint16_t id = 0;
+		std::string name;
+	};
+
+	struct Summary {
+		uint16_t id = 0;
+		std::string name;
+		bool decays = false;
+		uint32_t count = 0;
+	};
+
+	bool IsCorpse(Item* item) {
+		return item && g_materials.isInTileset(item, "Corpses");
+	}
+
+	class ReportDialog final : public wxDialog {
+	public:
+		ReportDialog(wxWindow* parent, const wxString& report) :
+			wxDialog(parent, wxID_ANY, "Corpse Decay Report", wxDefaultPosition, wxSize(600, 540), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
+			auto* root = newd wxBoxSizer(wxVERTICAL);
+			reportText = newd wxTextCtrl(this, wxID_ANY, report, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_DONTWRAP);
+			reportText->SetFont(wxFont(10, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
+			root->Add(reportText, 1, wxEXPAND | wxALL, 8);
+
+			auto* buttons = newd wxBoxSizer(wxHORIZONTAL);
+			buttons->AddStretchSpacer();
+			auto* save = newd wxButton(this, wxID_SAVE, "Save to file...");
+			auto* close = newd wxButton(this, wxID_CLOSE, "Close");
+			buttons->Add(save, 0, wxRIGHT, 8);
+			buttons->Add(close, 0);
+			root->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+			SetSizer(root);
+
+			save->Bind(wxEVT_BUTTON, &ReportDialog::OnSave, this);
+			close->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { EndModal(wxID_CLOSE); });
+		}
+
+	private:
+		void OnSave(wxCommandEvent&) {
+			wxFileDialog dialog(this, "Save corpse report", wxEmptyString, "corpse_report.txt", "Text files (*.txt)|*.txt", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+			if (dialog.ShowModal() != wxID_OK) {
+				return;
+			}
+			wxFile file(dialog.GetPath(), wxFile::write);
+			if (!file.IsOpened() || !file.Write(reportText->GetValue())) {
+				wxMessageBox("The corpse report could not be saved.", "Save failed", wxOK | wxICON_ERROR, this);
+			}
+		}
+
+		wxTextCtrl* reportText = nullptr;
+	};
+}
+
+void MainMenuBar::OnSearchForCorpsesOnMap(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	Map& map = g_gui.GetCurrentMap();
+	std::vector<CorpseSearch::Occurrence> occurrences;
+	occurrences.reserve(256);
+	g_gui.CreateLoadBar("Searching map for corpses...");
+
+	long long visited = 0;
+	for (MapIterator iterator = map.begin(); iterator != map.end(); ++iterator) {
+		Tile* tile = (*iterator)->get();
+		if (++visited % 0x8000 == 0) {
+			g_gui.SetLoadDone(static_cast<int32_t>(100 * visited / map.getTileCount()));
+		}
+		if (CorpseSearch::IsCorpse(tile->ground)) {
+			occurrences.push_back({ tile->getPosition(), tile->ground->getID(), tile->ground->getName() });
+		}
+		for (Item* item : tile->items) {
+			if (CorpseSearch::IsCorpse(item)) {
+				occurrences.push_back({ tile->getPosition(), item->getID(), item->getName() });
+			}
+		}
+	}
+	g_gui.DestroyLoadBar();
+
+	if (occurrences.empty()) {
+		g_gui.PopupDialog("Search completed", "No corpses were found on the map.", wxOK);
+		return;
+	}
+
+	std::map<uint16_t, CorpseSearch::Summary> summaries;
+	for (const CorpseSearch::Occurrence& occurrence : occurrences) {
+		auto [iterator, inserted] = summaries.try_emplace(occurrence.id);
+		CorpseSearch::Summary& summary = iterator->second;
+		if (inserted) {
+			summary.id = occurrence.id;
+			summary.name = occurrence.name;
+			summary.decays = g_items.typeExists(occurrence.id) && g_items[occurrence.id].decays;
+		}
+		++summary.count;
+	}
+
+	SearchResultWindow* results = g_gui.ShowSearchWindow("Corpses Found", false);
+	results->Clear();
+	for (const CorpseSearch::Occurrence& occurrence : occurrences) {
+		wxString description = "Corpse: " + wxString::FromUTF8(occurrence.name);
+		description << wxString::Format(" (ID %u)", occurrence.id);
+		results->AddPosition(description, occurrence.position);
+	}
+
+	bool anyDecaying = false;
+	wxString report;
+	report << "Corpse Decay Report\n"
+		   << "===================\n\n"
+		   << wxString::Format("Total occurrences: %zu\n", occurrences.size())
+		   << wxString::Format("Unique item IDs:   %zu\n\n", summaries.size())
+		   << "ID       Count    Decays?    Name\n"
+		   << "------------------------------------------------------------\n";
+	for (const auto& [id, summary] : summaries) {
+		anyDecaying = anyDecaying || summary.decays;
+		report << wxString::Format("%-8u %-8u %-10s ", static_cast<unsigned int>(id), static_cast<unsigned int>(summary.count), summary.decays ? wxS("YES (!)") : wxS("no"))
+			   << wxString::FromUTF8(summary.name) << "\n";
+	}
+	if (anyDecaying) {
+		report << "\nWarning: entries marked YES have decay configured in items.xml.\n"
+			   << "A statically placed corpse can disappear unless the server configuration\n"
+			   << "or scripts prevent that decay.\n";
+	}
+
+	CorpseSearch::ReportDialog dialog(frame, report);
+	dialog.ShowModal();
 }
 
 void MainMenuBar::OnSearchForStuffOnSelection(wxCommandEvent& WXUNUSED(event)) {
@@ -2060,6 +2198,117 @@ void MainMenuBar::OnMapCleanHouseItems(wxCommandEvent& WXUNUSED(event)) {
 		// editor->removeHouseItems(true);
 	}
 
+	g_gui.RefreshView();
+}
+
+namespace ClearMapItemIds {
+	bool HasIds(const Item* item) {
+		if (!item) {
+			return false;
+		}
+
+		if (item->getActionID() > 0 || item->getUniqueID() > 0) {
+			return true;
+		}
+
+		const Container* container = dynamic_cast<const Container*>(item);
+		if (!container) {
+			return false;
+		}
+
+		for (size_t index = 0; index < container->getItemCount(); ++index) {
+			if (HasIds(container->getItem(index))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	uint64_t ClearIds(Item* item) {
+		if (!item) {
+			return 0;
+		}
+
+		const bool changed = item->getActionID() > 0 || item->getUniqueID() > 0;
+		item->eraseAttribute("aid");
+		item->eraseAttribute("uid");
+
+		uint64_t updated = changed ? 1 : 0;
+		if (Container* container = dynamic_cast<Container*>(item)) {
+			for (Item* child : container->getVector()) {
+				updated += ClearIds(child);
+			}
+		}
+		return updated;
+	}
+
+	uint64_t ClearMap(Map& map) {
+		MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
+		uint64_t updated = 0;
+		uint64_t visited = 0;
+		const uint64_t tileCount = map.getTileCount();
+
+		for (MapIterator iterator = map.begin(); iterator != map.end(); ++iterator) {
+			TileLocation* location = *iterator;
+			Tile* tile = location->get();
+			++visited;
+			if (visited % 0x8000 == 0 && tileCount > 0) {
+				g_gui.SetLoadDone(static_cast<int32_t>(100 * visited / tileCount));
+			}
+
+			bool hasIds = HasIds(tile->ground);
+			if (!hasIds) {
+				for (const Item* item : tile->items) {
+					if (HasIds(item)) {
+						hasIds = true;
+						break;
+					}
+				}
+			}
+			if (!hasIds) {
+				continue;
+			}
+
+			std::unique_ptr<Tile> replacement(tile->deepCopy(map));
+			updated += ClearIds(replacement->ground);
+			for (Item* item : replacement->items) {
+				updated += ClearIds(item);
+			}
+			replacement->update();
+			map.setTile(location, replacement.release(), true);
+		}
+
+		return updated;
+	}
+}
+
+void MainMenuBar::OnMapClearActionUniqueIds(wxCommandEvent& WXUNUSED(event)) {
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) {
+		return;
+	}
+
+	const int result = g_gui.PopupDialog(
+		"Clear Action IDs and Unique IDs",
+		"Are you sure you want to remove all Action IDs and Unique IDs from every item on the map? This action cannot be undone.",
+		wxYES | wxNO
+	);
+	if (result != wxID_YES) {
+		return;
+	}
+
+	editor->selection.clear();
+	editor->actionQueue->clear();
+	g_gui.CreateLoadBar("Clearing Action IDs and Unique IDs...");
+	const uint64_t updated = ClearMapItemIds::ClearMap(editor->map);
+	g_gui.DestroyLoadBar();
+
+	wxString message;
+	message << updated << " items updated.";
+	g_gui.PopupDialog("Clear completed", message, wxOK);
+	if (updated > 0) {
+		editor->map.doChange();
+	}
 	g_gui.RefreshView();
 }
 
