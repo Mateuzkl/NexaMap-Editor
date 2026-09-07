@@ -101,6 +101,30 @@ bool ClientAssets::load(wxString& error, wxArrayString& warnings) {
 			return false;
 		}
 	}
+	for (const auto& effect : appearances.effect()) {
+		if (!g_gui.gfx.loadAppearanceEffect(effect, error, warnings)) {
+			if (error.empty()) {
+				error = wxString::Format("Could not load effect appearance %u.", effect.id());
+			}
+			wxLogError(error);
+			g_items.clear();
+			g_gui.gfx.clear();
+			g_spriteAppearances.unload();
+			return false;
+		}
+	}
+	for (const auto& missile : appearances.missile()) {
+		if (!g_gui.gfx.loadAppearanceMissile(missile, error, warnings)) {
+			if (error.empty()) {
+				error = wxString::Format("Could not load missile appearance %u.", missile.id());
+			}
+			wxLogError(error);
+			g_items.clear();
+			g_gui.gfx.clear();
+			g_spriteAppearances.unload();
+			return false;
+		}
+	}
 
 	versionName = manifest.version;
 	loaded = true;

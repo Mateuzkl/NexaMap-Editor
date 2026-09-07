@@ -138,7 +138,9 @@ public:
 		const Outfit* outfit = nullptr,
 		int direction = 2,
 		int frame = 0,
-		int patternZ = 0
+		int patternZ = 0,
+		int patternX = 0,
+		int patternY = 0
 	);
 	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 
@@ -372,6 +374,8 @@ public:
 
 	Sprite* getSprite(int id);
 	GameSprite* getCreatureSprite(int id);
+	GameSprite* getEffectSprite(int id);
+	GameSprite* getDistanceSprite(int id);
 	GameSprite* getEditorSprite(int id);
 
 	long getElapsedTime() const {
@@ -379,6 +383,8 @@ public:
 	}
 
 	uint16_t getItemSpriteMaxID() const;
+	uint16_t getEffectSpriteMaxID() const;
+	uint16_t getDistanceSpriteMaxID() const;
 
 	// Get an unused texture id (this is acquired by simply increasing a value starting from 0x10000000)
 	GLuint getFreeTextureID();
@@ -395,6 +401,8 @@ public:
 	bool loadSpriteData(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadAppearanceItem(const rme::protobuf::appearances::Appearance& appearance, ItemType* item, wxString& error, wxArrayString& warnings);
 	bool loadAppearanceOutfit(const rme::protobuf::appearances::Appearance& appearance, wxString& error, wxArrayString& warnings);
+	bool loadAppearanceEffect(const rme::protobuf::appearances::Appearance& appearance, wxString& error, wxArrayString& warnings);
+	bool loadAppearanceMissile(const rme::protobuf::appearances::Appearance& appearance, wxString& error, wxArrayString& warnings);
 
 	// Cleans old & unused textures according to config settings
 	void garbageCollection();
@@ -479,6 +487,8 @@ private:
 	DatFormat dat_format;
 	uint16_t item_count;
 	uint16_t creature_count;
+	uint16_t effect_count;
+	uint16_t distance_count;
 	bool otfi_found;
 	bool is_extended;
 	bool has_transparency;

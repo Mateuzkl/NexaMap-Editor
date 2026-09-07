@@ -8,6 +8,7 @@
 #include "editor_autosave_state.h"
 #include "spell_definition.h"
 #include "server_vocation_catalog.h"
+#include "server_visual_catalog.h"
 
 #include <wx/dialog.h>
 
@@ -43,6 +44,7 @@ private:
 	void refreshPreview();
 	void syncVocations();
 	void refreshVocationControls();
+	void chooseVisual(ServerVisualKind kind);
 	bool confirmDiscard();
 	bool saveDocument(bool showErrors);
 	void scheduleAutosave();
@@ -56,6 +58,7 @@ private:
 
 	std::unique_ptr<SpellDefinitionDocument> document;
 	std::unique_ptr<SpellAreaResolver> areaResolver;
+	ServerVisualCatalog visualCatalog;
 	SpellDefinition edited;
 	std::array<wxWindow*, static_cast<std::size_t>(SpellField::Count)> controls {};
 	MonsterSpellPreview* preview = nullptr;

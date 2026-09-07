@@ -198,6 +198,8 @@ GraphicManager::GraphicManager() :
 	dat_format(DAT_FORMAT_UNKNOWN),
 	item_count(0),
 	creature_count(0),
+	effect_count(0),
+	distance_count(0),
 	otfi_found(false),
 	is_extended(false),
 	has_transparency(false),
@@ -233,6 +235,8 @@ void GraphicManager::swap(GraphicManager& other) noexcept {
 	swap(dat_format, other.dat_format);
 	swap(item_count, other.item_count);
 	swap(creature_count, other.creature_count);
+	swap(effect_count, other.effect_count);
+	swap(distance_count, other.distance_count);
 	swap(otfi_found, other.otfi_found);
 	swap(is_extended, other.is_extended);
 	swap(has_transparency, other.has_transparency);
@@ -548,6 +552,8 @@ void GraphicManager::clear(bool clearPreloader) {
 
 	item_count = 0;
 	creature_count = 0;
+	effect_count = 0;
+	distance_count = 0;
 	loaded_textures = 0;
 	lastclean = time(nullptr);
 	spritefile = "";
@@ -603,6 +609,22 @@ GameSprite* GraphicManager::getCreatureSprite(int id) {
 	return nullptr;
 }
 
+GameSprite* GraphicManager::getEffectSprite(int id) {
+	if (id <= 0 || id > effect_count) {
+		return nullptr;
+	}
+	const auto iterator = sprite_space.find(static_cast<int>(item_count) + creature_count + id);
+	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
+}
+
+GameSprite* GraphicManager::getDistanceSprite(int id) {
+	if (id <= 0 || id > distance_count) {
+		return nullptr;
+	}
+	const auto iterator = sprite_space.find(static_cast<int>(item_count) + creature_count + effect_count + id);
+	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
+}
+
 GameSprite* GraphicManager::getEditorSprite(int id) {
 	if (id >= 0) {
 		return nullptr;
@@ -617,6 +639,14 @@ GameSprite* GraphicManager::getEditorSprite(int id) {
 
 uint16_t GraphicManager::getItemSpriteMaxID() const {
 	return item_count;
+}
+
+uint16_t GraphicManager::getEffectSpriteMaxID() const {
+	return effect_count;
+}
+
+uint16_t GraphicManager::getDistanceSpriteMaxID() const {
+	return distance_count;
 }
 
 #define loadPNGFile(name) _wxGetBitmapFromMemory(name, sizeof(name))
@@ -816,8 +846,6 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		return false;
 	}
 
-	uint16_t effect_count, distance_count;
-
 	uint32_t datSignature;
 	file.getU32(datSignature);
 	// get max id
@@ -827,8 +855,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	file.getU16(distance_count);
 
 	uint32_t minID = 100; // items start with id 100
-	// We don't load distance/effects, if we would, just add effect_count & distance_count here
-	uint32_t maxID = item_count + creature_count;
+	const uint32_t maxID = static_cast<uint32_t>(item_count) + creature_count + effect_count + distance_count;
 
 	dat_format = client_version->getDatFormatForSignature(datSignature);
 
@@ -838,7 +865,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		has_frame_groups = dat_format >= DAT_FORMAT_1057;
 	}
 
-	uint16_t id = minID;
+	uint32_t id = minID;
 	// loop through all ItemDatabase until we reach the end of file
 	while (id <= maxID) {
 		auto* sType = newd GameSprite();
@@ -1125,6 +1152,46 @@ bool GraphicManager::loadAppearanceOutfit(
 		return false;
 	}
 	creature_count = std::max<uint16_t>(creature_count, static_cast<uint16_t>(appearance.id()));
+	unloaded = false;
+	has_transparency = true;
+	has_frame_durations = true;
+	return true;
+}
+
+bool GraphicManager::loadAppearanceEffect(
+	const rme::protobuf::appearances::Appearance& appearance,
+	wxString& error,
+	wxArrayString& warnings
+) {
+	if (appearance.id() > std::numeric_limits<uint16_t>::max()) {
+		warnings.push_back(wxString::Format("Ignored effect appearance with unsupported ID %u.", appearance.id()));
+		return true;
+	}
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + static_cast<int>(appearance.id());
+	if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings)) {
+		return false;
+	}
+	effect_count = std::max<uint16_t>(effect_count, static_cast<uint16_t>(appearance.id()));
+	unloaded = false;
+	has_transparency = true;
+	has_frame_durations = true;
+	return true;
+}
+
+bool GraphicManager::loadAppearanceMissile(
+	const rme::protobuf::appearances::Appearance& appearance,
+	wxString& error,
+	wxArrayString& warnings
+) {
+	if (appearance.id() > std::numeric_limits<uint16_t>::max()) {
+		warnings.push_back(wxString::Format("Ignored missile appearance with unsupported ID %u.", appearance.id()));
+		return true;
+	}
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + effect_count + static_cast<int>(appearance.id());
+	if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings)) {
+		return false;
+	}
+	distance_count = std::max<uint16_t>(distance_count, static_cast<uint16_t>(appearance.id()));
 	unloaded = false;
 	has_transparency = true;
 	has_frame_durations = true;
@@ -1562,7 +1629,7 @@ void GameSprite::unloadDC() {
 	dc[SPRITE_SIZE_32x32] = nullptr;
 }
 
-bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ) {
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ, int patternX, int patternY) {
 	if (outfit && outfit->lookMount != 0) {
 		const int mountClientId = g_workspace.resolveMountClientId(outfit->lookMount);
 		GameSprite* mountSpr = mountClientId > 0 ? g_gui.gfx.getCreatureSprite(mountClientId) : nullptr;
@@ -1658,7 +1725,7 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
 	const size_t pixelCount = static_cast<size_t>(pixelWidth) * static_cast<size_t>(pixelHeight);
 	if (pixelWidth <= 0 || pixelHeight <= 0 || pixelCount > MaximumPreviewBytes / 4
-		|| layers == 0 || (outfit && (pattern_x == 0 || pattern_y == 0))) {
+		|| layers == 0 || pattern_x == 0 || pattern_y == 0 || pattern_z == 0) {
 		pixels.clear();
 		return false;
 	}
@@ -1672,10 +1739,11 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 		}
 		for (uint8_t tileX = 0; tileX < width; ++tileX) {
 			for (uint8_t tileY = 0; tileY < height; ++tileY) {
-				const int patternX = outfit ? std::clamp(direction, 0, static_cast<int>(pattern_x) - 1) : 0;
+				const int patternXIndex = outfit ? std::clamp(direction, 0, static_cast<int>(pattern_x) - 1) : std::clamp(patternX, 0, static_cast<int>(pattern_x) - 1);
+				const int patternYIndex = outfit ? layer : std::clamp(patternY, 0, static_cast<int>(pattern_y) - 1);
 				const int patternZIndex = outfit && pattern_z > 1 ? std::clamp(patternZ, 0, static_cast<int>(pattern_z) - 1) : 0;
 				const int animationFrame = frames > 0 ? std::clamp(frame, 0, static_cast<int>(frames) - 1) : 0;
-				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, patternX, outfit ? layer : 0, patternZIndex, animationFrame);
+				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, patternXIndex, patternYIndex, patternZIndex, animationFrame);
 				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
 					continue;
 				}

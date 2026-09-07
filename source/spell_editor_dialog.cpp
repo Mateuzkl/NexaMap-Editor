@@ -8,6 +8,7 @@
 
 #include "monster_spell_preview.h"
 #include "spell_area_resolver.h"
+#include "spell_visual_browser_dialog.h"
 #include "server_vocation_catalog.h"
 #include "theme.h"
 #include "workspace_session.h"
@@ -82,6 +83,7 @@ namespace {
 SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefinitionDocument> value) :
 	wxDialog(parent, wxID_ANY, "Spell Editor", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	document(std::move(value)), edited(document->definition()), areaResolver(std::make_unique<SpellAreaResolver>(g_workspace.getServer())) {
+	visualCatalog = ServerVisualCatalog::Build(g_workspace.getServer());
 	SetBackgroundColour(Theme::Get(Theme::Role::Surface));
 	auto* root = newd wxBoxSizer(wxVERTICAL);
 	auto* header = newd wxPanel(this);
@@ -147,20 +149,70 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	auto* visualPage = Page(notebook);
 	auto* visualSizer = newd wxBoxSizer(wxHORIZONTAL);
 	auto* visualFields = newd wxStaticBoxSizer(wxVERTICAL, visualPage, "Combat visuals");
-	auto* visualGrid = Grid();
-	addText(visualFields->GetStaticBox(), visualGrid, SpellField::CombatType, edited.combatType, { "COMBAT_PHYSICALDAMAGE", "COMBAT_ENERGYDAMAGE", "COMBAT_EARTHDAMAGE", "COMBAT_FIREDAMAGE", "COMBAT_LIFEDRAIN", "COMBAT_MANADRAIN", "COMBAT_HEALING", "COMBAT_ICEDAMAGE", "COMBAT_HOLYDAMAGE", "COMBAT_DEATHDAMAGE" });
-	addText(visualFields->GetStaticBox(), visualGrid, SpellField::Effect, edited.effect, { "CONST_ME_NONE", "CONST_ME_DRAWBLOOD", "CONST_ME_EXPLOSIONAREA", "CONST_ME_FIREAREA", "CONST_ME_ENERGYAREA", "CONST_ME_MAGIC_BLUE", "CONST_ME_MAGIC_RED", "CONST_ME_HITBYFIRE", "CONST_ME_PLANTATTACK" });
-	addText(visualFields->GetStaticBox(), visualGrid, SpellField::Projectile, edited.projectile, { "CONST_ANI_NONE", "CONST_ANI_SPEAR", "CONST_ANI_FIRE", "CONST_ANI_ENERGY", "CONST_ANI_POISON", "CONST_ANI_ICE", "CONST_ANI_HOLY", "CONST_ANI_DEATH" });
-	addText(visualFields->GetStaticBox(), visualGrid, SpellField::Area, edited.areaExpression, { "AREA_CIRCLE2X2", "AREA_CIRCLE3X3", "AREA_SQUARE1X1", "AREA_SQUARE2X2", "AREA_BEAM5", "AREA_WAVE4" });
+	auto* visualGrid = newd wxFlexGridSizer(3, 8, 8);
+	visualGrid->AddGrowableCol(1, 1);
+	const auto addVisualText = [&](SpellField field, const std::string& value, const wxArrayString& choices, const wxString& buttonLabel, ServerVisualKind kind) {
+		visualGrid->Add(newd wxStaticText(visualFields->GetStaticBox(), wxID_ANY, SpellFieldName(field)), 0, wxALIGN_CENTER_VERTICAL);
+		auto* control = newd wxComboBox(visualFields->GetStaticBox(), wxID_ANY, Utf8(value), wxDefaultPosition, wxDefaultSize, choices, wxCB_DROPDOWN);
+		controls[Index(field)] = control;
+		applyCapability(control, field);
+		visualGrid->Add(control, 1, wxEXPAND);
+		auto* browse = newd wxButton(visualFields->GetStaticBox(), wxID_ANY, buttonLabel);
+		browse->Enable(edited.capability(field).editable);
+		visualGrid->Add(browse, 0);
+		control->Bind(wxEVT_TEXT, &SpellEditorDialog::onFieldChanged, this);
+		control->Bind(wxEVT_COMBOBOX, &SpellEditorDialog::onFieldChanged, this);
+		browse->Bind(wxEVT_BUTTON, [this, kind](wxCommandEvent&) { chooseVisual(kind); });
+	};
+	const auto addPlainText = [&](SpellField field, const std::string& value, const wxArrayString& choices) {
+		visualGrid->Add(newd wxStaticText(visualFields->GetStaticBox(), wxID_ANY, SpellFieldName(field)), 0, wxALIGN_CENTER_VERTICAL);
+		auto* control = newd wxComboBox(visualFields->GetStaticBox(), wxID_ANY, Utf8(value), wxDefaultPosition, wxDefaultSize, choices, wxCB_DROPDOWN);
+		controls[Index(field)] = control;
+		applyCapability(control, field);
+		visualGrid->Add(control, 1, wxEXPAND);
+		visualGrid->AddSpacer(1);
+		control->Bind(wxEVT_TEXT, &SpellEditorDialog::onFieldChanged, this);
+		control->Bind(wxEVT_COMBOBOX, &SpellEditorDialog::onFieldChanged, this);
+	};
+	addPlainText(SpellField::CombatType, edited.combatType, { "COMBAT_PHYSICALDAMAGE", "COMBAT_ENERGYDAMAGE", "COMBAT_EARTHDAMAGE", "COMBAT_FIREDAMAGE", "COMBAT_LIFEDRAIN", "COMBAT_MANADRAIN", "COMBAT_HEALING", "COMBAT_ICEDAMAGE", "COMBAT_HOLYDAMAGE", "COMBAT_DEATHDAMAGE" });
+	wxArrayString effects;
+	for (const ServerVisualConstant& entry : visualCatalog.effects()) {
+		effects.Add(Utf8(entry.name));
+	}
+	wxArrayString projectiles;
+	for (const ServerVisualConstant& entry : visualCatalog.projectiles()) {
+		projectiles.Add(Utf8(entry.name));
+	}
+	addVisualText(SpellField::Effect, edited.effect, effects, "Browse...", ServerVisualKind::MagicEffect);
+	addVisualText(SpellField::Projectile, edited.projectile, projectiles, "Browse...", ServerVisualKind::DistanceEffect);
+	addPlainText(SpellField::Area, edited.areaExpression, { "AREA_CIRCLE2X2", "AREA_CIRCLE3X3", "AREA_SQUARE1X1", "AREA_SQUARE2X2", "AREA_BEAM5", "AREA_WAVE4" });
 	visualGrid->Add(newd wxStaticText(visualFields->GetStaticBox(), wxID_ANY, "Preview direction"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* directionChoice = newd wxChoice(visualFields->GetStaticBox(), wxID_ANY);
 	directionChoice->Append("North");
+	directionChoice->Append("North-East");
 	directionChoice->Append("East");
+	directionChoice->Append("South-East");
 	directionChoice->Append("South");
+	directionChoice->Append("South-West");
 	directionChoice->Append("West");
+	directionChoice->Append("North-West");
 	directionChoice->SetSelection(0);
 	visualGrid->Add(directionChoice, 1, wxEXPAND);
+	visualGrid->AddSpacer(1);
 	visualFields->Add(visualGrid, 0, wxEXPAND | wxALL, FromDIP(8));
+	auto* playback = newd wxBoxSizer(wxHORIZONTAL);
+	auto* play = newd wxButton(visualFields->GetStaticBox(), wxID_ANY, "Play");
+	auto* stop = newd wxButton(visualFields->GetStaticBox(), wxID_ANY, "Stop");
+	auto* speed = newd wxChoice(visualFields->GetStaticBox(), wxID_ANY);
+	speed->Append("Slow");
+	speed->Append("Normal");
+	speed->Append("Fast");
+	speed->SetSelection(1);
+	playback->Add(play, 0, wxRIGHT, FromDIP(6));
+	playback->Add(stop, 0, wxRIGHT, FromDIP(12));
+	playback->Add(newd wxStaticText(visualFields->GetStaticBox(), wxID_ANY, "Animation speed"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
+	playback->Add(speed, 1);
+	visualFields->Add(playback, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 	areaStatus = newd wxStaticText(visualFields->GetStaticBox(), wxID_ANY, Utf8(edited.areaStatus));
 	areaStatus->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
 	areaStatus->Wrap(FromDIP(360));
@@ -171,6 +223,12 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	visualPage->SetSizer(visualSizer);
 	notebook->AddPage(visualPage, "Visual");
 	directionChoice->Bind(wxEVT_CHOICE, [this, directionChoice](wxCommandEvent&) { direction = directionChoice->GetSelection(); refreshPreview(); });
+	play->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { preview->SetPlaying(true); });
+	stop->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { preview->SetPlaying(false); });
+	speed->Bind(wxEVT_CHOICE, [this, speed](wxCommandEvent&) {
+		static constexpr int intervals[] { 250, 140, 75 };
+		preview->SetAnimationInterval(intervals[std::clamp(speed->GetSelection(), 0, 2)]);
+	});
 
 	auto* vocationPage = Page(notebook);
 	auto* vocationSizer = newd wxBoxSizer(wxVERTICAL);
@@ -463,6 +521,25 @@ void SpellEditorDialog::refreshVocationControls() {
 	showInDescriptionCheck->SetValue(selected && vocationValues[static_cast<std::size_t>(row)].find(";true") != std::string::npos);
 }
 
+void SpellEditorDialog::chooseVisual(ServerVisualKind kind) {
+	readControls();
+	const std::string current = kind == ServerVisualKind::MagicEffect ? edited.effect : edited.projectile;
+	SpellVisualBrowserDialog dialog(this, kind, visualCatalog, current);
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+	const auto selected = dialog.selectedValue();
+	if (!selected) {
+		return;
+	}
+	const SpellField field = kind == ServerVisualKind::MagicEffect ? SpellField::Effect : SpellField::Projectile;
+	if (auto* control = dynamic_cast<wxComboBox*>(controls[Index(field)])) {
+		control->SetValue(Utf8(*selected));
+	}
+	scheduleAutosave();
+	refreshPreview();
+}
+
 void SpellEditorDialog::refreshPreview() {
 	if (!preview) {
 		return;
@@ -475,6 +552,9 @@ void SpellEditorDialog::refreshPreview() {
 	edited.preview.area.range = edited.range;
 	edited.preview.area.target = edited.needTarget;
 	preview->SetDirection(direction);
+	const auto effectId = visualCatalog.resolve(ServerVisualKind::MagicEffect, edited.effect);
+	const auto projectileId = visualCatalog.resolve(ServerVisualKind::DistanceEffect, edited.projectile);
+	preview->SetVisualIds(static_cast<int>(effectId.value_or(0)), static_cast<int>(projectileId.value_or(0)));
 	SpellAreaResolution resolution;
 	if (edited.areaExpression == document->definition().areaExpression) {
 		resolution.state = edited.areaResolutionState;

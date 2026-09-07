@@ -314,8 +314,10 @@
 	<ClCompile Include="..\..\source\spell_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\spell_area_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\spell_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
+	<ClCompile Include="..\..\source\spell_visual_browser_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
 	<ClCompile Include="..\..\source\server_vocation_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+	<ClCompile Include="..\..\source\server_visual_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\mount_id_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\workspace_session.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
@@ -675,8 +677,10 @@
 	<ClInclude Include="..\..\source\spell_definition.h" />
 	<ClInclude Include="..\..\source\spell_area_resolver.h" />
 	<ClInclude Include="..\..\source\spell_editor_dialog.h" />
+	<ClInclude Include="..\..\source\spell_visual_browser_dialog.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />
 	<ClInclude Include="..\..\source\server_vocation_catalog.h" />
+	<ClInclude Include="..\..\source\server_visual_catalog.h" />
 	<ClInclude Include="..\..\source\mount_id_resolver.h" />
 	<ClInclude Include="..\..\source\workspace_session.h" />
     <ClInclude Include="..\..\source\version_info.h" />

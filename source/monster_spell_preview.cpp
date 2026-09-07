@@ -7,16 +7,88 @@
 #include "monster_spell_preview.h"
 
 #include "monster_spell_area.h"
+#include "graphics.h"
+#include "gui.h"
 #include "theme.h"
 
 #include <algorithm>
 
 #include <wx/dcbuffer.h>
+#include <wx/image.h>
+#include <wx/timer.h>
+
+namespace {
+	wxBitmap BitmapFromRgba(const std::vector<uint8_t>& rgba, int width, int height) {
+		if (width <= 0 || height <= 0 || rgba.size() != static_cast<std::size_t>(width) * height * 4) {
+			return {};
+		}
+		auto* rgb = new unsigned char[static_cast<std::size_t>(width) * height * 3];
+		auto* alpha = new unsigned char[static_cast<std::size_t>(width) * height];
+		for (std::size_t pixel = 0; pixel < static_cast<std::size_t>(width) * height; ++pixel) {
+			rgb[pixel * 3] = rgba[pixel * 4];
+			rgb[pixel * 3 + 1] = rgba[pixel * 4 + 1];
+			rgb[pixel * 3 + 2] = rgba[pixel * 4 + 2];
+			alpha[pixel] = rgba[pixel * 4 + 3];
+		}
+		return wxBitmap(wxImage(width, height, rgb, alpha, false));
+	}
+
+	std::pair<int, int> DirectionPattern(int direction, const GameSprite& sprite) {
+		static constexpr int offsets[8][2] {
+			{ 0, -1 },
+			{ 1, -1 },
+			{ 1, 0 },
+			{ 1, 1 },
+			{ 0, 1 },
+			{ -1, 1 },
+			{ -1, 0 },
+			{ -1, -1 },
+		};
+		const int selected = std::clamp(direction, 0, 7);
+		return {
+			sprite.pattern_x >= 3 ? offsets[selected][0] + 1 : std::min<int>(selected, std::max<int>(0, sprite.pattern_x - 1)),
+			sprite.pattern_y >= 3 ? offsets[selected][1] + 1 : 0,
+		};
+	}
+
+	wxBitmap SpriteBitmap(GameSprite* sprite, int frame, int direction) {
+		if (!sprite) {
+			return {};
+		}
+		std::vector<uint8_t> pixels;
+		int width = 0;
+		int height = 0;
+		bool pending = false;
+		const auto [patternX, patternY] = DirectionPattern(direction, *sprite);
+		if (!sprite->getVisualPreviewRGBA(pixels, width, height, pending, true, nullptr, 0, frame, 0, patternX, patternY)) {
+			return {};
+		}
+		return BitmapFromRgba(pixels, width, height);
+	}
+
+	wxBitmap FitBitmap(wxBitmap bitmap, int maximum) {
+		if (!bitmap.IsOk() || maximum <= 0) {
+			return bitmap;
+		}
+		const int largest = std::max(bitmap.GetWidth(), bitmap.GetHeight());
+		if (largest <= maximum) {
+			return bitmap;
+		}
+		const double scale = static_cast<double>(maximum) / largest;
+		return wxBitmap(bitmap.ConvertToImage().Scale(
+			std::max(1, static_cast<int>(bitmap.GetWidth() * scale)),
+			std::max(1, static_cast<int>(bitmap.GetHeight() * scale)),
+			wxIMAGE_QUALITY_HIGH
+		));
+	}
+}
 
 MonsterSpellPreview::MonsterSpellPreview(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
 	SetMinSize(FromDIP(wxSize(300, 320)));
 	Bind(wxEVT_PAINT, &MonsterSpellPreview::OnPaint, this);
+	timer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &MonsterSpellPreview::OnTimer, this, timer->GetId());
 }
 
 void MonsterSpellPreview::SetAttack(const MonsterAttackDefinition* attack) {
@@ -50,6 +122,36 @@ void MonsterSpellPreview::SetDirection(int newDirection) {
 	Refresh();
 }
 
+void MonsterSpellPreview::SetVisualIds(int newEffectId, int newProjectileId) {
+	effectId = std::max(0, newEffectId);
+	projectileId = std::max(0, newProjectileId);
+	animationTick = 0;
+	flightStep = 0;
+	Refresh();
+}
+
+void MonsterSpellPreview::SetPlaying(bool playing) {
+	if (playing) {
+		timer->Start(animationInterval);
+	} else {
+		timer->Stop();
+	}
+	Refresh();
+}
+
+void MonsterSpellPreview::SetAnimationInterval(int milliseconds) {
+	animationInterval = std::clamp(milliseconds, 50, 1000);
+	if (timer->IsRunning()) {
+		timer->Start(animationInterval);
+	}
+}
+
+void MonsterSpellPreview::OnTimer(wxTimerEvent&) {
+	++animationTick;
+	flightStep = (flightStep + 1) % 13;
+	Refresh(false);
+}
+
 void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 	wxAutoBufferedPaintDC dc(this);
 	dc.SetBackground(wxBrush(Theme::Get(Theme::Role::Surface)));
@@ -61,7 +163,7 @@ void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 		return;
 	}
 
-	const std::vector<MonsterAreaTile> tiles = customAreaMode ? customTiles : BuildMonsterAreaTiles(current.area, direction);
+	const std::vector<MonsterAreaTile> tiles = customAreaMode ? customTiles : BuildMonsterAreaTiles(current.area, direction / 2);
 	int extent = 4;
 	for (const MonsterAreaTile& tile : tiles) {
 		extent = std::max({ extent, std::abs(tile.x) + 1, std::abs(tile.y) + 1 });
@@ -88,6 +190,39 @@ void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 	dc.DrawRectangle(caster);
 	dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 	dc.DrawLabel("C", caster, wxALIGN_CENTER);
+
+	GameSprite* effectSprite = g_gui.gfx.getEffectSprite(effectId);
+	if (effectSprite) {
+		wxBitmap bitmap = FitBitmap(SpriteBitmap(effectSprite, animationTick % std::max<int>(1, effectSprite->frames), 0), std::max(cell, cell * 2));
+		if (bitmap.IsOk()) {
+			if (tiles.empty()) {
+				dc.DrawBitmap(bitmap, center.x + cell / 2 - bitmap.GetWidth() / 2, center.y + cell / 2 - bitmap.GetHeight() / 2, true);
+			} else {
+				for (const MonsterAreaTile& tile : tiles) {
+					const int x = center.x + tile.x * cell + cell / 2 - bitmap.GetWidth() / 2;
+					const int y = center.y + tile.y * cell + cell / 2 - bitmap.GetHeight() / 2;
+					dc.DrawBitmap(bitmap, x, y, true);
+				}
+			}
+		}
+	}
+
+	GameSprite* projectileSprite = g_gui.gfx.getDistanceSprite(projectileId);
+	if (projectileSprite) {
+		wxBitmap bitmap = FitBitmap(SpriteBitmap(projectileSprite, animationTick % std::max<int>(1, projectileSprite->frames), direction), std::max(cell, cell * 2));
+		if (bitmap.IsOk()) {
+			MonsterAreaTile destination { 0, -std::max(2, current.area.range) };
+			if (!tiles.empty()) {
+				destination = *std::max_element(tiles.begin(), tiles.end(), [](const MonsterAreaTile& left, const MonsterAreaTile& right) {
+					return std::abs(left.x) + std::abs(left.y) < std::abs(right.x) + std::abs(right.y);
+				});
+			}
+			const double progress = timer->IsRunning() ? static_cast<double>(flightStep) / 12.0 : 1.0;
+			const int x = center.x + static_cast<int>(destination.x * cell * progress) + cell / 2 - bitmap.GetWidth() / 2;
+			const int y = center.y + static_cast<int>(destination.y * cell * progress) + cell / 2 - bitmap.GetHeight() / 2;
+			dc.DrawBitmap(bitmap, x, y, true);
+		}
+	}
 
 	const int detailsTop = size.y - FromDIP(62);
 	dc.SetTextForeground(Theme::Get(Theme::Role::Text));

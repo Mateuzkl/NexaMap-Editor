@@ -114,6 +114,7 @@ ${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.h
 ${CMAKE_CURRENT_LIST_DIR}/spell_definition.h
 ${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.h
 ${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.h
@@ -161,6 +162,7 @@ ${CMAKE_CURRENT_LIST_DIR}/settings.h
 ${CMAKE_CURRENT_LIST_DIR}/server_content_index.h
 ${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.h
+${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.h
 ${CMAKE_CURRENT_LIST_DIR}/editor_autosave_state.h
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
@@ -306,6 +308,7 @@ ${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.cpp
@@ -348,6 +351,7 @@ ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.cpp
+${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.cpp
 ${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
@@ -417,6 +421,7 @@ set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
 	${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.cpp
+	${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_definition.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.cpp
@@ -431,6 +436,7 @@ set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
 	${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.cpp
 	${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
+	${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp

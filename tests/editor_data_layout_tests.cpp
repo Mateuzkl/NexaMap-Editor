@@ -91,6 +91,19 @@ int main() {
 	check(spellDialog.find("StartOnce(650)") != std::string::npos, "Spell Editor uses debounced autosave");
 	check(spellDialog.find("wxVSCROLL") != std::string::npos, "Spell Editor uses scrollable content pages");
 	check(spellDialog.find("Registration XML") != std::string::npos && spellDialog.find("Implementation Lua") != std::string::npos, "Spell Editor exposes paired registration and implementation sources");
+	check(spellDialog.find("SpellVisualBrowserDialog") != std::string::npos && spellDialog.find("Browse...") != std::string::npos, "Spell Editor exposes visual effect and projectile browsers");
+	check(spellDialog.find("North-East") != std::string::npos && spellDialog.find("South-West") != std::string::npos, "Spell visual controls expose all eight projectile directions");
+	check(spellDialog.find("Animation speed") != std::string::npos && spellDialog.find("SetPlaying(true)") != std::string::npos, "Spell visual preview has play, stop and speed controls");
+
+	std::ifstream graphicsFile(sourceRoot / "source" / "graphics.cpp", std::ios::binary);
+	const std::string graphics((std::istreambuf_iterator<char>(graphicsFile)), std::istreambuf_iterator<char>());
+	check(graphics.find("getEffectSprite") != std::string::npos && graphics.find("getDistanceSprite") != std::string::npos, "GraphicManager exposes active-session effect and projectile sprites");
+	check(graphics.find("creature_count + effect_count + distance_count") != std::string::npos, "classic DAT metadata loads items, outfits, effects and projectiles");
+	check(graphics.find("swap(effect_count, other.effect_count)") != std::string::npos && graphics.find("swap(distance_count, other.distance_count)") != std::string::npos, "effect and projectile ranges swap with each EditorResourceSession");
+
+	std::ifstream assetsFile(sourceRoot / "source" / "client_assets.cpp", std::ios::binary);
+	const std::string assets((std::istreambuf_iterator<char>(assetsFile)), std::istreambuf_iterator<char>());
+	check(assets.find("appearances.effect()") != std::string::npos && assets.find("appearances.missile()") != std::string::npos, "protobuf clients load effect and missile appearances");
 
 	if (failures == 0) {
 		std::cout << checks << " editor data layout checks passed.\n";

@@ -378,6 +378,18 @@ if(BUILD_TESTING)
 	endif()
 	add_test(NAME spell_definition_provider_tests COMMAND spell_definition_provider_tests)
 
+	add_executable(server_visual_catalog_tests
+		tests/server_visual_catalog_tests.cpp
+		source/server_visual_catalog.cpp
+		source/server_workspace.cpp
+	)
+	target_include_directories(server_visual_catalog_tests PRIVATE source)
+	set_target_properties(server_visual_catalog_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+	if(MSVC)
+		target_compile_options(server_visual_catalog_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME server_visual_catalog_tests COMMAND server_visual_catalog_tests)
+
 	add_executable(monster_spell_area_tests
 		tests/monster_spell_area_tests.cpp
 		source/monster_spell_area.cpp
