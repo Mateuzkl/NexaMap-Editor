@@ -37,6 +37,7 @@ public:
 
 	[[nodiscard]] bool wasSaved() const;
 	[[nodiscard]] const MonsterDefinition& savedDefinition() const;
+	[[nodiscard]] bool wantsBrowse() const;
 
 private:
 	wxTextCtrl* addTextField(wxWindow* parent, wxFlexGridSizer* grid, MonsterField field, const std::string& value);
@@ -67,6 +68,7 @@ private:
 	void onCancel(wxCommandEvent& event);
 	void onClose(wxCloseEvent& event);
 	void onSave(wxCommandEvent& event);
+	void onBrowse(wxCommandEvent& event);
 	void onFieldChanged(wxCommandEvent& event);
 	void onAutosave(wxTimerEvent& event);
 	void onLookChanged(wxCommandEvent& event);
@@ -101,6 +103,7 @@ private:
 	EditorAutosaveState autosaveState;
 	bool constructing = true;
 	bool saved = false;
+	bool browseRequested = false;
 };
 
 #endif // NEXAMAP_MONSTER_EDITOR_DIALOG_H_

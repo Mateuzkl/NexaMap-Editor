@@ -547,6 +547,10 @@ bool ServerWorkspace::hasAppearances() const {
 	return appearancesFingerprint.exists;
 }
 
+bool ServerWorkspace::hasMountsXml() const {
+	return mountsXmlFingerprint.exists;
+}
+
 bool ServerWorkspace::usesCanaryCrystalLoader() const {
 	return UsesCanaryCrystalLoader(serverType);
 }
@@ -571,6 +575,9 @@ bool ServerWorkspace::trackedResourcesChanged() const {
 		return true;
 	}
 	if (!appearancesPath.empty() && !appearancesFingerprint.MatchesCurrentFile()) {
+		return true;
+	}
+	if (!mountsXmlPath.empty() && !mountsXmlFingerprint.MatchesCurrentFile()) {
 		return true;
 	}
 	return std::any_of(maps.begin(), maps.end(), [](const DetectedMap& map) {
@@ -612,6 +619,33 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		}
 		if (!activeItems.appearances.empty()) {
 			workspace.appearancesPath = activeItems.appearances;
+		}
+	}
+
+	static constexpr std::array<const char*, 6> mountXmlCandidates {
+		"data/XML/mounts.xml",
+		"data/xml/mounts.xml",
+		"data/mounts.xml",
+		"XML/mounts.xml",
+		"xml/mounts.xml",
+		"mounts.xml",
+	};
+	if (!workspace.activeDataDirectory.empty()) {
+		for (const char* candidate : mountXmlCandidates) {
+			const std::filesystem::path path = workspace.activeDataDirectory / candidate;
+			if (IsServerWorkspaceFile(path)) {
+				workspace.mountsXmlPath = Normalize(path);
+				break;
+			}
+		}
+	}
+	if (workspace.mountsXmlPath.empty()) {
+		for (const char* candidate : mountXmlCandidates) {
+			const std::filesystem::path path = root / candidate;
+			if (IsServerWorkspaceFile(path)) {
+				workspace.mountsXmlPath = Normalize(path);
+				break;
+			}
 		}
 	}
 
@@ -668,6 +702,8 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 					workspace.itemsXmlPath = Normalize(entry.path());
 				} else if (workspace.appearancesPath.empty() && fileName == "appearances.dat") {
 					workspace.appearancesPath = Normalize(entry.path());
+				} else if (workspace.mountsXmlPath.empty() && fileName == "mounts.xml") {
+					workspace.mountsXmlPath = Normalize(entry.path());
 				}
 				const std::string extension = Lower(ServerPathUtf8(entry.path().extension()));
 				if (workspace.activeDataDirectory.empty() && (extension == ".otbm" || extension == ".otgz")) {
@@ -732,6 +768,8 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	workspace.itemsXmlFingerprint = ResourceFingerprint::Read(workspace.itemsXmlPath);
 	TraceServerScan(options, "Reading appearances.dat metadata", workspace.appearancesPath);
 	workspace.appearancesFingerprint = ResourceFingerprint::Read(workspace.appearancesPath);
+	TraceServerScan(options, "Reading mounts.xml metadata", workspace.mountsXmlPath);
+	workspace.mountsXmlFingerprint = ResourceFingerprint::Read(workspace.mountsXmlPath);
 	TraceServerScan(options, "Finalizing server profile");
 	const DetectedMap* primaryMap = workspace.findMap(workspace.primaryMapPath);
 	if (primaryMap != nullptr) {

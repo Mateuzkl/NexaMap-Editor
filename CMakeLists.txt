@@ -307,6 +307,7 @@ if(BUILD_TESTING)
 
 	add_executable(server_workspace_tests
 		tests/server_workspace_tests.cpp
+		source/mount_id_resolver.cpp
 		source/server_workspace.cpp
 	)
 	target_include_directories(server_workspace_tests PRIVATE source)
@@ -366,6 +367,7 @@ if(BUILD_TESTING)
 	add_executable(spell_definition_provider_tests
 		tests/spell_definition_provider_tests.cpp
 		source/spell_definition.cpp
+		source/spell_area_resolver.cpp
 		source/server_content_index.cpp
 		source/server_workspace.cpp
 	)

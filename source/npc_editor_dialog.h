@@ -5,6 +5,7 @@
 #ifndef NEXAMAP_NPC_EDITOR_DIALOG_H_
 #define NEXAMAP_NPC_EDITOR_DIALOG_H_
 
+#include "editor_autosave_state.h"
 #include "npc_definition.h"
 
 #include <wx/dialog.h>
@@ -16,7 +17,10 @@ class wxFlexGridSizer;
 class wxListCtrl;
 class wxSpinCtrl;
 class wxStaticBitmap;
+class wxStaticText;
 class wxTextCtrl;
+class wxTimer;
+class wxTimerEvent;
 class wxWindow;
 class OutfitColorPicker;
 
@@ -24,6 +28,7 @@ class NpcEditorDialog final : public wxDialog {
 public:
 	NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinitionDocument> document);
 	[[nodiscard]] bool wasSaved() const;
+	[[nodiscard]] bool wantsBrowse() const;
 
 private:
 	wxTextCtrl* addText(wxWindow* parent, wxFlexGridSizer* grid, NpcField field, const std::string& value);
@@ -38,7 +43,13 @@ private:
 	void editShop(std::size_t index);
 	void editTravel(std::size_t index);
 	bool confirmDiscard();
+	bool saveDocument(bool showErrors);
+	void scheduleAutosave();
+	void updateSaveState(const wxString& label, bool error = false);
 	void onSave(wxCommandEvent& event);
+	void onBrowse(wxCommandEvent& event);
+	void onFieldChanged(wxCommandEvent& event);
+	void onAutosave(wxTimerEvent& event);
 	void onCancel(wxCommandEvent& event);
 	void onClose(wxCloseEvent& event);
 
@@ -51,7 +62,12 @@ private:
 	wxListCtrl* shopList = nullptr;
 	wxListCtrl* travelList = nullptr;
 	wxTextCtrl* sourceView = nullptr;
+	wxStaticText* saveStateLabel = nullptr;
+	std::unique_ptr<wxTimer> autosaveTimer;
+	EditorAutosaveState autosaveState;
+	bool constructing = true;
 	bool saved = false;
+	bool browseRequested = false;
 };
 
 #endif // NEXAMAP_NPC_EDITOR_DIALOG_H_

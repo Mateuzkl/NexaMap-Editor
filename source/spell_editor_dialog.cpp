@@ -7,9 +7,13 @@
 #include "spell_editor_dialog.h"
 
 #include "monster_spell_preview.h"
+#include "spell_area_resolver.h"
+#include "server_vocation_catalog.h"
 #include "theme.h"
+#include "workspace_session.h"
 
 #include <wx/checkbox.h>
+#include <wx/checklst.h>
 #include <wx/choice.h>
 #include <wx/combobox.h>
 #include <wx/notebook.h>
@@ -18,11 +22,16 @@
 #include <wx/statline.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
+#include <wx/timer.h>
 
 #include <algorithm>
+#include <cctype>
 #include <limits>
 
 namespace {
+	constexpr int ID_SPELL_BACK = wxID_HIGHEST + 921;
+	constexpr int ID_SPELL_BROWSE = wxID_HIGHEST + 922;
+
 	wxString Utf8(const std::string& value) {
 		return wxString::FromUTF8(value);
 	}
@@ -33,6 +42,18 @@ namespace {
 
 	std::size_t Index(SpellField field) {
 		return static_cast<std::size_t>(field);
+	}
+
+	std::string LowerAscii(std::string value) {
+		std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+		return value;
+	}
+
+	std::string VocationName(std::string value) {
+		if (const auto flag = value.find(';'); flag != std::string::npos) {
+			value.resize(flag);
+		}
+		return LowerAscii(value);
 	}
 
 	wxScrolledWindow* Page(wxNotebook* notebook) {
@@ -60,7 +81,7 @@ namespace {
 
 SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefinitionDocument> value) :
 	wxDialog(parent, wxID_ANY, "Spell Editor", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
-	document(std::move(value)), edited(document->definition()) {
+	document(std::move(value)), edited(document->definition()), areaResolver(std::make_unique<SpellAreaResolver>(g_workspace.getServer())) {
 	SetBackgroundColour(Theme::Get(Theme::Role::Surface));
 	auto* root = newd wxBoxSizer(wxVERTICAL);
 	auto* header = newd wxPanel(this);
@@ -153,14 +174,113 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 
 	auto* vocationPage = Page(notebook);
 	auto* vocationSizer = newd wxBoxSizer(wxVERTICAL);
-	vocationSizer->Add(newd wxStaticText(vocationPage, wxID_ANY, "Vocation declarations are displayed from the selected spell and preserved exactly."), 0, wxALL, FromDIP(10));
-	auto* vocations = newd wxTextCtrl(vocationPage, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
-	wxString vocationText;
-	for (const std::string& vocation : edited.vocations) {
-		vocationText += Utf8(vocation) + "\n";
+	vocationSizer->Add(newd wxStaticText(vocationPage, wxID_ANY, "Vocations come from the active Server Workspace. Existing custom names and flags remain preserved."), 0, wxALL, FromDIP(10));
+	allVocationsCheck = newd wxCheckBox(vocationPage, wxID_ANY, "All vocations (global spell)");
+	allVocationsCheck->SetValue(edited.allVocations);
+	vocationSizer->Add(allVocationsCheck, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+	vocationList = newd wxCheckListBox(vocationPage, wxID_ANY);
+	vocationCatalog = LoadServerVocations(g_workspace.getServer());
+	std::vector<bool> consumed(edited.vocations.size(), false);
+	for (const ServerVocation& vocation : vocationCatalog) {
+		const std::string normalized = LowerAscii(vocation.name);
+		std::string raw = document->source().format == ServerContentFormat::Lua ? normalized : vocation.name;
+		bool checked = false;
+		for (std::size_t existing = 0; existing < edited.vocations.size(); ++existing) {
+			if (!consumed[existing] && VocationName(edited.vocations[existing]) == normalized) {
+				raw = edited.vocations[existing];
+				consumed[existing] = true;
+				checked = true;
+				break;
+			}
+		}
+		const int row = vocationList->Append(Utf8(vocation.name + (vocation.promoted ? "  (promoted)" : "")));
+		vocationList->Check(row, checked);
+		vocationValues.push_back(std::move(raw));
 	}
-	vocations->ChangeValue(vocationText.empty() ? wxString("No literal vocation list was found in this source.") : vocationText);
-	vocationSizer->Add(vocations, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+	for (std::size_t existing = 0; existing < edited.vocations.size(); ++existing) {
+		if (!consumed[existing]) {
+			const int row = vocationList->Append("Custom: " + Utf8(edited.vocations[existing]));
+			vocationList->Check(row, true);
+			vocationValues.push_back(edited.vocations[existing]);
+		}
+	}
+	vocationList->Enable(edited.vocationCapability.editable && !edited.allVocations);
+	vocationList->SetToolTip(Utf8(edited.vocationCapability.limitation));
+	vocationSizer->Add(vocationList, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+	auto* vocationOptions = newd wxBoxSizer(wxHORIZONTAL);
+	showInDescriptionCheck = newd wxCheckBox(vocationPage, wxID_ANY, "Show selected in description");
+	showInDescriptionCheck->Enable(document->source().format == ServerContentFormat::Lua && edited.vocationCapability.editable && !edited.allVocations);
+	vocationOptions->Add(showInDescriptionCheck, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
+	customVocation = newd wxTextCtrl(vocationPage, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	customVocation->SetHint("Custom vocation name");
+	vocationOptions->Add(customVocation, 1, wxRIGHT, FromDIP(6));
+	auto* addVocation = newd wxButton(vocationPage, wxID_ADD, "Add");
+	auto* removeVocation = newd wxButton(vocationPage, wxID_REMOVE, "Remove selected");
+	vocationOptions->Add(addVocation, 0, wxRIGHT, FromDIP(6));
+	vocationOptions->Add(removeVocation, 0);
+	vocationSizer->Add(vocationOptions, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+	const bool vocationEditable = edited.vocationCapability.editable;
+	allVocationsCheck->Enable(vocationEditable);
+	customVocation->Enable(vocationEditable && !edited.allVocations);
+	addVocation->Enable(vocationEditable && !edited.allVocations);
+	removeVocation->Enable(vocationEditable && !edited.allVocations);
+	allVocationsCheck->Bind(wxEVT_CHECKBOX, [this, addVocation, removeVocation](wxCommandEvent&) {
+		const bool all = allVocationsCheck->GetValue();
+		vocationList->Enable(!all);
+		customVocation->Enable(!all);
+		addVocation->Enable(!all);
+		removeVocation->Enable(!all);
+		showInDescriptionCheck->Enable(!all && document->source().format == ServerContentFormat::Lua);
+		if (all) {
+			for (unsigned int row = 0; row < vocationList->GetCount(); ++row) {
+				vocationList->Check(row, false);
+			}
+		}
+		syncVocations();
+	});
+	vocationList->Bind(wxEVT_CHECKLISTBOX, [this](wxCommandEvent&) { syncVocations(); });
+	vocationList->Bind(wxEVT_LISTBOX, [this](wxCommandEvent&) { refreshVocationControls(); });
+	showInDescriptionCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+		const int row = vocationList->GetSelection();
+		if (row >= 0 && static_cast<std::size_t>(row) < vocationValues.size()) {
+			std::string raw = vocationValues[static_cast<std::size_t>(row)];
+			if (const auto separator = raw.find(';'); separator != std::string::npos) {
+				raw.resize(separator);
+			}
+			if (showInDescriptionCheck->GetValue()) {
+				raw += ";true";
+			}
+			vocationValues[static_cast<std::size_t>(row)] = std::move(raw);
+			syncVocations();
+		}
+	});
+	const auto addCustom = [this]() {
+		const std::string value = Narrow(customVocation->GetValue()).empty() ? std::string() : Narrow(customVocation->GetValue());
+		if (value.empty()) {
+			return;
+		}
+		vocationValues.push_back(value);
+		const int row = vocationList->Append("Custom: " + Utf8(value));
+		vocationList->Check(row, true);
+		vocationList->SetSelection(row);
+		customVocation->Clear();
+		syncVocations();
+	};
+	addVocation->Bind(wxEVT_BUTTON, [addCustom](wxCommandEvent&) { addCustom(); });
+	customVocation->Bind(wxEVT_TEXT_ENTER, [addCustom](wxCommandEvent&) { addCustom(); });
+	removeVocation->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+		const int row = vocationList->GetSelection();
+		if (row < 0) {
+			return;
+		}
+		if (static_cast<std::size_t>(row) < vocationCatalog.size()) {
+			vocationList->Check(row, false);
+		} else {
+			vocationList->Delete(row);
+			vocationValues.erase(vocationValues.begin() + row);
+		}
+		syncVocations();
+	});
 	vocationPage->SetSizer(vocationSizer);
 	notebook->AddPage(vocationPage, "Vocations");
 
@@ -194,6 +314,8 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	saveState = newd wxStaticText(this, wxID_ANY, "No changes");
 	saveState->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
 	bottom->Add(saveState, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
+	bottom->Add(newd wxButton(this, ID_SPELL_BACK, "< Back to Spells"), 0, wxRIGHT, FromDIP(6));
+	bottom->Add(newd wxButton(this, ID_SPELL_BROWSE, "Browse Spells..."), 0, wxRIGHT, FromDIP(12));
 	bottom->Add(newd wxButton(this, wxID_OK, "Save"), 0, wxRIGHT, FromDIP(8));
 	bottom->Add(newd wxButton(this, wxID_CANCEL, "Close"), 0);
 	root->Add(newd wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
@@ -203,8 +325,12 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	SetSize(FromDIP(wxSize(980, 760)));
 	CentreOnParent();
 	Bind(wxEVT_BUTTON, &SpellEditorDialog::onSave, this, wxID_OK);
+	Bind(wxEVT_BUTTON, &SpellEditorDialog::onBrowse, this, ID_SPELL_BACK);
+	Bind(wxEVT_BUTTON, &SpellEditorDialog::onBrowse, this, ID_SPELL_BROWSE);
 	Bind(wxEVT_BUTTON, &SpellEditorDialog::onCloseButton, this, wxID_CANCEL);
 	Bind(wxEVT_CLOSE_WINDOW, &SpellEditorDialog::onClose, this);
+	autosaveTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &SpellEditorDialog::onAutosave, this, autosaveTimer->GetId());
 	constructing = false;
 	refreshPreview();
 }
@@ -214,6 +340,10 @@ bool SpellEditorDialog::wasSaved() const {
 }
 const SpellDefinition& SpellEditorDialog::savedDefinition() const {
 	return edited;
+}
+
+bool SpellEditorDialog::wantsBrowse() const {
+	return browseRequested;
 }
 
 wxWindow* SpellEditorDialog::addText(wxWindow* parent, wxFlexGridSizer* grid, SpellField field, const std::string& value, const wxArrayString& choices) {
@@ -304,6 +434,35 @@ void SpellEditorDialog::readControls() {
 	boolean(SpellField::SelfTarget, edited.selfTarget);
 }
 
+void SpellEditorDialog::syncVocations() {
+	edited.vocations.clear();
+	if (!allVocationsCheck || !allVocationsCheck->GetValue()) {
+		for (unsigned int row = 0; row < vocationList->GetCount() && row < vocationValues.size(); ++row) {
+			if (vocationList->IsChecked(row)) {
+				edited.vocations.push_back(vocationValues[row]);
+			}
+		}
+	}
+	edited.allVocations = edited.vocations.empty();
+	if (edited.allVocations && allVocationsCheck && !allVocationsCheck->GetValue()) {
+		allVocationsCheck->SetValue(true);
+		vocationList->Enable(false);
+		customVocation->Enable(false);
+		showInDescriptionCheck->Enable(false);
+	}
+	scheduleAutosave();
+}
+
+void SpellEditorDialog::refreshVocationControls() {
+	if (!showInDescriptionCheck || !vocationList) {
+		return;
+	}
+	const int row = vocationList->GetSelection();
+	const bool selected = row >= 0 && static_cast<std::size_t>(row) < vocationValues.size();
+	showInDescriptionCheck->Enable(selected && document->source().format == ServerContentFormat::Lua && !edited.allVocations);
+	showInDescriptionCheck->SetValue(selected && vocationValues[static_cast<std::size_t>(row)].find(";true") != std::string::npos);
+}
+
 void SpellEditorDialog::refreshPreview() {
 	if (!preview) {
 		return;
@@ -316,67 +475,104 @@ void SpellEditorDialog::refreshPreview() {
 	edited.preview.area.range = edited.range;
 	edited.preview.area.target = edited.needTarget;
 	preview->SetDirection(direction);
-	if (!edited.customAreaTiles.empty() && edited.areaExpression == document->definition().areaExpression) {
-		preview->SetCustomArea(&edited.preview, edited.customAreaTiles, "Custom " + std::to_string(edited.customAreaTiles.size()) + " tiles");
+	SpellAreaResolution resolution;
+	if (edited.areaExpression == document->definition().areaExpression) {
+		resolution.state = edited.areaResolutionState;
+		resolution.tiles = edited.customAreaTiles;
+		resolution.description = edited.areaStatus;
 	} else {
-		SpellDefinition resolved = edited;
-		resolved.customAreaTiles.clear();
-		// Reloading the provider is unnecessary here; reproduce the common static shapes.
-		const std::string area = Narrow(Utf8(edited.areaExpression).Lower());
-		resolved.preview.area = {};
-		resolved.preview.area.range = edited.range;
-		resolved.preview.area.target = edited.needTarget;
-		if (area.find("circle2x2") != std::string::npos) {
-			resolved.preview.area.radius = 2;
-		} else if (area.find("circle3x3") != std::string::npos) {
-			resolved.preview.area.radius = 3;
-		} else if (area.find("square1x1") != std::string::npos) {
-			resolved.preview.area.radius = 1;
-		} else if (area.find("square2x2") != std::string::npos) {
-			resolved.preview.area.radius = 2;
-		} else if (area.find("beam") != std::string::npos) {
-			resolved.preview.area.length = area.find('8') != std::string::npos ? 8 : 5;
-		} else if (area.find("wave") != std::string::npos) {
-			resolved.preview.area.length = area.find('8') != std::string::npos ? 8 : 4;
-			resolved.preview.area.spread = 3;
-		}
-		preview->SetAttack(&resolved.preview);
+		resolution = areaResolver->resolve(edited.areaExpression);
 	}
-}
-
-void SpellEditorDialog::updateDirtyState() {
-	readControls();
-	const bool dirty = document->hasChanges(edited);
-	saveState->SetLabel(dirty ? "Unsaved changes" : (saved ? "Saved" : "No changes"));
-	saveState->SetForegroundColour(dirty ? wxColour(230, 169, 56) : Theme::Get(Theme::Role::TextSubtle));
+	areaStatus->SetLabel(Utf8(resolution.description));
+	areaStatus->Wrap(FromDIP(360));
+	if (resolution.state == SpellAreaResolutionState::Resolved) {
+		preview->SetCustomArea(&edited.preview, std::move(resolution.tiles), resolution.description);
+	} else if (resolution.state == SpellAreaResolutionState::Single) {
+		preview->SetAttack(&edited.preview);
+	} else {
+		preview->SetUnavailableArea(&edited.preview, resolution.description);
+	}
 }
 
 void SpellEditorDialog::onFieldChanged(wxCommandEvent& event) {
 	event.Skip();
 	if (!constructing) {
-		updateDirtyState();
+		scheduleAutosave();
 		refreshPreview();
 	}
 }
 
 void SpellEditorDialog::onSave(wxCommandEvent&) {
+	saveDocument(true);
+}
+
+bool SpellEditorDialog::saveDocument(bool showErrors) {
 	readControls();
 	std::string error;
 	if (!document->save(edited, error)) {
-		saveState->SetLabel("Save failed");
-		saveState->SetForegroundColour(wxColour(230, 82, 82));
-		wxMessageBox(Utf8(error), "Could not save spell", wxOK | wxICON_ERROR, this);
-		return;
+		autosaveState.failed(error);
+		updateSaveState("Save error: " + Utf8(error), true);
+		if (showErrors) {
+			wxMessageBox(Utf8(error), "Could not save spell", wxOK | wxICON_ERROR, this);
+		}
+		return false;
 	}
 	edited = document->definition();
 	declarationSource->ChangeValue(Utf8(document->declarationText()));
 	if (implementationSource) {
 		implementationSource->ChangeValue(Utf8(document->implementationText()));
 	}
+	autosaveState.saved();
 	saved = true;
-	saveState->SetLabel("Saved");
-	saveState->SetForegroundColour(wxColour(80, 196, 122));
+	updateSaveState(showErrors ? "Saved" : "Saved automatically");
 	refreshPreview();
+	return true;
+}
+
+void SpellEditorDialog::scheduleAutosave() {
+	if (constructing || !document) {
+		return;
+	}
+	readControls();
+	if (!document->hasChanges(edited)) {
+		if (!autosaveState.hasError()) {
+			updateSaveState(saved ? "Saved" : "No changes");
+		}
+		return;
+	}
+	autosaveState.changed();
+	updateSaveState("Unsaved changes - autosave pending");
+	if (autosaveTimer) {
+		autosaveTimer->StartOnce(650);
+	}
+}
+
+void SpellEditorDialog::updateSaveState(const wxString& label, bool error) {
+	if (!saveState) {
+		return;
+	}
+	saveState->SetLabel(label);
+	saveState->SetForegroundColour(error ? wxColour(232, 72, 85) : Theme::Get(Theme::Role::TextSubtle));
+	saveState->SetToolTip(label);
+	saveState->GetParent()->Layout();
+}
+
+void SpellEditorDialog::onAutosave(wxTimerEvent&) {
+	if (autosaveState.ready()) {
+		saveDocument(false);
+	}
+}
+
+void SpellEditorDialog::onBrowse(wxCommandEvent&) {
+	if (autosaveTimer) {
+		autosaveTimer->Stop();
+	}
+	readControls();
+	if (document->hasChanges(edited) && !saveDocument(true)) {
+		return;
+	}
+	browseRequested = true;
+	EndModal(wxID_CANCEL);
 }
 
 bool SpellEditorDialog::confirmDiscard() {

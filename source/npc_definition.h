@@ -35,9 +35,22 @@ enum class NpcField : uint8_t {
 };
 
 struct NpcFieldCapability {
+	enum class State : uint8_t {
+		Unsupported = 0,
+		ExistingEditableLiteral,
+		SupportedInsertable,
+		DynamicReadOnly,
+		Ambiguous,
+	};
+
+	State state = State::Unsupported;
 	bool present = false;
 	bool editable = false;
 	std::string limitation;
+
+	[[nodiscard]] bool insertable() const {
+		return state == State::SupportedInsertable;
+	}
 };
 
 struct NpcMessage {

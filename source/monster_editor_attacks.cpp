@@ -20,6 +20,7 @@
 #include <wx/listctrl.h>
 #include <wx/notebook.h>
 #include <wx/spinctrl.h>
+#include <wx/splitter.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
 #include <wx/tokenzr.h>
@@ -71,12 +72,16 @@ namespace {
 }
 
 void MonsterEditorDialog::addAttackPage(wxNotebook* notebook) {
-	auto* page = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
-	page->SetScrollRate(0, FromDIP(12));
-	auto* root = newd wxBoxSizer(wxHORIZONTAL);
+	auto* page = newd wxPanel(notebook);
+	auto* root = newd wxBoxSizer(wxVERTICAL);
+	root->Add(newd wxStaticText(page, wxID_ANY, "Attacks and spells are normalized from XML or Lua. Unknown fields remain preserved in the source."), 0, wxEXPAND | wxALL, FromDIP(10));
+	auto* splitter = newd wxSplitterWindow(page, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE | wxSP_3D);
+	splitter->SetMinimumPaneSize(FromDIP(210));
+	splitter->SetSashGravity(0.66);
+	auto* leftPanel = newd wxPanel(splitter);
+	auto* rightPanel = newd wxPanel(splitter);
 	auto* left = newd wxBoxSizer(wxVERTICAL);
-	left->Add(newd wxStaticText(page, wxID_ANY, "Attacks and spells are normalized from XML or Lua. Unknown fields remain preserved in the source."), 0, wxBOTTOM, FromDIP(8));
-	attackList = newd wxListCtrl(page, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
+	attackList = newd wxListCtrl(leftPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
 	attackList->AppendColumn("Attack", wxLIST_FORMAT_LEFT, FromDIP(120));
 	attackList->AppendColumn("Combat", wxLIST_FORMAT_LEFT, FromDIP(145));
 	attackList->AppendColumn("Interval", wxLIST_FORMAT_RIGHT, FromDIP(72));
@@ -85,7 +90,21 @@ void MonsterEditorDialog::addAttackPage(wxNotebook* notebook) {
 	attackList->AppendColumn("Area", wxLIST_FORMAT_LEFT, FromDIP(135));
 	attackList->AppendColumn("Effect", wxLIST_FORMAT_LEFT, FromDIP(145));
 	attackList->AppendColumn("Projectile", wxLIST_FORMAT_LEFT, FromDIP(145));
-	left->Add(attackList, 1, wxEXPAND | wxBOTTOM, FromDIP(8));
+	left->Add(attackList, 1, wxEXPAND);
+	leftPanel->SetSizer(left);
+
+	auto* right = newd wxBoxSizer(wxVERTICAL);
+	right->Add(newd wxStaticText(rightPanel, wxID_ANY, "Visual preview"), 0, wxBOTTOM, FromDIP(5));
+	attackDirection = newd wxChoice(rightPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, Values({ "North", "East", "South", "West" }));
+	attackDirection->SetSelection(0);
+	right->Add(attackDirection, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
+	attackPreview = newd MonsterSpellPreview(rightPanel);
+	attackPreview->SetMinSize(FromDIP(wxSize(210, 260)));
+	right->Add(attackPreview, 1, wxEXPAND);
+	rightPanel->SetSizer(right);
+	splitter->SplitVertically(leftPanel, rightPanel, FromDIP(500));
+	root->Add(splitter, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
+
 	auto* buttons = newd wxBoxSizer(wxHORIZONTAL);
 	const auto addButton = [&](const wxString& label, const std::function<void()>& action) {
 		auto* button = newd wxButton(page, wxID_ANY, label);
@@ -98,17 +117,7 @@ void MonsterEditorDialog::addAttackPage(wxNotebook* notebook) {
 	addButton("Remove", [this]() { const long row = attackList->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED); if (row >= 0) { edited.attacks.erase(edited.attacks.begin() + row); refreshAttackList(); } });
 	addButton("Up", [this]() { moveSelected(attackList, edited.attacks.size(), true, [this](std::size_t a, std::size_t b) { std::swap(edited.attacks[a], edited.attacks[b]); refreshAttackList(); }); });
 	addButton("Down", [this]() { moveSelected(attackList, edited.attacks.size(), false, [this](std::size_t a, std::size_t b) { std::swap(edited.attacks[a], edited.attacks[b]); refreshAttackList(); }); });
-	left->Add(buttons, 0, wxEXPAND);
-	root->Add(left, 3, wxEXPAND | wxALL, FromDIP(10));
-
-	auto* right = newd wxBoxSizer(wxVERTICAL);
-	right->Add(newd wxStaticText(page, wxID_ANY, "Affected tiles"), 0, wxBOTTOM, FromDIP(5));
-	attackDirection = newd wxChoice(page, wxID_ANY, wxDefaultPosition, wxDefaultSize, Values({ "North", "East", "South", "West" }));
-	attackDirection->SetSelection(0);
-	right->Add(attackDirection, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
-	attackPreview = newd MonsterSpellPreview(page);
-	right->Add(attackPreview, 1, wxEXPAND);
-	root->Add(right, 2, wxEXPAND | wxTOP | wxRIGHT | wxBOTTOM, FromDIP(10));
+	root->Add(buttons, 0, wxEXPAND | wxALL, FromDIP(10));
 	page->SetSizer(root);
 	notebook->AddPage(page, "Attacks");
 	applySectionCapability(page, MonsterSection::Attacks);

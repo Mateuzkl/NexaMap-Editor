@@ -6,6 +6,7 @@
 
 #include "ext/pugixml.hpp"
 #include "file_transaction.h"
+#include "spell_area_resolver.h"
 
 #include <algorithm>
 #include <array>
@@ -78,6 +79,13 @@ namespace {
 		std::size_t line = 1;
 		bool selfClosing = false;
 		std::vector<XmlAttribute> attributes;
+	};
+
+	struct XmlVocationSource {
+		std::string name;
+		std::size_t file = 0;
+		std::size_t begin = 0;
+		std::size_t end = 0;
 	};
 
 	std::size_t Index(SpellField field) {
@@ -504,35 +512,6 @@ namespace {
 		return {};
 	}
 
-	void ApplyKnownArea(SpellDefinition& definition) {
-		definition.preview.area = {};
-		definition.preview.area.range = definition.range;
-		definition.preview.area.target = definition.needTarget;
-		const std::string area = LowerAscii(definition.areaExpression);
-		if (area.empty()) {
-			definition.areaStatus = "No static area is declared; preview uses targeting fields.";
-			return;
-		}
-		if (area.find("circle2x2") != std::string::npos) {
-			definition.preview.area.radius = 2;
-		} else if (area.find("circle3x3") != std::string::npos) {
-			definition.preview.area.radius = 3;
-		} else if (area.find("square1x1") != std::string::npos) {
-			definition.preview.area.radius = 1;
-		} else if (area.find("square2x2") != std::string::npos) {
-			definition.preview.area.radius = 2;
-		} else if (area.find("beam") != std::string::npos) {
-			definition.preview.area.length = area.find('8') != std::string::npos ? 8 : (area.find('5') != std::string::npos ? 5 : 4);
-		} else if (area.find("wave") != std::string::npos) {
-			definition.preview.area.length = area.find('8') != std::string::npos ? 8 : (area.find('6') != std::string::npos ? 6 : 4);
-			definition.preview.area.spread = 3;
-		} else {
-			definition.areaStatus = "The area expression is preserved, but its geometry is not a known static constant.";
-			return;
-		}
-		definition.areaStatus = "Static engine area resolved for preview.";
-	}
-
 	std::vector<MonsterAreaTile> ParseLiteralArea(std::string_view expression) {
 		std::vector<std::vector<int>> rows;
 		int depth = 0;
@@ -597,6 +576,15 @@ struct SpellDefinitionDocument::Impl {
 	std::vector<SourceFile> files;
 	std::array<std::vector<SourceLocation>, FieldCount> locations;
 	std::size_t implementationFile = 0;
+	std::optional<SourceLocation> luaVocationArguments;
+	std::optional<SourceLocation> luaVocationStatement;
+	std::vector<XmlVocationSource> xmlVocations;
+	std::size_t vocationInsertFile = 0;
+	std::size_t vocationInsertPosition = std::string::npos;
+	std::string spellVariable;
+	std::string xmlSpellTag;
+	std::size_t xmlSpellEnd = 0;
+	bool xmlSpellSelfClosing = false;
 
 	void addLocation(SpellField field, SourceLocation location, const std::string& value) {
 		auto& capability = original.capabilities[Index(field)];
@@ -748,6 +736,7 @@ struct SpellDefinitionDocument::Impl {
 			return false;
 		}
 		const Creation& creation = creations[*selected];
+		spellVariable = creation.variable;
 		const std::size_t begin = creation.token;
 		const std::size_t end = *selected + 1 < creations.size() ? creations[*selected + 1].token : tokens.size();
 		if (begin + 4 < tokens.size()) {
@@ -795,6 +784,57 @@ struct SpellDefinitionDocument::Impl {
 				capability.limitation = "The Lua value is computed rather than a direct literal.";
 			}
 		}
+
+		std::vector<std::pair<std::size_t, std::size_t>> vocationCalls;
+		for (std::size_t i = begin; i + 4 < end; ++i) {
+			if (tokens[i].text != creation.variable || tokens[i + 1].text != ":" || tokens[i + 2].text != "vocation" || tokens[i + 3].text != "(") {
+				continue;
+			}
+			if (const auto close = MatchingToken(tokens, i + 3, "(", ")")) {
+				vocationCalls.push_back({ i, *close });
+			}
+		}
+		if (vocationCalls.size() > 1) {
+			original.vocationCapability = { SpellVocationCapabilityState::Ambiguous, false, "Multiple vocation declarations control this spell." };
+		} else if (vocationCalls.size() == 1) {
+			const auto [call, close] = vocationCalls.front();
+			bool safe = true;
+			for (std::size_t token = call + 4; token < close; ++token) {
+				if (tokens[token].kind == TokenKind::String) {
+					original.vocations.push_back(tokens[token].text);
+				} else if (tokens[token].text != ",") {
+					safe = false;
+				}
+			}
+			if (safe) {
+				luaVocationArguments = SourceLocation { file, tokens[call + 3].end, tokens[close].begin, ValueSyntax::LuaString, '"', {} };
+				std::size_t statementBegin = tokens[call].begin;
+				if (const std::size_t line = files[file].bytes.rfind('\n', statementBegin); line != std::string::npos
+					&& files[file].bytes.substr(line + 1, statementBegin - line - 1).find_first_not_of(" \t\r") == std::string::npos) {
+					statementBegin = line + 1;
+				}
+				std::size_t statementEnd = tokens[close].end;
+				if (const std::size_t line = files[file].bytes.find('\n', statementEnd); line != std::string::npos
+					&& files[file].bytes.substr(statementEnd, line - statementEnd).find_first_not_of(" \t\r") == std::string::npos) {
+					statementEnd = line + 1;
+				}
+				luaVocationStatement = SourceLocation { file, statementBegin, statementEnd, ValueSyntax::LuaString, '"', {} };
+				original.vocationCapability = { SpellVocationCapabilityState::ExistingEditableLiteral, true, {} };
+			} else {
+				original.vocations.clear();
+				original.vocationCapability = { SpellVocationCapabilityState::DynamicReadOnly, false, "The vocation call contains computed arguments." };
+			}
+		} else {
+			original.vocationCapability = { SpellVocationCapabilityState::SupportedInsertable, true, "No vocation call exists; this spell currently allows all vocations." };
+		}
+		for (std::size_t i = begin; i + 3 < end; ++i) {
+			if (tokens[i].text == creation.variable && tokens[i + 1].text == ":" && tokens[i + 2].text == "register" && tokens[i + 3].text == "(") {
+				vocationInsertFile = file;
+				const std::size_t lineStart = files[file].bytes.rfind('\n', tokens[i].begin);
+				vocationInsertPosition = lineStart == std::string::npos ? 0 : lineStart + 1;
+				break;
+			}
+		}
 		if (original.name.empty()) {
 			error = "The indexed Lua spell has no supported literal name.";
 			return false;
@@ -829,6 +869,9 @@ struct SpellDefinitionDocument::Impl {
 			return false;
 		}
 		original.subtype = selected->name;
+		xmlSpellTag = selected->name;
+		xmlSpellEnd = selected->end;
+		xmlSpellSelfClosing = selected->selfClosing;
 		const auto add = [&](SpellField field, const XmlAttribute* attribute, ValueSyntax syntax) {
 			if (attribute) {
 				addLocation(field, { file, attribute->begin, attribute->end, syntax, attribute->quote, attribute->value }, attribute->value);
@@ -863,15 +906,34 @@ struct SpellDefinitionDocument::Impl {
 		if (!selected->selfClosing) {
 			const std::size_t closing = files[file].bytes.find("</" + selected->name, selected->end);
 			const std::size_t nodeEnd = closing == std::string::npos ? selected->end : closing;
+			vocationInsertFile = file;
+			vocationInsertPosition = nodeEnd;
 			for (const XmlTag& tag : tags) {
 				if (tag.begin <= selected->end || tag.begin >= nodeEnd || tag.name != "vocation") {
 					continue;
 				}
 				if (const XmlAttribute* name = FindAttribute(tag, "name")) {
 					original.vocations.push_back(name->value);
+					std::size_t removeBegin = tag.begin;
+					const std::size_t lineStart = files[file].bytes.rfind('\n', tag.begin);
+					if (lineStart != std::string::npos && files[file].bytes.substr(lineStart + 1, tag.begin - lineStart - 1).find_first_not_of(" \t\r") == std::string::npos) {
+						removeBegin = lineStart + 1;
+					}
+					std::size_t removeEnd = tag.end;
+					if (const std::size_t newline = files[file].bytes.find('\n', tag.end); newline != std::string::npos
+						&& files[file].bytes.substr(tag.end, newline - tag.end).find_first_not_of(" \t\r") == std::string::npos) {
+						removeEnd = newline + 1;
+					}
+					xmlVocations.push_back({ name->value, file, removeBegin, removeEnd });
 				}
 			}
+			original.vocationCapability = { original.vocations.empty() ? SpellVocationCapabilityState::SupportedInsertable : SpellVocationCapabilityState::ExistingEditableLiteral, true, {} };
+		} else {
+			vocationInsertFile = file;
+			vocationInsertPosition = selected->end >= 2 ? selected->end - 2 : selected->end;
+			original.vocationCapability = { SpellVocationCapabilityState::SupportedInsertable, true, "This self-closing spell currently allows all vocations." };
 		}
+		original.allVocations = original.vocations.empty();
 		return true;
 	}
 
@@ -951,13 +1013,25 @@ struct SpellDefinitionDocument::Impl {
 		return value;
 	}
 
-	void finishPreview() {
+	void finishPreview(const ServerWorkspace& workspace) {
 		original.preview.name = original.name;
 		original.preview.type = original.combatType;
 		original.preview.effect = original.effect;
 		original.preview.projectile = original.projectile;
-		if (original.customAreaTiles.empty()) {
-			ApplyKnownArea(original);
+		original.allVocations = original.vocations.empty();
+		if (!original.areaExpression.empty() && !original.customAreaTiles.empty()) {
+			original.areaResolutionState = SpellAreaResolutionState::Resolved;
+			original.areaStatus = "Literal combat area resolved to " + std::to_string(original.customAreaTiles.size()) + " affected tiles.";
+		} else {
+			const SpellAreaResolution resolution = SpellAreaResolver(workspace).resolve(original.areaExpression);
+			original.areaResolutionState = resolution.state;
+			original.customAreaTiles = resolution.tiles;
+			original.areaStatus = resolution.description;
+			if (resolution.state == SpellAreaResolutionState::Single) {
+				original.preview.area = {};
+				original.preview.area.range = original.range;
+				original.preview.area.target = original.needTarget;
+			}
 		}
 		for (std::size_t field = 0; field < FieldCount; ++field) {
 			auto& capability = original.capabilities[field];
@@ -973,6 +1047,14 @@ const SpellFieldCapability& SpellDefinition::capability(SpellField field) const 
 }
 
 std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(const ServerContentSource& source, std::string& error) {
+	return Load(source, error, nullptr);
+}
+
+std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(
+	const ServerContentSource& source,
+	std::string& error,
+	const ServerWorkspace* selectedWorkspace
+) {
 	error.clear();
 	if (source.kind != ServerContentKind::Spell || (source.format != ServerContentFormat::Xml && source.format != ServerContentFormat::Lua)) {
 		error = "This source is not a supported global spell definition.";
@@ -1003,7 +1085,25 @@ std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(const Ser
 		implementation->files.push_back({ *source.relatedScriptPath, ResourceFingerprint::Read(*source.relatedScriptPath), *related });
 	}
 	implementation->parseCombat(implementation->implementationFile);
-	implementation->finishPreview();
+	ServerWorkspace inferred;
+	if (!selectedWorkspace) {
+		std::filesystem::path current = source.declarationPath.parent_path();
+		while (!current.empty()) {
+			const std::string name = LowerAscii(current.filename().string());
+			if (name == "data" || name == "data-crystal" || name == "data-global") {
+				inferred.activeDataDirectory = current;
+				inferred.rootPath = current.parent_path();
+				break;
+			}
+			const auto parent = current.parent_path();
+			if (parent == current) {
+				break;
+			}
+			current = parent;
+		}
+		selectedWorkspace = &inferred;
+	}
+	implementation->finishPreview(*selectedWorkspace);
 	return std::unique_ptr<SpellDefinitionDocument>(new SpellDefinitionDocument(std::move(implementation)));
 }
 
@@ -1037,7 +1137,7 @@ bool SpellDefinitionDocument::hasChanges(const SpellDefinition& edited) const {
 			return true;
 		}
 	}
-	return false;
+	return implementation->original.vocations != edited.vocations;
 }
 
 bool SpellDefinitionDocument::save(const SpellDefinition& edited, std::string& error) {
@@ -1063,6 +1163,69 @@ bool SpellDefinitionDocument::save(const SpellDefinition& edited, std::string& e
 		}
 		const SourceLocation& location = implementation->locations[index].front();
 		patches[location.file].push_back({ location.begin, location.end, implementation->replacement(edited, field, location) });
+	}
+	if (implementation->original.vocations != edited.vocations) {
+		if (!implementation->original.vocationCapability.editable) {
+			error = "Vocations cannot be saved safely: " + implementation->original.vocationCapability.limitation;
+			return false;
+		}
+		if (implementation->sourceInfo.format == ServerContentFormat::Lua) {
+			std::string arguments;
+			for (std::size_t index = 0; index < edited.vocations.size(); ++index) {
+				if (index) {
+					arguments += ", ";
+				}
+				arguments += EncodeLuaString(edited.vocations[index], '"');
+			}
+			if (implementation->luaVocationArguments) {
+				if (edited.vocations.empty() && implementation->luaVocationStatement) {
+					const auto& statement = *implementation->luaVocationStatement;
+					patches[statement.file].push_back({ statement.begin, statement.end, {} });
+				} else {
+					const auto& location = *implementation->luaVocationArguments;
+					patches[location.file].push_back({ location.begin, location.end, arguments });
+				}
+			} else if (!edited.vocations.empty() && implementation->vocationInsertPosition != std::string::npos) {
+				const std::string newline = implementation->files[implementation->vocationInsertFile].bytes.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+				patches[implementation->vocationInsertFile].push_back({
+					implementation->vocationInsertPosition,
+					implementation->vocationInsertPosition,
+					implementation->spellVariable + ":vocation(" + arguments + ")" + newline,
+				});
+			} else if (!edited.vocations.empty()) {
+				error = "The Lua spell has no safe insertion anchor before register().";
+				return false;
+			}
+		} else {
+			std::multiset<std::string> remaining(edited.vocations.begin(), edited.vocations.end());
+			for (const XmlVocationSource& source : implementation->xmlVocations) {
+				if (const auto found = remaining.find(source.name); found != remaining.end()) {
+					remaining.erase(found);
+				} else {
+					patches[source.file].push_back({ source.begin, source.end, {} });
+				}
+			}
+			const std::string& bytes = implementation->files[implementation->vocationInsertFile].bytes;
+			const std::string newline = bytes.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+			std::string additions;
+			for (const std::string& vocation : remaining) {
+				additions += "\t<vocation name=\"" + EncodeXml(vocation, '"') + "\"/>" + newline;
+			}
+			if (!additions.empty()) {
+				if (implementation->xmlSpellSelfClosing && implementation->xmlSpellEnd >= 2) {
+					patches[implementation->vocationInsertFile].push_back({
+						implementation->xmlSpellEnd - 2,
+						implementation->xmlSpellEnd,
+						">" + newline + additions + "</" + implementation->xmlSpellTag + ">",
+					});
+				} else if (implementation->vocationInsertPosition != std::string::npos) {
+					patches[implementation->vocationInsertFile].push_back({ implementation->vocationInsertPosition, implementation->vocationInsertPosition, additions });
+				} else {
+					error = "The XML spell has no safe vocation insertion anchor.";
+					return false;
+				}
+			}
+		}
 	}
 	if (std::all_of(patches.begin(), patches.end(), [](const auto& value) { return value.empty(); })) {
 		return true;

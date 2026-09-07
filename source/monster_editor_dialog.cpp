@@ -11,6 +11,7 @@
 #include "outfit.h"
 #include "outfit_color_picker.h"
 #include "theme.h"
+#include "workspace_session.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -19,6 +20,9 @@
 #include <wx/timer.h>
 
 namespace {
+	constexpr int ID_MONSTER_BACK = wxID_HIGHEST + 901;
+	constexpr int ID_MONSTER_BROWSE = wxID_HIGHEST + 902;
+
 	std::size_t FieldIndex(MonsterField field) {
 		return static_cast<std::size_t>(field);
 	}
@@ -223,6 +227,8 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	saveStateLabel = newd wxStaticText(this, wxID_ANY, "No unsaved changes");
 	saveStateLabel->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
 	footer->Add(saveStateLabel, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
+	footer->Add(newd wxButton(this, ID_MONSTER_BACK, "< Back to Monsters"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
+	footer->Add(newd wxButton(this, ID_MONSTER_BROWSE, "Browse Monsters..."), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
 	auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
 	if (buttons) {
 		footer->Add(buttons, 0, wxALIGN_CENTER_VERTICAL);
@@ -236,6 +242,8 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	SetSize(FromDIP(wxSize(860, 680)));
 	CentreOnParent();
 	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onSave, this, wxID_OK);
+	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onBrowse, this, ID_MONSTER_BACK);
+	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onBrowse, this, ID_MONSTER_BROWSE);
 	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onCancel, this, wxID_CANCEL);
 	Bind(wxEVT_CLOSE_WINDOW, &MonsterEditorDialog::onClose, this);
 	Bind(wxEVT_TEXT, &MonsterEditorDialog::onFieldChanged, this);
@@ -253,6 +261,10 @@ bool MonsterEditorDialog::wasSaved() const {
 
 const MonsterDefinition& MonsterEditorDialog::savedDefinition() const {
 	return edited;
+}
+
+bool MonsterEditorDialog::wantsBrowse() const {
+	return browseRequested;
 }
 
 wxTextCtrl* MonsterEditorDialog::addTextField(wxWindow* parent, wxFlexGridSizer* grid, MonsterField field, const std::string& value) {
@@ -403,6 +415,12 @@ void MonsterEditorDialog::refreshPreview() {
 	} else if (outfit.lookType > 0) {
 		sprite = g_gui.gfx.getCreatureSprite(outfit.lookType);
 		previewOutfit = &outfit;
+	} else if (outfit.lookMount > 0) {
+		const int resolvedMount = g_workspace.resolveMountClientId(outfit.lookMount);
+		sprite = g_gui.gfx.getCreatureSprite(resolvedMount);
+		outfit.lookType = resolvedMount;
+		outfit.lookMount = 0;
+		previewOutfit = &outfit;
 	}
 	if (!sprite) {
 		preview->SetBitmap(wxBitmap());
@@ -432,6 +450,18 @@ void MonsterEditorDialog::refreshPreview() {
 
 void MonsterEditorDialog::onSave(wxCommandEvent& WXUNUSED(event)) {
 	saveDocument(true);
+}
+
+void MonsterEditorDialog::onBrowse(wxCommandEvent& WXUNUSED(event)) {
+	if (autosaveTimer) {
+		autosaveTimer->Stop();
+	}
+	readControls();
+	if (document->hasChanges(edited) && !saveDocument(true)) {
+		return;
+	}
+	browseRequested = true;
+	EndModal(wxID_CANCEL);
 }
 
 bool MonsterEditorDialog::saveDocument(bool showErrors) {

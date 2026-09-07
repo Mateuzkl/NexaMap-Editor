@@ -26,6 +26,7 @@ void MonsterSpellPreview::SetAttack(const MonsterAttackDefinition* attack) {
 	}
 	customTiles.clear();
 	customDescription.clear();
+	customAreaMode = false;
 	Refresh();
 }
 
@@ -36,7 +37,12 @@ void MonsterSpellPreview::SetCustomArea(const MonsterAttackDefinition* attack, s
 	}
 	customTiles = std::move(tiles);
 	customDescription = std::move(description);
+	customAreaMode = true;
 	Refresh();
+}
+
+void MonsterSpellPreview::SetUnavailableArea(const MonsterAttackDefinition* attack, std::string description) {
+	SetCustomArea(attack, {}, std::move(description));
 }
 
 void MonsterSpellPreview::SetDirection(int newDirection) {
@@ -55,7 +61,7 @@ void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 		return;
 	}
 
-	const std::vector<MonsterAreaTile> tiles = customTiles.empty() ? BuildMonsterAreaTiles(current.area, direction) : customTiles;
+	const std::vector<MonsterAreaTile> tiles = customAreaMode ? customTiles : BuildMonsterAreaTiles(current.area, direction);
 	int extent = 4;
 	for (const MonsterAreaTile& tile : tiles) {
 		extent = std::max({ extent, std::abs(tile.x) + 1, std::abs(tile.y) + 1 });

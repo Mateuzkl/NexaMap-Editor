@@ -135,6 +135,101 @@ npcType:register(npcConfig)
 		);
 	}
 
+	void TestLuaInsertableCapabilities() {
+		TemporaryDirectory directory;
+		const auto path = directory.write("data/npc/insertable.lua", R"(local internalNpcName = "Insertable"
+local npcType = Game.createNpcType(internalNpcName)
+local npcConfig = {}
+npcConfig.name = internalNpcName
+npcConfig.outfit = { lookType = 128 }
+npcConfig.flags = {}
+customCallback(computeValue())
+npcType:register(npcConfig)
+)");
+		std::string error;
+		auto document = NpcDefinitionDocument::Load(Source(ServerContentFormat::Lua, path, "Insertable"), error);
+		Check(document != nullptr, "minimal npcConfig Lua NPC opens: " + error);
+		if (!document) {
+			return;
+		}
+		const NpcDefinition& definition = document->definition();
+		for (const NpcField field : { NpcField::Description, NpcField::Health, NpcField::MaxHealth, NpcField::WalkInterval, NpcField::WalkRadius, NpcField::Speed, NpcField::FloorChange, NpcField::LookTypeEx, NpcField::LookMount }) {
+			Check(definition.capability(field).state == NpcFieldCapability::State::SupportedInsertable && definition.capability(field).editable, std::string(NpcFieldName(field)) + " is absent but insertable in npcConfig");
+		}
+		Check(definition.capability(NpcField::Direction).state == NpcFieldCapability::State::Unsupported, "direction stays disabled when the detected TFS Lua API has no direction property");
+		NpcDefinition edited = definition;
+		edited.description = "an inserted NPC";
+		edited.health = 90;
+		edited.maxHealth = 120;
+		edited.walkInterval = 1800;
+		edited.walkRadius = 4;
+		edited.speed = 75;
+		edited.floorChange = true;
+		edited.lookTypeEx = 2160;
+		edited.lookMount = 368;
+		Check(document->save(edited, error), "all supported missing npcConfig properties insert safely: " + error);
+		const std::string saved = directory.read("data/npc/insertable.lua");
+		Check(saved.find("npcConfig.description = \"an inserted NPC\"") != std::string::npos, "missing description is inserted");
+		Check(saved.find("npcConfig.health = 90") != std::string::npos && saved.find("npcConfig.maxHealth = 120") != std::string::npos, "missing health fields are inserted");
+		Check(saved.find("npcConfig.walkInterval = 1800") != std::string::npos && saved.find("npcConfig.walkRadius = 4") != std::string::npos && saved.find("npcConfig.walkSpeed = 75") != std::string::npos, "missing movement fields use the npcConfig schema");
+		Check(saved.find("floorchange = true") != std::string::npos && saved.find("lookTypeEx = 2160") != std::string::npos && saved.find("lookMount = 368") != std::string::npos, "missing flags and outfit fields are inserted in their real tables");
+		Check(saved.find("customCallback(computeValue())") != std::string::npos, "npcConfig insertion preserves custom Lua");
+	}
+
+	void TestDirectMethodCapabilities() {
+		TemporaryDirectory directory;
+		const auto path = directory.write("data/npc/direct.lua", R"(local npcType = Game.createNpcType("Direct NPC")
+npcType:outfit({ lookType = 472 })
+customDirectCallback()
+npcType:defaultBehavior()
+)");
+		std::string error;
+		auto document = NpcDefinitionDocument::Load(Source(ServerContentFormat::Lua, path, "Direct NPC"), error);
+		Check(document != nullptr, "direct-method Lua NPC opens: " + error);
+		if (!document) {
+			return;
+		}
+		for (const NpcField field : { NpcField::Health, NpcField::MaxHealth, NpcField::WalkInterval, NpcField::WalkRadius, NpcField::Speed, NpcField::FloorChange, NpcField::LookTypeEx, NpcField::LookMount }) {
+			Check(document->definition().capability(field).state == NpcFieldCapability::State::SupportedInsertable, std::string(NpcFieldName(field)) + " is insertable through the direct NpcType provider");
+		}
+		NpcDefinition edited = document->definition();
+		edited.health = 95;
+		edited.maxHealth = 130;
+		edited.walkInterval = 1500;
+		edited.walkRadius = 5;
+		edited.speed = 90;
+		edited.floorChange = true;
+		edited.lookTypeEx = 100;
+		edited.lookMount = 200;
+		Check(document->save(edited, error), "direct NpcType methods and outfit fields insert safely: " + error);
+		const std::string saved = directory.read("data/npc/direct.lua");
+		Check(saved.find("npcType:health(95)") != std::string::npos && saved.find("npcType:maxHealth(130)") != std::string::npos, "direct health methods are inserted");
+		Check(saved.find("npcType:walkInterval(1500)") != std::string::npos && saved.find("npcType:spawnRadius(5)") != std::string::npos && saved.find("npcType:walkSpeed(90)") != std::string::npos, "direct movement uses detected NpcType method names");
+		Check(saved.find("npcType:floorChange(true)") != std::string::npos && saved.find("lookTypeEx = 100") != std::string::npos && saved.find("lookMount = 200") != std::string::npos, "direct floor and outfit fields are inserted");
+		Check(saved.find("customDirectCallback()") != std::string::npos, "direct-method insertion preserves custom Lua");
+	}
+
+	void TestDynamicAndAmbiguousCapabilities() {
+		TemporaryDirectory directory;
+		const auto path = directory.write("data/npc/dynamic.lua", R"(local npcType = Game.createNpcType("Dynamic NPC")
+local npcConfig = {}
+npcConfig.name = "Dynamic NPC"
+npcConfig.health = calculateHealth()
+npcConfig.walkRadius = 2
+npcConfig.walkRadius = overrideRadius
+npcConfig.outfit = { lookType = chooseLookType() }
+npcType:register(npcConfig)
+)");
+		std::string error;
+		auto document = NpcDefinitionDocument::Load(Source(ServerContentFormat::Lua, path, "Dynamic NPC"), error);
+		Check(document != nullptr, "dynamic Lua NPC opens: " + error);
+		if (document) {
+			Check(document->definition().capability(NpcField::Health).state == NpcFieldCapability::State::DynamicReadOnly, "computed Lua property is dynamic read-only");
+			Check(document->definition().capability(NpcField::WalkRadius).state == NpcFieldCapability::State::Ambiguous, "duplicate Lua property is ambiguity-safe");
+			Check(document->definition().capability(NpcField::LookType).state == NpcFieldCapability::State::DynamicReadOnly, "computed outfit property is dynamic read-only");
+		}
+	}
+
 	void TestReal(const std::filesystem::path& luaRoot, const std::filesystem::path& xmlRoot) {
 		for (const auto& [root, format] : { std::pair(luaRoot, ServerContentFormat::Lua), std::pair(xmlRoot, ServerContentFormat::Xml) }) {
 			const auto detected = ServerResourceDetector::Detect(root);
@@ -248,6 +343,9 @@ npcType:register(npcConfig)
 int main(int argc, char** argv) {
 	TestXml();
 	TestLua();
+	TestLuaInsertableCapabilities();
+	TestDirectMethodCapabilities();
+	TestDynamicAndAmbiguousCapabilities();
 	TestCreation();
 	if (argc == 4) {
 		TestReal(argv[1], argv[2]);

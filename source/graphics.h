@@ -137,7 +137,8 @@ public:
 		bool allowAsync = true,
 		const Outfit* outfit = nullptr,
 		int direction = 2,
-		int frame = 0
+		int frame = 0,
+		int patternZ = 0
 	);
 	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 

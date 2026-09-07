@@ -14,6 +14,7 @@
 #include <optional>
 #include <regex>
 #include <string_view>
+#include <tuple>
 
 namespace {
 	constexpr std::size_t FieldCount = static_cast<std::size_t>(NpcField::Count);
@@ -210,9 +211,94 @@ namespace {
 		value = Lower(match->str(1)) == "true";
 		return Capture(*match, 1);
 	}
+
+	std::optional<Location> LuaMethodNumber(const std::string& text, const std::string& object, const std::string& method, int& value) {
+		const std::regex expression("\\b" + object + "\\s*:\\s*" + method + R"(\s*\(\s*(-?\d+)\s*\))", std::regex::icase);
+		const auto match = First(text, expression);
+		if (!match) {
+			return std::nullopt;
+		}
+		value = Integer(match->str(1)).value_or(value);
+		return Capture(*match, 1);
+	}
+
+	std::optional<Location> LuaMethodBoolean(const std::string& text, const std::string& object, const std::string& method, bool& value) {
+		const std::regex expression("\\b" + object + "\\s*:\\s*" + method + R"(\s*\(\s*(true|false)\s*\))", std::regex::icase);
+		const auto match = First(text, expression);
+		if (!match) {
+			return std::nullopt;
+		}
+		value = Lower(match->str(1)) == "true";
+		return Capture(*match, 1);
+	}
+
+	std::optional<std::pair<std::size_t, std::size_t>> LuaTable(const std::string& text, const std::regex& startExpression) {
+		const auto start = First(text, startExpression);
+		if (!start) {
+			return std::nullopt;
+		}
+		const std::size_t open = text.find('{', static_cast<std::size_t>(start->position(0)));
+		if (open == std::string::npos) {
+			return std::nullopt;
+		}
+		int depth = 0;
+		char quote = '\0';
+		bool escaped = false;
+		for (std::size_t cursor = open; cursor < text.size(); ++cursor) {
+			const char character = text[cursor];
+			if (quote) {
+				if (escaped) {
+					escaped = false;
+				} else if (character == '\\') {
+					escaped = true;
+				} else if (character == quote) {
+					quote = '\0';
+				}
+				continue;
+			}
+			if (character == '\'' || character == '"') {
+				quote = character;
+			} else if (character == '{') {
+				++depth;
+			} else if (character == '}' && --depth == 0) {
+				return std::pair(open, cursor);
+			}
+		}
+		return std::nullopt;
+	}
+
+	std::size_t LineStart(const std::string& text, std::size_t position) {
+		const std::size_t newline = position == 0 ? std::string::npos : text.rfind('\n', position - 1);
+		return newline == std::string::npos ? 0 : newline + 1;
+	}
+
+	std::size_t LineEnd(const std::string& text, std::size_t position) {
+		const std::size_t newline = text.find('\n', position);
+		return newline == std::string::npos ? text.size() : newline + 1;
+	}
+
+	std::string Newline(const std::string& text) {
+		return text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+	}
+
+	std::size_t MatchCount(const std::string& text, const std::regex& expression) {
+		return static_cast<std::size_t>(std::distance(std::sregex_iterator(text.begin(), text.end(), expression), std::sregex_iterator()));
+	}
+
+	bool HasLuaAssignment(const std::string& text, const std::string& prefix) {
+		return std::regex_search(text, std::regex(prefix + R"(\s*=)", std::regex::icase));
+	}
+
+	bool HasLuaMethod(const std::string& text, const std::string& object, const std::string& method) {
+		return std::regex_search(text, std::regex("\\b" + object + "\\s*:\\s*" + method + R"(\s*\()", std::regex::icase));
+	}
 }
 
 struct NpcDefinitionDocument::Impl {
+	enum class LuaProvider : uint8_t { None,
+									   ConfigTable,
+									   DirectMethods };
+
 	ServerContentSource sourceInfo;
 	ResourceFingerprint fingerprint;
 	std::string bytes;
@@ -221,18 +307,73 @@ struct NpcDefinitionDocument::Impl {
 	std::vector<MessageSource> messages;
 	std::vector<ShopSource> shop;
 	std::vector<TravelSource> travel;
+	LuaProvider luaProvider = LuaProvider::None;
+	std::string luaObject;
+	std::size_t scalarInsert = std::string::npos;
+	std::size_t directInsert = std::string::npos;
+	std::optional<std::pair<std::size_t, std::size_t>> outfitTable;
+	std::optional<std::pair<std::size_t, std::size_t>> flagsTable;
 };
 
 namespace {
-	void SetCapability(NpcDefinitionDocument::Impl& impl, NpcField field, const std::optional<Location>& location) {
+	void SetCapability(
+		NpcDefinitionDocument::Impl& impl,
+		NpcField field,
+		const std::optional<Location>& location,
+		NpcFieldCapability::State missingState = NpcFieldCapability::State::Unsupported,
+		std::string missingReason = "This server provider does not expose this field."
+	) {
 		auto& capability = impl.original.capabilities[static_cast<std::size_t>(field)];
 		if (location) {
 			impl.fields[static_cast<std::size_t>(field)].push_back(*location);
 		}
 		capability.present = location.has_value();
-		capability.editable = location.has_value();
-		if (!location) {
-			capability.limitation = "No direct literal for this field was found; custom behavior remains preserved.";
+		capability.state = location ? NpcFieldCapability::State::ExistingEditableLiteral : missingState;
+		capability.editable = location.has_value() || missingState == NpcFieldCapability::State::SupportedInsertable;
+		capability.limitation = location ? std::string() : std::move(missingReason);
+	}
+
+	void MarkDynamic(NpcDefinitionDocument::Impl& impl, NpcField field, const std::string& reason) {
+		auto& capability = impl.original.capabilities[static_cast<std::size_t>(field)];
+		capability.state = NpcFieldCapability::State::DynamicReadOnly;
+		capability.present = true;
+		capability.editable = false;
+		capability.limitation = reason;
+	}
+
+	void MarkAmbiguous(NpcDefinitionDocument::Impl& impl, NpcField field, const std::string& reason) {
+		auto& capability = impl.original.capabilities[static_cast<std::size_t>(field)];
+		capability.state = NpcFieldCapability::State::Ambiguous;
+		capability.present = true;
+		capability.editable = false;
+		capability.limitation = reason;
+		impl.fields[static_cast<std::size_t>(field)].clear();
+	}
+
+	void SetLuaCapability(
+		NpcDefinitionDocument::Impl& impl,
+		NpcField field,
+		const std::optional<Location>& location,
+		bool supported,
+		bool expressionPresent,
+		bool ambiguous = false
+	) {
+		if (ambiguous) {
+			MarkAmbiguous(impl, field, "More than one matching declaration was found; edit the source directly.");
+		} else if (location) {
+			SetCapability(impl, field, location);
+		} else if (expressionPresent) {
+			MarkDynamic(impl, field, "This value is computed by Lua and is preserved read-only.");
+		} else if (supported) {
+			SetCapability(
+				impl,
+				field,
+				std::nullopt,
+				NpcFieldCapability::State::SupportedInsertable,
+				"This property is absent and will be inserted using the detected server API."
+			);
+		} else {
+			SetCapability(impl, field, std::nullopt);
 		}
 	}
 
@@ -319,7 +460,38 @@ namespace {
 			error = "Lua file does not contain a structural Game.createNpcType NPC definition.";
 			return;
 		}
-		std::string value;
+		const std::regex createWithObject(R"(local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*Game\.createNpcType\s*\()", std::regex::icase);
+		const auto createObject = First(impl.bytes, createWithObject);
+		if (!createObject) {
+			error = "Lua NPC has no assignable Game.createNpcType provider object.";
+			return;
+		}
+		impl.luaObject = createObject->str(1);
+		impl.luaProvider = impl.bytes.find("npcConfig") != std::string::npos
+				&& std::regex_search(impl.bytes, std::regex("\\b" + impl.luaObject + R"(\s*:\s*register\s*\(\s*npcConfig\s*\))", std::regex::icase))
+			? NpcDefinitionDocument::Impl::LuaProvider::ConfigTable
+			: NpcDefinitionDocument::Impl::LuaProvider::DirectMethods;
+		impl.outfitTable = LuaTable(
+			impl.bytes,
+			impl.luaProvider == NpcDefinitionDocument::Impl::LuaProvider::ConfigTable
+				? std::regex(R"(npcConfig\.outfit\s*=\s*\{)", std::regex::icase)
+				: std::regex("\\b" + impl.luaObject + R"(\s*:\s*outfit\s*\(\s*\{)", std::regex::icase)
+		);
+		if (impl.luaProvider == NpcDefinitionDocument::Impl::LuaProvider::ConfigTable) {
+			impl.flagsTable = LuaTable(impl.bytes, std::regex(R"(npcConfig\.flags\s*=\s*\{)", std::regex::icase));
+			const std::regex anchor(R"(npcConfig\.(?:outfit|flags)\s*=|\b[A-Za-z_][A-Za-z0-9_]*\s*:\s*register\s*\(\s*npcConfig)", std::regex::icase);
+			if (const auto found = First(impl.bytes, anchor)) {
+				impl.scalarInsert = LineStart(impl.bytes, static_cast<std::size_t>(found->position(0)));
+			}
+		} else {
+			const std::regex anchor("\\b" + impl.luaObject + R"(\s*:\s*(?:outfit|defaultBehavior|speechBubble)\s*\()", std::regex::icase);
+			if (const auto found = First(impl.bytes, anchor)) {
+				impl.directInsert = LineStart(impl.bytes, static_cast<std::size_t>(found->position(0)));
+			} else {
+				impl.directInsert = LineEnd(impl.bytes, static_cast<std::size_t>(createObject->position(0) + createObject->length(0)));
+			}
+		}
+
 		auto internalName = LuaString(impl.bytes, R"(local\s+internalNpcName)", impl.original.name);
 		if (internalName) {
 			impl.fields[static_cast<std::size_t>(NpcField::Name)].push_back(*internalName);
@@ -332,29 +504,66 @@ namespace {
 		auto& nameCapability = impl.original.capabilities[static_cast<std::size_t>(NpcField::Name)];
 		nameCapability.present = !impl.fields[static_cast<std::size_t>(NpcField::Name)].empty();
 		nameCapability.editable = nameCapability.present;
+		nameCapability.state = nameCapability.present ? NpcFieldCapability::State::ExistingEditableLiteral : NpcFieldCapability::State::DynamicReadOnly;
+		if (!nameCapability.present) {
+			nameCapability.limitation = "The NPC name is computed by Lua.";
+		}
 
-		SetCapability(impl, NpcField::Description, LuaString(impl.bytes, R"(npcConfig\.description)", impl.original.description));
-		if (!impl.original.capability(NpcField::Description).present && impl.bytes.find("npcConfig.description = internalNpcName") != std::string::npos) {
-			impl.original.description = impl.original.name;
+		const bool config = impl.luaProvider == NpcDefinitionDocument::Impl::LuaProvider::ConfigTable;
+		const auto assignment = [&](NpcField field, const std::string& prefix, auto reader, auto& target, bool supported = true) {
+			const std::regex occurrence(prefix + R"(\s*=)", std::regex::icase);
+			const std::size_t count = MatchCount(impl.bytes, occurrence);
+			const auto location = reader(impl.bytes, prefix, target);
+			SetLuaCapability(impl, field, location, supported, count > 0, count > 1);
+		};
+		const auto method = [&](NpcField field, const std::string& name, auto reader, auto& target, bool supported = true) {
+			const std::regex occurrence("\\b" + impl.luaObject + "\\s*:\\s*" + name + R"(\s*\()", std::regex::icase);
+			const std::size_t count = MatchCount(impl.bytes, occurrence);
+			const auto location = reader(impl.bytes, impl.luaObject, name, target);
+			SetLuaCapability(impl, field, location, supported, count > 0, count > 1);
+		};
+
+		if (config) {
+			assignment(NpcField::Description, R"(npcConfig\.description)", LuaString, impl.original.description);
+			if (impl.original.capability(NpcField::Description).state == NpcFieldCapability::State::DynamicReadOnly
+				&& impl.bytes.find("npcConfig.description = internalNpcName") != std::string::npos) {
+				impl.original.description = impl.original.name;
+			}
+			assignment(NpcField::Health, R"(npcConfig\.health)", LuaNumber, impl.original.health);
+			assignment(NpcField::MaxHealth, R"(npcConfig\.maxHealth)", LuaNumber, impl.original.maxHealth);
+			if (impl.original.capability(NpcField::MaxHealth).state == NpcFieldCapability::State::DynamicReadOnly
+				&& impl.bytes.find("npcConfig.maxHealth = npcConfig.health") != std::string::npos) {
+				impl.original.maxHealth = impl.original.health;
+			}
+			assignment(NpcField::WalkInterval, R"(npcConfig\.walkInterval)", LuaNumber, impl.original.walkInterval);
+			assignment(NpcField::WalkRadius, R"(npcConfig\.walkRadius)", LuaNumber, impl.original.walkRadius);
+			assignment(NpcField::Speed, R"(npcConfig\.walkSpeed)", LuaNumber, impl.original.speed);
+			assignment(NpcField::FloorChange, R"(floorchange)", LuaBoolean, impl.original.floorChange);
+		} else {
+			SetCapability(impl, NpcField::Description, std::nullopt);
+			method(NpcField::Health, "health", LuaMethodNumber, impl.original.health);
+			method(NpcField::MaxHealth, "maxHealth", LuaMethodNumber, impl.original.maxHealth);
+			method(NpcField::WalkInterval, "walkInterval", LuaMethodNumber, impl.original.walkInterval);
+			method(NpcField::WalkRadius, "spawnRadius", LuaMethodNumber, impl.original.walkRadius);
+			method(NpcField::Speed, "walkSpeed", LuaMethodNumber, impl.original.speed);
+			method(NpcField::FloorChange, "floorChange", LuaMethodBoolean, impl.original.floorChange);
 		}
 		SetCapability(impl, NpcField::Script, std::nullopt);
-		SetCapability(impl, NpcField::Health, LuaNumber(impl.bytes, R"(npcConfig\.health)", impl.original.health));
-		SetCapability(impl, NpcField::MaxHealth, LuaNumber(impl.bytes, R"(npcConfig\.maxHealth)", impl.original.maxHealth));
-		if (!impl.original.capability(NpcField::MaxHealth).present && impl.bytes.find("npcConfig.maxHealth = npcConfig.health") != std::string::npos) {
-			impl.original.maxHealth = impl.original.health;
+
+		for (const auto [field, prefix, target] : {
+				 std::tuple(NpcField::LookType, std::string(R"(lookType)"), &impl.original.lookType),
+				 std::tuple(NpcField::LookTypeEx, std::string(R"(lookTypeEx)"), &impl.original.lookTypeEx),
+				 std::tuple(NpcField::LookHead, std::string(R"(lookHead)"), &impl.original.lookHead),
+				 std::tuple(NpcField::LookBody, std::string(R"(lookBody)"), &impl.original.lookBody),
+				 std::tuple(NpcField::LookLegs, std::string(R"(lookLegs)"), &impl.original.lookLegs),
+				 std::tuple(NpcField::LookFeet, std::string(R"(lookFeet)"), &impl.original.lookFeet),
+				 std::tuple(NpcField::LookAddons, std::string(R"((?:lookAddons|addons))"), &impl.original.lookAddons),
+				 std::tuple(NpcField::LookMount, std::string(R"((?:lookMount|mount))"), &impl.original.lookMount),
+			 }) {
+			const std::size_t count = MatchCount(impl.bytes, std::regex("\\b" + prefix + R"(\s*=)", std::regex::icase));
+			const auto location = LuaNumber(impl.bytes, "\\b" + prefix, *target);
+			SetLuaCapability(impl, field, location, impl.outfitTable.has_value(), count > 0, count > 1);
 		}
-		SetCapability(impl, NpcField::WalkInterval, LuaNumber(impl.bytes, R"(npcConfig\.walkInterval)", impl.original.walkInterval));
-		SetCapability(impl, NpcField::WalkRadius, LuaNumber(impl.bytes, R"(npcConfig\.walkRadius)", impl.original.walkRadius));
-		SetCapability(impl, NpcField::Speed, LuaNumber(impl.bytes, R"(npcConfig\.speed)", impl.original.speed));
-		SetCapability(impl, NpcField::FloorChange, LuaBoolean(impl.bytes, R"(floorchange)", impl.original.floorChange));
-		SetCapability(impl, NpcField::LookType, LuaNumber(impl.bytes, R"(lookType)", impl.original.lookType));
-		SetCapability(impl, NpcField::LookTypeEx, LuaNumber(impl.bytes, R"(lookTypeEx)", impl.original.lookTypeEx));
-		SetCapability(impl, NpcField::LookHead, LuaNumber(impl.bytes, R"(lookHead)", impl.original.lookHead));
-		SetCapability(impl, NpcField::LookBody, LuaNumber(impl.bytes, R"(lookBody)", impl.original.lookBody));
-		SetCapability(impl, NpcField::LookLegs, LuaNumber(impl.bytes, R"(lookLegs)", impl.original.lookLegs));
-		SetCapability(impl, NpcField::LookFeet, LuaNumber(impl.bytes, R"(lookFeet)", impl.original.lookFeet));
-		SetCapability(impl, NpcField::LookAddons, LuaNumber(impl.bytes, R"((?:lookAddons|addons))", impl.original.lookAddons));
-		SetCapability(impl, NpcField::LookMount, LuaNumber(impl.bytes, R"(lookMount)", impl.original.lookMount));
 		SetCapability(impl, NpcField::Direction, std::nullopt);
 
 		const std::regex message(R"(npcHandler\s*:\s*setMessage\s*\(\s*(MESSAGE_[A-Z_]+)\s*,\s*(["'])(.*?)\2\s*\))");
@@ -481,6 +690,92 @@ namespace {
 		}
 		return {};
 	}
+
+	std::optional<std::pair<std::size_t, std::string>> LuaInsertion(
+		const NpcDefinitionDocument::Impl& impl,
+		NpcField field,
+		const std::string& value
+	) {
+		const std::string newline = Newline(impl.bytes);
+		const auto tableField = [&](const std::optional<std::pair<std::size_t, std::size_t>>& table, const std::string& key) -> std::optional<std::pair<std::size_t, std::string>> {
+			if (!table) {
+				return std::nullopt;
+			}
+			const std::size_t open = table->first;
+			const std::size_t close = table->second;
+			if (impl.bytes.find('\n', open) < close) {
+				return std::pair(LineStart(impl.bytes, close), "\t" + key + " = " + value + "," + newline);
+			}
+			const bool empty = impl.bytes.find_first_not_of(" \t\r\n", open + 1) >= close;
+			return std::pair(close, empty ? (" " + key + " = " + value + " ") : (", " + key + " = " + value));
+		};
+		if (field >= NpcField::LookType && field <= NpcField::LookMount) {
+			static constexpr std::array<const char*, 8> keys {
+				"lookType", "lookTypeEx", "lookHead", "lookBody", "lookLegs", "lookFeet", "lookAddons", "lookMount"
+			};
+			return tableField(impl.outfitTable, keys[static_cast<std::size_t>(field) - static_cast<std::size_t>(NpcField::LookType)]);
+		}
+		if (impl.luaProvider == NpcDefinitionDocument::Impl::LuaProvider::ConfigTable) {
+			if (field == NpcField::FloorChange) {
+				return tableField(impl.flagsTable, "floorchange");
+			}
+			if (impl.scalarInsert == std::string::npos) {
+				return std::nullopt;
+			}
+			std::string key;
+			switch (field) {
+				case NpcField::Description:
+					key = "description";
+					break;
+				case NpcField::Health:
+					key = "health";
+					break;
+				case NpcField::MaxHealth:
+					key = "maxHealth";
+					break;
+				case NpcField::WalkInterval:
+					key = "walkInterval";
+					break;
+				case NpcField::WalkRadius:
+					key = "walkRadius";
+					break;
+				case NpcField::Speed:
+					key = "walkSpeed";
+					break;
+				default:
+					return std::nullopt;
+			}
+			const std::string encoded = field == NpcField::Description ? ("\"" + EncodeLua(value, '"') + "\"") : value;
+			return std::pair(impl.scalarInsert, "npcConfig." + key + " = " + encoded + newline);
+		}
+		if (impl.luaProvider == NpcDefinitionDocument::Impl::LuaProvider::DirectMethods && impl.directInsert != std::string::npos) {
+			std::string method;
+			switch (field) {
+				case NpcField::Health:
+					method = "health";
+					break;
+				case NpcField::MaxHealth:
+					method = "maxHealth";
+					break;
+				case NpcField::WalkInterval:
+					method = "walkInterval";
+					break;
+				case NpcField::WalkRadius:
+					method = "spawnRadius";
+					break;
+				case NpcField::Speed:
+					method = "walkSpeed";
+					break;
+				case NpcField::FloorChange:
+					method = "floorChange";
+					break;
+				default:
+					return std::nullopt;
+			}
+			return std::pair(impl.directInsert, impl.luaObject + ":" + method + "(" + value + ")" + newline);
+		}
+		return std::nullopt;
+	}
 }
 
 const NpcFieldCapability& NpcDefinition::capability(NpcField field) const {
@@ -552,9 +847,21 @@ bool NpcDefinitionDocument::save(const NpcDefinition& edited, std::string& error
 		if (before == after) {
 			continue;
 		}
-		if (!implementation->original.capability(field).editable || implementation->fields[i].empty()) {
+		const auto& capability = implementation->original.capability(field);
+		if (!capability.editable) {
 			error = std::string(NpcFieldName(field)) + " cannot be edited safely in this provider.";
 			return false;
+		}
+		if (implementation->fields[i].empty()) {
+			const auto insertion = implementation->sourceInfo.format == ServerContentFormat::Lua
+				? LuaInsertion(*implementation, field, after)
+				: std::nullopt;
+			if (!insertion) {
+				error = std::string(NpcFieldName(field)) + " has no safe insertion anchor in this provider.";
+				return false;
+			}
+			add({ insertion->first, insertion->first, '\0' }, insertion->second);
+			continue;
 		}
 		for (const Location& location : implementation->fields[i]) {
 			add(location, location.quote ? (implementation->sourceInfo.format == ServerContentFormat::Xml ? EncodeXml(after, location.quote) : EncodeLua(after, location.quote)) : (field == NpcField::FloorChange && implementation->sourceInfo.format == ServerContentFormat::Xml ? (edited.floorChange ? "1" : "0") : after));
@@ -629,7 +936,7 @@ bool NpcDefinitionDocument::save(const NpcDefinition& edited, std::string& error
 		error = "The NPC source changed on disk after the editor opened. Reopen it before saving.";
 		return false;
 	}
-	std::sort(patches.begin(), patches.end(), [](const Patch& a, const Patch& b) { return a.begin > b.begin; });
+	std::stable_sort(patches.begin(), patches.end(), [](const Patch& a, const Patch& b) { return a.begin > b.begin; });
 	std::string updated = implementation->bytes;
 	for (const Patch& patch : patches) {
 		updated.replace(patch.begin, patch.end - patch.begin, patch.value);

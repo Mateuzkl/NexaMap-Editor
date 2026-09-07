@@ -27,6 +27,7 @@
 #include "otml.h"
 #include "sprite_appearances.h"
 #include "sprite_preloader.h"
+#include "workspace_session.h"
 
 #include <appearances.pb.h>
 #include <iterator>
@@ -1561,7 +1562,96 @@ void GameSprite::unloadDC() {
 	dc[SPRITE_SIZE_32x32] = nullptr;
 }
 
-bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame) {
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ) {
+	if (outfit && outfit->lookMount != 0) {
+		const int mountClientId = g_workspace.resolveMountClientId(outfit->lookMount);
+		GameSprite* mountSpr = mountClientId > 0 ? g_gui.gfx.getCreatureSprite(mountClientId) : nullptr;
+		if (mountSpr && mountSpr != this) {
+			Outfit mountOutfit;
+			mountOutfit.lookType = mountClientId;
+			mountOutfit.lookHead = outfit->lookMountHead;
+			mountOutfit.lookBody = outfit->lookMountBody;
+			mountOutfit.lookLegs = outfit->lookMountLegs;
+			mountOutfit.lookFeet = outfit->lookMountFeet;
+			mountOutfit.lookAddon = 0;
+			mountOutfit.lookMount = 0;
+
+			std::vector<uint8_t> mountPixels;
+			int mountW = 0, mountH = 0;
+			bool mountPending = false;
+			const bool mountOk = mountSpr->getVisualPreviewRGBA(mountPixels, mountW, mountH, mountPending, allowAsync, &mountOutfit, direction, 0, 0);
+
+			Outfit riderOutfit = *outfit;
+			riderOutfit.lookMount = 0;
+			const int riderPatternZ = std::min<int>(1, this->pattern_z - 1);
+			std::vector<uint8_t> riderPixels;
+			int riderW = 0, riderH = 0;
+			bool riderPending = false;
+			const bool riderOk = this->getVisualPreviewRGBA(riderPixels, riderW, riderH, riderPending, allowAsync, &riderOutfit, direction, frame, riderPatternZ);
+
+			pending = pending || mountPending || riderPending;
+
+			if (mountOk && riderOk) {
+				const int compositeW = std::max(mountW, riderW);
+				const int compositeH = std::max(mountH, riderH);
+				pixels.assign(static_cast<size_t>(compositeW) * compositeH * 4, 0);
+				pixelWidth = compositeW;
+				pixelHeight = compositeH;
+
+				const int mountOffsetX = compositeW - mountW;
+				const int mountOffsetY = compositeH - mountH;
+				const int riderOffsetX = compositeW - riderW;
+				const int riderOffsetY = compositeH - riderH;
+
+				for (int y = 0; y < mountH; ++y) {
+					for (int x = 0; x < mountW; ++x) {
+						const size_t srcIdx = (static_cast<size_t>(y) * mountW + x) * 4;
+						const size_t dstIdx = (static_cast<size_t>(mountOffsetY + y) * compositeW + mountOffsetX + x) * 4;
+						std::copy_n(mountPixels.data() + srcIdx, 4, pixels.data() + dstIdx);
+					}
+				}
+
+				for (int y = 0; y < riderH; ++y) {
+					for (int x = 0; x < riderW; ++x) {
+						const size_t srcIdx = (static_cast<size_t>(y) * riderW + x) * 4;
+						const uint8_t srcA = riderPixels[srcIdx + 3];
+						if (srcA == 0) {
+							continue;
+						}
+						const size_t dstIdx = (static_cast<size_t>(riderOffsetY + y) * compositeW + riderOffsetX + x) * 4;
+						const uint8_t dstA = pixels[dstIdx + 3];
+						if (srcA == 255 || dstA == 0) {
+							std::copy_n(riderPixels.data() + srcIdx, 4, pixels.data() + dstIdx);
+						} else {
+							const float sa = srcA / 255.0f;
+							const float da = dstA / 255.0f;
+							const float outA = sa + da * (1.0f - sa);
+							if (outA > 0.0f) {
+								pixels[dstIdx + 0] = static_cast<uint8_t>((riderPixels[srcIdx + 0] * sa + pixels[dstIdx + 0] * da * (1.0f - sa)) / outA);
+								pixels[dstIdx + 1] = static_cast<uint8_t>((riderPixels[srcIdx + 1] * sa + pixels[dstIdx + 1] * da * (1.0f - sa)) / outA);
+								pixels[dstIdx + 2] = static_cast<uint8_t>((riderPixels[srcIdx + 2] * sa + pixels[dstIdx + 2] * da * (1.0f - sa)) / outA);
+								pixels[dstIdx + 3] = static_cast<uint8_t>(outA * 255.0f);
+							}
+						}
+					}
+				}
+				return true;
+			}
+			if (mountOk) {
+				pixels = std::move(mountPixels);
+				pixelWidth = mountW;
+				pixelHeight = mountH;
+				return true;
+			}
+			if (riderOk) {
+				pixels = std::move(riderPixels);
+				pixelWidth = riderW;
+				pixelHeight = riderH;
+				return true;
+			}
+		}
+	}
+
 	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
@@ -1583,8 +1673,9 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 		for (uint8_t tileX = 0; tileX < width; ++tileX) {
 			for (uint8_t tileY = 0; tileY < height; ++tileY) {
 				const int patternX = outfit ? std::clamp(direction, 0, static_cast<int>(pattern_x) - 1) : 0;
+				const int patternZIndex = outfit && pattern_z > 1 ? std::clamp(patternZ, 0, static_cast<int>(pattern_z) - 1) : 0;
 				const int animationFrame = frames > 0 ? std::clamp(frame, 0, static_cast<int>(frames) - 1) : 0;
-				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, patternX, outfit ? layer : 0, 0, animationFrame);
+				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, patternX, outfit ? layer : 0, patternZIndex, animationFrame);
 				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
 					continue;
 				}
@@ -1651,11 +1742,25 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 				for (int y = 0; y < SPRITE_PIXELS; ++y) {
 					for (int x = 0; x < SPRITE_PIXELS; ++x) {
 						const size_t source = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 4;
-						if (tilePixels[source + 3] == 0) {
+						const uint8_t srcA = tilePixels[source + 3];
+						if (srcA == 0) {
 							continue;
 						}
 						const size_t destination = (static_cast<size_t>(destinationY + y) * pixelWidth + destinationX + x) * 4;
-						std::copy_n(tilePixels.data() + source, 4, pixels.data() + destination);
+						const uint8_t dstA = pixels[destination + 3];
+						if (srcA == 255 || dstA == 0) {
+							std::copy_n(tilePixels.data() + source, 4, pixels.data() + destination);
+						} else {
+							const float sa = srcA / 255.0f;
+							const float da = dstA / 255.0f;
+							const float outA = sa + da * (1.0f - sa);
+							if (outA > 0.0f) {
+								pixels[destination + 0] = static_cast<uint8_t>((tilePixels[source + 0] * sa + pixels[destination + 0] * da * (1.0f - sa)) / outA);
+								pixels[destination + 1] = static_cast<uint8_t>((tilePixels[source + 1] * sa + pixels[destination + 1] * da * (1.0f - sa)) / outA);
+								pixels[destination + 2] = static_cast<uint8_t>((tilePixels[source + 2] * sa + pixels[destination + 2] * da * (1.0f - sa)) / outA);
+								pixels[destination + 3] = static_cast<uint8_t>(outA * 255.0f);
+							}
+						}
 					}
 				}
 			}

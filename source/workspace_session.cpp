@@ -45,7 +45,7 @@ namespace {
 	}
 
 	bool SameServerWorkspace(const ServerWorkspace& left, const ServerWorkspace& right) {
-		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.spellsDirectory == right.spellsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.itemIdMode == right.itemIdMode && left.serverType == right.serverType && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
+		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.mountsXmlPath == right.mountsXmlPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.spellsDirectory == right.spellsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.mountsXmlFingerprint == right.mountsXmlFingerprint && left.itemIdMode == right.itemIdMode && left.serverType == right.serverType && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
 	}
 
 	bool ApplyDetectedMapSelection(ServerWorkspace& workspace, const std::filesystem::path& path) {
@@ -178,6 +178,11 @@ bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bo
 		selectedDetectedMapPath.clear();
 	}
 	ServerContentIndex detectedContent = ServerContentIndex::Build(detection.workspace, &serverContent);
+	std::string mountError;
+	mountIdResolver.load(detection.workspace.mountsXmlPath, mountError);
+	if (options.diagnosticLogging && !detection.workspace.mountsXmlPath.empty()) {
+		std::cerr << "[workspace] Loaded " << mountIdResolver.size() << " mounts from " << detection.workspace.mountsXmlPath << std::endl;
+	}
 	const bool changed = !SameServerWorkspace(server, detection.workspace) || serverError != wxstr(detection.error);
 	const bool contentChanged = !serverContent.sameContentAs(detectedContent);
 	server = detection.workspace;
@@ -386,4 +391,12 @@ void WorkspaceSession::persistPaths() {
 	g_settings.setString(Config::WORKSPACE_ITEMS_XML_PATH, server.itemsXmlPath.empty() ? std::string() : nstr(FromFilesystemPath(server.itemsXmlPath)));
 	g_settings.setString(Config::WORKSPACE_APPEARANCES_PATH, server.appearancesPath.empty() ? std::string() : nstr(FromFilesystemPath(server.appearancesPath)));
 	g_settings.setInteger(Config::WORKSPACE_ITEM_ID_MODE, static_cast<int>(idModePreference));
+}
+
+const MountIdResolver& WorkspaceSession::getMountIdResolver() const {
+	return mountIdResolver;
+}
+
+int WorkspaceSession::resolveMountClientId(int mountId) const {
+	return mountIdResolver.resolveClientId(mountId);
 }

@@ -6,6 +6,7 @@
 #define NEXAMAP_WORKSPACE_SESSION_H_
 
 #include "client_version.h"
+#include "mount_id_resolver.h"
 #include "server_content_index.h"
 #include "server_workspace.h"
 
@@ -55,6 +56,8 @@ public:
 	[[nodiscard]] bool containsMap(const wxString& path) const;
 	[[nodiscard]] std::optional<DetectedMap> getDetectedMap(const wxString& path) const;
 	[[nodiscard]] std::vector<wxString> getDetectedMaps() const;
+	[[nodiscard]] const MountIdResolver& getMountIdResolver() const;
+	[[nodiscard]] int resolveMountClientId(int mountId) const;
 	[[nodiscard]] uint64_t getGeneration() const;
 	[[nodiscard]] uint64_t getContentGeneration() const;
 
@@ -64,6 +67,7 @@ private:
 	WorkspaceClientSelection client;
 	ServerWorkspace server;
 	ServerContentIndex serverContent;
+	MountIdResolver mountIdResolver;
 	std::filesystem::path selectedDetectedMapPath;
 	wxString serverError;
 	ItemIdModePreference idModePreference = ItemIdModePreference::Auto;

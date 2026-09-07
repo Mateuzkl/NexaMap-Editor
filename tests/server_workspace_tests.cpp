@@ -1,4 +1,5 @@
 #include "server_workspace.h"
+#include "mount_id_resolver.h"
 
 #include <chrono>
 #include <filesystem>
@@ -82,6 +83,7 @@ int main() {
 		server.write("data/monster/rat.lua");
 		server.write("data/npc/guide.lua");
 		server.write("data/spells/spells.xml", "<spells/>");
+		server.write("data/XML/mounts.xml", "<mounts><mount id='1' clientid='368' name='Widow Queen'/><mount id='7' clientId='374' name='Titanica'/></mounts>");
 
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
 		check(detection.validRoot, "standard TFS root is valid");
@@ -97,6 +99,13 @@ int main() {
 		check(!detection.workspace.monstersDirectory.empty(), "standard TFS monsters are detected");
 		check(!detection.workspace.npcsDirectory.empty(), "standard TFS NPCs are detected");
 		check(!detection.workspace.spellsDirectory.empty(), "standard TFS spells are detected");
+		check(detection.workspace.hasMountsXml() && detection.workspace.mountsXmlPath == std::filesystem::weakly_canonical(server.path / "data/XML/mounts.xml"), "standard TFS mounts.xml is detected exactly");
+
+		MountIdResolver mounts;
+		std::string mountError;
+		check(mounts.load(detection.workspace.mountsXmlPath, mountError), "detected mounts.xml loads: " + mountError);
+		check(mounts.size() == 2 && mounts.resolveClientId(1) == 368 && mounts.resolveClientId(7) == 374, "server mount IDs resolve to client look types");
+		check(mounts.resolveClientId(999) == 999, "unknown mount IDs remain usable as direct client look types");
 	}
 
 	{

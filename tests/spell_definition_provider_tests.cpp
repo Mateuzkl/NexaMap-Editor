@@ -126,6 +126,10 @@ namespace {
 
 	void TestXmlRegistryAndLuaImplementation() {
 		TemporaryDirectory temporary;
+		Write(
+			temporary.path / "data/scripts/lib/spell_lib.lua",
+			"AREA_CIRCLE3X3 = {\n  {0, 1, 0},\n  {1, 3, 1},\n  {0, 1, 0}\n}\n"
+		);
 		const auto registry = temporary.path / "data/spells/spells.xml";
 		const auto script = temporary.path / "data/spells/scripts/attack/fireball.lua";
 		const std::string xml = "<?xml version=\"1.0\"?>\n<spells>\n"
@@ -158,7 +162,12 @@ namespace {
 		}
 		Check(document->hasSeparateImplementation(), "XML registration and Lua implementation remain separate sources");
 		Check(document->definition().mana == 30 && document->definition().vocations == std::vector<std::string> { "Sorcerer" }, "XML fields and vocations are normalized");
-		Check(document->definition().areaExpression == "AREA_CIRCLE3X3" && document->definition().preview.area.radius == 3, "paired Lua static area is resolved");
+		Check(
+			document->definition().areaExpression == "AREA_CIRCLE3X3"
+				&& document->definition().areaResolutionState == SpellAreaResolutionState::Resolved
+				&& document->definition().customAreaTiles.size() == 5,
+			"paired Lua static area is resolved from the active workspace library"
+		);
 
 		SpellDefinition edited = document->definition();
 		edited.name = "Greater Fireball";
@@ -171,6 +180,121 @@ namespace {
 		Check(savedXml.find("name=\"Greater Fireball\"") != std::string::npos && savedXml.find("mana=\"45\"") != std::string::npos, "XML registry values are patched");
 		Check(savedXml.find("custom=\"untouched\"") != std::string::npos && savedXml.find("preserve registry comment") != std::string::npos, "unknown XML and comments are preserved");
 		Check(savedLua.find("CONST_ME_EXPLOSIONAREA") != std::string::npos && savedLua.find("AREA_CIRCLE2X2") != std::string::npos && savedLua.find("preserve script comment") != std::string::npos, "paired Lua changes preserve surrounding source");
+	}
+
+	void TestWorkspaceAreaResolver() {
+		TemporaryDirectory temporary;
+		Write(
+			temporary.path / "data/scripts/lib/areas.lua",
+			"AREA_BASE = {\n  {0, 1, 0},\n  {1, 3, 1}\n}\n"
+			"AREA_ALIAS = AREA_BASE\n"
+			"AREA_DYNAMIC = buildArea(radius)\n"
+		);
+		ServerWorkspace workspace;
+		workspace.rootPath = temporary.path;
+		workspace.activeDataDirectory = temporary.path / "data";
+		const SpellAreaResolver resolver(workspace);
+		const auto literal = resolver.resolve("createCombatArea({{1, 3, 1}})");
+		Check(literal.state == SpellAreaResolutionState::Resolved && literal.tiles.size() == 3, "literal createCombatArea resolves exact tiles");
+		const auto alias = resolver.resolve("AREA_ALIAS");
+		Check(alias.state == SpellAreaResolutionState::Resolved && alias.tiles.size() == 4, "workspace area aliases resolve through their real definition");
+		const auto dynamic = resolver.resolve("AREA_DYNAMIC");
+		Check(dynamic.state == SpellAreaResolutionState::Unresolved, "dynamic areas stay unresolved instead of falling back to Single");
+		const auto missing = resolver.resolve("AREA_NOT_DEFINED");
+		Check(missing.state == SpellAreaResolutionState::Unresolved, "missing constants stay unresolved instead of falling back to Single");
+	}
+
+	void TestVocationProviders() {
+		TemporaryDirectory temporary;
+		const auto luaPath = temporary.path / "data/scripts/spells/support/vocation.lua";
+		const std::string lua = "-- preserve vocation provider\n"
+								"local spell = Spell(SPELL_INSTANT)\n"
+								"spell:name(\"Vocation Test\")\n"
+								"spell:vocation(\"sorcerer;true\", \"custom mage\")\n"
+								"customRegistrationHook()\n"
+								"spell:register()\n";
+		Write(luaPath, lua);
+		ServerContentSource luaSource;
+		luaSource.kind = ServerContentKind::Spell;
+		luaSource.format = ServerContentFormat::Lua;
+		luaSource.name = "Vocation Test";
+		luaSource.declarationPath = luaPath;
+		luaSource.declarationLine = LineOf(lua, "local spell");
+		std::string error;
+		auto luaDocument = SpellDefinitionDocument::Load(luaSource, error);
+		Check(luaDocument != nullptr, "Lua vocation spell opens: " + error);
+		if (luaDocument) {
+			Check(
+				luaDocument->definition().vocationCapability.state == SpellVocationCapabilityState::ExistingEditableLiteral
+					&& luaDocument->definition().vocations == std::vector<std::string>({ "sorcerer;true", "custom mage" }),
+				"existing Lua vocation list and description flag are editable"
+			);
+			SpellDefinition edited = luaDocument->definition();
+			edited.vocations = { "druid", "custom mage;true" };
+			Check(luaDocument->save(edited, error), "Lua vocations save through their existing provider call: " + error);
+			const std::string saved = Read(luaPath);
+			Check(saved.find("spell:vocation(\"druid\", \"custom mage;true\")") != std::string::npos, "Lua vocation arguments are replaced without regenerating the file");
+			Check(saved.find("customRegistrationHook()") != std::string::npos && saved.find("preserve vocation provider") != std::string::npos, "custom Lua around vocations remains preserved");
+		}
+
+		const auto globalPath = temporary.path / "data/scripts/spells/support/global.lua";
+		const std::string global = "local spell = Spell(SPELL_INSTANT)\nspell:name(\"Global Test\")\ncustomHook()\nspell:register()\n";
+		Write(globalPath, global);
+		ServerContentSource globalSource = luaSource;
+		globalSource.name = "Global Test";
+		globalSource.declarationPath = globalPath;
+		globalSource.declarationLine = 1;
+		auto globalDocument = SpellDefinitionDocument::Load(globalSource, error);
+		Check(
+			globalDocument && globalDocument->definition().allVocations
+				&& globalDocument->definition().vocationCapability.state == SpellVocationCapabilityState::SupportedInsertable,
+			"absent Lua vocation call is represented as editable All vocations"
+		);
+		if (globalDocument) {
+			SpellDefinition edited = globalDocument->definition();
+			edited.vocations = { "royal paladin", "custom id 42" };
+			Check(globalDocument->save(edited, error), "absent Lua vocation declaration is inserted before register: " + error);
+			const std::string saved = Read(globalPath);
+			Check(
+				saved.find("spell:vocation(\"royal paladin\", \"custom id 42\")") < saved.find("spell:register()")
+					&& saved.find("customHook()") != std::string::npos,
+				"inserted Lua vocation call uses the detected spell variable and preserves custom code"
+			);
+		}
+
+		const auto dynamicPath = temporary.path / "data/scripts/spells/support/dynamic.lua";
+		const std::string dynamic = "local spell = Spell(SPELL_INSTANT)\nspell:name(\"Dynamic Test\")\nspell:vocation(unpack(config.vocations))\nspell:register()\n";
+		Write(dynamicPath, dynamic);
+		ServerContentSource dynamicSource = luaSource;
+		dynamicSource.name = "Dynamic Test";
+		dynamicSource.declarationPath = dynamicPath;
+		dynamicSource.declarationLine = 1;
+		auto dynamicDocument = SpellDefinitionDocument::Load(dynamicSource, error);
+		Check(
+			dynamicDocument && dynamicDocument->definition().vocationCapability.state == SpellVocationCapabilityState::DynamicReadOnly
+				&& !dynamicDocument->definition().vocationCapability.editable,
+			"computed Lua vocation declarations remain read-only"
+		);
+
+		const auto xmlPath = temporary.path / "data/spells/spells.xml";
+		const std::string xml = "<spells>\n  <instant name=\"XML Global\" words=\"exana test\"/>\n</spells>\n";
+		Write(xmlPath, xml);
+		ServerContentSource xmlSource;
+		xmlSource.kind = ServerContentKind::Spell;
+		xmlSource.format = ServerContentFormat::Xml;
+		xmlSource.name = "XML Global";
+		xmlSource.subtype = "instant";
+		xmlSource.declarationPath = xmlPath;
+		xmlSource.declarationLine = 2;
+		auto xmlDocument = SpellDefinitionDocument::Load(xmlSource, error);
+		Check(xmlDocument && xmlDocument->definition().allVocations && xmlDocument->definition().vocationCapability.editable, "self-closing XML spells expose insertable vocations");
+		if (xmlDocument) {
+			SpellDefinition edited = xmlDocument->definition();
+			edited.vocations = { "Druid", "Custom Vocation" };
+			Check(xmlDocument->save(edited, error), "XML vocations save by expanding the selected spell node: " + error);
+			const std::string saved = Read(xmlPath);
+			Check(saved.find("<vocation name=\"Druid\"/>") != std::string::npos && saved.find("<vocation name=\"Custom Vocation\"/>") != std::string::npos, "XML standard and custom vocations are inserted");
+		}
 	}
 
 	void TestRealBase(const std::filesystem::path& root, const std::string& label) {
@@ -204,6 +328,22 @@ namespace {
 		Check(indexed > 0, label + " contains indexed global spells");
 		Check(opened > 0, label + " opens at least one real spell definition");
 		Check(visual > 0, label + " exposes combat visual metadata from a real spell");
+		if (label == "TFS Lua") {
+			const ServerContentLookupResult eternalWinter = index.findExact(ServerContentKind::Spell, "Eternal Winter");
+			std::string areaError;
+			auto eternalWinterDocument = eternalWinter.value()
+				? SpellDefinitionDocument::Load(*eternalWinter.value(), areaError, &detection.workspace)
+				: nullptr;
+			Check(eternalWinterDocument != nullptr, "real Eternal Winter opens: " + areaError);
+			if (eternalWinterDocument) {
+				const SpellDefinition& spell = eternalWinterDocument->definition();
+				Check(spell.areaExpression == "AREA_CIRCLE5X5", "real Eternal Winter retains AREA_CIRCLE5X5");
+				Check(
+					spell.areaResolutionState == SpellAreaResolutionState::Resolved && !spell.customAreaTiles.empty(),
+					"real Eternal Winter resolves AREA_CIRCLE5X5 from spell_lib instead of displaying Single"
+				);
+			}
+		}
 		std::cout << label << ": " << indexed << " inspected, " << opened << " opened, " << visual << " with visual metadata.\n";
 	}
 }
@@ -212,6 +352,8 @@ int main(int argc, char** argv) {
 	TestLuaSourcePreservation();
 	TestExactLuaDeclarationSelection();
 	TestXmlRegistryAndLuaImplementation();
+	TestWorkspaceAreaResolver();
+	TestVocationProviders();
 	if (argc > 1) {
 		TestRealBase(argv[1], "TFS Lua");
 	}

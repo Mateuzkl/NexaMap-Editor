@@ -13,9 +13,12 @@
 #include "outfit.h"
 #include "outfit_color_picker.h"
 #include "theme.h"
+#include "workspace_session.h"
 
 #include <wx/listctrl.h>
 #include <wx/notebook.h>
+#include <wx/statline.h>
+#include <wx/timer.h>
 
 #include <algorithm>
 #include <cstring>
@@ -23,6 +26,9 @@
 #include <vector>
 
 namespace {
+	constexpr int ID_NPC_BACK = wxID_HIGHEST + 911;
+	constexpr int ID_NPC_BROWSE = wxID_HIGHEST + 912;
+
 	wxString Utf8(const std::string& value) {
 		return wxString::FromUTF8(value);
 	}
@@ -69,7 +75,17 @@ namespace {
 		outfit.lookFeet = definition.lookFeet;
 		outfit.lookAddon = definition.lookAddons;
 		outfit.lookMount = definition.lookMount;
-		GameSprite* sprite = outfit.lookItem > 0 ? dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(outfit.lookItem)) : g_gui.gfx.getCreatureSprite(outfit.lookType);
+		GameSprite* sprite = nullptr;
+		if (outfit.lookItem > 0) {
+			sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(outfit.lookItem));
+		} else if (outfit.lookType > 0) {
+			sprite = g_gui.gfx.getCreatureSprite(outfit.lookType);
+		} else if (outfit.lookMount > 0) {
+			const int resolvedMount = g_workspace.resolveMountClientId(outfit.lookMount);
+			sprite = g_gui.gfx.getCreatureSprite(resolvedMount);
+			outfit.lookType = resolvedMount;
+			outfit.lookMount = 0;
+		}
 		if (!sprite) {
 			return {};
 		}
@@ -167,6 +183,7 @@ NpcEditorDialog::NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinition
 				break;
 		}
 		refreshPreview();
+		scheduleAutosave();
 	});
 	outfitColors->SetColors(edited.lookHead, edited.lookBody, edited.lookLegs, edited.lookFeet);
 	for (int channel = 0; channel < 4; ++channel) {
@@ -219,18 +236,37 @@ NpcEditorDialog::NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinition
 	sourcePage->SetSizer(sourceSizer);
 	notebook->AddPage(sourcePage, "Source");
 	root->Add(notebook, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+	auto* footer = newd wxBoxSizer(wxHORIZONTAL);
+	saveStateLabel = newd wxStaticText(this, wxID_ANY, "No unsaved changes");
+	saveStateLabel->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
+	footer->Add(saveStateLabel, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
+	footer->Add(newd wxButton(this, ID_NPC_BACK, "< Back to NPCs"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
+	footer->Add(newd wxButton(this, ID_NPC_BROWSE, "Browse NPCs..."), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
 	auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
 	if (auto* save = FindWindow(wxID_OK)) {
 		save->SetLabel("Save");
 	}
-	root->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+	if (auto* close = FindWindow(wxID_CANCEL)) {
+		close->SetLabel("Close");
+	}
+	footer->Add(buttons, 0, wxALIGN_CENTER_VERTICAL);
+	root->Add(newd wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+	root->Add(footer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 	SetSizer(root);
 	SetMinSize(FromDIP(wxSize(760, 590)));
 	SetSize(FromDIP(wxSize(900, 700)));
 	CentreOnParent();
 	Bind(wxEVT_BUTTON, &NpcEditorDialog::onSave, this, wxID_OK);
+	Bind(wxEVT_BUTTON, &NpcEditorDialog::onBrowse, this, ID_NPC_BACK);
+	Bind(wxEVT_BUTTON, &NpcEditorDialog::onBrowse, this, ID_NPC_BROWSE);
 	Bind(wxEVT_BUTTON, &NpcEditorDialog::onCancel, this, wxID_CANCEL);
 	Bind(wxEVT_CLOSE_WINDOW, &NpcEditorDialog::onClose, this);
+	Bind(wxEVT_TEXT, &NpcEditorDialog::onFieldChanged, this);
+	Bind(wxEVT_SPINCTRL, &NpcEditorDialog::onFieldChanged, this);
+	Bind(wxEVT_CHECKBOX, &NpcEditorDialog::onFieldChanged, this);
+	autosaveTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &NpcEditorDialog::onAutosave, this, autosaveTimer->GetId());
+	constructing = false;
 	refreshPreview();
 	refreshMessages();
 	refreshShop();
@@ -239,6 +275,10 @@ NpcEditorDialog::NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinition
 
 bool NpcEditorDialog::wasSaved() const {
 	return saved;
+}
+
+bool NpcEditorDialog::wantsBrowse() const {
+	return browseRequested;
 }
 wxTextCtrl* NpcEditorDialog::addText(wxWindow* parent, wxFlexGridSizer* grid, NpcField field, const std::string& value) {
 	grid->Add(newd wxStaticText(parent, wxID_ANY, NpcFieldName(field)), 0, wxALIGN_CENTER_VERTICAL);
@@ -304,7 +344,8 @@ void NpcEditorDialog::readControls() {
 void NpcEditorDialog::refreshPreview() {
 	readControls();
 	preview->SetBitmap(PreviewBitmap(edited, FromDIP(170)));
-	preview->SetToolTip(wxString::Format("lookType %d | lookTypeEx %d | direction %d", edited.lookType, edited.lookTypeEx, edited.direction));
+	preview->SetToolTip(wxString::Format("lookType %d | lookTypeEx %d | mount %d | direction %d", edited.lookType, edited.lookTypeEx, edited.lookMount, edited.direction));
+	preview->Refresh();
 }
 void NpcEditorDialog::refreshMessages() {
 	messageList->DeleteAllItems();
@@ -346,6 +387,7 @@ void NpcEditorDialog::editMessage(std::size_t index) {
 	if (dialog.ShowModal() == wxID_OK) {
 		edited.messages[index].text = Narrow(dialog.GetValue());
 		refreshMessages();
+		scheduleAutosave();
 	}
 }
 void NpcEditorDialog::editShop(std::size_t index) {
@@ -377,6 +419,7 @@ void NpcEditorDialog::editShop(std::size_t index) {
 		item.buy = buy->GetValue();
 		item.sell = sell->GetValue();
 		refreshShop();
+		scheduleAutosave();
 	}
 }
 void NpcEditorDialog::editTravel(std::size_t index) {
@@ -405,19 +448,85 @@ void NpcEditorDialog::editTravel(std::size_t index) {
 		travel.y = y->GetValue();
 		travel.z = z->GetValue();
 		refreshTravel();
+		scheduleAutosave();
 	}
 }
 
 void NpcEditorDialog::onSave(wxCommandEvent&) {
+	saveDocument(true);
+}
+
+bool NpcEditorDialog::saveDocument(bool showErrors) {
 	readControls();
 	std::string error;
 	if (!document->save(edited, error)) {
-		wxMessageBox(Utf8(error), "Could not save NPC", wxOK | wxICON_ERROR, this);
-		return;
+		autosaveState.failed(error);
+		updateSaveState("Save error: " + Utf8(error), true);
+		if (showErrors) {
+			wxMessageBox(Utf8(error), "Could not save NPC", wxOK | wxICON_ERROR, this);
+		}
+		return false;
 	}
 	edited = document->definition();
 	sourceView->ChangeValue(Utf8(document->sourceText()));
+	autosaveState.saved();
 	saved = true;
+	updateSaveState(showErrors ? "Saved" : "Saved automatically");
+	return true;
+}
+
+void NpcEditorDialog::scheduleAutosave() {
+	if (constructing || !document) {
+		return;
+	}
+	readControls();
+	if (!document->hasChanges(edited)) {
+		if (!autosaveState.hasError()) {
+			updateSaveState(saved ? "Saved" : "No unsaved changes");
+		}
+		return;
+	}
+	autosaveState.changed();
+	updateSaveState("Unsaved changes - autosave pending");
+	if (autosaveTimer) {
+		autosaveTimer->StartOnce(650);
+	}
+}
+
+void NpcEditorDialog::updateSaveState(const wxString& label, bool error) {
+	if (!saveStateLabel) {
+		return;
+	}
+	saveStateLabel->SetLabel(label);
+	saveStateLabel->SetForegroundColour(error ? wxColour(232, 72, 85) : Theme::Get(Theme::Role::TextSubtle));
+	saveStateLabel->SetToolTip(label);
+	saveStateLabel->GetParent()->Layout();
+}
+
+void NpcEditorDialog::onFieldChanged(wxCommandEvent& event) {
+	scheduleAutosave();
+	if (!constructing) {
+		refreshPreview();
+	}
+	event.Skip();
+}
+
+void NpcEditorDialog::onAutosave(wxTimerEvent&) {
+	if (autosaveState.ready()) {
+		saveDocument(false);
+	}
+}
+
+void NpcEditorDialog::onBrowse(wxCommandEvent&) {
+	if (autosaveTimer) {
+		autosaveTimer->Stop();
+	}
+	readControls();
+	if (document->hasChanges(edited) && !saveDocument(true)) {
+		return;
+	}
+	browseRequested = true;
+	EndModal(wxID_CANCEL);
 }
 bool NpcEditorDialog::confirmDiscard() {
 	readControls();

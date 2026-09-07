@@ -61,10 +61,12 @@ struct ServerWorkspace {
 	std::filesystem::path monstersDirectory;
 	std::filesystem::path npcsDirectory;
 	std::filesystem::path spellsDirectory;
+	std::filesystem::path mountsXmlPath;
 
 	ResourceFingerprint itemsOtbFingerprint;
 	ResourceFingerprint itemsXmlFingerprint;
 	ResourceFingerprint appearancesFingerprint;
+	ResourceFingerprint mountsXmlFingerprint;
 	std::vector<DetectedMap> maps;
 
 	ItemIdMode itemIdMode = ItemIdMode::Unknown;
@@ -79,6 +81,7 @@ struct ServerWorkspace {
 	[[nodiscard]] bool hasItemsOtb() const;
 	[[nodiscard]] bool hasItemsXml() const;
 	[[nodiscard]] bool hasAppearances() const;
+	[[nodiscard]] bool hasMountsXml() const;
 	[[nodiscard]] bool usesCanaryCrystalLoader() const;
 	[[nodiscard]] bool containsMap(const std::filesystem::path& path) const;
 	[[nodiscard]] const DetectedMap* findMap(const std::filesystem::path& path) const;

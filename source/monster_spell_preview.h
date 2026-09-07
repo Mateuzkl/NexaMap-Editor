@@ -19,6 +19,7 @@ public:
 
 	void SetAttack(const MonsterAttackDefinition* attack);
 	void SetCustomArea(const MonsterAttackDefinition* attack, std::vector<MonsterAreaTile> tiles, std::string description);
+	void SetUnavailableArea(const MonsterAttackDefinition* attack, std::string description);
 	void SetDirection(int direction);
 
 private:
@@ -27,6 +28,7 @@ private:
 	MonsterAttackDefinition current;
 	std::vector<MonsterAreaTile> customTiles;
 	std::string customDescription;
+	bool customAreaMode = false;
 	bool hasAttack = false;
 	int direction = 0;
 };

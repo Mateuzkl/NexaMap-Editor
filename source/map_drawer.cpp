@@ -23,6 +23,7 @@
 #include "map_overlay_text.h"
 #include <wx/dcmemory.h>
 #include "theme.h"
+#include "workspace_session.h"
 
 #ifdef __WINDOWS__
 	#include <windows.h>
@@ -1674,7 +1675,7 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 		Outfit outfit = podium->getOutfit();
 		if (!podium->hasShowOutfit()) {
 			if (podium->hasShowMount()) {
-				outfit.lookType = outfit.lookMount;
+				outfit.lookType = g_workspace.resolveMountClientId(outfit.lookMount);
 				outfit.lookHead = outfit.lookMountHead;
 				outfit.lookBody = outfit.lookMountBody;
 				outfit.lookLegs = outfit.lookMountLegs;
@@ -1775,10 +1776,11 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 		// mount colors by Zbizu
 		int pattern_z = 0;
 		if (outfit.lookMount != 0) {
-			if (GameSprite* mountSpr = g_gui.gfx.getCreatureSprite(outfit.lookMount)) {
+			const int mountClientId = g_workspace.resolveMountClientId(outfit.lookMount);
+			if (GameSprite* mountSpr = g_gui.gfx.getCreatureSprite(mountClientId)) {
 				// generate mount colors
 				Outfit mountOutfit;
-				mountOutfit.lookType = outfit.lookMount;
+				mountOutfit.lookType = mountClientId;
 				mountOutfit.lookHead = outfit.lookMountHead;
 				mountOutfit.lookBody = outfit.lookMountBody;
 				mountOutfit.lookLegs = outfit.lookMountLegs;

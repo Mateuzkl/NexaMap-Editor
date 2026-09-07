@@ -8,6 +8,7 @@
 #include "monster_definition.h"
 #include "monster_spell_area.h"
 #include "server_content_index.h"
+#include "spell_area_resolver.h"
 
 #include <array>
 #include <cstdint>
@@ -53,6 +54,20 @@ struct SpellFieldCapability {
 	std::string limitation;
 };
 
+enum class SpellVocationCapabilityState : uint8_t {
+	Unsupported = 0,
+	ExistingEditableLiteral,
+	SupportedInsertable,
+	DynamicReadOnly,
+	Ambiguous,
+};
+
+struct SpellVocationCapability {
+	SpellVocationCapabilityState state = SpellVocationCapabilityState::Unsupported;
+	bool editable = false;
+	std::string limitation;
+};
+
 struct SpellDefinition {
 	std::string name;
 	std::string subtype;
@@ -85,8 +100,11 @@ struct SpellDefinition {
 	std::string areaExpression;
 	std::string areaStatus;
 	std::vector<std::string> vocations;
+	bool allVocations = true;
+	SpellVocationCapability vocationCapability;
 	MonsterAttackDefinition preview;
 	std::vector<MonsterAreaTile> customAreaTiles;
+	SpellAreaResolutionState areaResolutionState = SpellAreaResolutionState::Single;
 	std::array<SpellFieldCapability, static_cast<std::size_t>(SpellField::Count)> capabilities {};
 
 	[[nodiscard]] const SpellFieldCapability& capability(SpellField field) const;
@@ -95,6 +113,7 @@ struct SpellDefinition {
 class SpellDefinitionDocument {
 public:
 	static std::unique_ptr<SpellDefinitionDocument> Load(const ServerContentSource& source, std::string& error);
+	static std::unique_ptr<SpellDefinitionDocument> Load(const ServerContentSource& source, std::string& error, const ServerWorkspace* workspace);
 
 	~SpellDefinitionDocument();
 	SpellDefinitionDocument(SpellDefinitionDocument&&) noexcept;

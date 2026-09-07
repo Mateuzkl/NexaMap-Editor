@@ -5,7 +5,9 @@
 #ifndef NEXAMAP_SPELL_EDITOR_DIALOG_H_
 #define NEXAMAP_SPELL_EDITOR_DIALOG_H_
 
+#include "editor_autosave_state.h"
 #include "spell_definition.h"
+#include "server_vocation_catalog.h"
 
 #include <wx/dialog.h>
 
@@ -13,10 +15,15 @@
 #include <memory>
 
 class MonsterSpellPreview;
+class SpellAreaResolver;
 class wxCloseEvent;
+class wxCheckBox;
+class wxCheckListBox;
 class wxFlexGridSizer;
 class wxStaticText;
 class wxTextCtrl;
+class wxTimer;
+class wxTimerEvent;
 class wxWindow;
 
 class SpellEditorDialog final : public wxDialog {
@@ -25,6 +32,7 @@ public:
 
 	[[nodiscard]] bool wasSaved() const;
 	[[nodiscard]] const SpellDefinition& savedDefinition() const;
+	[[nodiscard]] bool wantsBrowse() const;
 
 private:
 	wxWindow* addText(wxWindow* parent, wxFlexGridSizer* grid, SpellField field, const std::string& value, const wxArrayString& choices = {});
@@ -33,14 +41,21 @@ private:
 	void applyCapability(wxWindow* control, SpellField field);
 	void readControls();
 	void refreshPreview();
-	void updateDirtyState();
+	void syncVocations();
+	void refreshVocationControls();
 	bool confirmDiscard();
+	bool saveDocument(bool showErrors);
+	void scheduleAutosave();
+	void updateSaveState(const wxString& label, bool error = false);
 	void onFieldChanged(wxCommandEvent& event);
 	void onSave(wxCommandEvent& event);
+	void onBrowse(wxCommandEvent& event);
+	void onAutosave(wxTimerEvent& event);
 	void onCloseButton(wxCommandEvent& event);
 	void onClose(wxCloseEvent& event);
 
 	std::unique_ptr<SpellDefinitionDocument> document;
+	std::unique_ptr<SpellAreaResolver> areaResolver;
 	SpellDefinition edited;
 	std::array<wxWindow*, static_cast<std::size_t>(SpellField::Count)> controls {};
 	MonsterSpellPreview* preview = nullptr;
@@ -48,9 +63,18 @@ private:
 	wxStaticText* saveState = nullptr;
 	wxTextCtrl* declarationSource = nullptr;
 	wxTextCtrl* implementationSource = nullptr;
+	wxCheckBox* allVocationsCheck = nullptr;
+	wxCheckBox* showInDescriptionCheck = nullptr;
+	wxCheckListBox* vocationList = nullptr;
+	wxTextCtrl* customVocation = nullptr;
+	std::vector<ServerVocation> vocationCatalog;
+	std::vector<std::string> vocationValues;
+	std::unique_ptr<wxTimer> autosaveTimer;
+	EditorAutosaveState autosaveState;
 	int direction = 0;
 	bool constructing = true;
 	bool saved = false;
+	bool browseRequested = false;
 };
 
 #endif // NEXAMAP_SPELL_EDITOR_DIALOG_H_

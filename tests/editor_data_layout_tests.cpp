@@ -55,24 +55,40 @@ int main() {
 	std::ifstream monsterDialogFile(sourceRoot / "source" / "monster_editor_dialog.cpp", std::ios::binary);
 	const std::string monsterDialog((std::istreambuf_iterator<char>(monsterDialogFile)), std::istreambuf_iterator<char>());
 	const std::size_t saveBegin = monsterDialog.find("void MonsterEditorDialog::onSave");
-	const std::size_t discardBegin = monsterDialog.find("bool MonsterEditorDialog::confirmDiscard", saveBegin);
-	check(saveBegin != std::string::npos && discardBegin != std::string::npos, "Monster Editor save handler is present");
-	if (saveBegin != std::string::npos && discardBegin != std::string::npos) {
-		const std::string saveHandler = monsterDialog.substr(saveBegin, discardBegin - saveBegin);
+	const std::size_t saveDocumentBegin = monsterDialog.find("bool MonsterEditorDialog::saveDocument", saveBegin);
+	check(saveBegin != std::string::npos && saveDocumentBegin != std::string::npos, "Monster Editor save handler is present");
+	if (saveBegin != std::string::npos && saveDocumentBegin != std::string::npos) {
+		const std::string saveHandler = monsterDialog.substr(saveBegin, std::min<std::size_t>(200, monsterDialog.size() - saveBegin));
 		check(saveHandler.find("EndModal") == std::string::npos, "Monster Editor Save and autosave keep the window open");
 		check(saveHandler.find("saveDocument(true)") != std::string::npos, "Monster Editor Save uses the validated source save path");
 	}
+	check(monsterDialog.find("< Back to Monsters") != std::string::npos && monsterDialog.find("Browse Monsters...") != std::string::npos, "Monster Editor exposes internal back and browse navigation");
+	check(monsterDialog.find("StartOnce(650)") != std::string::npos, "Monster Editor uses debounced autosave");
+
+	std::ifstream npcDialogFile(sourceRoot / "source" / "npc_editor_dialog.cpp", std::ios::binary);
+	const std::string npcDialog((std::istreambuf_iterator<char>(npcDialogFile)), std::istreambuf_iterator<char>());
+	const std::size_t npcSaveBegin = npcDialog.find("void NpcEditorDialog::onSave");
+	const std::size_t npcSaveDocumentBegin = npcDialog.find("bool NpcEditorDialog::saveDocument", npcSaveBegin);
+	check(npcSaveBegin != std::string::npos && npcSaveDocumentBegin != std::string::npos, "NPC Editor save handler is present");
+	if (npcSaveBegin != std::string::npos && npcSaveDocumentBegin != std::string::npos) {
+		const std::string saveHandler = npcDialog.substr(npcSaveBegin, npcSaveDocumentBegin - npcSaveBegin);
+		check(saveHandler.find("EndModal") == std::string::npos && saveHandler.find("saveDocument(true)") != std::string::npos, "NPC Editor Save validates and keeps the window open");
+	}
+	check(npcDialog.find("< Back to NPCs") != std::string::npos && npcDialog.find("Browse NPCs...") != std::string::npos, "NPC Editor exposes internal back and browse navigation");
+	check(npcDialog.find("StartOnce(650)") != std::string::npos, "NPC Editor uses debounced autosave");
 
 	std::ifstream spellDialogFile(sourceRoot / "source" / "spell_editor_dialog.cpp", std::ios::binary);
 	const std::string spellDialog((std::istreambuf_iterator<char>(spellDialogFile)), std::istreambuf_iterator<char>());
 	const std::size_t spellSaveBegin = spellDialog.find("void SpellEditorDialog::onSave");
-	const std::size_t spellDiscardBegin = spellDialog.find("bool SpellEditorDialog::confirmDiscard", spellSaveBegin);
-	check(spellSaveBegin != std::string::npos && spellDiscardBegin != std::string::npos, "Spell Editor save handler is present");
-	if (spellSaveBegin != std::string::npos && spellDiscardBegin != std::string::npos) {
-		const std::string saveHandler = spellDialog.substr(spellSaveBegin, spellDiscardBegin - spellSaveBegin);
+	const std::size_t spellSaveDocumentBegin = spellDialog.find("bool SpellEditorDialog::saveDocument", spellSaveBegin);
+	check(spellSaveBegin != std::string::npos && spellSaveDocumentBegin != std::string::npos, "Spell Editor save handler is present");
+	if (spellSaveBegin != std::string::npos && spellSaveDocumentBegin != std::string::npos) {
+		const std::string saveHandler = spellDialog.substr(spellSaveBegin, spellSaveDocumentBegin - spellSaveBegin);
 		check(saveHandler.find("EndModal") == std::string::npos, "Spell Editor Save keeps the editor open");
-		check(saveHandler.find("document->save") != std::string::npos, "Spell Editor Save uses the validated provider transaction");
+		check(saveHandler.find("saveDocument(true)") != std::string::npos, "Spell Editor Save uses the validated provider transaction");
 	}
+	check(spellDialog.find("< Back to Spells") != std::string::npos && spellDialog.find("Browse Spells...") != std::string::npos, "Spell Editor exposes internal back and browse navigation");
+	check(spellDialog.find("StartOnce(650)") != std::string::npos, "Spell Editor uses debounced autosave");
 	check(spellDialog.find("wxVSCROLL") != std::string::npos, "Spell Editor uses scrollable content pages");
 	check(spellDialog.find("Registration XML") != std::string::npos && spellDialog.find("Implementation Lua") != std::string::npos, "Spell Editor exposes paired registration and implementation sources");
 

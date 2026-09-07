@@ -3120,7 +3120,14 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 
 	MonsterEditorDialog dialog(root, std::move(document));
 	dialog.ShowModal();
+	const bool browse = dialog.wantsBrowse();
+	const auto browseNext = [this, browse, workspaceRoot]() {
+		if (browse && g_workspace.getServer().rootPath == workspaceRoot) {
+			wxTheApp->CallAfter([this]() { ShowMonsterEditorBrowser(); });
+		}
+	};
 	if (!dialog.wasSaved()) {
+		browseNext();
 		return;
 	}
 	if (g_workspace.getServer().rootPath != workspaceRoot) {
@@ -3131,6 +3138,7 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 	wxString scanError;
 	if (!g_workspace.rescanServer(scanError)) {
 		wxMessageBox("The monster was saved, but the Server Workspace could not be reindexed:\n" + scanError, "Monster saved", wxOK | wxICON_WARNING, root);
+		browseNext();
 		return;
 	}
 	wxString importError;
@@ -3141,6 +3149,7 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 		: g_creatures.importLuaFromOT(filename, importError, warnings);
 	if (!imported) {
 		wxMessageBox("The source was saved, but the creature palette could not reload it:\n" + importError, "Monster saved", wxOK | wxICON_WARNING, root);
+		browseNext();
 		return;
 	}
 	g_materials.createOtherTileset();
@@ -3150,6 +3159,7 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 		ListDialog(root, "Monster reload warnings", warnings);
 	}
 	SetStatusText("Saved monster " + wxString::FromUTF8(dialog.savedDefinition().name));
+	browseNext();
 }
 
 void GUI::ShowNpcEditor(const std::string& npcName) {
@@ -3160,12 +3170,37 @@ void GUI::ShowNpcEditor(const std::string& npcName) {
 	if (lookup.empty()) {
 		lookup = g_workspace.getServerContent().findCaseInsensitive(ServerContentKind::Npc, npcName);
 	}
+	if (lookup.empty()) {
+		wxMessageBox("NexaMap could not locate this NPC in the active Server Workspace.", "NPC source", wxOK | wxICON_INFORMATION, root);
+		return;
+	}
 	const ServerContentSource* source = lookup.value();
 	if (!source) {
 		source = lookup.uniqueRegisteredValue();
 	}
 	if (!source) {
-		wxMessageBox(lookup.empty() ? "NexaMap could not locate this NPC in the active Server Workspace." : "More than one source defines this NPC. Open it from Browse NPCs to choose the exact source.", "NPC source", wxOK | wxICON_INFORMATION, root);
+		// Multiple sources define this NPC - let the user pick the right one.
+		std::vector<ServerContentSource> ambiguous;
+		for (const ServerContentSource* match : lookup.matches) {
+			if (match->declarationExists) {
+				ambiguous.push_back(*match);
+			}
+		}
+		if (ambiguous.empty()) {
+			wxMessageBox("NexaMap found multiple references for this NPC, but none have a valid source file.", "NPC source", wxOK | wxICON_INFORMATION, root);
+			return;
+		}
+		if (ambiguous.size() == 1) {
+			ShowNpcEditor(ambiguous.front());
+			return;
+		}
+		ServerContentBrowserDialog chooser(root, "Choose NPC Source", "NPC", g_workspace.getServer().npcsDirectory, std::move(ambiguous), false);
+		if (chooser.ShowModal() != wxID_OK) {
+			return;
+		}
+		if (const auto chosen = chooser.selectedSource()) {
+			ShowNpcEditor(*chosen);
+		}
 		return;
 	}
 	ShowNpcEditor(*source);
@@ -3235,7 +3270,14 @@ void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
 	}
 	NpcEditorDialog dialog(root, std::move(document));
 	dialog.ShowModal();
+	const bool browse = dialog.wantsBrowse();
+	const auto browseNext = [this, browse, workspaceRoot]() {
+		if (browse && g_workspace.getServer().rootPath == workspaceRoot) {
+			wxTheApp->CallAfter([this]() { ShowNpcEditorBrowser(); });
+		}
+	};
 	if (!dialog.wasSaved()) {
+		browseNext();
 		return;
 	}
 	if (g_workspace.getServer().rootPath != workspaceRoot) {
@@ -3245,6 +3287,7 @@ void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
 	wxString scanError;
 	if (!g_workspace.rescanServer(scanError)) {
 		wxMessageBox("The NPC was saved, but the workspace could not be reindexed:\n" + scanError, "NPC saved", wxOK | wxICON_WARNING, root);
+		browseNext();
 		return;
 	}
 	wxString importError;
@@ -3253,6 +3296,7 @@ void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
 	const bool imported = source.format == ServerContentFormat::Xml ? g_creatures.importXMLFromOT(filename, importError, warnings) : g_creatures.importLuaFromOT(filename, importError, warnings);
 	if (!imported) {
 		wxMessageBox("The NPC source was saved, but the creature palette could not reload it:\n" + importError, "NPC saved", wxOK | wxICON_WARNING, root);
+		browseNext();
 		return;
 	}
 	g_materials.createOtherTileset();
@@ -3262,6 +3306,7 @@ void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
 		ListDialog(root, "NPC reload warnings", warnings);
 	}
 	SetStatusText("Saved NPC " + wxString::FromUTF8(source.name));
+	browseNext();
 }
 
 void GUI::ShowSpellEditorBrowser() {
@@ -3293,14 +3338,21 @@ void GUI::ShowSpellEditor(const ServerContentSource& selectedSource) {
 	const ServerContentSource source = selectedSource;
 	const auto workspaceRoot = g_workspace.getServer().rootPath;
 	std::string error;
-	auto document = SpellDefinitionDocument::Load(source, error);
+	auto document = SpellDefinitionDocument::Load(source, error, &g_workspace.getServer());
 	if (!document) {
 		wxMessageBox(wxString::FromUTF8(error), "Could not open spell", wxOK | wxICON_ERROR, root);
 		return;
 	}
 	SpellEditorDialog dialog(root, std::move(document));
 	dialog.ShowModal();
+	const bool browse = dialog.wantsBrowse();
+	const auto browseNext = [this, browse, workspaceRoot]() {
+		if (browse && g_workspace.getServer().rootPath == workspaceRoot) {
+			wxTheApp->CallAfter([this]() { ShowSpellEditorBrowser(); });
+		}
+	};
 	if (!dialog.wasSaved()) {
+		browseNext();
 		return;
 	}
 	if (g_workspace.getServer().rootPath != workspaceRoot) {
@@ -3310,10 +3362,12 @@ void GUI::ShowSpellEditor(const ServerContentSource& selectedSource) {
 	wxString scanError;
 	if (!g_workspace.rescanServer(scanError)) {
 		wxMessageBox("The spell was saved, but the Server Workspace could not be reindexed:\n" + scanError, "Spell saved", wxOK | wxICON_WARNING, root);
+		browseNext();
 		return;
 	}
 	RefreshView();
 	SetStatusText("Saved spell " + wxString::FromUTF8(dialog.savedDefinition().name));
+	browseNext();
 }
 
 void GUI::SetHotkey(int index, Hotkey& hotkey) {
