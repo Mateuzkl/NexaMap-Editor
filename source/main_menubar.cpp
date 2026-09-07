@@ -83,6 +83,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SPAWN_NPC_CONVERTER, wxITEM_NORMAL, OnSpawnNpcConverter);
 	MAKE_ACTION(SERVER_NEW_MONSTER_EDITOR, wxITEM_NORMAL, OnServerNewMonsterEditor);
 	MAKE_ACTION(SERVER_MONSTER_EDITOR, wxITEM_NORMAL, OnServerMonsterEditor);
+	MAKE_ACTION(SERVER_NEW_NPC_EDITOR, wxITEM_NORMAL, OnServerNewNpcEditor);
+	MAKE_ACTION(SERVER_NPC_EDITOR, wxITEM_NORMAL, OnServerNpcEditor);
 	MAKE_ACTION(IMPORT_MONSTERS, wxITEM_NORMAL, OnImportMonsterData);
 	MAKE_ACTION(EXPORT_MINIMAP, wxITEM_NORMAL, OnExportMinimap);
 	MAKE_ACTION(EXPORT_TILESETS, wxITEM_NORMAL, OnExportTilesets);
@@ -449,6 +451,8 @@ void MainMenuBar::Update() {
 	EnableItem(SPAWN_NPC_CONVERTER, true);
 	EnableItem(SERVER_NEW_MONSTER_EDITOR, loaded);
 	EnableItem(SERVER_MONSTER_EDITOR, loaded);
+	EnableItem(SERVER_NEW_NPC_EDITOR, loaded);
+	EnableItem(SERVER_NPC_EDITOR, loaded);
 	EnableItem(IMPORT_MONSTERS, is_local);
 	EnableItem(EXPORT_MINIMAP, is_local);
 	EnableItem(EXPORT_TILESETS, loaded);
@@ -1034,6 +1038,14 @@ void MainMenuBar::OnServerNewMonsterEditor(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnServerMonsterEditor(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.ShowMonsterEditorBrowser();
+}
+
+void MainMenuBar::OnServerNewNpcEditor(wxCommandEvent& WXUNUSED(event)) {
+	g_gui.ShowNewNpcEditor();
+}
+
+void MainMenuBar::OnServerNpcEditor(wxCommandEvent& WXUNUSED(event)) {
+	g_gui.ShowNpcEditorBrowser();
 }
 
 namespace {

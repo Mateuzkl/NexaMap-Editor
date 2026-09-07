@@ -1,5 +1,6 @@
 #include "monster_definition.h"
 #include "monster_definition_creation.h"
+#include "editor_autosave_state.h"
 #include "server_content_index.h"
 #include "server_workspace.h"
 
@@ -365,15 +366,55 @@ namespace {
 		ServerWorkspace luaWorkspace;
 		luaWorkspace.rootPath = luaServer.path;
 		luaWorkspace.monstersDirectory = luaServer.path / "data/monsters";
+		luaWorkspace.serverType = ServerType::Tfs;
+		luaServer.write(
+			"data/scripts/lib/register_monster_type.lua",
+			"registerMonsterType.summons = function(mtype, mask)\n"
+			" local summonData = mask.summons or (mask.summon and mask.summon.summons)\n"
+			" for _, v in pairs(summonData or {}) do mtype:addSummon(v.name, v.interval, v.chance, v.count) end\nend\n"
+		);
 		const ServerContentIndex luaIndex = ServerContentIndex::Build(luaWorkspace);
 		request = { "Lua Sentinel", ServerContentFormat::Lua, luaDirectory };
 		Check(CreateMonsterDefinition(luaWorkspace, luaIndex, request, created, error), "new Lua monster is created: " + error);
+		const std::string tfsLua = luaServer.read("data/monsters/custom/lua_sentinel.lua");
+		Check(created.provider == "TFS Lua registerMonsterType", "TFS Lua creation reports its detected provider");
+		Check(tfsLua.find("monster.summons = {}") != std::string::npos && tfsLua.find("summons = { maxSummons") == std::string::npos, "TFS Lua uses a list for summons and cannot trigger registerMonsterType v.name on a number");
 		document = MonsterDefinitionDocument::Load(created.source, error);
 		Check(document != nullptr, "created Lua monster opens in the visual editor provider: " + error);
 		if (document) {
 			Check(document->definition().name == "Lua Sentinel" && document->definition().capability(MonsterField::LookType).editable, "created Lua Main and Look fields are editable");
 			Check(document->definition().capability(MonsterSection::Loot).editable, "created Lua loot section is editable");
 		}
+
+		TemporaryDirectory canaryServer;
+		const std::filesystem::path canaryDirectory = canaryServer.path / "data-canary/monster/custom";
+		std::filesystem::create_directories(canaryDirectory);
+		ServerWorkspace canaryWorkspace;
+		canaryWorkspace.rootPath = canaryServer.path;
+		canaryWorkspace.monstersDirectory = canaryServer.path / "data-canary/monster";
+		canaryWorkspace.serverType = ServerType::Canary;
+		const ServerContentIndex canaryIndex = ServerContentIndex::Build(canaryWorkspace);
+		request = { "Canary Sentinel", ServerContentFormat::Lua, canaryDirectory };
+		Check(CreateMonsterDefinition(canaryWorkspace, canaryIndex, request, created, error), "new Canary Lua monster is created: " + error);
+		const std::string canaryLua = canaryServer.read("data-canary/monster/custom/canary_sentinel.lua");
+		Check(created.provider == "Canary/Crystal Lua", "Canary family selects the Canary Lua provider");
+		Check(canaryLua.find("monster.summon = { maxSummons = 0, summons = {} }") != std::string::npos, "Canary Lua uses its nested summon provider shape");
+	}
+
+	void TestAutosaveState() {
+		using namespace std::chrono_literals;
+		EditorAutosaveState state(500ms);
+		const auto start = EditorAutosaveState::Clock::time_point(1s);
+		Check(!state.dirty() && !state.ready(start), "autosave begins clean");
+		state.changed(start);
+		Check(state.dirty() && !state.ready(start + 499ms), "autosave waits for the debounce interval");
+		Check(state.ready(start + 500ms), "autosave becomes ready at the debounce deadline");
+		state.failed("invalid field");
+		Check(state.dirty() && state.hasError() && !state.ready(start + 2s), "invalid autosave remains dirty with a visible error");
+		state.changed(start + 2s);
+		Check(!state.hasError() && state.ready(start + 2500ms), "editing after an error schedules validation again");
+		state.saved();
+		Check(!state.dirty() && !state.hasError(), "successful autosave clears dirty and error state");
 	}
 
 	void TestRealServers(const std::filesystem::path& modernRoot, const std::filesystem::path& xmlRoot) {
@@ -457,6 +498,7 @@ int main(int argc, char** argv) {
 	TestAmbiguousAndExternalChanges();
 	TestAdvancedValidation();
 	TestNewMonsterCreation();
+	TestAutosaveState();
 	if (argc == 3) {
 		TestRealServers(std::filesystem::path(argv[1]), std::filesystem::path(argv[2]));
 	} else if (argc != 1) {

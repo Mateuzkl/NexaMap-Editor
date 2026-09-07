@@ -196,6 +196,8 @@ namespace MenuBar {
 		SHOW_CONTAINER_PREVIEW,
 		SERVER_NEW_MONSTER_EDITOR,
 		SERVER_MONSTER_EDITOR,
+		SERVER_NEW_NPC_EDITOR,
+		SERVER_NPC_EDITOR,
 	};
 }
 
@@ -247,6 +249,8 @@ public:
 	void OnSpawnNpcConverter(wxCommandEvent& event);
 	void OnServerNewMonsterEditor(wxCommandEvent& event);
 	void OnServerMonsterEditor(wxCommandEvent& event);
+	void OnServerNewNpcEditor(wxCommandEvent& event);
+	void OnServerNpcEditor(wxCommandEvent& event);
 	void OnImportMonsterData(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);
 	void OnExportTilesets(wxCommandEvent& event);

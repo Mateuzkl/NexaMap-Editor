@@ -106,6 +106,9 @@ ${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.h
 ${CMAKE_CURRENT_LIST_DIR}/monster_editor_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/monster_spell_area.h
 ${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.h
+${CMAKE_CURRENT_LIST_DIR}/npc_definition.h
+${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.h
+${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.h
@@ -151,6 +154,8 @@ ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/session_id.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
 ${CMAKE_CURRENT_LIST_DIR}/server_content_index.h
+${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/editor_autosave_state.h
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
@@ -287,6 +292,9 @@ ${CMAKE_CURRENT_LIST_DIR}/monster_editor_sections.cpp
 ${CMAKE_CURRENT_LIST_DIR}/monster_editor_attacks.cpp
 ${CMAKE_CURRENT_LIST_DIR}/monster_spell_area.cpp
 ${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.cpp
+${CMAKE_CURRENT_LIST_DIR}/npc_definition.cpp
+${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
+${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.cpp
@@ -327,6 +335,7 @@ ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/session_id.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
+${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.cpp
 ${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
@@ -393,6 +402,7 @@ ${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
 )
 set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
+	${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_definition.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.cpp
@@ -401,6 +411,9 @@ set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/monster_editor_attacks.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_spell_area.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.cpp
+	${CMAKE_CURRENT_LIST_DIR}/npc_definition.cpp
+	${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
+	${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp

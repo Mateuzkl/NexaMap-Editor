@@ -82,11 +82,14 @@ CreaturePalettePanel::CreaturePalettePanel(wxWindow* parent, wxWindowID id) :
 				return;
 			}
 			wxMenu menu;
-			if (CreatureType* type = brush->getType(); type && !type->isNpc) {
+			if (CreatureType* type = brush->getType(); type) {
 				const int editId = wxWindow::NewControlId();
-				menu.Append(editId, "Edit Monster...", "Open the source definition from the active Server Workspace");
+				menu.Append(editId, type->isNpc ? "Edit NPC..." : "Edit Monster...", "Open the source definition from the active Server Workspace");
 				const std::string name = type->name;
-				menu.Bind(wxEVT_MENU, [name](wxCommandEvent&) { g_gui.ShowMonsterEditor(name); }, editId);
+				const bool npc = type->isNpc;
+				menu.Bind(wxEVT_MENU, [name, npc](wxCommandEvent&) { if (npc){ g_gui.ShowNpcEditor(name);
+} else{ g_gui.ShowMonsterEditor(name);
+} }, editId);
 			}
 			if (const auto favorite = FavoriteResources::FromBrush(brush)) {
 				if (menu.GetMenuItemCount() > 0) {

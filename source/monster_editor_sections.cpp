@@ -287,7 +287,8 @@ namespace {
 
 void MonsterEditorDialog::addAdvancedPages(wxNotebook* notebook) {
 	addAttackPage(notebook);
-	auto* defensesPage = newd wxPanel(notebook);
+	auto* defensesPage = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+	defensesPage->SetScrollRate(0, FromDIP(12));
 	auto* defensesSizer = newd wxBoxSizer(wxVERTICAL);
 	defensesSizer->Add(
 		newd wxStaticText(defensesPage, wxID_ANY, "Healing and support actions. Armor and base defense remain on Main."),
@@ -349,7 +350,8 @@ void MonsterEditorDialog::addAdvancedPages(wxNotebook* notebook) {
 	notebook->AddPage(defensesPage, "Defenses");
 	applySectionCapability(defensesPage, MonsterSection::Defenses);
 
-	auto* resistancePage = newd wxPanel(notebook);
+	auto* resistancePage = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+	resistancePage->SetScrollRate(0, FromDIP(12));
 	auto* resistanceSizer = newd wxBoxSizer(wxVERTICAL);
 	auto* split = newd wxBoxSizer(wxHORIZONTAL);
 	auto* resistanceBox = newd wxStaticBoxSizer(wxVERTICAL, resistancePage, "Elements");
@@ -450,7 +452,8 @@ void MonsterEditorDialog::addAdvancedPages(wxNotebook* notebook) {
 	applySectionCapability(resistanceBox->GetStaticBox(), MonsterSection::Resistances);
 	applySectionCapability(immunityBox->GetStaticBox(), MonsterSection::Immunities);
 
-	auto* lootPage = newd wxPanel(notebook);
+	auto* lootPage = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+	lootPage->SetScrollRate(0, FromDIP(12));
 	auto* lootSizer = newd wxBoxSizer(wxVERTICAL);
 	lootSizer->Add(
 		newd wxStaticText(lootPage, wxID_ANY, "Container contents are shown as child rows. Item search uses the active client and server item database."),
@@ -550,7 +553,8 @@ void MonsterEditorDialog::addAdvancedPages(wxNotebook* notebook) {
 	notebook->AddPage(lootPage, "Loot");
 	applySectionCapability(lootPage, MonsterSection::Loot);
 
-	auto* summonsPage = newd wxPanel(notebook);
+	auto* summonsPage = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+	summonsPage->SetScrollRate(0, FromDIP(12));
 	auto* summonsSizer = newd wxBoxSizer(wxVERTICAL);
 	auto* maxRow = newd wxBoxSizer(wxHORIZONTAL);
 	maxRow->Add(newd wxStaticText(summonsPage, wxID_ANY, "Maximum active summons"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
@@ -607,7 +611,8 @@ void MonsterEditorDialog::addAdvancedPages(wxNotebook* notebook) {
 	notebook->AddPage(summonsPage, "Summons");
 	applySectionCapability(summonsPage, MonsterSection::Summons);
 
-	auto* voicesPage = newd wxPanel(notebook);
+	auto* voicesPage = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+	voicesPage->SetScrollRate(0, FromDIP(12));
 	auto* voicesSizer = newd wxBoxSizer(wxVERTICAL);
 	auto* voiceSettings = newd wxFlexGridSizer(2, 8, 12);
 	voiceSettings->Add(newd wxStaticText(voicesPage, wxID_ANY, "Interval"), 0, wxALIGN_CENTER_VERTICAL);
@@ -712,6 +717,7 @@ void MonsterEditorDialog::refreshDefenseList() {
 		defenseList->SetItem(row, 6, Utf8(action.effect));
 		defenseList->SetItem(row, 7, action.target ? "Yes" : "No");
 	}
+	scheduleAutosave();
 }
 
 void MonsterEditorDialog::refreshResistanceLists() {
@@ -732,6 +738,7 @@ void MonsterEditorDialog::refreshResistanceLists() {
 			immunityList->SetItem(row, 2, immunity.usesCondition ? (immunity.condition ? "Yes" : "No") : "-");
 		}
 	}
+	scheduleAutosave();
 }
 
 void MonsterEditorDialog::refreshLootTree() {
@@ -747,6 +754,7 @@ void MonsterEditorDialog::refreshLootTree() {
 	const wxTreeItemId root = lootTree->AddRoot(wxString::Format("Loot (%zu entries)", edited.loot.size()), 0, 0);
 	AppendLootNodes(lootTree, images, imageIndexes, imageSize, root, edited.loot, {});
 	lootTree->ExpandAll();
+	scheduleAutosave();
 }
 
 void MonsterEditorDialog::refreshSummonList() {
@@ -762,6 +770,7 @@ void MonsterEditorDialog::refreshSummonList() {
 		summonList->SetItem(row, 3, wxString::Format("%d", summon.max));
 		summonList->SetItem(row, 4, summon.force ? "Yes" : "No");
 	}
+	scheduleAutosave();
 }
 
 void MonsterEditorDialog::refreshVoiceList() {
@@ -774,6 +783,7 @@ void MonsterEditorDialog::refreshVoiceList() {
 		const long row = voiceList->InsertItem(static_cast<long>(index), Utf8(voice.text));
 		voiceList->SetItem(row, 1, voice.yell ? "Yes" : "No");
 	}
+	scheduleAutosave();
 }
 
 bool MonsterEditorDialog::editDefense(MonsterDefenseAction& action) {

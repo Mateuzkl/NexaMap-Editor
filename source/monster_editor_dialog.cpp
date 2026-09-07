@@ -15,6 +15,8 @@
 #include <filesystem>
 #include <vector>
 
+#include <wx/timer.h>
+
 namespace {
 	std::size_t FieldIndex(MonsterField field) {
 		return static_cast<std::size_t>(field);
@@ -123,7 +125,8 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	mainPage->SetSizer(mainSizer);
 	notebook->AddPage(mainPage, "Main", true);
 
-	auto* lookPage = newd wxPanel(notebook);
+	auto* lookPage = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+	lookPage->SetScrollRate(0, FromDIP(12));
 	auto* lookSizer = newd wxBoxSizer(wxHORIZONTAL);
 	auto* previewSection = Section(lookPage, "Active client preview");
 	preview = newd wxStaticBitmap(previewSection->GetStaticBox(), wxID_ANY, wxBitmap(), wxDefaultPosition, FromDIP(wxSize(190, 190)));
@@ -180,7 +183,7 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	}
 	metadata += wxString::Format("\nIndexed line: %zu", document->source().declarationLine);
 	sourceSizer->Add(newd wxStaticText(sourcePage, wxID_ANY, metadata), 0, wxEXPAND | wxBOTTOM, FromDIP(8));
-	auto* sourceText = newd wxTextCtrl(
+	sourceView = newd wxTextCtrl(
 		sourcePage,
 		wxID_ANY,
 		Utf8(document->sourceText()),
@@ -189,26 +192,37 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 		wxTE_MULTILINE | wxTE_READONLY | wxTE_DONTWRAP
 	);
 	wxFont sourceFont = wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE);
-	sourceText->SetFont(sourceFont);
-	sourceSizer->Add(sourceText, 1, wxEXPAND);
+	sourceView->SetFont(sourceFont);
+	sourceSizer->Add(sourceView, 1, wxEXPAND);
 	sourcePage->SetSizer(sourceSizer);
 	notebook->AddPage(sourcePage, "Source");
 
 	rootSizer->Add(notebook, 1, wxEXPAND | wxALL, FromDIP(12));
+	auto* footer = newd wxBoxSizer(wxHORIZONTAL);
+	saveStateLabel = newd wxStaticText(this, wxID_ANY, "No unsaved changes");
+	saveStateLabel->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
+	footer->Add(saveStateLabel, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
 	auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
 	if (buttons) {
-		rootSizer->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+		footer->Add(buttons, 0, wxALIGN_CENTER_VERTICAL);
 	}
+	rootSizer->Add(footer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 	if (wxWindow* saveButton = FindWindow(wxID_OK)) {
 		saveButton->SetLabel("Save");
 	}
 	SetSizer(rootSizer);
-	SetMinSize(FromDIP(wxSize(780, 610)));
-	SetSize(FromDIP(wxSize(900, 700)));
+	SetMinSize(FromDIP(wxSize(760, 600)));
+	SetSize(FromDIP(wxSize(860, 680)));
 	CentreOnParent();
 	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onSave, this, wxID_OK);
 	Bind(wxEVT_BUTTON, &MonsterEditorDialog::onCancel, this, wxID_CANCEL);
 	Bind(wxEVT_CLOSE_WINDOW, &MonsterEditorDialog::onClose, this);
+	Bind(wxEVT_TEXT, &MonsterEditorDialog::onFieldChanged, this);
+	Bind(wxEVT_SPINCTRL, &MonsterEditorDialog::onFieldChanged, this);
+	Bind(wxEVT_CHECKBOX, &MonsterEditorDialog::onFieldChanged, this);
+	autosaveTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &MonsterEditorDialog::onAutosave, this, autosaveTimer->GetId());
+	constructing = false;
 	refreshPreview();
 }
 
@@ -386,18 +400,76 @@ void MonsterEditorDialog::refreshPreview() {
 }
 
 void MonsterEditorDialog::onSave(wxCommandEvent& WXUNUSED(event)) {
+	saveDocument(true);
+}
+
+bool MonsterEditorDialog::saveDocument(bool showErrors) {
 	readControls();
 	if (edited.name.empty()) {
-		wxMessageBox("Monster name cannot be empty.", "Monster Editor", wxOK | wxICON_WARNING, this);
-		return;
+		const std::string error = "Monster name cannot be empty.";
+		autosaveState.failed(error);
+		updateSaveState(Utf8(error), true);
+		if (showErrors) {
+			wxMessageBox(Utf8(error), "Monster Editor", wxOK | wxICON_WARNING, this);
+		}
+		return false;
 	}
 	std::string error;
 	if (!document->save(edited, error)) {
-		wxMessageBox(Utf8(error), "Could not save monster", wxOK | wxICON_ERROR, this);
+		autosaveState.failed(error);
+		updateSaveState("Save error: " + Utf8(error), true);
+		if (showErrors) {
+			wxMessageBox(Utf8(error), "Could not save monster", wxOK | wxICON_ERROR, this);
+		}
+		return false;
+	}
+	edited = document->definition();
+	autosaveState.saved();
+	saved = true;
+	if (sourceView) {
+		sourceView->ChangeValue(Utf8(document->sourceText()));
+	}
+	updateSaveState(showErrors ? "Saved" : "Saved automatically");
+	return true;
+}
+
+void MonsterEditorDialog::scheduleAutosave() {
+	if (constructing || !document) {
 		return;
 	}
-	saved = true;
-	EndModal(wxID_OK);
+	readControls();
+	if (!document->hasChanges(edited)) {
+		if (!autosaveState.hasError()) {
+			updateSaveState(saved ? "Saved" : "No unsaved changes");
+		}
+		return;
+	}
+	autosaveState.changed();
+	updateSaveState("Unsaved changes - autosave pending");
+	if (autosaveTimer) {
+		autosaveTimer->StartOnce(650);
+	}
+}
+
+void MonsterEditorDialog::onFieldChanged(wxCommandEvent& event) {
+	scheduleAutosave();
+	event.Skip();
+}
+
+void MonsterEditorDialog::onAutosave(wxTimerEvent& WXUNUSED(event)) {
+	if (autosaveState.ready()) {
+		saveDocument(false);
+	}
+}
+
+void MonsterEditorDialog::updateSaveState(const wxString& label, bool error) {
+	if (!saveStateLabel) {
+		return;
+	}
+	saveStateLabel->SetLabel(label);
+	saveStateLabel->SetForegroundColour(error ? wxColour(232, 72, 85) : Theme::Get(Theme::Role::TextSubtle));
+	saveStateLabel->SetToolTip(label);
+	saveStateLabel->GetParent()->Layout();
 }
 
 bool MonsterEditorDialog::confirmDiscard() {
@@ -430,6 +502,7 @@ void MonsterEditorDialog::onClose(wxCloseEvent& event) {
 
 void MonsterEditorDialog::onLookChanged(wxCommandEvent& WXUNUSED(event)) {
 	refreshPreview();
+	scheduleAutosave();
 }
 
 void MonsterEditorDialog::onRotate(wxCommandEvent& WXUNUSED(event)) {

@@ -2823,8 +2823,12 @@ void MapCanvas::OnEditMonster(wxCommandEvent& WXUNUSED(event)) {
 		return;
 	}
 	Tile* tile = PopupSelectedTile(editor);
-	if (tile && tile->creature && !tile->creature->isNpc()) {
-		g_gui.ShowMonsterEditor(tile->creature->getName());
+	if (tile && tile->creature) {
+		if (tile->creature->isNpc()) {
+			g_gui.ShowNpcEditor(tile->creature->getName());
+		} else {
+			g_gui.ShowMonsterEditor(tile->creature->getName());
+		}
 	}
 }
 
@@ -3117,9 +3121,7 @@ void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 
 				if (topCreature) {
 					Append(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, "Select Creature", "Uses the current creature as a creature brush");
-					if (!topCreature->isNpc()) {
-						Append(MAP_POPUP_MENU_EDIT_MONSTER, "Edit Monster...", "Open the source definition from the active Server Workspace");
-					}
+					Append(MAP_POPUP_MENU_EDIT_MONSTER, topCreature->isNpc() ? "Edit NPC..." : "Edit Monster...", "Open the source definition from the active Server Workspace");
 				}
 
 				if (topSpawn) {

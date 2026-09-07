@@ -5,6 +5,7 @@
 #include "monster_definition_creation.h"
 
 #include "file_transaction.h"
+#include "monster_definition.h"
 
 #include <algorithm>
 #include <cctype>
@@ -137,7 +138,7 @@ namespace {
 		return output;
 	}
 
-	std::string LuaTemplate(const std::string& name) {
+	std::string LuaTemplate(const std::string& name, MonsterCreationProvider provider) {
 		const std::string escaped = EncodeLua(name);
 		std::string output = "local mType = Game.createMonsterType(\"";
 		output += escaped;
@@ -164,7 +165,7 @@ namespace {
 				  "\tlookMount = 0,\n"
 				  "}\n\n"
 				  "monster.changeTarget = { interval = 4000, chance = 10 }\n"
-				  "monster.strategy = { attack = 100, defense = 0 }\n"
+				  "monster.strategiesTarget = { nearest = 100 }\n"
 				  "monster.flags = {\n"
 				  "\tsummonable = false,\n"
 				  "\tattackable = true,\n"
@@ -181,11 +182,90 @@ namespace {
 				  "monster.defenses = { defense = 0, armor = 0 }\n"
 				  "monster.elements = {}\n"
 				  "monster.immunities = {}\n"
-				  "monster.summons = { maxSummons = 0 }\n"
-				  "monster.voices = { interval = 5000, chance = 10 }\n"
+				  "monster.maxSummons = 0\n";
+		if (provider == MonsterCreationProvider::CanaryLua) {
+			output += "monster.summon = { maxSummons = 0, summons = {} }\n";
+		} else {
+			output += "monster.summons = {}\n";
+		}
+		output += "monster.voices = { interval = 5000, chance = 10 }\n"
 				  "monster.loot = {}\n\n"
 				  "mType:register(monster)\n";
 		return output;
+	}
+
+	std::optional<std::string> ReadSmallFile(const std::filesystem::path& path) {
+		std::error_code filesystemError;
+		const auto size = std::filesystem::file_size(path, filesystemError);
+		if (filesystemError || size > 4 * 1024 * 1024) {
+			return std::nullopt;
+		}
+		std::ifstream stream(path, std::ios::binary);
+		if (!stream.is_open()) {
+			return std::nullopt;
+		}
+		return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+	}
+
+	bool UsesNestedCanarySummons(const ServerContentIndex& index) {
+		std::size_t inspected = 0;
+		for (const ServerContentSource& source : index.entries()) {
+			if (source.kind != ServerContentKind::Monster || source.format != ServerContentFormat::Lua || !source.declarationExists) {
+				continue;
+			}
+			const auto contents = ReadSmallFile(source.declarationPath);
+			if (contents && (contents->find("monster.summon =") != std::string::npos || contents->find("monster.summon=") != std::string::npos)) {
+				return true;
+			}
+			if (++inspected >= 64) {
+				break;
+			}
+		}
+		return false;
+	}
+
+	bool ValidateGeneratedSource(
+		const std::filesystem::path& staged,
+		ServerContentFormat format,
+		MonsterCreationProvider provider,
+		const std::string& name,
+		std::string& error
+	) {
+		const auto contents = ReadSmallFile(staged);
+		if (!contents) {
+			error = "Could not reread the staged monster definition for validation.";
+			return false;
+		}
+		if (format == ServerContentFormat::Lua) {
+			if (contents->find("monster.summons = { maxSummons") != std::string::npos) {
+				error = "The generated Lua uses an unsafe summons shape for the detected registration API.";
+				return false;
+			}
+			if (provider == MonsterCreationProvider::CanaryLua && contents->find("monster.summon = { maxSummons = 0, summons = {} }") == std::string::npos) {
+				error = "The generated Lua does not match the detected Canary summon provider.";
+				return false;
+			}
+		}
+		ServerContentSource source;
+		source.kind = ServerContentKind::Monster;
+		source.format = format;
+		source.name = name;
+		source.declarationPath = staged;
+		source.declarationExists = true;
+		source.registered = true;
+		source.declarationFingerprint = ResourceFingerprint::Read(staged);
+		auto document = MonsterDefinitionDocument::Load(source, error);
+		if (!document) {
+			error = "Generated monster validation failed: " + error;
+			return false;
+		}
+		if (document->definition().name != name || !ValidateMonsterDefinition(document->definition(), error)) {
+			if (error.empty()) {
+				error = "Generated monster validation did not recover the requested identity.";
+			}
+			return false;
+		}
+		return true;
 	}
 
 	bool WriteFile(const std::filesystem::path& path, std::string_view contents, std::string& error) {
@@ -266,6 +346,32 @@ namespace {
 	}
 }
 
+MonsterCreationProvider DetectMonsterCreationProvider(
+	const ServerWorkspace& workspace,
+	const ServerContentIndex& index,
+	ServerContentFormat format
+) {
+	if (format == ServerContentFormat::Xml) {
+		return MonsterCreationProvider::TfsXml;
+	}
+	if (workspace.usesCanaryCrystalLoader() || UsesNestedCanarySummons(index)) {
+		return MonsterCreationProvider::CanaryLua;
+	}
+	return MonsterCreationProvider::TfsLua;
+}
+
+const char* MonsterCreationProviderName(MonsterCreationProvider provider) {
+	switch (provider) {
+		case MonsterCreationProvider::TfsXml:
+			return "TFS XML";
+		case MonsterCreationProvider::TfsLua:
+			return "TFS Lua registerMonsterType";
+		case MonsterCreationProvider::CanaryLua:
+			return "Canary/Crystal Lua";
+	}
+	return "Unknown";
+}
+
 std::string MakeMonsterFileStem(const std::string& name) {
 	std::string stem;
 	bool separator = false;
@@ -337,8 +443,13 @@ bool CreateMonsterDefinition(
 		}
 	}
 
+	const MonsterCreationProvider provider = DetectMonsterCreationProvider(workspace, index, request.format);
 	FileSaveTransaction transaction;
-	if (!WriteFile(transaction.Stage(declaration), request.format == ServerContentFormat::Xml ? XmlTemplate(name) : LuaTemplate(name), error)) {
+	const std::filesystem::path stagedDeclaration = transaction.Stage(declaration);
+	if (!WriteFile(stagedDeclaration, request.format == ServerContentFormat::Xml ? XmlTemplate(name) : LuaTemplate(name, provider), error)) {
+		return false;
+	}
+	if (!ValidateGeneratedSource(stagedDeclaration, request.format, provider, name, error)) {
 		return false;
 	}
 	if (registry && !WriteFile(transaction.Stage(*registry), updatedRegistry, error)) {
@@ -356,6 +467,7 @@ bool CreateMonsterDefinition(
 	result.source.registered = registry.has_value() || request.format == ServerContentFormat::Lua;
 	result.source.declarationExists = true;
 	result.source.declarationFingerprint = ResourceFingerprint::Read(declaration);
+	result.provider = MonsterCreationProviderName(provider);
 	if (registry) {
 		result.source.registrationFingerprint = ResourceFingerprint::Read(*registry);
 	}

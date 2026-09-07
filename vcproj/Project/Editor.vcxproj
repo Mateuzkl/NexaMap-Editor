@@ -276,6 +276,9 @@
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
 	</ClCompile>
+	<ClCompile Include="..\..\source\server_content_browser_dialog.cpp">
+	  <IncludeInUnityFile>false</IncludeInUnityFile>
+	</ClCompile>
 	<ClCompile Include="..\..\source\monster_definition.cpp">
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -304,6 +307,9 @@
 	<ClCompile Include="..\..\source\monster_spell_preview.cpp">
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	</ClCompile>
+	<ClCompile Include="..\..\source\npc_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+	<ClCompile Include="..\..\source\npc_definition_creation.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+	<ClCompile Include="..\..\source\npc_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
 	<ClCompile Include="..\..\source\workspace_session.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
@@ -648,12 +654,17 @@
     <ClInclude Include="..\..\source\find_item_window.h" />
 	<ClInclude Include="..\..\source\welcome_dialog.h" />
 	<ClInclude Include="..\..\source\server_content_index.h" />
+	<ClInclude Include="..\..\source\server_content_browser_dialog.h" />
+	<ClInclude Include="..\..\source\editor_autosave_state.h" />
 	<ClInclude Include="..\..\source\monster_definition.h" />
 	<ClInclude Include="..\..\source\monster_definition_creation.h" />
 	<ClInclude Include="..\..\source\monster_section_codec.h" />
 	<ClInclude Include="..\..\source\monster_editor_dialog.h" />
 	<ClInclude Include="..\..\source\monster_spell_area.h" />
 	<ClInclude Include="..\..\source\monster_spell_preview.h" />
+	<ClInclude Include="..\..\source\npc_definition.h" />
+	<ClInclude Include="..\..\source\npc_definition_creation.h" />
+	<ClInclude Include="..\..\source\npc_editor_dialog.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />
 	<ClInclude Include="..\..\source\workspace_session.h" />
     <ClInclude Include="..\..\source\version_info.h" />

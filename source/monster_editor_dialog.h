@@ -6,6 +6,7 @@
 #define NEXAMAP_MONSTER_EDITOR_DIALOG_H_
 
 #include "monster_definition.h"
+#include "editor_autosave_state.h"
 
 #include <wx/dialog.h>
 
@@ -21,9 +22,12 @@ class wxListCtrl;
 class wxNotebook;
 class wxSpinCtrl;
 class wxStaticBitmap;
+class wxStaticText;
 class wxTextCtrl;
 class wxTreeCtrl;
 class wxWindow;
+class wxTimer;
+class wxTimerEvent;
 class MonsterSpellPreview;
 
 class MonsterEditorDialog final : public wxDialog {
@@ -62,13 +66,20 @@ private:
 	void onCancel(wxCommandEvent& event);
 	void onClose(wxCloseEvent& event);
 	void onSave(wxCommandEvent& event);
+	void onFieldChanged(wxCommandEvent& event);
+	void onAutosave(wxTimerEvent& event);
 	void onLookChanged(wxCommandEvent& event);
 	void onRotate(wxCommandEvent& event);
+	void scheduleAutosave();
+	bool saveDocument(bool showErrors);
+	void updateSaveState(const wxString& label, bool error = false);
 
 	std::unique_ptr<MonsterDefinitionDocument> document;
 	MonsterDefinition edited;
 	std::array<wxWindow*, static_cast<std::size_t>(MonsterField::Count)> controls {};
 	wxStaticBitmap* preview = nullptr;
+	wxStaticText* saveStateLabel = nullptr;
+	wxTextCtrl* sourceView = nullptr;
 	wxChoice* directionChoice = nullptr;
 	wxSpinCtrl* frame = nullptr;
 	wxListCtrl* defenseList = nullptr;
@@ -84,6 +95,9 @@ private:
 	wxSpinCtrl* voiceChance = nullptr;
 	wxListCtrl* voiceList = nullptr;
 	int direction = 2;
+	std::unique_ptr<wxTimer> autosaveTimer;
+	EditorAutosaveState autosaveState;
+	bool constructing = true;
 	bool saved = false;
 };
 

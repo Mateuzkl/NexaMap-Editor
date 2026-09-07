@@ -211,3 +211,13 @@ The UI will consume normalized `MonsterDefinition`, `NpcDefinition`, and `SpellD
 8. **Phase 8:** file watching, compare/conflict workflow, performance polish, and documentation.
 
 Probable components include `server_content_index`, provider/model modules per category, editor dialogs, spell-area preview widgets, source patch/transaction helpers, context-menu integration, and focused tests. Phase 1 deliberately adds no large editor window and does not modify server files.
+
+## Phase 5 implementation
+
+Phase 5 adds a native NPC editor for the active `WorkspaceSession`. The browser searches by name, format, or relative source path and opens registered Lua NPC definitions or XML NPC definitions without mixing resources from another map tab. The editor keeps fixed Save/Cancel controls and scrollable Main, Look, Messages, Shop, Travel, Behavior, and Source pages.
+
+The providers expose only fields backed by unambiguous literal source spans. Saving patches those spans through `FileSaveTransaction`, validates the result, checks the original fingerprint, and preserves callbacks, comments, unknown attributes, formatting, and custom behavior outside the changed spans. Dynamic Lua behavior remains visible and read-only. XML NPC behavior scripts remain separate sources and are not rewritten while editing the definition.
+
+New NPC creation selects a provider from the active server workspace. Modern TFS Lua output uses a registered `Game.createNpcType` definition; traditional TFS output creates an XML definition and its related Lua behavior script. Both outputs are parsed and validated before the transaction is committed.
+
+The implementation is covered by synthetic preservation and creation tests plus discovery/opening checks against the TFS 1.8 8.60 Lua base and the Dragon Souls XML/Lua base. Menu, palette, and map context actions rescan the workspace and refresh the creature palette after a successful save.

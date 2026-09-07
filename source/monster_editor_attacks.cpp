@@ -71,7 +71,8 @@ namespace {
 }
 
 void MonsterEditorDialog::addAttackPage(wxNotebook* notebook) {
-	auto* page = newd wxPanel(notebook);
+	auto* page = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxHSCROLL);
+	page->SetScrollRate(FromDIP(12), FromDIP(12));
 	auto* root = newd wxBoxSizer(wxHORIZONTAL);
 	auto* left = newd wxBoxSizer(wxVERTICAL);
 	left->Add(newd wxStaticText(page, wxID_ANY, "Attacks and spells are normalized from XML or Lua. Unknown fields remain preserved in the source."), 0, wxBOTTOM, FromDIP(8));
@@ -143,6 +144,7 @@ void MonsterEditorDialog::refreshAttackList() {
 		attackList->EnsureVisible(selected);
 	}
 	refreshAttackPreview();
+	scheduleAutosave();
 }
 
 void MonsterEditorDialog::refreshAttackPreview() {

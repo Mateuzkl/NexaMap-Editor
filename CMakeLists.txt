@@ -349,6 +349,20 @@ if(BUILD_TESTING)
 	endif()
 	add_test(NAME monster_definition_provider_tests COMMAND monster_definition_provider_tests)
 
+	add_executable(npc_definition_provider_tests
+		tests/npc_definition_provider_tests.cpp
+		source/npc_definition.cpp
+		source/npc_definition_creation.cpp
+		source/server_content_index.cpp
+		source/server_workspace.cpp
+	)
+	target_include_directories(npc_definition_provider_tests PRIVATE source)
+	set_target_properties(npc_definition_provider_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+	if(MSVC)
+		target_compile_options(npc_definition_provider_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME npc_definition_provider_tests COMMAND npc_definition_provider_tests)
+
 	add_executable(monster_spell_area_tests
 		tests/monster_spell_area_tests.cpp
 		source/monster_spell_area.cpp

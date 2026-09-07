@@ -52,6 +52,17 @@ int main() {
 	check(numericDirectories == 0, "numeric version directories have been fully retired");
 	check(std::filesystem::is_regular_file(dataRoot / "canary-crystal" / "items" / "items.xml"), "Canary/Crystal compatibility data remains isolated");
 
+	std::ifstream monsterDialogFile(sourceRoot / "source" / "monster_editor_dialog.cpp", std::ios::binary);
+	const std::string monsterDialog((std::istreambuf_iterator<char>(monsterDialogFile)), std::istreambuf_iterator<char>());
+	const std::size_t saveBegin = monsterDialog.find("void MonsterEditorDialog::onSave");
+	const std::size_t discardBegin = monsterDialog.find("bool MonsterEditorDialog::confirmDiscard", saveBegin);
+	check(saveBegin != std::string::npos && discardBegin != std::string::npos, "Monster Editor save handler is present");
+	if (saveBegin != std::string::npos && discardBegin != std::string::npos) {
+		const std::string saveHandler = monsterDialog.substr(saveBegin, discardBegin - saveBegin);
+		check(saveHandler.find("EndModal") == std::string::npos, "Monster Editor Save and autosave keep the window open");
+		check(saveHandler.find("saveDocument(true)") != std::string::npos, "Monster Editor Save uses the validated source save path");
+	}
+
 	if (failures == 0) {
 		std::cout << checks << " editor data layout checks passed.\n";
 	}

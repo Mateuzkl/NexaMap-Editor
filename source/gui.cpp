@@ -61,6 +61,9 @@
 #include "cross_client_paste_dialog.h"
 #include "monster_definition_creation.h"
 #include "monster_editor_dialog.h"
+#include "npc_definition_creation.h"
+#include "npc_editor_dialog.h"
+#include "server_content_browser_dialog.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -189,6 +192,77 @@ namespace {
 
 	private:
 		std::filesystem::path monsterRoot;
+		wxTextCtrl* name = nullptr;
+		wxChoice* format = nullptr;
+		wxTextCtrl* directory = nullptr;
+		std::vector<ServerContentFormat> formats;
+	};
+
+	class NewNpcDialog final : public wxDialog {
+	public:
+		NewNpcDialog(wxWindow* parent, const ServerWorkspace& workspace, const ServerContentCapabilities& capabilities) :
+			wxDialog(parent, wxID_ANY, "Create New NPC", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
+			SetBackgroundColour(Theme::Get(Theme::Role::Surface));
+			auto* top = newd wxBoxSizer(wxVERTICAL);
+			top->Add(newd wxStaticText(this, wxID_ANY, "Create an NPC in the active Server Workspace."), 0, wxEXPAND | wxALL, FromDIP(12));
+			auto* form = newd wxFlexGridSizer(2, 8, 10);
+			form->AddGrowableCol(1, 1);
+			form->Add(newd wxStaticText(this, wxID_ANY, "NPC name:"), 0, wxALIGN_CENTER_VERTICAL);
+			name = newd wxTextCtrl(this, wxID_ANY);
+			form->Add(name, 1, wxEXPAND);
+			form->Add(newd wxStaticText(this, wxID_ANY, "Source format:"), 0, wxALIGN_CENTER_VERTICAL);
+			format = newd wxChoice(this, wxID_ANY);
+			if (capabilities.npcs.xmlDefinitions) {
+				formats.push_back(ServerContentFormat::Xml);
+				format->Append("TFS XML + behavior script");
+			}
+			if (capabilities.npcs.luaDefinitions) {
+				formats.push_back(ServerContentFormat::Lua);
+				format->Append("Lua / revscriptsys");
+			}
+			if (formats.empty()) {
+				formats.push_back(workspace.serverType == ServerType::Tfs ? ServerContentFormat::Xml : ServerContentFormat::Lua);
+				format->Append(formats.front() == ServerContentFormat::Xml ? "TFS XML + behavior script" : "Lua / revscriptsys");
+			}
+			format->SetSelection(0);
+			form->Add(format, 1, wxEXPAND);
+			form->Add(newd wxStaticText(this, wxID_ANY, "Destination folder:"), 0, wxALIGN_CENTER_VERTICAL);
+			auto* row = newd wxBoxSizer(wxHORIZONTAL);
+			directory = newd wxTextCtrl(this, wxID_ANY, WorkspacePath(workspace.npcsDirectory), wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
+			row->Add(directory, 1, wxEXPAND);
+			auto* browse = newd wxButton(this, wxID_ANY, "Browse...");
+			row->Add(browse, 0, wxLEFT, FromDIP(8));
+			form->Add(row, 1, wxEXPAND);
+			top->Add(form, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+			top->Add(newd wxStaticText(this, wxID_ANY, "The generated source is validated, indexed and opened in the visual editor."), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+			auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
+			if (auto* create = FindWindow(wxID_OK)) {
+				create->SetLabel("Create and Edit");
+			}
+			top->Add(buttons, 0, wxEXPAND | wxALL, FromDIP(12));
+			SetSizerAndFit(top);
+			SetMinSize(FromDIP(wxSize(620, 260)));
+			CentreOnParent();
+			name->SetFocus();
+			browse->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { wxDirDialog chooser(this, "Choose a folder inside the workspace NPC directory", directory->GetValue(), wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST | wxDD_NEW_DIR_BUTTON); if (chooser.ShowModal() == wxID_OK){ directory->ChangeValue(chooser.GetPath());
+} });
+		}
+		std::string npcName() const {
+			return nstr(name->GetValue());
+		}
+		ServerContentFormat sourceFormat() const {
+			const int selection = format->GetSelection();
+			return selection >= 0 && static_cast<std::size_t>(selection) < formats.size() ? formats[static_cast<std::size_t>(selection)] : ServerContentFormat::Unknown;
+		}
+		std::filesystem::path destinationDirectory() const {
+#ifdef __WINDOWS__
+			return std::filesystem::path(directory->GetValue().ToStdWstring());
+#else
+			return std::filesystem::path(directory->GetValue().ToStdString());
+#endif
+		}
+
+	private:
 		wxTextCtrl* name = nullptr;
 		wxChoice* format = nullptr;
 		wxTextCtrl* directory = nullptr;
@@ -2974,27 +3048,18 @@ void GUI::ShowMonsterEditorBrowser() {
 	if (!IsEditorOpen()) {
 		return;
 	}
-	std::vector<const ServerContentSource*> monsters;
+	std::vector<ServerContentSource> monsters;
 	for (const ServerContentSource& source : g_workspace.getServerContent().entries()) {
 		if (source.kind == ServerContentKind::Monster && source.declarationExists) {
-			monsters.push_back(&source);
+			monsters.push_back(source);
 		}
 	}
-	std::sort(monsters.begin(), monsters.end(), [](const ServerContentSource* left, const ServerContentSource* right) {
-		return std::tie(left->name, left->declarationPath) < std::tie(right->name, right->declarationPath);
-	});
-	wxArrayString choices;
-	choices.Add("Create a new monster...");
-	for (const ServerContentSource* source : monsters) {
-		choices.Add(wxString::FromUTF8(source->name) + "  |  " + wxString::FromUTF8(ServerContentFormatName(source->format)) + "  |  " + WorkspacePath(source->declarationPath));
-	}
-	wxSingleChoiceDialog chooser(root, "Create a new monster or choose an existing definition.", "Monster Editor", choices);
-	chooser.SetSize(root->FromDIP(wxSize(820, 560)));
-	if (chooser.ShowModal() == wxID_OK && chooser.GetSelection() >= 0) {
-		if (chooser.GetSelection() == 0) {
+	ServerContentBrowserDialog chooser(root, "Monster Editor", "monster", g_workspace.getServer().monstersDirectory, std::move(monsters));
+	if (chooser.ShowModal() == wxID_OK) {
+		if (chooser.wantsCreate()) {
 			ShowNewMonsterEditor();
-		} else {
-			ShowMonsterEditor(*monsters[static_cast<std::size_t>(chooser.GetSelection() - 1)]);
+		} else if (const auto source = chooser.selectedSource()) {
+			ShowMonsterEditor(*source);
 		}
 	}
 }
@@ -3053,7 +3118,8 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 	}
 
 	MonsterEditorDialog dialog(root, std::move(document));
-	if (dialog.ShowModal() != wxID_OK || !dialog.wasSaved()) {
+	dialog.ShowModal();
+	if (!dialog.wasSaved()) {
 		return;
 	}
 	if (g_workspace.getServer().rootPath != workspaceRoot) {
@@ -3083,6 +3149,118 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 		ListDialog(root, "Monster reload warnings", warnings);
 	}
 	SetStatusText("Saved monster " + wxString::FromUTF8(dialog.savedDefinition().name));
+}
+
+void GUI::ShowNpcEditor(const std::string& npcName) {
+	if (!IsEditorOpen() || npcName.empty()) {
+		return;
+	}
+	ServerContentLookupResult lookup = g_workspace.getServerContent().findExact(ServerContentKind::Npc, npcName);
+	if (lookup.empty()) {
+		lookup = g_workspace.getServerContent().findCaseInsensitive(ServerContentKind::Npc, npcName);
+	}
+	const ServerContentSource* source = lookup.value();
+	if (!source) {
+		source = lookup.uniqueRegisteredValue();
+	}
+	if (!source) {
+		wxMessageBox(lookup.empty() ? "NexaMap could not locate this NPC in the active Server Workspace." : "More than one source defines this NPC. Open it from Browse NPCs to choose the exact source.", "NPC source", wxOK | wxICON_INFORMATION, root);
+		return;
+	}
+	ShowNpcEditor(*source);
+}
+
+void GUI::ShowNpcEditorBrowser() {
+	if (!IsEditorOpen()) {
+		return;
+	}
+	std::vector<ServerContentSource> npcs;
+	for (const ServerContentSource& source : g_workspace.getServerContent().entries()) {
+		if (source.kind == ServerContentKind::Npc && source.declarationExists) {
+			npcs.push_back(source);
+		}
+	}
+	ServerContentBrowserDialog chooser(root, "NPC Editor", "NPC", g_workspace.getServer().npcsDirectory, std::move(npcs));
+	if (chooser.ShowModal() != wxID_OK) {
+		return;
+	}
+	if (chooser.wantsCreate()) {
+		ShowNewNpcEditor();
+	} else if (const auto source = chooser.selectedSource()) {
+		ShowNpcEditor(*source);
+	}
+}
+
+void GUI::ShowNewNpcEditor() {
+	if (!IsEditorOpen()) {
+		return;
+	}
+	const ServerWorkspace& workspace = g_workspace.getServer();
+	if (workspace.npcsDirectory.empty()) {
+		wxMessageBox("The active Server Workspace has no detected NPC directory.", "Create New NPC", wxOK | wxICON_INFORMATION, root);
+		return;
+	}
+	NewNpcDialog dialog(root, workspace, g_workspace.getServerContent().capabilities());
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+	NpcCreationRequest request { dialog.npcName(), dialog.sourceFormat(), dialog.destinationDirectory() };
+	NpcCreationResult created;
+	std::string error;
+	if (!CreateNpcDefinition(workspace, g_workspace.getServerContent(), request, created, error)) {
+		wxMessageBox(wxString::FromUTF8(error), "Could not create NPC", wxOK | wxICON_ERROR, root);
+		return;
+	}
+	wxString scanError;
+	if (!g_workspace.rescanServer(scanError)) {
+		wxMessageBox("The NPC was created, but the workspace could not be reindexed:\n" + scanError, "NPC created", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	const auto found = std::find_if(g_workspace.getServerContent().entries().begin(), g_workspace.getServerContent().entries().end(), [&created](const ServerContentSource& source) { return source.kind == ServerContentKind::Npc && source.declarationPath.lexically_normal() == created.source.declarationPath.lexically_normal(); });
+	ShowNpcEditor(found == g_workspace.getServerContent().entries().end() ? created.source : *found);
+}
+
+void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
+	if (!IsEditorOpen() || selectedSource.kind != ServerContentKind::Npc) {
+		return;
+	}
+	const ServerContentSource source = selectedSource;
+	const auto workspaceRoot = g_workspace.getServer().rootPath;
+	std::string error;
+	auto document = NpcDefinitionDocument::Load(source, error);
+	if (!document) {
+		wxMessageBox(wxString::FromUTF8(error), "Could not open NPC", wxOK | wxICON_ERROR, root);
+		return;
+	}
+	NpcEditorDialog dialog(root, std::move(document));
+	dialog.ShowModal();
+	if (!dialog.wasSaved()) {
+		return;
+	}
+	if (g_workspace.getServer().rootPath != workspaceRoot) {
+		wxMessageBox("The active workspace changed while the NPC editor was open. The source was saved, but the palette was not refreshed.", "NPC saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	wxString scanError;
+	if (!g_workspace.rescanServer(scanError)) {
+		wxMessageBox("The NPC was saved, but the workspace could not be reindexed:\n" + scanError, "NPC saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	wxString importError;
+	wxArrayString warnings;
+	const FileName filename(WorkspacePath(source.declarationPath));
+	const bool imported = source.format == ServerContentFormat::Xml ? g_creatures.importXMLFromOT(filename, importError, warnings) : g_creatures.importLuaFromOT(filename, importError, warnings);
+	if (!imported) {
+		wxMessageBox("The NPC source was saved, but the creature palette could not reload it:\n" + importError, "NPC saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	g_materials.createOtherTileset();
+	RefreshPalettes(nullptr, true, false);
+	RefreshView();
+	if (!warnings.empty()) {
+		ListDialog(root, "NPC reload warnings", warnings);
+	}
+	SetStatusText("Saved NPC " + wxString::FromUTF8(source.name));
 }
 
 void GUI::SetHotkey(int index, Hotkey& hotkey) {

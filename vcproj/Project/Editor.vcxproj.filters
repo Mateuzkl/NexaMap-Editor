@@ -322,6 +322,12 @@
 	<ClInclude Include="..\..\source\server_content_index.h">
 	  <Filter>common</Filter>
 	</ClInclude>
+	<ClInclude Include="..\..\source\server_content_browser_dialog.h">
+	  <Filter>gui\dialogs</Filter>
+	</ClInclude>
+	<ClInclude Include="..\..\source\editor_autosave_state.h">
+	  <Filter>common</Filter>
+	</ClInclude>
 	<ClInclude Include="..\..\source\monster_definition.h">
 	  <Filter>common</Filter>
 	</ClInclude>
@@ -340,6 +346,9 @@
 	<ClInclude Include="..\..\source\monster_spell_preview.h">
 	  <Filter>gui\dialogs</Filter>
 	</ClInclude>
+	<ClInclude Include="..\..\source\npc_definition.h"><Filter>common</Filter></ClInclude>
+	<ClInclude Include="..\..\source\npc_definition_creation.h"><Filter>common</Filter></ClInclude>
+	<ClInclude Include="..\..\source\npc_editor_dialog.h"><Filter>gui\dialogs</Filter></ClInclude>
 	<ClInclude Include="..\..\source\workspace_session.h">
 	  <Filter>common</Filter>
 	</ClInclude>
@@ -641,6 +650,9 @@
 	<ClCompile Include="..\..\source\server_content_index.cpp">
 	  <Filter>common</Filter>
 	</ClCompile>
+	<ClCompile Include="..\..\source\server_content_browser_dialog.cpp">
+	  <Filter>gui\dialogs</Filter>
+	</ClCompile>
 	<ClCompile Include="..\..\source\monster_definition.cpp">
 	  <Filter>common</Filter>
 	</ClCompile>
@@ -665,6 +677,9 @@
 	<ClCompile Include="..\..\source\monster_spell_preview.cpp">
 	  <Filter>gui\dialogs</Filter>
 	</ClCompile>
+	<ClCompile Include="..\..\source\npc_definition.cpp"><Filter>common</Filter></ClCompile>
+	<ClCompile Include="..\..\source\npc_definition_creation.cpp"><Filter>common</Filter></ClCompile>
+	<ClCompile Include="..\..\source\npc_editor_dialog.cpp"><Filter>gui\dialogs</Filter></ClCompile>
 	<ClCompile Include="..\..\source\workspace_session.cpp">
 	  <Filter>common</Filter>
 	</ClCompile>

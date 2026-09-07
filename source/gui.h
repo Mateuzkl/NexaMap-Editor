@@ -230,6 +230,10 @@ public:
 	void ShowMonsterEditor(const ServerContentSource& source);
 	void ShowMonsterEditorBrowser();
 	void ShowNewMonsterEditor();
+	void ShowNpcEditor(const std::string& npcName);
+	void ShowNpcEditor(const ServerContentSource& source);
+	void ShowNpcEditorBrowser();
+	void ShowNewNpcEditor();
 
 	// Get the current GL context
 	// Param is required if the context is to be created.

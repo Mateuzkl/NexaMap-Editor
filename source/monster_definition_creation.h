@@ -18,9 +18,22 @@ struct MonsterCreationRequest {
 
 struct MonsterCreationResult {
 	ServerContentSource source;
+	std::string provider;
+};
+
+enum class MonsterCreationProvider : uint8_t {
+	TfsXml,
+	TfsLua,
+	CanaryLua,
 };
 
 [[nodiscard]] std::string MakeMonsterFileStem(const std::string& name);
+[[nodiscard]] MonsterCreationProvider DetectMonsterCreationProvider(
+	const ServerWorkspace& workspace,
+	const ServerContentIndex& index,
+	ServerContentFormat format
+);
+[[nodiscard]] const char* MonsterCreationProviderName(MonsterCreationProvider provider);
 [[nodiscard]] bool CreateMonsterDefinition(
 	const ServerWorkspace& workspace,
 	const ServerContentIndex& index,
