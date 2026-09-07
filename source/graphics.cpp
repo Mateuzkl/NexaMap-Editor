@@ -187,6 +187,10 @@ static uint32_t TemplateOutfitLookupTable[] = {
 	0x7F0000,
 };
 
+uint32_t GetOutfitColorRgb(std::size_t colorId) {
+	return colorId < std::size(TemplateOutfitLookupTable) ? TemplateOutfitLookupTable[colorId] : 0;
+}
+
 GraphicManager::GraphicManager() :
 	client_version(nullptr),
 	unloaded(true),

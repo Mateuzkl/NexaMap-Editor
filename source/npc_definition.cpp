@@ -353,7 +353,7 @@ namespace {
 		SetCapability(impl, NpcField::LookBody, LuaNumber(impl.bytes, R"(lookBody)", impl.original.lookBody));
 		SetCapability(impl, NpcField::LookLegs, LuaNumber(impl.bytes, R"(lookLegs)", impl.original.lookLegs));
 		SetCapability(impl, NpcField::LookFeet, LuaNumber(impl.bytes, R"(lookFeet)", impl.original.lookFeet));
-		SetCapability(impl, NpcField::LookAddons, LuaNumber(impl.bytes, R"(lookAddons)", impl.original.lookAddons));
+		SetCapability(impl, NpcField::LookAddons, LuaNumber(impl.bytes, R"((?:lookAddons|addons))", impl.original.lookAddons));
 		SetCapability(impl, NpcField::LookMount, LuaNumber(impl.bytes, R"(lookMount)", impl.original.lookMount));
 		SetCapability(impl, NpcField::Direction, std::nullopt);
 

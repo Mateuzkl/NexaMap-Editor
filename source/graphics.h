@@ -24,6 +24,7 @@
 #include "outfit.h"
 #include "common.h"
 #include <chrono>
+#include <cstddef>
 #include <deque>
 #include <memory>
 
@@ -44,6 +45,8 @@ enum SpriteSize {
 	SPRITE_SIZE_32x32,
 	SPRITE_SIZE_COUNT
 };
+
+[[nodiscard]] uint32_t GetOutfitColorRgb(std::size_t colorId);
 
 enum AnimationDirection {
 	ANIMATION_FORWARD = 0,

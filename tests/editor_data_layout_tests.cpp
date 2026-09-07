@@ -63,6 +63,19 @@ int main() {
 		check(saveHandler.find("saveDocument(true)") != std::string::npos, "Monster Editor Save uses the validated source save path");
 	}
 
+	std::ifstream spellDialogFile(sourceRoot / "source" / "spell_editor_dialog.cpp", std::ios::binary);
+	const std::string spellDialog((std::istreambuf_iterator<char>(spellDialogFile)), std::istreambuf_iterator<char>());
+	const std::size_t spellSaveBegin = spellDialog.find("void SpellEditorDialog::onSave");
+	const std::size_t spellDiscardBegin = spellDialog.find("bool SpellEditorDialog::confirmDiscard", spellSaveBegin);
+	check(spellSaveBegin != std::string::npos && spellDiscardBegin != std::string::npos, "Spell Editor save handler is present");
+	if (spellSaveBegin != std::string::npos && spellDiscardBegin != std::string::npos) {
+		const std::string saveHandler = spellDialog.substr(spellSaveBegin, spellDiscardBegin - spellSaveBegin);
+		check(saveHandler.find("EndModal") == std::string::npos, "Spell Editor Save keeps the editor open");
+		check(saveHandler.find("document->save") != std::string::npos, "Spell Editor Save uses the validated provider transaction");
+	}
+	check(spellDialog.find("wxVSCROLL") != std::string::npos, "Spell Editor uses scrollable content pages");
+	check(spellDialog.find("Registration XML") != std::string::npos && spellDialog.find("Implementation Lua") != std::string::npos, "Spell Editor exposes paired registration and implementation sources");
+
 	if (failures == 0) {
 		std::cout << checks << " editor data layout checks passed.\n";
 	}

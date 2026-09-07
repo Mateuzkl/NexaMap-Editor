@@ -310,6 +310,9 @@
 	<ClCompile Include="..\..\source\npc_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\npc_definition_creation.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\npc_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
+	<ClCompile Include="..\..\source\outfit_color_picker.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
+	<ClCompile Include="..\..\source\spell_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+	<ClCompile Include="..\..\source\spell_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
 	<ClCompile Include="..\..\source\workspace_session.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
@@ -665,6 +668,9 @@
 	<ClInclude Include="..\..\source\npc_definition.h" />
 	<ClInclude Include="..\..\source\npc_definition_creation.h" />
 	<ClInclude Include="..\..\source\npc_editor_dialog.h" />
+	<ClInclude Include="..\..\source\outfit_color_picker.h" />
+	<ClInclude Include="..\..\source\spell_definition.h" />
+	<ClInclude Include="..\..\source\spell_editor_dialog.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />
 	<ClInclude Include="..\..\source\workspace_session.h" />
     <ClInclude Include="..\..\source\version_info.h" />

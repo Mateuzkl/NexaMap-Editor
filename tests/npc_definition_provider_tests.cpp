@@ -98,7 +98,7 @@ npcConfig.health = 100
 npcConfig.maxHealth = npcConfig.health
 npcConfig.walkInterval = 2000
 npcConfig.walkRadius = 2
-npcConfig.outfit = { lookType = 155, lookHead = 1, lookBody = 2, lookLegs = 3, lookFeet = 4, lookAddons = 0, lookMount = 0 }
+npcConfig.outfit = { lookType = 155, lookHead = 1, lookBody = 2, lookLegs = 3, lookFeet = 4, addons = 1, lookMount = 0 }
 npcConfig.flags = { floorchange = false }
 npcConfig.shop = { { itemName = "backpack", clientId = 2854, buy = 10, sell = 5, custom = callback() } }
 addTravelKeyword("edron", 150, Position(33173, 31764, 6))
@@ -113,16 +113,26 @@ npcType:register(npcConfig)
 			return;
 		}
 		Check(document->definition().messages.size() == 1 && document->definition().shop.size() == 1 && document->definition().travel.size() == 1, "Lua direct messages, shop and travel are normalized");
+		Check(
+			document->definition().lookAddons == 1 && document->definition().capability(NpcField::LookAddons).editable,
+			"Lua direct-method outfit addons alias is normalized and editable"
+		);
 		NpcDefinition edited = document->definition();
 		edited.name = "Captain Blue";
 		edited.lookHead = 9;
+		edited.lookAddons = 2;
 		edited.messages[0].text = "Welcome";
 		edited.shop[0].buy = 12;
 		edited.travel[0].cost = 175;
 		Check(document->save(edited, error), "Lua NPC saves: " + error);
 		const std::string saved = directory.read("data/npc/captain.lua");
 		Check(saved.find("custom = callback()") != std::string::npos && saved.find("customCallback(computeValue())") != std::string::npos, "custom Lua behavior remains byte-preserved");
-		Check(saved.find("Captain Blue") != std::string::npos && saved.find("lookHead = 9") != std::string::npos && saved.find("buy = 12") != std::string::npos && saved.find("\"edron\", 175") != std::string::npos, "Lua literal edits are patched in place");
+		Check(
+			saved.find("Captain Blue") != std::string::npos && saved.find("lookHead = 9") != std::string::npos
+				&& saved.find("addons = 2") != std::string::npos && saved.find("buy = 12") != std::string::npos
+				&& saved.find("\"edron\", 175") != std::string::npos,
+			"Lua literal and outfit alias edits are patched in place"
+		);
 	}
 
 	void TestReal(const std::filesystem::path& luaRoot, const std::filesystem::path& xmlRoot) {
@@ -148,6 +158,21 @@ npcType:register(npcConfig)
 		const auto captain = luaIndex.findExact(ServerContentKind::Npc, "Captain Cookie");
 		auto captainDocument = captain.value() ? NpcDefinitionDocument::Load(*captain.value(), error) : nullptr;
 		Check(captainDocument != nullptr && !captainDocument->definition().messages.empty() && !captainDocument->definition().travel.empty(), "real TFS Lua travel NPC exposes direct messages and destination literals: " + error);
+
+		const ServerContentSource* bankerSource = nullptr;
+		for (const ServerContentSource& source : luaIndex.entries()) {
+			if (source.kind == ServerContentKind::Npc && source.format == ServerContentFormat::Lua
+				&& source.declarationPath.filename() == "banker.lua") {
+				bankerSource = &source;
+				break;
+			}
+		}
+		auto bankerDocument = bankerSource ? NpcDefinitionDocument::Load(*bankerSource, error) : nullptr;
+		Check(
+			bankerDocument != nullptr && bankerDocument->definition().lookAddons == 1
+				&& bankerDocument->definition().capability(NpcField::LookAddons).editable,
+			"real TFS Lua Banker exposes the direct-method outfit and addons alias: " + error
+		);
 
 		bool foundLuaShop = false;
 		for (const ServerContentSource& source : luaIndex.entries()) {

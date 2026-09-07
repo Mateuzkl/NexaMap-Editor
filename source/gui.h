@@ -234,6 +234,8 @@ public:
 	void ShowNpcEditor(const ServerContentSource& source);
 	void ShowNpcEditorBrowser();
 	void ShowNewNpcEditor();
+	void ShowSpellEditor(const ServerContentSource& source);
+	void ShowSpellEditorBrowser();
 
 	// Get the current GL context
 	// Param is required if the context is to be created.

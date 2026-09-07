@@ -18,6 +18,7 @@ class wxSpinCtrl;
 class wxStaticBitmap;
 class wxTextCtrl;
 class wxWindow;
+class OutfitColorPicker;
 
 class NpcEditorDialog final : public wxDialog {
 public:
@@ -45,6 +46,7 @@ private:
 	NpcDefinition edited;
 	std::array<wxWindow*, static_cast<std::size_t>(NpcField::Count)> controls {};
 	wxStaticBitmap* preview = nullptr;
+	OutfitColorPicker* outfitColors = nullptr;
 	wxListCtrl* messageList = nullptr;
 	wxListCtrl* shopList = nullptr;
 	wxListCtrl* travelList = nullptr;

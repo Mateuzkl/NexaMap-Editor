@@ -9,6 +9,7 @@
 #include "graphics.h"
 #include "gui.h"
 #include "outfit.h"
+#include "outfit_color_picker.h"
 #include "theme.h"
 
 #include <algorithm>
@@ -161,13 +162,33 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	};
 	addLook(MonsterField::LookType, edited.outfit.lookType, 200000);
 	addLook(MonsterField::LookTypeEx, edited.outfit.lookTypeEx, 200000);
-	addLook(MonsterField::LookHead, edited.outfit.head, 132);
-	addLook(MonsterField::LookBody, edited.outfit.body, 132);
-	addLook(MonsterField::LookLegs, edited.outfit.legs, 132);
-	addLook(MonsterField::LookFeet, edited.outfit.feet, 132);
 	addLook(MonsterField::LookAddons, edited.outfit.addons, 255);
 	addLook(MonsterField::LookMount, edited.outfit.mount, 200000);
 	appearance->Add(appearanceGrid, 1, wxEXPAND | wxALL, FromDIP(8));
+	outfitColors = newd OutfitColorPicker(appearance->GetStaticBox(), [this](int channel, int color) {
+		switch (channel) {
+			case 0:
+				edited.outfit.head = color;
+				break;
+			case 1:
+				edited.outfit.body = color;
+				break;
+			case 2:
+				edited.outfit.legs = color;
+				break;
+			case 3:
+				edited.outfit.feet = color;
+				break;
+		}
+		refreshPreview();
+		scheduleAutosave();
+	});
+	outfitColors->SetColors(edited.outfit.head, edited.outfit.body, edited.outfit.legs, edited.outfit.feet);
+	for (int channel = 0; channel < 4; ++channel) {
+		const MonsterField field = static_cast<MonsterField>(static_cast<int>(MonsterField::LookHead) + channel);
+		outfitColors->SetChannelEnabled(channel, edited.capability(field).editable);
+	}
+	appearance->Add(outfitColors, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 	lookSizer->Add(appearance, 1, wxEXPAND);
 	lookPage->SetSizer(lookSizer);
 	notebook->AddPage(lookPage, "Look");
@@ -325,10 +346,20 @@ void MonsterEditorDialog::readControls() {
 	assignNumber(MonsterField::StaticAttack, edited.staticAttack);
 	assignNumber(MonsterField::LookType, edited.outfit.lookType);
 	assignNumber(MonsterField::LookTypeEx, edited.outfit.lookTypeEx);
-	assignNumber(MonsterField::LookHead, edited.outfit.head);
-	assignNumber(MonsterField::LookBody, edited.outfit.body);
-	assignNumber(MonsterField::LookLegs, edited.outfit.legs);
-	assignNumber(MonsterField::LookFeet, edited.outfit.feet);
+	if (outfitColors) {
+		if (edited.capability(MonsterField::LookHead).editable) {
+			edited.outfit.head = outfitColors->GetColor(0);
+		}
+		if (edited.capability(MonsterField::LookBody).editable) {
+			edited.outfit.body = outfitColors->GetColor(1);
+		}
+		if (edited.capability(MonsterField::LookLegs).editable) {
+			edited.outfit.legs = outfitColors->GetColor(2);
+		}
+		if (edited.capability(MonsterField::LookFeet).editable) {
+			edited.outfit.feet = outfitColors->GetColor(3);
+		}
+	}
 	assignNumber(MonsterField::LookAddons, edited.outfit.addons);
 	assignNumber(MonsterField::LookMount, edited.outfit.mount);
 

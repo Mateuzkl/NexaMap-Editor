@@ -46,7 +46,8 @@ ServerContentBrowserDialog::ServerContentBrowserDialog(
 	const wxString& title,
 	const wxString& noun,
 	std::filesystem::path root,
-	std::vector<ServerContentSource> contentSources
+	std::vector<ServerContentSource> contentSources,
+	bool allowCreate
 ) :
 	wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	contentRoot(std::move(root)),
@@ -57,9 +58,12 @@ ServerContentBrowserDialog::ServerContentBrowserDialog(
 	});
 
 	auto* rootSizer = newd wxBoxSizer(wxVERTICAL);
-	auto* createButton = newd wxButton(this, ID_CREATE_CONTENT, "Create a new " + noun + "...");
-	rootSizer->Add(createButton, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
-	rootSizer->Add(newd wxStaticLine(this), 0, wxEXPAND | wxALL, FromDIP(12));
+	wxButton* createButton = nullptr;
+	if (allowCreate) {
+		createButton = newd wxButton(this, ID_CREATE_CONTENT, "Create a new " + noun + "...");
+		rootSizer->Add(createButton, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+		rootSizer->Add(newd wxStaticLine(this), 0, wxEXPAND | wxALL, FromDIP(12));
+	}
 
 	search = newd wxSearchCtrl(this, wxID_ANY);
 	search->SetDescriptiveText("Search " + noun + "s by name, format or source path...");
@@ -90,10 +94,12 @@ ServerContentBrowserDialog::ServerContentBrowserDialog(
 	SetSize(FromDIP(wxSize(900, 620)));
 	CentreOnParent();
 
-	createButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-		create = true;
-		EndModal(wxID_OK);
-	});
+	if (createButton) {
+		createButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+			create = true;
+			EndModal(wxID_OK);
+		});
+	}
 	search->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { rebuildList(); });
 	search->Bind(wxEVT_SEARCHCTRL_CANCEL_BTN, [this](wxCommandEvent&) {
 		search->Clear();

@@ -29,6 +29,7 @@ class wxWindow;
 class wxTimer;
 class wxTimerEvent;
 class MonsterSpellPreview;
+class OutfitColorPicker;
 
 class MonsterEditorDialog final : public wxDialog {
 public:
@@ -78,6 +79,7 @@ private:
 	MonsterDefinition edited;
 	std::array<wxWindow*, static_cast<std::size_t>(MonsterField::Count)> controls {};
 	wxStaticBitmap* preview = nullptr;
+	OutfitColorPicker* outfitColors = nullptr;
 	wxStaticText* saveStateLabel = nullptr;
 	wxTextCtrl* sourceView = nullptr;
 	wxChoice* directionChoice = nullptr;

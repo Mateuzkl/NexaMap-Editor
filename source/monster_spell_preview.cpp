@@ -24,6 +24,18 @@ void MonsterSpellPreview::SetAttack(const MonsterAttackDefinition* attack) {
 	if (attack) {
 		current = *attack;
 	}
+	customTiles.clear();
+	customDescription.clear();
+	Refresh();
+}
+
+void MonsterSpellPreview::SetCustomArea(const MonsterAttackDefinition* attack, std::vector<MonsterAreaTile> tiles, std::string description) {
+	hasAttack = attack != nullptr;
+	if (attack) {
+		current = *attack;
+	}
+	customTiles = std::move(tiles);
+	customDescription = std::move(description);
 	Refresh();
 }
 
@@ -43,7 +55,7 @@ void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 		return;
 	}
 
-	const std::vector<MonsterAreaTile> tiles = BuildMonsterAreaTiles(current.area, direction);
+	const std::vector<MonsterAreaTile> tiles = customTiles.empty() ? BuildMonsterAreaTiles(current.area, direction) : customTiles;
 	int extent = 4;
 	for (const MonsterAreaTile& tile : tiles) {
 		extent = std::max({ extent, std::abs(tile.x) + 1, std::abs(tile.y) + 1 });
@@ -73,7 +85,7 @@ void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 
 	const int detailsTop = size.y - FromDIP(62);
 	dc.SetTextForeground(Theme::Get(Theme::Role::Text));
-	dc.DrawText(wxString::FromUTF8(DescribeMonsterArea(current.area)), FromDIP(10), detailsTop);
+	dc.DrawText(wxString::FromUTF8(customDescription.empty() ? DescribeMonsterArea(current.area) : customDescription), FromDIP(10), detailsTop);
 	dc.SetTextForeground(Theme::Get(Theme::Role::TextSubtle));
 	dc.DrawText("Effect: " + wxString::FromUTF8(current.effect.empty() ? "none" : current.effect), FromDIP(10), detailsTop + FromDIP(20));
 	dc.DrawText("Projectile: " + wxString::FromUTF8(current.projectile.empty() ? "none" : current.projectile), FromDIP(10), detailsTop + FromDIP(38));

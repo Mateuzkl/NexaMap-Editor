@@ -109,6 +109,9 @@ ${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.h
 ${CMAKE_CURRENT_LIST_DIR}/npc_definition.h
 ${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.h
 ${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.h
+${CMAKE_CURRENT_LIST_DIR}/spell_definition.h
+${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.h
@@ -295,6 +298,9 @@ ${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.cpp
 ${CMAKE_CURRENT_LIST_DIR}/npc_definition.cpp
 ${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
 ${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.cpp
+${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
+${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.cpp
@@ -414,6 +420,8 @@ set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/npc_definition.cpp
 	${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
 	${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
+	${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
+	${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp

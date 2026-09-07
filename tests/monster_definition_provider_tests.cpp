@@ -189,7 +189,7 @@ namespace {
 								   "monster.changeTarget = { interval = 4000, chance = 20 }\n"
 								   "monster.attacks = {\n"
 								   "\t{ name = \"combat\", interval = 2000, chance = 20, type = COMBAT_EARTHDAMAGE, minDamage = -15, maxDamage = -120, length = 8, spread = 0, effect = CONST_ME_CARNIPHILA, target = false, condition = { type = CONDITION_CURSED } }, -- earth beam\n"
-								   "\t{ name = \"combat\", interval = 2000, chance = 15, type = COMBAT_FIREDAMAGE, minDamage = -70, maxDamage = -180, range = 7, radius = 5, shootEffect = CONST_ANI_FIRE, target = true },\n"
+								   "\t{ name = \"combat\", interval = 2000, chance = 15, type = COMBAT_FIREDAMAGE, minDamage = -70, maxDamage = -180, range = 7, radius = 5, effect = 243, shootEffect = CONST_ANI_FIRE, target = true },\n"
 								   "}\n"
 								   "monster.defenses = {\n"
 								   "\tdefense = 30, armor = 25, mitigation = 0.99,\n"
@@ -216,7 +216,13 @@ namespace {
 		Check(document->definition().health == 8200 && document->definition().outfit.body == 1, "Lua Main and Look values are normalized");
 		Check(!document->definition().capability(MonsterField::Description).editable, "computed Lua value is read-only");
 		Check(document->definition().capability(MonsterField::Name).editable, "coordinated Lua name literals are editable");
-		Check(document->definition().attacks.size() == 2 && document->definition().attacks.front().area.shape == MonsterAreaShape::Beam && document->definition().attacks.back().projectile == "CONST_ANI_FIRE", "Lua attacks, constants and areas are normalized");
+		Check(
+			document->definition().attacks.size() == 2
+				&& document->definition().attacks.front().area.shape == MonsterAreaShape::Beam
+				&& document->definition().attacks.back().effect == "243"
+				&& document->definition().attacks.back().projectile == "CONST_ANI_FIRE",
+			"Lua attacks, numeric effects, constants and areas are normalized"
+		);
 		Check(
 			document->definition().defenseActions.size() == 1 && document->definition().defenseActions.front().type == "COMBAT_HEALING",
 			"Lua defense actions and constants are normalized"

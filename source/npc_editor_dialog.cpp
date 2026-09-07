@@ -11,6 +11,7 @@
 #include "gui.h"
 #include "items.h"
 #include "outfit.h"
+#include "outfit_color_picker.h"
 #include "theme.h"
 
 #include <wx/listctrl.h>
@@ -145,11 +146,34 @@ NpcEditorDialog::NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinition
 	lookSizer->Add(previewBox, 0, wxEXPAND | wxRIGHT, FromDIP(10));
 	auto* outfit = newd wxStaticBoxSizer(wxVERTICAL, lookPage, "Outfit");
 	auto* outfitGrid = Grid();
-	for (const auto [field, current, maximum] : { std::tuple(NpcField::LookType, edited.lookType, 200000), std::tuple(NpcField::LookTypeEx, edited.lookTypeEx, 200000), std::tuple(NpcField::LookHead, edited.lookHead, 132), std::tuple(NpcField::LookBody, edited.lookBody, 132), std::tuple(NpcField::LookLegs, edited.lookLegs, 132), std::tuple(NpcField::LookFeet, edited.lookFeet, 132), std::tuple(NpcField::LookAddons, edited.lookAddons, 255), std::tuple(NpcField::LookMount, edited.lookMount, 200000) }) {
+	for (const auto [field, current, maximum] : { std::tuple(NpcField::LookType, edited.lookType, 200000), std::tuple(NpcField::LookTypeEx, edited.lookTypeEx, 200000), std::tuple(NpcField::LookAddons, edited.lookAddons, 255), std::tuple(NpcField::LookMount, edited.lookMount, 200000) }) {
 		auto* control = addNumber(outfit->GetStaticBox(), outfitGrid, field, current, maximum);
 		control->Bind(wxEVT_SPINCTRL, [this](wxCommandEvent&) { refreshPreview(); });
 	}
 	outfit->Add(outfitGrid, 0, wxEXPAND | wxALL, FromDIP(8));
+	outfitColors = newd OutfitColorPicker(outfit->GetStaticBox(), [this](int channel, int color) {
+		switch (channel) {
+			case 0:
+				edited.lookHead = color;
+				break;
+			case 1:
+				edited.lookBody = color;
+				break;
+			case 2:
+				edited.lookLegs = color;
+				break;
+			case 3:
+				edited.lookFeet = color;
+				break;
+		}
+		refreshPreview();
+	});
+	outfitColors->SetColors(edited.lookHead, edited.lookBody, edited.lookLegs, edited.lookFeet);
+	for (int channel = 0; channel < 4; ++channel) {
+		const NpcField field = static_cast<NpcField>(static_cast<int>(NpcField::LookHead) + channel);
+		outfitColors->SetChannelEnabled(channel, edited.capability(field).editable);
+	}
+	outfit->Add(outfitColors, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 	lookSizer->Add(outfit, 1, wxEXPAND);
 	lookPage->SetSizer(lookSizer);
 	notebook->AddPage(lookPage, "Look");
@@ -256,10 +280,20 @@ void NpcEditorDialog::readControls() {
 	number(NpcField::Direction, edited.direction);
 	number(NpcField::LookType, edited.lookType);
 	number(NpcField::LookTypeEx, edited.lookTypeEx);
-	number(NpcField::LookHead, edited.lookHead);
-	number(NpcField::LookBody, edited.lookBody);
-	number(NpcField::LookLegs, edited.lookLegs);
-	number(NpcField::LookFeet, edited.lookFeet);
+	if (outfitColors) {
+		if (edited.capability(NpcField::LookHead).editable) {
+			edited.lookHead = outfitColors->GetColor(0);
+		}
+		if (edited.capability(NpcField::LookBody).editable) {
+			edited.lookBody = outfitColors->GetColor(1);
+		}
+		if (edited.capability(NpcField::LookLegs).editable) {
+			edited.lookLegs = outfitColors->GetColor(2);
+		}
+		if (edited.capability(NpcField::LookFeet).editable) {
+			edited.lookFeet = outfitColors->GetColor(3);
+		}
+	}
 	number(NpcField::LookAddons, edited.lookAddons);
 	number(NpcField::LookMount, edited.lookMount);
 	if (edited.capability(NpcField::FloorChange).editable) {

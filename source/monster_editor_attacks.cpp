@@ -71,8 +71,8 @@ namespace {
 }
 
 void MonsterEditorDialog::addAttackPage(wxNotebook* notebook) {
-	auto* page = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxHSCROLL);
-	page->SetScrollRate(FromDIP(12), FromDIP(12));
+	auto* page = newd wxScrolledWindow(notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+	page->SetScrollRate(0, FromDIP(12));
 	auto* root = newd wxBoxSizer(wxHORIZONTAL);
 	auto* left = newd wxBoxSizer(wxVERTICAL);
 	left->Add(newd wxStaticText(page, wxID_ANY, "Attacks and spells are normalized from XML or Lua. Unknown fields remain preserved in the source."), 0, wxBOTTOM, FromDIP(8));
@@ -99,7 +99,7 @@ void MonsterEditorDialog::addAttackPage(wxNotebook* notebook) {
 	addButton("Up", [this]() { moveSelected(attackList, edited.attacks.size(), true, [this](std::size_t a, std::size_t b) { std::swap(edited.attacks[a], edited.attacks[b]); refreshAttackList(); }); });
 	addButton("Down", [this]() { moveSelected(attackList, edited.attacks.size(), false, [this](std::size_t a, std::size_t b) { std::swap(edited.attacks[a], edited.attacks[b]); refreshAttackList(); }); });
 	left->Add(buttons, 0, wxEXPAND);
-	root->Add(left, 1, wxEXPAND | wxALL, FromDIP(10));
+	root->Add(left, 3, wxEXPAND | wxALL, FromDIP(10));
 
 	auto* right = newd wxBoxSizer(wxVERTICAL);
 	right->Add(newd wxStaticText(page, wxID_ANY, "Affected tiles"), 0, wxBOTTOM, FromDIP(5));
@@ -108,7 +108,7 @@ void MonsterEditorDialog::addAttackPage(wxNotebook* notebook) {
 	right->Add(attackDirection, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 	attackPreview = newd MonsterSpellPreview(page);
 	right->Add(attackPreview, 1, wxEXPAND);
-	root->Add(right, 0, wxEXPAND | wxTOP | wxRIGHT | wxBOTTOM, FromDIP(10));
+	root->Add(right, 2, wxEXPAND | wxTOP | wxRIGHT | wxBOTTOM, FromDIP(10));
 	page->SetSizer(root);
 	notebook->AddPage(page, "Attacks");
 	applySectionCapability(page, MonsterSection::Attacks);

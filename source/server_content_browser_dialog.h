@@ -25,7 +25,8 @@ public:
 		const wxString& title,
 		const wxString& noun,
 		std::filesystem::path contentRoot,
-		std::vector<ServerContentSource> sources
+		std::vector<ServerContentSource> sources,
+		bool allowCreate = true
 	);
 
 	[[nodiscard]] bool wantsCreate() const;

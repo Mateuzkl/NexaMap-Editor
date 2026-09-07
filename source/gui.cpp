@@ -64,6 +64,7 @@
 #include "npc_definition_creation.h"
 #include "npc_editor_dialog.h"
 #include "server_content_browser_dialog.h"
+#include "spell_editor_dialog.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -3261,6 +3262,58 @@ void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
 		ListDialog(root, "NPC reload warnings", warnings);
 	}
 	SetStatusText("Saved NPC " + wxString::FromUTF8(source.name));
+}
+
+void GUI::ShowSpellEditorBrowser() {
+	if (!IsEditorOpen()) {
+		return;
+	}
+	std::vector<ServerContentSource> spells;
+	for (const ServerContentSource& source : g_workspace.getServerContent().entries()) {
+		if (source.kind == ServerContentKind::Spell && source.declarationExists) {
+			spells.push_back(source);
+		}
+	}
+	if (spells.empty()) {
+		wxMessageBox("No spell definitions were detected in the active Server Workspace.", "Spell Editor", wxOK | wxICON_INFORMATION, root);
+		return;
+	}
+	ServerContentBrowserDialog chooser(root, "Spell Editor", "spell", g_workspace.getServer().spellsDirectory, std::move(spells), false);
+	if (chooser.ShowModal() == wxID_OK) {
+		if (const auto source = chooser.selectedSource()) {
+			ShowSpellEditor(*source);
+		}
+	}
+}
+
+void GUI::ShowSpellEditor(const ServerContentSource& selectedSource) {
+	if (!IsEditorOpen() || selectedSource.kind != ServerContentKind::Spell) {
+		return;
+	}
+	const ServerContentSource source = selectedSource;
+	const auto workspaceRoot = g_workspace.getServer().rootPath;
+	std::string error;
+	auto document = SpellDefinitionDocument::Load(source, error);
+	if (!document) {
+		wxMessageBox(wxString::FromUTF8(error), "Could not open spell", wxOK | wxICON_ERROR, root);
+		return;
+	}
+	SpellEditorDialog dialog(root, std::move(document));
+	dialog.ShowModal();
+	if (!dialog.wasSaved()) {
+		return;
+	}
+	if (g_workspace.getServer().rootPath != workspaceRoot) {
+		wxMessageBox("The active workspace changed while the Spell Editor was open. The source was saved, but this workspace was not reindexed.", "Spell saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	wxString scanError;
+	if (!g_workspace.rescanServer(scanError)) {
+		wxMessageBox("The spell was saved, but the Server Workspace could not be reindexed:\n" + scanError, "Spell saved", wxOK | wxICON_WARNING, root);
+		return;
+	}
+	RefreshView();
+	SetStatusText("Saved spell " + wxString::FromUTF8(dialog.savedDefinition().name));
 }
 
 void GUI::SetHotkey(int index, Hotkey& hotkey) {

@@ -1131,7 +1131,8 @@ namespace {
 		if (!entry) {
 			return true;
 		}
-		if (entry->value.kind != LuaValue::Kind::String && entry->value.kind != LuaValue::Kind::Identifier) {
+		if (entry->value.kind != LuaValue::Kind::String && entry->value.kind != LuaValue::Kind::Identifier
+			&& entry->value.kind != LuaValue::Kind::Number) {
 			limitation = std::string(key) + " is a computed expression.";
 			return false;
 		}
