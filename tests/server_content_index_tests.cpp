@@ -260,6 +260,32 @@ namespace {
 		Check(xmlCached.stats().filesParsed == 0 && xmlCached.stats().filesReused == xmlCached.stats().filesDiscovered, "real XML/mixed base fully reuses an unchanged cache");
 		std::cout << "XML/mixed real base: " << CountKind(xml, ServerContentKind::Monster) << " monsters, " << CountKind(xml, ServerContentKind::Npc) << " NPCs, " << CountKind(xml, ServerContentKind::Spell) << " spells, " << xml.stats().filesDiscovered << " scanned files.\n";
 	}
+
+	void TestRealCanary(const std::filesystem::path& canaryRoot) {
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(canaryRoot);
+		Check(detection.validRoot, "real Crystal/Canary server root is readable");
+		Check(detection.workspace.usesCanaryCrystalLoader(), "real Crystal/Canary server family is detected");
+		Check(
+			detection.workspace.activeDataDirectory == std::filesystem::weakly_canonical(canaryRoot / "data-global"),
+			"real Crystal/Canary base respects config.lua dataPackDirectory"
+		);
+		Check(
+			detection.workspace.monstersDirectory == std::filesystem::weakly_canonical(canaryRoot / "data-global/monster")
+				&& detection.workspace.npcsDirectory == std::filesystem::weakly_canonical(canaryRoot / "data-global/npc"),
+			"real Crystal/Canary content roots follow the active datapack"
+		);
+		const ServerContentIndex index = ServerContentIndex::Build(detection.workspace);
+		Check(CountKind(index, ServerContentKind::Monster) > 0, "real Crystal/Canary base indexes Lua monsters");
+		Check(CountKind(index, ServerContentKind::Npc) > 0, "real Crystal/Canary base indexes Lua NPCs");
+		Check(index.capabilities().monsters.luaDefinitions && index.capabilities().npcs.luaDefinitions, "real Crystal/Canary capabilities expose Lua monsters and NPCs");
+		Check(index.findExact(ServerContentKind::Monster, "Toad").unique(), "real Crystal/Canary base resolves a known active-datapack monster");
+		Check(!index.stats().fileLimitReached, "real Crystal/Canary scan completes within bounds");
+		const ServerContentIndex cached = ServerContentIndex::Build(detection.workspace, &index);
+		Check(
+			cached.stats().filesParsed == 0 && cached.stats().filesReused == cached.stats().filesDiscovered,
+			"real Crystal/Canary base fully reuses an unchanged cache"
+		);
+	}
 }
 
 int main(int argc, char** argv) {
@@ -269,10 +295,13 @@ int main(int argc, char** argv) {
 	TestFingerprintsAndCache();
 	TestFileLimit();
 
-	if (argc == 3) {
+	if (argc == 4) {
+		TestRealServers(std::filesystem::path(argv[1]), std::filesystem::path(argv[2]));
+		TestRealCanary(std::filesystem::path(argv[3]));
+	} else if (argc == 3) {
 		TestRealServers(std::filesystem::path(argv[1]), std::filesystem::path(argv[2]));
 	} else if (argc != 1) {
-		std::cerr << "Usage: server_content_index_tests [modern-lua-server xml-mixed-server]\n";
+		std::cerr << "Usage: server_content_index_tests [modern-lua-server xml-mixed-server [canary-crystal-server]]\n";
 		return 2;
 	}
 

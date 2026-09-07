@@ -1218,7 +1218,7 @@ std::unique_ptr<MonsterDefinitionDocument> MonsterDefinitionDocument::Load(const
 		}
 	}
 
-	implementation->sections = MonsterSectionCodec::Parse(source.format, implementation->files.front().bytes, implementation->original, error);
+	implementation->sections = MonsterSectionCodec::Parse(source.format, source.serverType, implementation->files.front().bytes, implementation->original, error);
 	if (!implementation->sections) {
 		return nullptr;
 	}

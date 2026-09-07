@@ -977,6 +977,7 @@ ServerContentIndex ServerContentIndex::Build(const ServerWorkspace& workspace, c
 		return fingerprint;
 	};
 	for (ServerContentSource& source : index.sources) {
+		source.serverType = workspace.serverType;
 		source.declarationFingerprint = currentFingerprint(source.declarationPath);
 		source.declarationExists = source.declarationFingerprint.exists;
 		if (source.registrationPath) {

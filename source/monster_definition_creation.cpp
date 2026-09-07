@@ -249,6 +249,7 @@ namespace {
 		ServerContentSource source;
 		source.kind = ServerContentKind::Monster;
 		source.format = format;
+		source.serverType = provider == MonsterCreationProvider::CanaryLua ? ServerType::Canary : ServerType::Tfs;
 		source.name = name;
 		source.declarationPath = staged;
 		source.declarationExists = true;
@@ -461,6 +462,7 @@ bool CreateMonsterDefinition(
 
 	result.source.kind = ServerContentKind::Monster;
 	result.source.format = request.format;
+	result.source.serverType = workspace.serverType;
 	result.source.name = name;
 	result.source.declarationPath = declaration;
 	result.source.registrationPath = registry;

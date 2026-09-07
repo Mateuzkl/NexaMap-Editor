@@ -178,6 +178,27 @@ npcType:register(npcConfig)
 		Check(foundXmlShop, "real XML TFS base exposes parameter-based shop entries");
 	}
 
+	void TestRealCanary(const std::filesystem::path& canaryRoot) {
+		const auto detected = ServerResourceDetector::Detect(canaryRoot);
+		Check(detected.validRoot && detected.workspace.usesCanaryCrystalLoader(), "real Crystal/Canary base selects its engine profile");
+		const auto index = ServerContentIndex::Build(detected.workspace);
+		const ServerContentSource* source = nullptr;
+		for (const auto& entry : index.entries()) {
+			if (entry.kind == ServerContentKind::Npc && entry.format == ServerContentFormat::Lua) {
+				source = &entry;
+				break;
+			}
+		}
+		Check(source != nullptr, "real Crystal/Canary base indexes a Lua NPC");
+		std::string error;
+		auto document = source ? NpcDefinitionDocument::Load(*source, error) : nullptr;
+		Check(
+			document != nullptr && !document->definition().name.empty()
+				&& document->definition().capability(NpcField::LookType).editable,
+			"real Crystal/Canary NPC opens with editable literal fields: " + error
+		);
+	}
+
 	void TestCreation() {
 		TemporaryDirectory directory;
 		std::filesystem::create_directories(directory.path / "data/npc/custom");
@@ -203,7 +224,10 @@ int main(int argc, char** argv) {
 	TestXml();
 	TestLua();
 	TestCreation();
-	if (argc == 3) {
+	if (argc == 4) {
+		TestReal(argv[1], argv[2]);
+		TestRealCanary(argv[3]);
+	} else if (argc == 3) {
 		TestReal(argv[1], argv[2]);
 	} else if (argc != 1) {
 		return 2;

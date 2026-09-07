@@ -570,7 +570,7 @@ namespace {
 		return property.rawValue ? property.value : "\"" + EncodeLua(property.value) + "\"";
 	}
 
-	std::string SectionMember(MonsterSection section) {
+	std::string SectionMember(MonsterSection section, bool nestedLuaSummons = false) {
 		switch (section) {
 			case MonsterSection::Defenses:
 				return "defenses";
@@ -581,7 +581,7 @@ namespace {
 			case MonsterSection::Loot:
 				return "loot";
 			case MonsterSection::Summons:
-				return "summons";
+				return nestedLuaSummons ? "summon" : "summons";
 			case MonsterSection::Voices:
 				return "voices";
 			case MonsterSection::Attacks:
@@ -624,6 +624,7 @@ struct MonsterSectionCodec::Impl {
 	std::array<SectionState, SectionCount> states;
 	std::size_t insertionOffset = 0;
 	bool hasInsertionAnchor = false;
+	bool nestedLuaSummons = false;
 
 	void limitation(MonsterDefinition& definition, MonsterSection section, std::string reason) {
 		SectionState& state = states[Index(section)];
@@ -1343,13 +1344,30 @@ namespace {
 					definition.loot.push_back(std::move(loot));
 				}
 				return true;
-			case MonsterSection::Summons:
+			case MonsterSection::Summons: {
 				if (!ReadLuaInteger(table, "maxSummons", definition.maxSummons, limitation)) {
 					return false;
 				}
-				definition.summonProperties = LuaCustomFields(table, { "maxsummons" });
-				for (const LuaEntry& entry : table.entries) {
+				definition.summonProperties = LuaCustomFields(
+					table,
+					codec.nestedLuaSummons ? std::initializer_list<std::string_view> { "maxsummons", "summons" }
+										   : std::initializer_list<std::string_view> { "maxsummons" }
+				);
+				const LuaTable* summonEntries = &table;
+				if (codec.nestedLuaSummons) {
+					const LuaEntry* nested = FindLuaField(table, "summons");
+					if (!nested || nested->value.kind != LuaValue::Kind::Table) {
+						limitation = "The Canary/Crystal summon section has no literal summons table.";
+						return false;
+					}
+					summonEntries = nested->value.table.get();
+				}
+				for (const LuaEntry& entry : summonEntries->entries) {
 					if (entry.key) {
+						if (codec.nestedLuaSummons) {
+							limitation = "The nested summons table contains an unsupported named entry.";
+							return false;
+						}
 						continue;
 					}
 					if (entry.value.kind != LuaValue::Kind::Table) {
@@ -1360,17 +1378,18 @@ namespace {
 					if (!ReadLuaText(*entry.value.table, "name", summon.name, limitation)
 						|| !ReadLuaInteger(*entry.value.table, "interval", summon.interval, limitation)
 						|| !ReadLuaInteger(*entry.value.table, "chance", summon.chance, limitation)
-						|| !ReadLuaInteger(*entry.value.table, "max", summon.max, limitation)) {
+						|| !ReadLuaInteger(*entry.value.table, codec.nestedLuaSummons ? "count" : "max", summon.max, limitation)) {
 						return false;
 					}
 					bool forceUsed = false;
 					if (!ReadLuaBoolean(*entry.value.table, "force", summon.force, forceUsed, limitation)) {
 						return false;
 					}
-					summon.customProperties = LuaCustomFields(*entry.value.table, { "name", "interval", "chance", "max", "force" });
+					summon.customProperties = LuaCustomFields(*entry.value.table, { "name", "interval", "chance", "max", "count", "force" });
 					definition.summons.push_back(std::move(summon));
 				}
 				return true;
+			}
 			case MonsterSection::Voices:
 				if (!ReadLuaInteger(table, "interval", definition.voices.interval, limitation)
 					|| !ReadLuaInteger(table, "chance", definition.voices.chance, limitation)) {
@@ -1434,8 +1453,9 @@ namespace {
 				section = MonsterSection::Immunities;
 			} else if (member == "loot") {
 				section = MonsterSection::Loot;
-			} else if (member == "summons") {
+			} else if (member == "summons" || member == "summon") {
 				section = MonsterSection::Summons;
+				codec.nestedLuaSummons = member == "summon";
 			} else if (member == "voices") {
 				section = MonsterSection::Voices;
 			} else if (member == "attacks") {
@@ -1778,7 +1798,8 @@ namespace {
 		MonsterSection section,
 		const MonsterDefinition& definition,
 		const std::string& indent,
-		const std::string& newline
+		const std::string& newline,
+		bool nestedLuaSummons
 	) {
 		std::string output = "{";
 		const std::string field = indent;
@@ -1914,19 +1935,29 @@ namespace {
 				begin();
 				output += field + "maxSummons = " + std::to_string(definition.maxSummons) + "," + newline;
 				AppendLuaProperties(output, definition.summonProperties, field, newline);
-				for (const MonsterSummon& summon : definition.summons) {
-					output += field + "{ name = \"" + EncodeLua(summon.name) + "\", interval = "
-						+ std::to_string(summon.interval) + ", chance = " + std::to_string(summon.chance);
-					if (summon.max != 0) {
-						output += ", max = " + std::to_string(summon.max);
+				if (nestedLuaSummons) {
+					output += field + "summons = {" + newline;
+				}
+				{
+					const std::string summonIndent = nestedLuaSummons ? field + "\t" : field;
+					for (const MonsterSummon& summon : definition.summons) {
+						output += summonIndent + "{ name = \"" + EncodeLua(summon.name) + "\", interval = "
+							+ std::to_string(summon.interval) + ", chance = " + std::to_string(summon.chance);
+						if (summon.max != 0) {
+							output += nestedLuaSummons ? ", count = " : ", max = ";
+							output += std::to_string(summon.max);
+						}
+						if (summon.force) {
+							output += ", force = true";
+						}
+						for (const MonsterCustomProperty& property : summon.customProperties) {
+							output += ", " + property.name + " = " + LuaPropertyValue(property);
+						}
+						output += " }," + newline;
 					}
-					if (summon.force) {
-						output += ", force = true";
-					}
-					for (const MonsterCustomProperty& property : summon.customProperties) {
-						output += ", " + property.name + " = " + LuaPropertyValue(property);
-					}
-					output += " }," + newline;
+				}
+				if (nestedLuaSummons) {
+					output += field + "}," + newline;
 				}
 				break;
 			case MonsterSection::Voices:
@@ -1956,6 +1987,7 @@ namespace {
 
 std::unique_ptr<MonsterSectionCodec> MonsterSectionCodec::Parse(
 	ServerContentFormat format,
+	ServerType serverType,
 	std::string_view source,
 	MonsterDefinition& definition,
 	std::string& error
@@ -1963,6 +1995,7 @@ std::unique_ptr<MonsterSectionCodec> MonsterSectionCodec::Parse(
 	error.clear();
 	auto implementation = std::make_unique<Impl>();
 	implementation->format = format;
+	implementation->nestedLuaSummons = UsesCanaryCrystalLoader(serverType);
 	implementation->source = std::string(source);
 	implementation->newline = NewlineFor(source);
 	if (format == ServerContentFormat::Xml) {
@@ -2014,7 +2047,7 @@ bool MonsterSectionCodec::buildPatches(
 		}
 		const std::string serialized = implementation->format == ServerContentFormat::Xml
 			? SerializeXmlSection(section, edited, implementation->indent, implementation->newline)
-			: SerializeLuaSection(section, edited, implementation->indent, implementation->newline);
+			: SerializeLuaSection(section, edited, implementation->indent, implementation->newline, implementation->nestedLuaSummons);
 		if (state.present) {
 			patches.push_back({ state.begin, state.end, serialized });
 		} else {
@@ -2025,7 +2058,7 @@ bool MonsterSectionCodec::buildPatches(
 			if (implementation->format == ServerContentFormat::Xml) {
 				insertion += implementation->indent + serialized + implementation->newline;
 			} else {
-				insertion += implementation->monsterVariable + "." + SectionMember(section) + " = " + serialized
+				insertion += implementation->monsterVariable + "." + SectionMember(section, implementation->nestedLuaSummons) + " = " + serialized
 					+ implementation->newline;
 			}
 		}

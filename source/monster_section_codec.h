@@ -25,6 +25,7 @@ public:
 
 	static std::unique_ptr<MonsterSectionCodec> Parse(
 		ServerContentFormat format,
+		ServerType serverType,
 		std::string_view source,
 		MonsterDefinition& definition,
 		std::string& error

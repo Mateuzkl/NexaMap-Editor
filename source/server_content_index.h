@@ -53,6 +53,7 @@ struct ServerContentCapabilities {
 struct ServerContentSource {
 	ServerContentKind kind = ServerContentKind::Monster;
 	ServerContentFormat format = ServerContentFormat::Unknown;
+	ServerType serverType = ServerType::UnknownGeneric;
 	std::string name;
 	std::vector<std::string> aliases;
 	std::string subtype;

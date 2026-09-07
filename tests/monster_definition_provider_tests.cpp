@@ -399,6 +399,25 @@ namespace {
 		const std::string canaryLua = canaryServer.read("data-canary/monster/custom/canary_sentinel.lua");
 		Check(created.provider == "Canary/Crystal Lua", "Canary family selects the Canary Lua provider");
 		Check(canaryLua.find("monster.summon = { maxSummons = 0, summons = {} }") != std::string::npos, "Canary Lua uses its nested summon provider shape");
+		auto canaryDocument = MonsterDefinitionDocument::Load(created.source, error);
+		Check(
+			canaryDocument != nullptr && canaryDocument->definition().capability(MonsterSection::Summons).editable,
+			"created Canary monster reopens with an editable nested summon section: " + error
+		);
+		if (canaryDocument) {
+			MonsterDefinition edited = canaryDocument->definition();
+			edited.maxSummons = 2;
+			edited.summons.push_back({ "Fire Elemental", 2000, 50, 2 });
+			Check(canaryDocument->save(edited, error), "Canary nested summons save through their provider: " + error);
+			const std::string savedCanary = canaryServer.read("data-canary/monster/custom/canary_sentinel.lua");
+			Check(
+				savedCanary.find("monster.summon = {") != std::string::npos
+					&& savedCanary.find("summons = {") != std::string::npos
+					&& savedCanary.find("count = 2") != std::string::npos
+					&& savedCanary.find("monster.summons =") == std::string::npos,
+				"Canary summon edits preserve the nested registration shape and count field"
+			);
+		}
 	}
 
 	void TestAutosaveState() {
@@ -490,6 +509,29 @@ namespace {
 			);
 		}
 	}
+
+	void TestRealCanary(const std::filesystem::path& canaryRoot) {
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(canaryRoot);
+		Check(detection.validRoot && detection.workspace.usesCanaryCrystalLoader(), "real Crystal/Canary base selects its engine profile");
+		const ServerContentIndex index = ServerContentIndex::Build(detection.workspace);
+		Check(
+			DetectMonsterCreationProvider(detection.workspace, index, ServerContentFormat::Lua) == MonsterCreationProvider::CanaryLua,
+			"real Crystal/Canary registration API selects the nested Lua creation provider"
+		);
+		const auto lich = index.findExact(ServerContentKind::Monster, "Lich");
+		const ServerContentSource* source = lich.value() ? lich.value() : lich.uniqueRegisteredValue();
+		std::string error;
+		auto document = source ? MonsterDefinitionDocument::Load(*source, error) : nullptr;
+		Check(document != nullptr, "real Crystal/Canary Lich opens: " + error);
+		if (document) {
+			Check(
+				document->definition().maxSummons == 4 && !document->definition().summons.empty()
+					&& document->definition().summons.front().max == 4,
+				"real Crystal/Canary nested summons and count are normalized"
+			);
+			Check(document->definition().capability(MonsterSection::Summons).editable, "real Crystal/Canary nested summon section is editable");
+		}
+	}
 }
 
 int main(int argc, char** argv) {
@@ -499,10 +541,13 @@ int main(int argc, char** argv) {
 	TestAdvancedValidation();
 	TestNewMonsterCreation();
 	TestAutosaveState();
-	if (argc == 3) {
+	if (argc == 4) {
+		TestRealServers(std::filesystem::path(argv[1]), std::filesystem::path(argv[2]));
+		TestRealCanary(std::filesystem::path(argv[3]));
+	} else if (argc == 3) {
 		TestRealServers(std::filesystem::path(argv[1]), std::filesystem::path(argv[2]));
 	} else if (argc != 1) {
-		std::cerr << "Usage: monster_definition_provider_tests [modern-lua-server xml-server]\n";
+		std::cerr << "Usage: monster_definition_provider_tests [modern-lua-server xml-server [canary-crystal-server]]\n";
 		return 2;
 	}
 	if (failures == 0) {

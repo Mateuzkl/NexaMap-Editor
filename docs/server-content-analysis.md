@@ -10,6 +10,7 @@ The analysis used these local trees:
 - MME at `MME`.
 - MONx at `MONx`, already cloned from `Coldensjo/MONx`.
 - `forgottenserver-downgrade-1.8-8.60` as a modern Lua server.
+- `Crystal-Server-devv` as a Crystal/Canary server with an active `data-global` datapack.
 - `Dragon-Souls-TFS-1.4-Protocol-11.00` as a legacy and mixed XML/Lua server.
 
 No product code may store these machine-specific paths. They are test and analysis inputs only.
@@ -91,6 +92,12 @@ mType:register(monster)
 NPC definitions use `Game.createNpcType`, direct outfit calls, handlers, keyword graphs, callbacks, shops, and arbitrary functions. The examined banker contains substantial custom control flow. Only identity and simple literal fields can initially be treated as safely editable.
 
 Revscript spells use `Spell("instant")`, callbacks and arbitrary combat logic, then literal metadata calls such as `spell:name(...)`, `spell:words(...)`, and `spell:register()`. Visual area support must distinguish literal `createCombatArea` tables from dynamically computed Lua.
+
+### Crystal/Canary active datapack base
+
+The examined Crystal server selects `data-global` through `config.lua`. Server content discovery must follow that configured datapack instead of indexing the parallel `data-crystal` tree. Monsters and NPCs use registered Lua definitions.
+
+Crystal's monster registration API differs from TFS 1.8 for summons. It reads `monster.summon = { maxSummons = ..., summons = {...} }`, and each summon uses `count`. The provider therefore records the server family on each indexed source, normalizes the nested table for the editor, and writes the same nested shape back. It never converts this section to the TFS `monster.summons` list.
 
 ### Dragon Souls / TFS 1.4 legacy and mixed base
 
@@ -220,4 +227,4 @@ The providers expose only fields backed by unambiguous literal source spans. Sav
 
 New NPC creation selects a provider from the active server workspace. Modern TFS Lua output uses a registered `Game.createNpcType` definition; traditional TFS output creates an XML definition and its related Lua behavior script. Both outputs are parsed and validated before the transaction is committed.
 
-The implementation is covered by synthetic preservation and creation tests plus discovery/opening checks against the TFS 1.8 8.60 Lua base and the Dragon Souls XML/Lua base. Menu, palette, and map context actions rescan the workspace and refresh the creature palette after a successful save.
+The implementation is covered by synthetic preservation and creation tests plus discovery/opening checks against the TFS 1.8 8.60 Lua base, the configured Crystal/Canary datapack, and the Dragon Souls XML/Lua base. Menu, palette, and map context actions rescan the workspace and refresh the creature palette after a successful save.
