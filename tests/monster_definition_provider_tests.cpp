@@ -349,7 +349,8 @@ namespace {
 		xmlServer.write("data/monster/monsters.xml", "<?xml version=\"1.0\"?>\n<monsters>\n</monsters>\n");
 		ServerWorkspace xmlWorkspace;
 		xmlWorkspace.rootPath = xmlServer.path;
-		xmlWorkspace.monstersDirectory = xmlServer.path / "data/monster";
+		// The workspace path may contain an alias or lexical segment (for example RUNNER~1 on CI).
+		xmlWorkspace.monstersDirectory = xmlServer.path / "data/monster/../monster";
 		ServerContentIndex xmlIndex = ServerContentIndex::Build(xmlWorkspace);
 		MonsterCreationRequest request { "Test & Guardian", ServerContentFormat::Xml, xmlDirectory };
 		MonsterCreationResult created;

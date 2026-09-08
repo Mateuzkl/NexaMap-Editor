@@ -336,7 +336,7 @@ namespace {
 			error = "The monster registry has no closing <monsters> element: " + registry.string() + ".";
 			return false;
 		}
-		const std::filesystem::path relative = declaration.lexically_relative(registry.parent_path());
+		const std::filesystem::path relative = Normalize(declaration).lexically_relative(Normalize(registry.parent_path()));
 		if (!IsSafeRelativePath(relative)) {
 			error = "The new XML monster must be stored below the monster registry directory.";
 			return false;
