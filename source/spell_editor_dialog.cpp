@@ -278,7 +278,8 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 			vocationValues.push_back(edited.vocations[existing]);
 		}
 	}
-	vocationList->Enable(edited.vocationCapability.editable && !edited.allVocations);
+	const bool vocationEditable = edited.vocationCapability.editable;
+	vocationList->Enable(vocationEditable);
 	vocationList->SetToolTip(Utf8(edited.vocationCapability.limitation));
 	vocationSizer->Add(vocationList, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
 	auto* vocationOptions = newd wxBoxSizer(wxHORIZONTAL);
@@ -293,18 +294,16 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	vocationOptions->Add(addVocation, 0, wxRIGHT, FromDIP(6));
 	vocationOptions->Add(removeVocation, 0);
 	vocationSizer->Add(vocationOptions, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
-	const bool vocationEditable = edited.vocationCapability.editable;
 	allVocationsCheck->Enable(vocationEditable);
 	customVocation->Enable(vocationEditable && !edited.allVocations);
 	addVocation->Enable(vocationEditable && !edited.allVocations);
 	removeVocation->Enable(vocationEditable && !edited.allVocations);
-	allVocationsCheck->Bind(wxEVT_CHECKBOX, [this, addVocation, removeVocation](wxCommandEvent&) {
+	allVocationsCheck->Bind(wxEVT_CHECKBOX, [this, addVocation, removeVocation, vocationEditable](wxCommandEvent&) {
 		const bool all = allVocationsCheck->GetValue();
-		vocationList->Enable(!all);
-		customVocation->Enable(!all);
-		addVocation->Enable(!all);
-		removeVocation->Enable(!all);
-		showInDescriptionCheck->Enable(!all && document->source().format == ServerContentFormat::Lua);
+		customVocation->Enable(vocationEditable && !all);
+		addVocation->Enable(vocationEditable && !all);
+		removeVocation->Enable(vocationEditable && !all);
+		showInDescriptionCheck->Enable(vocationEditable && !all && document->source().format == ServerContentFormat::Lua);
 		if (all) {
 			for (unsigned int row = 0; row < vocationList->GetCount(); ++row) {
 				vocationList->Check(row, false);
@@ -312,7 +311,17 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 		}
 		syncVocations();
 	});
-	vocationList->Bind(wxEVT_CHECKLISTBOX, [this](wxCommandEvent&) { syncVocations(); });
+	vocationList->Bind(wxEVT_CHECKLISTBOX, [this, addVocation, removeVocation, vocationEditable](wxCommandEvent&) {
+		if (allVocationsCheck->GetValue()) {
+			allVocationsCheck->SetValue(false);
+		}
+		syncVocations();
+		const bool all = allVocationsCheck->GetValue();
+		customVocation->Enable(vocationEditable && !all);
+		addVocation->Enable(vocationEditable && !all);
+		removeVocation->Enable(vocationEditable && !all);
+		refreshVocationControls();
+	});
 	vocationList->Bind(wxEVT_LISTBOX, [this](wxCommandEvent&) { refreshVocationControls(); });
 	showInDescriptionCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
 		const int row = vocationList->GetSelection();
@@ -665,7 +674,6 @@ void SpellEditorDialog::syncVocations() {
 	edited.allVocations = edited.vocations.empty();
 	if (edited.allVocations && allVocationsCheck && !allVocationsCheck->GetValue()) {
 		allVocationsCheck->SetValue(true);
-		vocationList->Enable(false);
 		customVocation->Enable(false);
 		showInDescriptionCheck->Enable(false);
 	}

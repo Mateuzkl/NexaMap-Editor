@@ -33,6 +33,7 @@
 #include "map_tab.h"
 
 #include <atomic>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -162,6 +163,26 @@ namespace {
 	std::streambuf* originalOutputBuffer = nullptr;
 	std::streambuf* originalErrorBuffer = nullptr;
 
+#ifdef __WINDOWS__
+	bool StartDiagnosticConsole() {
+		if (GetConsoleWindow() == nullptr && !AttachConsole(ATTACH_PARENT_PROCESS) && !AllocConsole()) {
+			return false;
+		}
+
+		FILE* consoleStream = nullptr;
+		freopen_s(&consoleStream, "CONOUT$", "w", stdout);
+		freopen_s(&consoleStream, "CONOUT$", "w", stderr);
+		freopen_s(&consoleStream, "CONIN$", "r", stdin);
+		std::ios::sync_with_stdio(true);
+		std::cout.clear();
+		std::cerr.clear();
+		SetConsoleOutputCP(CP_UTF8);
+		SetConsoleCP(CP_UTF8);
+		SetConsoleTitleW(L"NexaMap - Diagnostic Console");
+		return true;
+	}
+#endif
+
 	std::string DiagnosticPath(const std::filesystem::path& path) {
 		const auto utf8 = path.u8string();
 		return std::string(utf8.begin(), utf8.end());
@@ -284,10 +305,6 @@ namespace {
 	int RunApplication(EntryPoint&& entryPoint) {
 		std::cout << std::unitbuf;
 		std::cerr << std::unitbuf;
-#ifdef __WINDOWS__
-		SetConsoleOutputCP(CP_UTF8);
-		SetConsoleTitleW(L"NexaMap - Diagnostic Console");
-#endif
 		std::set_terminate(ReportTerminatedException);
 		try {
 			const int applicationExitCode = std::forward<EntryPoint>(entryPoint)();
@@ -343,13 +360,18 @@ bool Application::OnInit() {
 #if defined __DEBUG_MODE__ && defined __WINDOWS__
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
-	// Load the persisted theme before creating any windows.
-	std::cerr << "[startup] Loading settings" << std::endl;
+	// Load persisted startup options before creating any windows.
 	g_settings.load();
 	wxString forceDiagnostics;
 	if (wxGetEnv("NEXAMAP_DIAGNOSTICS", &forceDiagnostics) && forceDiagnostics == "1") {
 		g_settings.setInteger(Config::ENABLE_DIAGNOSTIC_LOG, 1);
+		g_settings.setInteger(Config::SHOW_DIAGNOSTIC_CONSOLE, 1);
 	}
+#ifdef __WINDOWS__
+	if (g_settings.getBoolean(Config::SHOW_DIAGNOSTIC_CONSOLE)) {
+		StartDiagnosticConsole();
+	}
+#endif
 	if (g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG)) {
 #ifdef __WINDOWS__
 		const std::filesystem::path executablePath(wxStandardPaths::Get().GetExecutablePath().ToStdWstring());
@@ -362,6 +384,7 @@ bool Application::OnInit() {
 			new ConsoleLogTarget();
 		}
 	}
+	std::cerr << "[startup] Loading settings" << std::endl;
 #if wxUSE_ON_FATAL_EXCEPTION
 	// Install before resource discovery and window construction so startup
 	// failures are captured as well as crashes in the event loop.

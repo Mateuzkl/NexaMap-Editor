@@ -91,6 +91,11 @@ wxNotebookPage* PreferencesWindow::CreateGeneralPage() {
 	diagnostic_log_chkbox->SetToolTip("Save console and crash information in nexamap.log next to the executable (or Local AppData/NexaMap/logs if the folder is read-only). Restart required.");
 	sizer->Add(diagnostic_log_chkbox, 0, wxLEFT | wxTOP, 5);
 
+	diagnostic_console_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Show diagnostic console on startup");
+	diagnostic_console_chkbox->SetValue(g_settings.getBoolean(Config::SHOW_DIAGNOSTIC_CONSOLE));
+	diagnostic_console_chkbox->SetToolTip("Open a console window with live diagnostic output. The nexamap.log file remains controlled separately. Restart required.");
+	sizer->Add(diagnostic_console_chkbox, 0, wxLEFT | wxTOP, 5);
+
 	enable_tileset_editing_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Enable tileset editing");
 	enable_tileset_editing_chkbox->SetValue(g_settings.getInteger(Config::SHOW_TILESET_EDITOR) == 1);
 	enable_tileset_editing_chkbox->SetToolTip("Show tileset editing options.");
@@ -710,6 +715,10 @@ bool PreferencesWindow::Apply() {
 		must_restart = true;
 	}
 	g_settings.setInteger(Config::ENABLE_DIAGNOSTIC_LOG, diagnostic_log_chkbox->GetValue());
+	if (g_settings.getBoolean(Config::SHOW_DIAGNOSTIC_CONSOLE) != diagnostic_console_chkbox->GetValue()) {
+		must_restart = true;
+	}
+	g_settings.setInteger(Config::SHOW_DIAGNOSTIC_CONSOLE, diagnostic_console_chkbox->GetValue());
 	g_settings.setInteger(Config::UNDO_SIZE, undo_size_spin->GetValue());
 	g_settings.setInteger(Config::UNDO_MEM_SIZE, undo_mem_size_spin->GetValue());
 	g_settings.setInteger(Config::WORKER_THREADS, worker_threads_spin->GetValue());

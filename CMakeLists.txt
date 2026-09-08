@@ -58,8 +58,8 @@ if(MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8)
 endif()
 if(WIN32)
-	# Keep a console in Release too, as in RME Redux, for startup/crash output.
-	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
+	# The diagnostic console is allocated at runtime when enabled in Preferences.
+	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 if(ENABLE_UNITY_BUILD)
 	if(CMAKE_VERSION VERSION_LESS 3.16)

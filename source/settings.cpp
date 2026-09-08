@@ -318,6 +318,7 @@ void Settings::IO(IOMode mode) {
 	Int(REPLACE_SIZE, 100000);
 	Int(COPY_POSITION_FORMAT, 0);
 	Int(ENABLE_DIAGNOSTIC_LOG, 1);
+	Int(SHOW_DIAGNOSTIC_CONSOLE, 0);
 	Int(DRAGON_SOULS_OTBM_COUNT_UINT16, 0);
 
 	section("Workspace");

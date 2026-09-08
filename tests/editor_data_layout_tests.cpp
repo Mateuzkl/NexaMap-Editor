@@ -120,6 +120,18 @@ int main() {
 	const std::size_t hotkeyBegin = gui.find("void GUI::SetHotkey", monsterEditorBegin);
 	check(monsterEditorBegin != std::string::npos && hotkeyBegin != std::string::npos && gui.substr(monsterEditorBegin, hotkeyBegin - monsterEditorBegin).find("rescanServer") == std::string::npos, "Monster, NPC and Spell saves avoid global server-content rescans");
 
+	std::ifstream applicationFile(sourceRoot / "source" / "application.cpp", std::ios::binary);
+	const std::string application((std::istreambuf_iterator<char>(applicationFile)), std::istreambuf_iterator<char>());
+	std::ifstream settingsFile(sourceRoot / "source" / "settings.cpp", std::ios::binary);
+	const std::string settings((std::istreambuf_iterator<char>(settingsFile)), std::istreambuf_iterator<char>());
+	std::ifstream cmakeFile(sourceRoot / "CMakeLists.txt", std::ios::binary);
+	const std::string cmake((std::istreambuf_iterator<char>(cmakeFile)), std::istreambuf_iterator<char>());
+	std::ifstream projectFile(sourceRoot / "vcproj" / "Project" / "Editor.vcxproj", std::ios::binary);
+	const std::string project((std::istreambuf_iterator<char>(projectFile)), std::istreambuf_iterator<char>());
+	check(settings.find("Int(SHOW_DIAGNOSTIC_CONSOLE, 0)") != std::string::npos, "diagnostic console is disabled by default");
+	check(application.find("StartDiagnosticConsole()") != std::string::npos && application.find("Config::SHOW_DIAGNOSTIC_CONSOLE") != std::string::npos, "diagnostic console is allocated only from the persisted startup option");
+	check(cmake.find("WIN32_EXECUTABLE TRUE") != std::string::npos && project.find("<SubSystem>Console</SubSystem>") == std::string::npos, "Windows builds start without an unconditional console window");
+
 	std::ifstream graphicsFile(sourceRoot / "source" / "graphics.cpp", std::ios::binary);
 	const std::string graphics((std::istreambuf_iterator<char>(graphicsFile)), std::istreambuf_iterator<char>());
 	check(graphics.find("getEffectSprite") != std::string::npos && graphics.find("getDistanceSprite") != std::string::npos, "GraphicManager exposes active-session effect and projectile sprites");
