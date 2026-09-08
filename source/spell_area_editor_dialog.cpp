@@ -30,7 +30,8 @@ namespace {
 
 class SpellAreaGridPanel final : public wxPanel {
 public:
-	explicit SpellAreaGridPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
+	explicit SpellAreaGridPanel(wxWindow* parent) :
+		wxPanel(parent, wxID_ANY) {
 		SetInitialSize(FromDIP(wxSize(470, 470)));
 		SetBackgroundStyle(wxBG_STYLE_PAINT);
 		SetDimensions(9, 9);

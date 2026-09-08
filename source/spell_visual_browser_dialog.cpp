@@ -240,7 +240,9 @@ SpellVisualBrowserDialog::SpellVisualBrowserDialog(
 	list->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent&) { updateSelection(); });
 	list->Bind(wxEVT_LIST_ITEM_DESELECTED, [this](wxListEvent&) { updateSelection(); });
 	list->Bind(wxEVT_LIST_ITEM_ACTIVATED, [this](wxListEvent&) { openSelection(); });
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { openSelection(); }, wxID_OK);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { openSelection(); }, wxID_OK
+	);
 	rebuildList();
 	if (const auto current = catalog.resolve(kind, currentValue)) {
 		for (long row = 0; row < list->GetItemCount(); ++row) {

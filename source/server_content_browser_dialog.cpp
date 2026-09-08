@@ -165,7 +165,9 @@ void ServerContentBrowserDialog::createControls(const wxString& noun, bool allow
 	list->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent&) { updateSelection(); });
 	list->Bind(wxEVT_LIST_ITEM_DESELECTED, [this](wxListEvent&) { updateSelection(); });
 	list->Bind(wxEVT_LIST_ITEM_ACTIVATED, [this](wxListEvent&) { openSelection(); });
-	Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { openSelection(); }, wxID_OK);
+	Bind(
+		wxEVT_BUTTON, [this](wxCommandEvent&) { openSelection(); }, wxID_OK
+	);
 	rebuildList();
 	search->SetFocus();
 }

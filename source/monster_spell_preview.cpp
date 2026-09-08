@@ -83,7 +83,8 @@ namespace {
 	}
 }
 
-MonsterSpellPreview::MonsterSpellPreview(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
+MonsterSpellPreview::MonsterSpellPreview(wxWindow* parent) :
+	wxPanel(parent, wxID_ANY) {
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
 	SetMinSize(FromDIP(wxSize(300, 320)));
 	Bind(wxEVT_PAINT, &MonsterSpellPreview::OnPaint, this);

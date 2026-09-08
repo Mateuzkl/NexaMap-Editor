@@ -809,7 +809,8 @@ std::unique_ptr<NpcDefinitionDocument> NpcDefinitionDocument::LoadFromText(const
 	return std::unique_ptr<NpcDefinitionDocument>(new NpcDefinitionDocument(std::move(impl)));
 }
 
-NpcDefinitionDocument::NpcDefinitionDocument(std::unique_ptr<Impl> value) : implementation(std::move(value)) { }
+NpcDefinitionDocument::NpcDefinitionDocument(std::unique_ptr<Impl> value) :
+	implementation(std::move(value)) { }
 NpcDefinitionDocument::~NpcDefinitionDocument() = default;
 NpcDefinitionDocument::NpcDefinitionDocument(NpcDefinitionDocument&&) noexcept = default;
 NpcDefinitionDocument& NpcDefinitionDocument::operator=(NpcDefinitionDocument&&) noexcept = default;

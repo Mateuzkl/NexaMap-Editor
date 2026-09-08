@@ -1134,7 +1134,8 @@ std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::LoadFromText(
 	return std::unique_ptr<SpellDefinitionDocument>(new SpellDefinitionDocument(std::move(implementation)));
 }
 
-SpellDefinitionDocument::SpellDefinitionDocument(std::unique_ptr<Impl> value) : implementation(std::move(value)) { }
+SpellDefinitionDocument::SpellDefinitionDocument(std::unique_ptr<Impl> value) :
+	implementation(std::move(value)) { }
 SpellDefinitionDocument::~SpellDefinitionDocument() = default;
 SpellDefinitionDocument::SpellDefinitionDocument(SpellDefinitionDocument&&) noexcept = default;
 SpellDefinitionDocument& SpellDefinitionDocument::operator=(SpellDefinitionDocument&&) noexcept = default;

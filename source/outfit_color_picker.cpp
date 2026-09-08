@@ -26,7 +26,8 @@ namespace {
 
 class OutfitColorPicker::Palette final : public wxPanel {
 public:
-	Palette(wxWindow* parent, std::function<void(int)> callback) : wxPanel(parent, wxID_ANY), callback(std::move(callback)) {
+	Palette(wxWindow* parent, std::function<void(int)> callback) :
+		wxPanel(parent, wxID_ANY), callback(std::move(callback)) {
 		SetBackgroundStyle(wxBG_STYLE_PAINT);
 		SetMinSize(FromDIP(wxSize(19 * 15 + 4, 7 * 15 + 4)));
 		Bind(wxEVT_PAINT, [this](wxPaintEvent&) { paint(); });
@@ -67,7 +68,8 @@ private:
 	int selected = 0;
 };
 
-OutfitColorPicker::OutfitColorPicker(wxWindow* parent, ChangeHandler changed) : wxPanel(parent, wxID_ANY), handler(std::move(changed)) {
+OutfitColorPicker::OutfitColorPicker(wxWindow* parent, ChangeHandler changed) :
+	wxPanel(parent, wxID_ANY), handler(std::move(changed)) {
 	auto* root = newd wxBoxSizer(wxVERTICAL);
 	auto* chooser = newd wxBoxSizer(wxHORIZONTAL);
 	auto* channels = newd wxBoxSizer(wxVERTICAL);
