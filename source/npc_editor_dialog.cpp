@@ -12,6 +12,7 @@
 #include "items.h"
 #include "outfit.h"
 #include "outfit_color_picker.h"
+#include "source_compare_dialog.h"
 #include "theme.h"
 #include "workspace_session.h"
 
@@ -75,16 +76,17 @@ namespace {
 		outfit.lookFeet = definition.lookFeet;
 		outfit.lookAddon = definition.lookAddons;
 		outfit.lookMount = definition.lookMount;
+		int mountClientId = outfit.lookMount > 0 ? g_workspace.resolveMountClientId(outfit.lookMount) : 0;
 		GameSprite* sprite = nullptr;
 		if (outfit.lookItem > 0) {
 			sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(outfit.lookItem));
 		} else if (outfit.lookType > 0) {
 			sprite = g_gui.gfx.getCreatureSprite(outfit.lookType);
 		} else if (outfit.lookMount > 0) {
-			const int resolvedMount = g_workspace.resolveMountClientId(outfit.lookMount);
-			sprite = g_gui.gfx.getCreatureSprite(resolvedMount);
-			outfit.lookType = resolvedMount;
+			sprite = g_gui.gfx.getCreatureSprite(mountClientId);
+			outfit.lookType = mountClientId;
 			outfit.lookMount = 0;
+			mountClientId = 0;
 		}
 		if (!sprite) {
 			return {};
@@ -92,7 +94,7 @@ namespace {
 		std::vector<uint8_t> rgba;
 		int width = 0, height = 0;
 		bool pending = false;
-		if (!sprite->getVisualPreviewRGBA(rgba, width, height, pending, false, outfit.lookItem > 0 ? nullptr : &outfit, definition.direction, 0)) {
+		if (!sprite->getVisualPreviewRGBA(rgba, width, height, pending, false, outfit.lookItem > 0 ? nullptr : &outfit, definition.direction, 0, 0, 0, 0, mountClientId)) {
 			return {};
 		}
 		wxImage image(width, height);
@@ -164,7 +166,11 @@ NpcEditorDialog::NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinition
 	auto* outfitGrid = Grid();
 	for (const auto [field, current, maximum] : { std::tuple(NpcField::LookType, edited.lookType, 200000), std::tuple(NpcField::LookTypeEx, edited.lookTypeEx, 200000), std::tuple(NpcField::LookAddons, edited.lookAddons, 255), std::tuple(NpcField::LookMount, edited.lookMount, 200000) }) {
 		auto* control = addNumber(outfit->GetStaticBox(), outfitGrid, field, current, maximum);
-		control->Bind(wxEVT_SPINCTRL, [this](wxCommandEvent&) { refreshPreview(); });
+		control->Bind(wxEVT_SPINCTRL, [this](wxCommandEvent&) {
+			readControls();
+			refreshPreview();
+			scheduleAutosave();
+		});
 	}
 	outfit->Add(outfitGrid, 0, wxEXPAND | wxALL, FromDIP(8));
 	outfitColors = newd OutfitColorPicker(outfit->GetStaticBox(), [this](int channel, int color) {
@@ -240,6 +246,10 @@ NpcEditorDialog::NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinition
 	saveStateLabel = newd wxStaticText(this, wxID_ANY, "No unsaved changes");
 	saveStateLabel->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
 	footer->Add(saveStateLabel, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
+	compareButton = newd wxButton(this, wxID_ANY, "Compare External...");
+	compareButton->Hide();
+	compareButton->Bind(wxEVT_BUTTON, &NpcEditorDialog::onCompareExternal, this);
+	footer->Add(compareButton, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
 	footer->Add(newd wxButton(this, ID_NPC_BACK, "< Back to NPCs"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 	footer->Add(newd wxButton(this, ID_NPC_BROWSE, "Browse NPCs..."), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
 	auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
@@ -266,6 +276,10 @@ NpcEditorDialog::NpcEditorDialog(wxWindow* parent, std::unique_ptr<NpcDefinition
 	Bind(wxEVT_CHECKBOX, &NpcEditorDialog::onFieldChanged, this);
 	autosaveTimer = std::make_unique<wxTimer>(this);
 	Bind(wxEVT_TIMER, &NpcEditorDialog::onAutosave, this, autosaveTimer->GetId());
+	sourceWatchTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &NpcEditorDialog::onSourceWatch, this, sourceWatchTimer->GetId());
+	resetSourceMonitor();
+	sourceWatchTimer->Start(1000);
 	constructing = false;
 	refreshPreview();
 	refreshMessages();
@@ -342,7 +356,6 @@ void NpcEditorDialog::readControls() {
 }
 
 void NpcEditorDialog::refreshPreview() {
-	readControls();
 	preview->SetBitmap(PreviewBitmap(edited, FromDIP(170)));
 	preview->SetToolTip(wxString::Format("lookType %d | lookTypeEx %d | mount %d | direction %d", edited.lookType, edited.lookTypeEx, edited.lookMount, edited.direction));
 	preview->Refresh();
@@ -458,6 +471,13 @@ void NpcEditorDialog::onSave(wxCommandEvent&) {
 
 bool NpcEditorDialog::saveDocument(bool showErrors) {
 	readControls();
+	if (!externalChanges.empty()) {
+		if (showErrors) {
+			wxCommandEvent event;
+			onCompareExternal(event);
+		}
+		return false;
+	}
 	std::string error;
 	if (!document->save(edited, error)) {
 		autosaveState.failed(error);
@@ -471,15 +491,15 @@ bool NpcEditorDialog::saveDocument(bool showErrors) {
 	sourceView->ChangeValue(Utf8(document->sourceText()));
 	autosaveState.saved();
 	saved = true;
+	resetSourceMonitor();
 	updateSaveState(showErrors ? "Saved" : "Saved automatically");
 	return true;
 }
 
 void NpcEditorDialog::scheduleAutosave() {
-	if (constructing || !document) {
+	if (constructing || !document || !externalChanges.empty()) {
 		return;
 	}
-	readControls();
 	if (!document->hasChanges(edited)) {
 		if (!autosaveState.hasError()) {
 			updateSaveState(saved ? "Saved" : "No unsaved changes");
@@ -504,16 +524,57 @@ void NpcEditorDialog::updateSaveState(const wxString& label, bool error) {
 }
 
 void NpcEditorDialog::onFieldChanged(wxCommandEvent& event) {
+	readControls();
 	scheduleAutosave();
-	if (!constructing) {
-		refreshPreview();
-	}
 	event.Skip();
 }
 
 void NpcEditorDialog::onAutosave(wxTimerEvent&) {
 	if (autosaveState.ready()) {
 		saveDocument(false);
+	}
+}
+
+void NpcEditorDialog::resetSourceMonitor() {
+	std::vector<EditorSourceSnapshot> sources { { document->source().declarationPath, document->sourceText() } };
+	const auto addRelated = [&](const std::optional<std::filesystem::path>& path) {
+		if (!path || path->lexically_normal() == document->source().declarationPath.lexically_normal()) {
+			return;
+		}
+		if (const auto text = SourceText::ReadBoundedFile(*path, 32 * 1024 * 1024)) {
+			sources.push_back({ *path, *text });
+		}
+	};
+	addRelated(document->source().registrationPath);
+	addRelated(document->source().relatedScriptPath);
+	sourceMonitor.reset(std::move(sources));
+	externalChanges.clear();
+	if (compareButton) {
+		compareButton->Hide();
+		Layout();
+	}
+}
+
+void NpcEditorDialog::onSourceWatch(wxTimerEvent&) {
+	if (!externalChanges.empty()) {
+		return;
+	}
+	externalChanges = sourceMonitor.poll();
+	if (externalChanges.empty()) {
+		return;
+	}
+	if (autosaveTimer) {
+		autosaveTimer->Stop();
+	}
+	updateSaveState("External source change detected - autosave paused", true);
+	compareButton->Show();
+	Layout();
+}
+
+void NpcEditorDialog::onCompareExternal(wxCommandEvent&) {
+	if (ShowSourceConflictDialog(this, externalChanges) == SourceConflictChoice::Reopen) {
+		browseRequested = true;
+		EndModal(wxID_CANCEL);
 	}
 }
 

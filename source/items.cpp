@@ -22,9 +22,11 @@
 
 #include "items.h"
 #include "item_id_mapping.h"
+#include "server_item_id_map.h"
 
 #include <appearances.pb.h>
 #include <limits>
+#include <unordered_set>
 
 ItemDatabase g_items;
 
@@ -229,6 +231,81 @@ bool ItemDatabase::loadFromAppearances(const rme::protobuf::appearances::Appeara
 		error = "The appearances file did not contain any usable object appearances.";
 		return false;
 	}
+	return true;
+}
+
+bool ItemDatabase::remapAppearancesToServerIds(const std::filesystem::path& mappingFile, wxString& error, wxArrayString& warnings) {
+	std::vector<ServerItemIdMapping> mappings;
+	std::string mappingError;
+	if (!LoadServerItemIdMap(mappingFile, mappings, mappingError)) {
+		error = wxString::FromUTF8(mappingError);
+		return false;
+	}
+
+	std::unordered_set<uint32_t> serverIds;
+	std::unordered_set<uint32_t> clientIds;
+	for (const ServerItemIdMapping& mapping : mappings) {
+		if (mapping.serverId == 0 || mapping.clientId == 0
+			|| mapping.serverId > std::numeric_limits<uint16_t>::max()
+			|| mapping.clientId > std::numeric_limits<uint16_t>::max()) {
+			continue;
+		}
+		if (!serverIds.insert(mapping.serverId).second) {
+			error = wxString::Format("The custom items.otb maps server ID %u more than once.", mapping.serverId);
+			return false;
+		}
+		if (!clientIds.insert(mapping.clientId).second) {
+			error = wxString::Format("The custom items.otb maps client ID %u more than once; aliases cannot be represented safely.", mapping.clientId);
+			return false;
+		}
+	}
+
+	ItemMap clientItems;
+	clientItems.swap(items);
+	ItemMap serverItems;
+	uint16_t mappedMaximum = 0;
+	std::size_t mappedCount = 0;
+	std::size_t unsupportedCount = 0;
+	std::size_t missingCount = 0;
+	for (const ServerItemIdMapping& mapping : mappings) {
+		if (mapping.serverId == 0 || mapping.clientId == 0
+			|| mapping.serverId > std::numeric_limits<uint16_t>::max()
+			|| mapping.clientId > std::numeric_limits<uint16_t>::max()) {
+			++unsupportedCount;
+			continue;
+		}
+		ItemType* item = clientItems[mapping.clientId];
+		if (item == nullptr) {
+			++missingCount;
+			continue;
+		}
+		clientItems.set(mapping.clientId, nullptr);
+		item->id = static_cast<uint16_t>(mapping.serverId);
+		item->clientID = static_cast<uint16_t>(mapping.clientId);
+		serverItems.set(mapping.serverId, item);
+		mappedMaximum = std::max(mappedMaximum, item->id);
+		++mappedCount;
+	}
+
+	for (std::size_t id = 0; id < clientItems.size(); ++id) {
+		delete clientItems[id];
+		clientItems.set(id, nullptr);
+	}
+	items.swap(serverItems);
+	max_item_id = mappedMaximum;
+	item_count = mappedMaximum;
+	if (mappedCount == 0) {
+		error = "The custom items.otb did not map any object from appearances.dat into NexaMap's supported ID range.";
+		clear();
+		return false;
+	}
+	if (unsupportedCount != 0) {
+		warnings.push_back(wxString::Format("Ignored %zu custom item ID pairs outside NexaMap's 16-bit item range.", unsupportedCount));
+	}
+	if (missingCount != 0) {
+		warnings.push_back(wxString::Format("Ignored %zu custom item ID pairs whose client appearance was not present.", missingCount));
+	}
+	error.clear();
 	return true;
 }
 

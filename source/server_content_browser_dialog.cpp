@@ -13,9 +13,11 @@
 #include <wx/srchctrl.h>
 #include <wx/statline.h>
 #include <wx/stattext.h>
+#include <wx/timer.h>
 
 #include <algorithm>
 #include <cctype>
+#include <numeric>
 #include <tuple>
 
 namespace {
@@ -36,10 +38,25 @@ namespace {
 		return value;
 	}
 
-	std::string SearchText(const ServerContentSource& source) {
-		return LowerAscii(source.name + " " + ServerContentFormatName(source.format) + " " + source.declarationPath.generic_string());
+	std::string SearchText(const ServerContentSource& source, const std::filesystem::path& relativePath) {
+		return LowerAscii(source.name + " " + ServerContentFormatName(source.format) + " " + relativePath.generic_string());
 	}
 }
+
+class ServerContentBrowserListCtrl final : public wxListCtrl {
+public:
+	ServerContentBrowserListCtrl(ServerContentBrowserDialog* parent) :
+		wxListCtrl(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_VIRTUAL),
+		owner(parent) { }
+
+protected:
+	wxString OnGetItemText(long item, long column) const override {
+		return owner->rowText(item, column);
+	}
+
+private:
+	ServerContentBrowserDialog* owner;
+};
 
 ServerContentBrowserDialog::ServerContentBrowserDialog(
 	wxWindow* parent,
@@ -51,11 +68,44 @@ ServerContentBrowserDialog::ServerContentBrowserDialog(
 ) :
 	wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	contentRoot(std::move(root)),
-	sources(std::move(contentSources)) {
-	SetBackgroundColour(Theme::Get(Theme::Role::Surface));
-	std::sort(sources.begin(), sources.end(), [](const ServerContentSource& left, const ServerContentSource& right) {
-		return std::tie(left.name, left.declarationPath) < std::tie(right.name, right.declarationPath);
+	sources(std::make_shared<const std::vector<ServerContentSource>>(std::move(contentSources))) {
+	sourceIndices.resize(sources->size());
+	std::iota(sourceIndices.begin(), sourceIndices.end(), 0);
+	std::sort(sourceIndices.begin(), sourceIndices.end(), [this](std::size_t left, std::size_t right) {
+		return std::tie((*sources)[left].name, (*sources)[left].declarationPath) < std::tie((*sources)[right].name, (*sources)[right].declarationPath);
 	});
+	createControls(noun, allowCreate);
+}
+
+ServerContentBrowserDialog::ServerContentBrowserDialog(
+	wxWindow* parent,
+	const wxString& title,
+	const wxString& noun,
+	std::filesystem::path root,
+	std::shared_ptr<const std::vector<ServerContentSource>> contentSources,
+	std::vector<std::size_t> indices,
+	bool allowCreate
+) :
+	wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+	contentRoot(std::move(root)),
+	sources(std::move(contentSources)),
+	sourceIndices(std::move(indices)) {
+	createControls(noun, allowCreate);
+}
+
+void ServerContentBrowserDialog::createControls(const wxString& noun, bool allowCreate) {
+	SetBackgroundColour(Theme::Get(Theme::Role::Surface));
+	searchKeys.reserve(sourceIndices.size());
+	relativePaths.reserve(sourceIndices.size());
+	for (const std::size_t sourceIndex : sourceIndices) {
+		const ServerContentSource& source = (*sources)[sourceIndex];
+		std::filesystem::path relative = source.declarationPath.lexically_relative(contentRoot);
+		if (relative.empty() || relative.native().starts_with(std::filesystem::path("..").native())) {
+			relative = source.declarationPath.filename();
+		}
+		relativePaths.push_back(relative);
+		searchKeys.push_back(SearchText(source, relative));
+	}
 
 	auto* rootSizer = newd wxBoxSizer(wxVERTICAL);
 	wxButton* createButton = nullptr;
@@ -65,12 +115,12 @@ ServerContentBrowserDialog::ServerContentBrowserDialog(
 		rootSizer->Add(newd wxStaticLine(this), 0, wxEXPAND | wxALL, FromDIP(12));
 	}
 
-	search = newd wxSearchCtrl(this, wxID_ANY);
+	search = newd wxSearchCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	search->SetDescriptiveText("Search " + noun + "s by name, format or source path...");
 	search->ShowCancelButton(true);
 	rootSizer->Add(search, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
-	list = newd wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
+	list = newd ServerContentBrowserListCtrl(this);
 	list->AppendColumn("Name", wxLIST_FORMAT_LEFT, FromDIP(250));
 	list->AppendColumn("Format", wxLIST_FORMAT_LEFT, FromDIP(90));
 	list->AppendColumn("Source", wxLIST_FORMAT_LEFT, FromDIP(470));
@@ -100,7 +150,14 @@ ServerContentBrowserDialog::ServerContentBrowserDialog(
 			EndModal(wxID_OK);
 		});
 	}
-	search->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { rebuildList(); });
+	filterTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &ServerContentBrowserDialog::onFilterTimer, this, filterTimer->GetId());
+	search->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { filterTimer->StartOnce(100); });
+	search->Bind(wxEVT_TEXT_ENTER, [this](wxCommandEvent&) {
+		filterTimer->Stop();
+		rebuildList();
+		openSelection();
+	});
 	search->Bind(wxEVT_SEARCHCTRL_CANCEL_BTN, [this](wxCommandEvent&) {
 		search->Clear();
 		rebuildList();
@@ -117,45 +174,60 @@ bool ServerContentBrowserDialog::wantsCreate() const {
 	return create;
 }
 
-std::optional<ServerContentSource> ServerContentBrowserDialog::selectedSource() const {
+const ServerContentSource* ServerContentBrowserDialog::selectedSource() const {
 	if (create || !list) {
-		return std::nullopt;
+		return nullptr;
 	}
 	const long row = list->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
 	if (row < 0 || static_cast<std::size_t>(row) >= visible.size()) {
-		return std::nullopt;
+		return nullptr;
 	}
-	return sources[visible[static_cast<std::size_t>(row)]];
+	return &(*sources)[sourceIndices[visible[static_cast<std::size_t>(row)]]];
 }
 
 void ServerContentBrowserDialog::rebuildList() {
 	const std::string needle = LowerAscii(search->GetValue().ToStdString(wxConvUTF8));
 	visible.clear();
-	list->DeleteAllItems();
-	for (std::size_t index = 0; index < sources.size(); ++index) {
-		const ServerContentSource& source = sources[index];
-		if (!needle.empty() && SearchText(source).find(needle) == std::string::npos) {
+	for (std::size_t index = 0; index < sourceIndices.size(); ++index) {
+		if (!needle.empty() && searchKeys[index].find(needle) == std::string::npos) {
 			continue;
 		}
 		visible.push_back(index);
-		const long row = list->InsertItem(list->GetItemCount(), wxString::FromUTF8(source.name));
-		list->SetItem(row, 1, wxString::FromUTF8(ServerContentFormatName(source.format)));
-		std::filesystem::path relative = source.declarationPath.lexically_relative(contentRoot);
-		if (relative.empty() || relative.native().starts_with(std::filesystem::path("..").native())) {
-			relative = source.declarationPath.filename();
-		}
-		list->SetItem(row, 2, PathText(relative));
 	}
+	list->SetItemCount(static_cast<long>(visible.size()));
+	list->Refresh();
 	if (!visible.empty()) {
 		list->SetItemState(0, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
 	}
 	updateSelection();
 }
 
+void ServerContentBrowserDialog::onFilterTimer(wxTimerEvent&) {
+	rebuildList();
+}
+
+wxString ServerContentBrowserDialog::rowText(long row, long column) const {
+	if (row < 0 || static_cast<std::size_t>(row) >= visible.size()) {
+		return {};
+	}
+	const std::size_t position = visible[static_cast<std::size_t>(row)];
+	const ServerContentSource& source = (*sources)[sourceIndices[position]];
+	switch (column) {
+		case 0:
+			return wxString::FromUTF8(source.name);
+		case 1:
+			return wxString::FromUTF8(ServerContentFormatName(source.format));
+		case 2:
+			return PathText(relativePaths[position]);
+		default:
+			return {};
+	}
+}
+
 void ServerContentBrowserDialog::updateSelection() {
 	const auto selected = selectedSource();
 	if (openButton) {
-		openButton->Enable(selected.has_value());
+		openButton->Enable(selected != nullptr);
 	}
 	details->SetLabel(selected ? PathText(selected->declarationPath) : wxString("No matching source selected."));
 	details->SetToolTip(selected ? PathText(selected->declarationPath) : wxString());

@@ -442,11 +442,9 @@ namespace {
 					(buying ? shopEntry.buy : shopEntry.sell) = price;
 					shopEntry.editable = true;
 					ShopSource source;
-					const std::size_t base = location.begin + static_cast<std::size_t>((*item).position(0));
 					source.name = Capture(*item, 1, location.begin);
 					source.id = Capture(*item, 2, location.begin);
 					(buying ? source.buy : source.sell) = Capture(*item, 3, location.begin);
-					(void)base;
 					impl.original.shop.push_back(std::move(shopEntry));
 					impl.shop.push_back(std::move(source));
 				}
@@ -792,10 +790,14 @@ std::unique_ptr<NpcDefinitionDocument> NpcDefinitionDocument::Load(const ServerC
 	if (!bytes) {
 		return nullptr;
 	}
+	return LoadFromText(source, *bytes, error);
+}
+
+std::unique_ptr<NpcDefinitionDocument> NpcDefinitionDocument::LoadFromText(const ServerContentSource& source, std::string bytes, std::string& error) {
 	auto impl = std::make_unique<Impl>();
 	impl->sourceInfo = source;
 	impl->fingerprint = ResourceFingerprint::Read(source.declarationPath);
-	impl->bytes = *bytes;
+	impl->bytes = std::move(bytes);
 	if (source.format == ServerContentFormat::Xml) {
 		ParseXml(*impl, error);
 	} else {
@@ -946,7 +948,7 @@ bool NpcDefinitionDocument::save(const NpcDefinition& edited, std::string& error
 		return false;
 	}
 	implementation->sourceInfo.declarationFingerprint = ResourceFingerprint::Read(implementation->sourceInfo.declarationPath);
-	auto refreshed = Load(implementation->sourceInfo, error);
+	auto refreshed = LoadFromText(implementation->sourceInfo, std::move(updated), error);
 	if (!refreshed) {
 		return false;
 	}

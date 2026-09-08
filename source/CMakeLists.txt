@@ -112,6 +112,8 @@ ${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.h
 ${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.h
 ${CMAKE_CURRENT_LIST_DIR}/spell_definition.h
+${CMAKE_CURRENT_LIST_DIR}/spell_area_library.h
+${CMAKE_CURRENT_LIST_DIR}/spell_area_editor_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.h
 ${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.h
@@ -160,10 +162,15 @@ ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/session_id.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
 ${CMAKE_CURRENT_LIST_DIR}/server_content_index.h
+${CMAKE_CURRENT_LIST_DIR}/source_text_utils.h
+${CMAKE_CURRENT_LIST_DIR}/lua_source_scanner.h
 ${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/server_item_id_map.h
 ${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.h
 ${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.h
 ${CMAKE_CURRENT_LIST_DIR}/editor_autosave_state.h
+${CMAKE_CURRENT_LIST_DIR}/editor_source_monitor.h
+${CMAKE_CURRENT_LIST_DIR}/source_compare_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
@@ -306,6 +313,8 @@ ${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
 ${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
+${CMAKE_CURRENT_LIST_DIR}/spell_area_library.cpp
+${CMAKE_CURRENT_LIST_DIR}/spell_area_editor_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.cpp
@@ -350,8 +359,10 @@ ${CMAKE_CURRENT_LIST_DIR}/session_id.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/server_item_id_map.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.cpp
+${CMAKE_CURRENT_LIST_DIR}/source_compare_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.cpp
 ${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
@@ -420,6 +431,7 @@ set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/mount_id_resolver.cpp
 	${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
 	${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
+	${CMAKE_CURRENT_LIST_DIR}/server_item_id_map.cpp
 	${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/monster_definition.cpp
@@ -434,6 +446,8 @@ set_source_files_properties(
 	${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
 	${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
+	${CMAKE_CURRENT_LIST_DIR}/spell_area_library.cpp
+	${CMAKE_CURRENT_LIST_DIR}/spell_area_editor_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.cpp
 	${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.cpp

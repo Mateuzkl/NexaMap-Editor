@@ -119,6 +119,7 @@ void MonsterSpellPreview::SetUnavailableArea(const MonsterAttackDefinition* atta
 
 void MonsterSpellPreview::SetDirection(int newDirection) {
 	direction = newDirection;
+	cachedProjectileDirection = -1;
 	Refresh();
 }
 
@@ -127,6 +128,8 @@ void MonsterSpellPreview::SetVisualIds(int newEffectId, int newProjectileId) {
 	projectileId = std::max(0, newProjectileId);
 	animationTick = 0;
 	flightStep = 0;
+	cachedEffectId = -1;
+	cachedProjectileId = -1;
 	Refresh();
 }
 
@@ -193,7 +196,13 @@ void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 
 	GameSprite* effectSprite = g_gui.gfx.getEffectSprite(effectId);
 	if (effectSprite) {
-		wxBitmap bitmap = FitBitmap(SpriteBitmap(effectSprite, animationTick % std::max<int>(1, effectSprite->frames), 0), std::max(cell, cell * 2));
+		const int effectFrame = animationTick % std::max<int>(1, effectSprite->frames);
+		if (cachedEffectId != effectId || cachedEffectFrame != effectFrame) {
+			cachedEffectBitmap = SpriteBitmap(effectSprite, effectFrame, 0);
+			cachedEffectId = effectId;
+			cachedEffectFrame = effectFrame;
+		}
+		wxBitmap bitmap = FitBitmap(cachedEffectBitmap, std::max(cell, cell * 2));
 		if (bitmap.IsOk()) {
 			if (tiles.empty()) {
 				dc.DrawBitmap(bitmap, center.x + cell / 2 - bitmap.GetWidth() / 2, center.y + cell / 2 - bitmap.GetHeight() / 2, true);
@@ -209,7 +218,14 @@ void MonsterSpellPreview::OnPaint(wxPaintEvent&) {
 
 	GameSprite* projectileSprite = g_gui.gfx.getDistanceSprite(projectileId);
 	if (projectileSprite) {
-		wxBitmap bitmap = FitBitmap(SpriteBitmap(projectileSprite, animationTick % std::max<int>(1, projectileSprite->frames), direction), std::max(cell, cell * 2));
+		const int projectileFrame = animationTick % std::max<int>(1, projectileSprite->frames);
+		if (cachedProjectileId != projectileId || cachedProjectileFrame != projectileFrame || cachedProjectileDirection != direction) {
+			cachedProjectileBitmap = SpriteBitmap(projectileSprite, projectileFrame, direction);
+			cachedProjectileId = projectileId;
+			cachedProjectileFrame = projectileFrame;
+			cachedProjectileDirection = direction;
+		}
+		wxBitmap bitmap = FitBitmap(cachedProjectileBitmap, std::max(cell, cell * 2));
 		if (bitmap.IsOk()) {
 			MonsterAreaTile destination { 0, -std::max(2, current.area.range) };
 			if (!tiles.empty()) {

@@ -7,9 +7,11 @@
 #include "spell_editor_dialog.h"
 
 #include "monster_spell_preview.h"
+#include "spell_area_editor_dialog.h"
 #include "spell_area_resolver.h"
 #include "spell_visual_browser_dialog.h"
 #include "server_vocation_catalog.h"
+#include "source_compare_dialog.h"
 #include "theme.h"
 #include "workspace_session.h"
 
@@ -43,6 +45,10 @@ namespace {
 
 	std::size_t Index(SpellField field) {
 		return static_cast<std::size_t>(field);
+	}
+
+	bool IsVisualField(SpellField field) {
+		return field == SpellField::CombatType || field == SpellField::Effect || field == SpellField::Projectile || field == SpellField::Area || field == SpellField::Range || field == SpellField::NeedTarget || field == SpellField::NeedDirection;
 	}
 
 	std::string LowerAscii(std::string value) {
@@ -82,8 +88,7 @@ namespace {
 
 SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefinitionDocument> value) :
 	wxDialog(parent, wxID_ANY, "Spell Editor", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
-	document(std::move(value)), edited(document->definition()), areaResolver(std::make_unique<SpellAreaResolver>(g_workspace.getServer())) {
-	visualCatalog = ServerVisualCatalog::Build(g_workspace.getServer());
+	document(std::move(value)), edited(document->definition()), areaResolver(g_workspace.getSpellAreaResolver()), visualCatalog(g_workspace.getServerVisualCatalog()), vocationCatalog(g_workspace.getServerVocations()) {
 	SetBackgroundColour(Theme::Get(Theme::Role::Surface));
 	auto* root = newd wxBoxSizer(wxVERTICAL);
 	auto* header = newd wxPanel(this);
@@ -160,8 +165,8 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 		auto* browse = newd wxButton(visualFields->GetStaticBox(), wxID_ANY, buttonLabel);
 		browse->Enable(edited.capability(field).editable);
 		visualGrid->Add(browse, 0);
-		control->Bind(wxEVT_TEXT, &SpellEditorDialog::onFieldChanged, this);
-		control->Bind(wxEVT_COMBOBOX, &SpellEditorDialog::onFieldChanged, this);
+		control->Bind(wxEVT_TEXT, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
+		control->Bind(wxEVT_COMBOBOX, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
 		browse->Bind(wxEVT_BUTTON, [this, kind](wxCommandEvent&) { chooseVisual(kind); });
 	};
 	const auto addPlainText = [&](SpellField field, const std::string& value, const wxArrayString& choices) {
@@ -171,21 +176,30 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 		applyCapability(control, field);
 		visualGrid->Add(control, 1, wxEXPAND);
 		visualGrid->AddSpacer(1);
-		control->Bind(wxEVT_TEXT, &SpellEditorDialog::onFieldChanged, this);
-		control->Bind(wxEVT_COMBOBOX, &SpellEditorDialog::onFieldChanged, this);
+		control->Bind(wxEVT_TEXT, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
+		control->Bind(wxEVT_COMBOBOX, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
 	};
 	addPlainText(SpellField::CombatType, edited.combatType, { "COMBAT_PHYSICALDAMAGE", "COMBAT_ENERGYDAMAGE", "COMBAT_EARTHDAMAGE", "COMBAT_FIREDAMAGE", "COMBAT_LIFEDRAIN", "COMBAT_MANADRAIN", "COMBAT_HEALING", "COMBAT_ICEDAMAGE", "COMBAT_HOLYDAMAGE", "COMBAT_DEATHDAMAGE" });
 	wxArrayString effects;
-	for (const ServerVisualConstant& entry : visualCatalog.effects()) {
+	for (const ServerVisualConstant& entry : visualCatalog->effects()) {
 		effects.Add(Utf8(entry.name));
 	}
 	wxArrayString projectiles;
-	for (const ServerVisualConstant& entry : visualCatalog.projectiles()) {
+	for (const ServerVisualConstant& entry : visualCatalog->projectiles()) {
 		projectiles.Add(Utf8(entry.name));
 	}
 	addVisualText(SpellField::Effect, edited.effect, effects, "Browse...", ServerVisualKind::MagicEffect);
 	addVisualText(SpellField::Projectile, edited.projectile, projectiles, "Browse...", ServerVisualKind::DistanceEffect);
-	addPlainText(SpellField::Area, edited.areaExpression, { "AREA_CIRCLE2X2", "AREA_CIRCLE3X3", "AREA_SQUARE1X1", "AREA_SQUARE2X2", "AREA_BEAM5", "AREA_WAVE4" });
+	visualGrid->Add(newd wxStaticText(visualFields->GetStaticBox(), wxID_ANY, SpellFieldName(SpellField::Area)), 0, wxALIGN_CENTER_VERTICAL);
+	auto* areaControl = newd wxComboBox(visualFields->GetStaticBox(), wxID_ANY, Utf8(edited.areaExpression), wxDefaultPosition, wxDefaultSize, wxArrayString { "AREA_CIRCLE2X2", "AREA_CIRCLE3X3", "AREA_SQUARE1X1", "AREA_SQUARE2X2", "AREA_BEAM5", "AREA_WAVE4" }, wxCB_DROPDOWN);
+	controls[Index(SpellField::Area)] = areaControl;
+	applyCapability(areaControl, SpellField::Area);
+	visualGrid->Add(areaControl, 1, wxEXPAND);
+	auto* createAreaButton = newd wxButton(visualFields->GetStaticBox(), wxID_ANY, "Create Area...");
+	visualGrid->Add(createAreaButton, 0);
+	areaControl->Bind(wxEVT_TEXT, [this](wxCommandEvent& event) { onFieldChanged(SpellField::Area, event); });
+	areaControl->Bind(wxEVT_COMBOBOX, [this](wxCommandEvent& event) { onFieldChanged(SpellField::Area, event); });
+	createAreaButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { createReusableArea(); });
 	visualGrid->Add(newd wxStaticText(visualFields->GetStaticBox(), wxID_ANY, "Preview direction"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* directionChoice = newd wxChoice(visualFields->GetStaticBox(), wxID_ANY);
 	directionChoice->Append("North");
@@ -222,7 +236,10 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	visualSizer->Add(preview, 1, wxEXPAND);
 	visualPage->SetSizer(visualSizer);
 	notebook->AddPage(visualPage, "Visual");
-	directionChoice->Bind(wxEVT_CHOICE, [this, directionChoice](wxCommandEvent&) { direction = directionChoice->GetSelection(); refreshPreview(); });
+	directionChoice->Bind(wxEVT_CHOICE, [this, directionChoice](wxCommandEvent&) {
+		direction = directionChoice->GetSelection();
+		schedulePreview();
+	});
 	play->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { preview->SetPlaying(true); });
 	stop->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { preview->SetPlaying(false); });
 	speed->Bind(wxEVT_CHOICE, [this, speed](wxCommandEvent&) {
@@ -237,9 +254,8 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	allVocationsCheck->SetValue(edited.allVocations);
 	vocationSizer->Add(allVocationsCheck, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
 	vocationList = newd wxCheckListBox(vocationPage, wxID_ANY);
-	vocationCatalog = LoadServerVocations(g_workspace.getServer());
 	std::vector<bool> consumed(edited.vocations.size(), false);
-	for (const ServerVocation& vocation : vocationCatalog) {
+	for (const ServerVocation& vocation : *vocationCatalog) {
 		const std::string normalized = LowerAscii(vocation.name);
 		std::string raw = document->source().format == ServerContentFormat::Lua ? normalized : vocation.name;
 		bool checked = false;
@@ -331,7 +347,7 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 		if (row < 0) {
 			return;
 		}
-		if (static_cast<std::size_t>(row) < vocationCatalog.size()) {
+		if (static_cast<std::size_t>(row) < vocationCatalog->size()) {
 			vocationList->Check(row, false);
 		} else {
 			vocationList->Delete(row);
@@ -372,6 +388,10 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	saveState = newd wxStaticText(this, wxID_ANY, "No changes");
 	saveState->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
 	bottom->Add(saveState, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
+	compareButton = newd wxButton(this, wxID_ANY, "Compare External...");
+	compareButton->Hide();
+	compareButton->Bind(wxEVT_BUTTON, &SpellEditorDialog::onCompareExternal, this);
+	bottom->Add(compareButton, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
 	bottom->Add(newd wxButton(this, ID_SPELL_BACK, "< Back to Spells"), 0, wxRIGHT, FromDIP(6));
 	bottom->Add(newd wxButton(this, ID_SPELL_BROWSE, "Browse Spells..."), 0, wxRIGHT, FromDIP(12));
 	bottom->Add(newd wxButton(this, wxID_OK, "Save"), 0, wxRIGHT, FromDIP(8));
@@ -389,6 +409,12 @@ SpellEditorDialog::SpellEditorDialog(wxWindow* parent, std::unique_ptr<SpellDefi
 	Bind(wxEVT_CLOSE_WINDOW, &SpellEditorDialog::onClose, this);
 	autosaveTimer = std::make_unique<wxTimer>(this);
 	Bind(wxEVT_TIMER, &SpellEditorDialog::onAutosave, this, autosaveTimer->GetId());
+	previewTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &SpellEditorDialog::onPreviewTimer, this, previewTimer->GetId());
+	sourceWatchTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &SpellEditorDialog::onSourceWatch, this, sourceWatchTimer->GetId());
+	resetSourceMonitor();
+	sourceWatchTimer->Start(1000);
 	constructing = false;
 	refreshPreview();
 }
@@ -415,8 +441,8 @@ wxWindow* SpellEditorDialog::addText(wxWindow* parent, wxFlexGridSizer* grid, Sp
 	controls[Index(field)] = control;
 	applyCapability(control, field);
 	grid->Add(control, 1, wxEXPAND);
-	control->Bind(wxEVT_TEXT, &SpellEditorDialog::onFieldChanged, this);
-	control->Bind(wxEVT_COMBOBOX, &SpellEditorDialog::onFieldChanged, this);
+	control->Bind(wxEVT_TEXT, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
+	control->Bind(wxEVT_COMBOBOX, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
 	return control;
 }
 
@@ -426,8 +452,8 @@ wxWindow* SpellEditorDialog::addNumber(wxWindow* parent, wxFlexGridSizer* grid, 
 	controls[Index(field)] = control;
 	applyCapability(control, field);
 	grid->Add(control, 1, wxEXPAND);
-	control->Bind(wxEVT_SPINCTRL, &SpellEditorDialog::onFieldChanged, this);
-	control->Bind(wxEVT_TEXT, &SpellEditorDialog::onFieldChanged, this);
+	control->Bind(wxEVT_SPINCTRL, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
+	control->Bind(wxEVT_TEXT, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
 	return control;
 }
 
@@ -438,7 +464,7 @@ wxWindow* SpellEditorDialog::addBoolean(wxWindow* parent, wxFlexGridSizer* grid,
 	controls[Index(field)] = control;
 	applyCapability(control, field);
 	grid->Add(control, 1, wxEXPAND);
-	control->Bind(wxEVT_CHECKBOX, &SpellEditorDialog::onFieldChanged, this);
+	control->Bind(wxEVT_CHECKBOX, [this, field](wxCommandEvent& event) { onFieldChanged(field, event); });
 	return control;
 }
 
@@ -447,6 +473,141 @@ void SpellEditorDialog::applyCapability(wxWindow* control, SpellField field) {
 	control->Enable(capability.editable);
 	if (!capability.editable && !capability.limitation.empty()) {
 		control->SetToolTip(Utf8(capability.limitation));
+	}
+}
+
+void SpellEditorDialog::createReusableArea() {
+	SpellAreaEditorDialog dialog(this, g_workspace.getServer(), areaResolver);
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+	const SpellAreaLibrarySaveResult& created = dialog.saveResult();
+	wxString refreshError;
+	if (!g_workspace.refreshServerContentPaths({ created.path }, refreshError)) {
+		wxMessageBox("The area was saved, but workspace metadata could not be refreshed: " + refreshError, "Area saved", wxOK | wxICON_WARNING, this);
+	} else {
+		areaResolver = g_workspace.getSpellAreaResolver();
+	}
+	if (edited.capability(SpellField::Area).editable) {
+		if (auto* control = dynamic_cast<wxComboBox*>(controls[Index(SpellField::Area)])) {
+			control->ChangeValue(Utf8(created.name));
+			edited.areaExpression = created.name;
+			autosaveState.changed();
+			scheduleAutosave();
+			schedulePreview();
+		}
+	}
+	if (areaStatus) {
+		areaStatus->SetLabel("Created " + Utf8(created.name) + wxString::Format(" with %zu affected tiles in ", created.affectedTiles) + PathText(created.path));
+		areaStatus->Wrap(FromDIP(360));
+	}
+}
+
+void SpellEditorDialog::syncField(SpellField field) {
+	const auto text = [&](std::string& destination) {
+		if (auto* control = dynamic_cast<wxTextCtrl*>(controls[Index(field)])) {
+			destination = Narrow(control->GetValue());
+		} else if (auto* combo = dynamic_cast<wxComboBox*>(controls[Index(field)])) {
+			destination = Narrow(combo->GetValue());
+		}
+	};
+	const auto number = [&](int& destination) {
+		if (auto* control = dynamic_cast<wxSpinCtrl*>(controls[Index(field)])) {
+			destination = control->GetValue();
+		}
+	};
+	const auto boolean = [&](bool& destination) {
+		if (auto* control = dynamic_cast<wxCheckBox*>(controls[Index(field)])) {
+			destination = control->GetValue();
+		}
+	};
+	switch (field) {
+		case SpellField::Name:
+			text(edited.name);
+			break;
+		case SpellField::Words:
+			text(edited.words);
+			break;
+		case SpellField::Group:
+			text(edited.group);
+			break;
+		case SpellField::Script:
+			text(edited.script);
+			break;
+		case SpellField::CombatType:
+			text(edited.combatType);
+			break;
+		case SpellField::Effect:
+			text(edited.effect);
+			break;
+		case SpellField::Projectile:
+			text(edited.projectile);
+			break;
+		case SpellField::Area:
+			text(edited.areaExpression);
+			break;
+		case SpellField::SpellId:
+			number(edited.spellId);
+			break;
+		case SpellField::RuneId:
+			number(edited.runeId);
+			break;
+		case SpellField::Level:
+			number(edited.level);
+			break;
+		case SpellField::MagicLevel:
+			number(edited.magicLevel);
+			break;
+		case SpellField::Mana:
+			number(edited.mana);
+			break;
+		case SpellField::ManaPercent:
+			number(edited.manaPercent);
+			break;
+		case SpellField::Soul:
+			number(edited.soul);
+			break;
+		case SpellField::Cooldown:
+			number(edited.cooldown);
+			break;
+		case SpellField::GroupCooldown:
+			number(edited.groupCooldown);
+			break;
+		case SpellField::Range:
+			number(edited.range);
+			break;
+		case SpellField::Charges:
+			number(edited.charges);
+			break;
+		case SpellField::Premium:
+			boolean(edited.premium);
+			break;
+		case SpellField::Enabled:
+			boolean(edited.enabled);
+			break;
+		case SpellField::Aggressive:
+			boolean(edited.aggressive);
+			break;
+		case SpellField::NeedTarget:
+			boolean(edited.needTarget);
+			break;
+		case SpellField::NeedDirection:
+			boolean(edited.needDirection);
+			break;
+		case SpellField::BlockWalls:
+			boolean(edited.blockWalls);
+			break;
+		case SpellField::AllowFarUse:
+			boolean(edited.allowFarUse);
+			break;
+		case SpellField::NeedLearn:
+			boolean(edited.needLearn);
+			break;
+		case SpellField::SelfTarget:
+			boolean(edited.selfTarget);
+			break;
+		case SpellField::Count:
+			break;
 	}
 }
 
@@ -522,9 +683,10 @@ void SpellEditorDialog::refreshVocationControls() {
 }
 
 void SpellEditorDialog::chooseVisual(ServerVisualKind kind) {
-	readControls();
+	const SpellField field = kind == ServerVisualKind::MagicEffect ? SpellField::Effect : SpellField::Projectile;
+	syncField(field);
 	const std::string current = kind == ServerVisualKind::MagicEffect ? edited.effect : edited.projectile;
-	SpellVisualBrowserDialog dialog(this, kind, visualCatalog, current);
+	SpellVisualBrowserDialog dialog(this, kind, *visualCatalog, current);
 	if (dialog.ShowModal() != wxID_OK) {
 		return;
 	}
@@ -532,19 +694,18 @@ void SpellEditorDialog::chooseVisual(ServerVisualKind kind) {
 	if (!selected) {
 		return;
 	}
-	const SpellField field = kind == ServerVisualKind::MagicEffect ? SpellField::Effect : SpellField::Projectile;
 	if (auto* control = dynamic_cast<wxComboBox*>(controls[Index(field)])) {
-		control->SetValue(Utf8(*selected));
+		control->ChangeValue(Utf8(*selected));
 	}
+	syncField(field);
 	scheduleAutosave();
-	refreshPreview();
+	schedulePreview();
 }
 
 void SpellEditorDialog::refreshPreview() {
 	if (!preview) {
 		return;
 	}
-	readControls();
 	edited.preview.name = edited.name;
 	edited.preview.type = edited.combatType;
 	edited.preview.effect = edited.effect;
@@ -552,8 +713,8 @@ void SpellEditorDialog::refreshPreview() {
 	edited.preview.area.range = edited.range;
 	edited.preview.area.target = edited.needTarget;
 	preview->SetDirection(direction);
-	const auto effectId = visualCatalog.resolve(ServerVisualKind::MagicEffect, edited.effect);
-	const auto projectileId = visualCatalog.resolve(ServerVisualKind::DistanceEffect, edited.projectile);
+	const auto effectId = visualCatalog->resolve(ServerVisualKind::MagicEffect, edited.effect);
+	const auto projectileId = visualCatalog->resolve(ServerVisualKind::DistanceEffect, edited.projectile);
 	preview->SetVisualIds(static_cast<int>(effectId.value_or(0)), static_cast<int>(projectileId.value_or(0)));
 	SpellAreaResolution resolution;
 	if (edited.areaExpression == document->definition().areaExpression) {
@@ -574,11 +735,21 @@ void SpellEditorDialog::refreshPreview() {
 	}
 }
 
-void SpellEditorDialog::onFieldChanged(wxCommandEvent& event) {
+void SpellEditorDialog::onFieldChanged(SpellField field, wxCommandEvent& event) {
 	event.Skip();
 	if (!constructing) {
+		syncField(field);
 		scheduleAutosave();
-		refreshPreview();
+		if (IsVisualField(field)) {
+			schedulePreview();
+		}
+	}
+}
+
+void SpellEditorDialog::schedulePreview() {
+	pendingChanges.changed(EditorChangeImpact::Preview);
+	if (previewTimer) {
+		previewTimer->StartOnce(80);
 	}
 }
 
@@ -588,6 +759,13 @@ void SpellEditorDialog::onSave(wxCommandEvent&) {
 
 bool SpellEditorDialog::saveDocument(bool showErrors) {
 	readControls();
+	if (!externalChanges.empty()) {
+		if (showErrors) {
+			wxCommandEvent event;
+			onCompareExternal(event);
+		}
+		return false;
+	}
 	std::string error;
 	if (!document->save(edited, error)) {
 		autosaveState.failed(error);
@@ -604,16 +782,16 @@ bool SpellEditorDialog::saveDocument(bool showErrors) {
 	}
 	autosaveState.saved();
 	saved = true;
+	resetSourceMonitor();
 	updateSaveState(showErrors ? "Saved" : "Saved automatically");
 	refreshPreview();
 	return true;
 }
 
 void SpellEditorDialog::scheduleAutosave() {
-	if (constructing || !document) {
+	if (constructing || !document || !externalChanges.empty()) {
 		return;
 	}
-	readControls();
 	if (!document->hasChanges(edited)) {
 		if (!autosaveState.hasError()) {
 			updateSaveState(saved ? "Saved" : "No changes");
@@ -640,6 +818,48 @@ void SpellEditorDialog::updateSaveState(const wxString& label, bool error) {
 void SpellEditorDialog::onAutosave(wxTimerEvent&) {
 	if (autosaveState.ready()) {
 		saveDocument(false);
+	}
+}
+
+void SpellEditorDialog::onPreviewTimer(wxTimerEvent&) {
+	if (pendingChanges.takePreview()) {
+		refreshPreview();
+	}
+}
+
+void SpellEditorDialog::resetSourceMonitor() {
+	std::vector<EditorSourceSnapshot> sources { { document->source().declarationPath, document->declarationText() } };
+	if (document->hasSeparateImplementation()) {
+		sources.push_back({ document->implementationPath(), document->implementationText() });
+	}
+	sourceMonitor.reset(std::move(sources));
+	externalChanges.clear();
+	if (compareButton) {
+		compareButton->Hide();
+		Layout();
+	}
+}
+
+void SpellEditorDialog::onSourceWatch(wxTimerEvent&) {
+	if (!externalChanges.empty()) {
+		return;
+	}
+	externalChanges = sourceMonitor.poll();
+	if (externalChanges.empty()) {
+		return;
+	}
+	if (autosaveTimer) {
+		autosaveTimer->Stop();
+	}
+	updateSaveState("External source change detected - autosave paused", true);
+	compareButton->Show();
+	Layout();
+}
+
+void SpellEditorDialog::onCompareExternal(wxCommandEvent&) {
+	if (ShowSourceConflictDialog(this, externalChanges) == SourceConflictChoice::Reopen) {
+		browseRequested = true;
+		EndModal(wxID_CANCEL);
 	}
 }
 

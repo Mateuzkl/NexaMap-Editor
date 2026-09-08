@@ -283,6 +283,7 @@ public:
 
 private:
 	struct Impl;
+	static std::unique_ptr<MonsterDefinitionDocument> LoadFromText(const ServerContentSource& source, std::vector<std::string> files, std::string& error);
 	explicit MonsterDefinitionDocument(std::unique_ptr<Impl> implementation);
 
 	std::unique_ptr<Impl> implementation;

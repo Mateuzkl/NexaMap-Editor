@@ -94,12 +94,39 @@ int main() {
 	check(spellDialog.find("SpellVisualBrowserDialog") != std::string::npos && spellDialog.find("Browse...") != std::string::npos, "Spell Editor exposes visual effect and projectile browsers");
 	check(spellDialog.find("North-East") != std::string::npos && spellDialog.find("South-West") != std::string::npos, "Spell visual controls expose all eight projectile directions");
 	check(spellDialog.find("Animation speed") != std::string::npos && spellDialog.find("SetPlaying(true)") != std::string::npos, "Spell visual preview has play, stop and speed controls");
+	check(spellDialog.find("g_workspace.getSpellAreaResolver()") != std::string::npos && spellDialog.find("g_workspace.getServerVisualCatalog()") != std::string::npos && spellDialog.find("g_workspace.getServerVocations()") != std::string::npos, "Spell editors reuse workspace-scoped metadata caches");
+	check(spellDialog.find("StartOnce(80)") != std::string::npos && spellDialog.find("IsVisualField(field)") != std::string::npos, "Spell visual refreshes are field-aware and coalesced");
+	check(spellDialog.find("Compare External...") != std::string::npos && spellDialog.find("onSourceWatch") != std::string::npos, "Spell Editor exposes external-change monitoring and comparison");
+	check(monsterDialog.find("Compare External...") != std::string::npos && npcDialog.find("Compare External...") != std::string::npos, "Monster and NPC editors expose external-change comparison");
+	std::ifstream areaDialogFile(sourceRoot / "source" / "spell_area_editor_dialog.cpp", std::ios::binary);
+	const std::string areaDialog((std::istreambuf_iterator<char>(areaDialogFile)), std::istreambuf_iterator<char>());
+	check(areaDialog.find("wxPanel(parent, wxID_ANY)") != std::string::npos && areaDialog.find("SetInitialSize(FromDIP") != std::string::npos, "spell-area grid applies DPI sizing only after wxPanel construction");
+
+	std::ifstream workspaceSessionFile(sourceRoot / "source" / "workspace_session.cpp", std::ios::binary);
+	const std::string workspaceSession((std::istreambuf_iterator<char>(workspaceSessionFile)), std::istreambuf_iterator<char>());
+	const std::size_t configureBegin = workspaceSession.find("bool WorkspaceSession::configureServer");
+	const std::size_t selectMapBegin = workspaceSession.find("bool WorkspaceSession::selectDetectedMap", configureBegin);
+	check(configureBegin != std::string::npos && selectMapBegin != std::string::npos && workspaceSession.substr(configureBegin, selectMapBegin - configureBegin).find("ServerContentIndex::Build") == std::string::npos, "fast workspace activation defers the heavy content index");
+	check(workspaceSession.find("ServerContentIndex::RefreshPaths") != std::string::npos, "workspace session exposes targeted content refresh");
+
+	std::ifstream browserFile(sourceRoot / "source" / "server_content_browser_dialog.cpp", std::ios::binary);
+	const std::string browser((std::istreambuf_iterator<char>(browserFile)), std::istreambuf_iterator<char>());
+	check(browser.find("wxLC_VIRTUAL") != std::string::npos && browser.find("searchKeys.push_back") != std::string::npos, "content browser virtualizes rows and precomputes normalized search keys");
+	check(browser.find("StartOnce(100)") != std::string::npos, "content browser debounces live filtering");
+
+	std::ifstream guiFile(sourceRoot / "source" / "gui.cpp", std::ios::binary);
+	const std::string gui((std::istreambuf_iterator<char>(guiFile)), std::istreambuf_iterator<char>());
+	const std::size_t monsterEditorBegin = gui.find("void GUI::ShowMonsterEditor(const std::string&");
+	const std::size_t hotkeyBegin = gui.find("void GUI::SetHotkey", monsterEditorBegin);
+	check(monsterEditorBegin != std::string::npos && hotkeyBegin != std::string::npos && gui.substr(monsterEditorBegin, hotkeyBegin - monsterEditorBegin).find("rescanServer") == std::string::npos, "Monster, NPC and Spell saves avoid global server-content rescans");
 
 	std::ifstream graphicsFile(sourceRoot / "source" / "graphics.cpp", std::ios::binary);
 	const std::string graphics((std::istreambuf_iterator<char>(graphicsFile)), std::istreambuf_iterator<char>());
 	check(graphics.find("getEffectSprite") != std::string::npos && graphics.find("getDistanceSprite") != std::string::npos, "GraphicManager exposes active-session effect and projectile sprites");
 	check(graphics.find("creature_count + effect_count + distance_count") != std::string::npos, "classic DAT metadata loads items, outfits, effects and projectiles");
 	check(graphics.find("swap(effect_count, other.effect_count)") != std::string::npos && graphics.find("swap(distance_count, other.distance_count)") != std::string::npos, "effect and projectile ranges swap with each EditorResourceSession");
+	check(graphics.find("deferredEffectAppearances") != std::string::npos && graphics.find("materializeAppearanceVisual") != std::string::npos, "protobuf effect and projectile sprites are materialized lazily on first preview");
+	check(graphics.find("g_workspace") == std::string::npos, "low-level graphics preview does not depend on global workspace state");
 
 	std::ifstream assetsFile(sourceRoot / "source" / "client_assets.cpp", std::ios::binary);
 	const std::string assets((std::istreambuf_iterator<char>(assetsFile)), std::istreambuf_iterator<char>());

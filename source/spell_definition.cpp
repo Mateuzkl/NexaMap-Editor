@@ -585,6 +585,7 @@ struct SpellDefinitionDocument::Impl {
 	std::string xmlSpellTag;
 	std::size_t xmlSpellEnd = 0;
 	bool xmlSpellSelfClosing = false;
+	std::shared_ptr<const SpellAreaResolver> areaResolver;
 
 	void addLocation(SpellField field, SourceLocation location, const std::string& value) {
 		auto& capability = original.capabilities[Index(field)];
@@ -1013,7 +1014,7 @@ struct SpellDefinitionDocument::Impl {
 		return value;
 	}
 
-	void finishPreview(const ServerWorkspace& workspace) {
+	void finishPreview(const SpellAreaResolver& resolver) {
 		original.preview.name = original.name;
 		original.preview.type = original.combatType;
 		original.preview.effect = original.effect;
@@ -1023,7 +1024,7 @@ struct SpellDefinitionDocument::Impl {
 			original.areaResolutionState = SpellAreaResolutionState::Resolved;
 			original.areaStatus = "Literal combat area resolved to " + std::to_string(original.customAreaTiles.size()) + " affected tiles.";
 		} else {
-			const SpellAreaResolution resolution = SpellAreaResolver(workspace).resolve(original.areaExpression);
+			const SpellAreaResolution resolution = resolver.resolve(original.areaExpression);
 			original.areaResolutionState = resolution.state;
 			original.customAreaTiles = resolution.tiles;
 			original.areaStatus = resolution.description;
@@ -1047,7 +1048,7 @@ const SpellFieldCapability& SpellDefinition::capability(SpellField field) const 
 }
 
 std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(const ServerContentSource& source, std::string& error) {
-	return Load(source, error, nullptr);
+	return Load(source, error, nullptr, nullptr);
 }
 
 std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(
@@ -1055,18 +1056,45 @@ std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(
 	std::string& error,
 	const ServerWorkspace* selectedWorkspace
 ) {
+	return Load(source, error, selectedWorkspace, nullptr);
+}
+
+std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(
+	const ServerContentSource& source,
+	std::string& error,
+	const ServerWorkspace* selectedWorkspace,
+	std::shared_ptr<const SpellAreaResolver> areaResolver
+) {
 	error.clear();
 	if (source.kind != ServerContentKind::Spell || (source.format != ServerContentFormat::Xml && source.format != ServerContentFormat::Lua)) {
 		error = "This source is not a supported global spell definition.";
 		return nullptr;
 	}
-	auto implementation = std::make_unique<Impl>();
-	implementation->sourceInfo = source;
 	const auto declaration = ReadFile(source.declarationPath, error);
 	if (!declaration) {
 		return nullptr;
 	}
-	implementation->files.push_back({ source.declarationPath, ResourceFingerprint::Read(source.declarationPath), *declaration });
+	std::vector<std::string> files { *declaration };
+	if (source.relatedScriptPath && !FileSaveTransaction::PathsReferToSameFile(*source.relatedScriptPath, source.declarationPath)) {
+		const auto related = ReadFile(*source.relatedScriptPath, error);
+		if (!related) {
+			return nullptr;
+		}
+		files.push_back(*related);
+	}
+	return LoadFromText(source, std::move(files), error, selectedWorkspace, std::move(areaResolver));
+}
+
+std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::LoadFromText(
+	const ServerContentSource& source,
+	std::vector<std::string> files,
+	std::string& error,
+	const ServerWorkspace* selectedWorkspace,
+	std::shared_ptr<const SpellAreaResolver> areaResolver
+) {
+	auto implementation = std::make_unique<Impl>();
+	implementation->sourceInfo = source;
+	implementation->files.push_back({ source.declarationPath, ResourceFingerprint::Read(source.declarationPath), std::move(files.front()) });
 	if (source.format == ServerContentFormat::Lua) {
 		if (!implementation->parseLuaDeclaration(0, error)) {
 			return nullptr;
@@ -1074,15 +1102,10 @@ std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(
 	} else if (!implementation->parseXmlDeclaration(0, error)) {
 		return nullptr;
 	}
-
 	implementation->implementationFile = 0;
-	if (source.relatedScriptPath && !FileSaveTransaction::PathsReferToSameFile(*source.relatedScriptPath, source.declarationPath)) {
-		const auto related = ReadFile(*source.relatedScriptPath, error);
-		if (!related) {
-			return nullptr;
-		}
+	if (files.size() > 1 && source.relatedScriptPath) {
 		implementation->implementationFile = implementation->files.size();
-		implementation->files.push_back({ *source.relatedScriptPath, ResourceFingerprint::Read(*source.relatedScriptPath), *related });
+		implementation->files.push_back({ *source.relatedScriptPath, ResourceFingerprint::Read(*source.relatedScriptPath), std::move(files[1]) });
 	}
 	implementation->parseCombat(implementation->implementationFile);
 	ServerWorkspace inferred;
@@ -1103,7 +1126,11 @@ std::unique_ptr<SpellDefinitionDocument> SpellDefinitionDocument::Load(
 		}
 		selectedWorkspace = &inferred;
 	}
-	implementation->finishPreview(*selectedWorkspace);
+	if (!areaResolver) {
+		areaResolver = std::make_shared<const SpellAreaResolver>(*selectedWorkspace);
+	}
+	implementation->areaResolver = std::move(areaResolver);
+	implementation->finishPreview(*implementation->areaResolver);
 	return std::unique_ptr<SpellDefinitionDocument>(new SpellDefinitionDocument(std::move(implementation)));
 }
 
@@ -1280,7 +1307,7 @@ bool SpellDefinitionDocument::save(const SpellDefinition& edited, std::string& e
 	if (implementation->sourceInfo.relatedScriptPath) {
 		implementation->sourceInfo.relatedScriptFingerprint = ResourceFingerprint::Read(*implementation->sourceInfo.relatedScriptPath);
 	}
-	auto refreshed = Load(implementation->sourceInfo, error);
+	auto refreshed = LoadFromText(implementation->sourceInfo, std::move(updated), error, nullptr, implementation->areaResolver);
 	if (!refreshed) {
 		return false;
 	}

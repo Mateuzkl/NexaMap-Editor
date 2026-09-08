@@ -49,7 +49,7 @@ bool ClientAssets::validatePath(const wxString& candidate, ClientAssetsManifest&
 	return true;
 }
 
-bool ClientAssets::load(wxString& error, wxArrayString& warnings) {
+bool ClientAssets::load(wxString& error, wxArrayString& warnings, const std::filesystem::path& appearancesOverride) {
 	unload();
 
 	ClientAssetsManifest manifest;
@@ -61,9 +61,10 @@ bool ClientAssets::load(wxString& error, wxArrayString& warnings) {
 		return false;
 	}
 
-	std::ifstream appearanceStream(manifest.appearancesFile, std::ios::in | std::ios::binary);
+	const std::filesystem::path appearancesFile = appearancesOverride.empty() ? manifest.appearancesFile : appearancesOverride;
+	std::ifstream appearanceStream(appearancesFile, std::ios::in | std::ios::binary);
 	if (!appearanceStream.is_open()) {
-		error = "Could not open appearances file: " + wxstr(manifest.appearancesFile.string());
+		error = "Could not open appearances file: " + wxstr(appearancesFile.string());
 		wxLogError(error);
 		g_spriteAppearances.unload();
 		return false;
@@ -72,7 +73,7 @@ bool ClientAssets::load(wxString& error, wxArrayString& warnings) {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 	rme::protobuf::appearances::Appearances appearances;
 	if (!appearances.ParseFromIstream(&appearanceStream)) {
-		error = "The appearances file is corrupt or incompatible: " + wxstr(manifest.appearancesFile.string());
+		error = "The appearances file is corrupt or incompatible: " + wxstr(appearancesFile.string());
 		wxLogError(error);
 		g_spriteAppearances.unload();
 		return false;

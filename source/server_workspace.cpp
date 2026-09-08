@@ -4,6 +4,8 @@
 
 #include "server_workspace.h"
 
+#include "server_item_id_map.h"
+
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -210,6 +212,12 @@ namespace {
 		const bool hasNpcs = HasDirectory(root, { "data/npc", "data/npcs", "npc", "npcs" });
 		const bool mapInDataWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "data/world");
 		const bool mapInRootWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "world");
+		const KnownItemFiles itemFiles = FindKnownItems(root);
+		const bool hasCustomPairTable = hasItemsOtb && (hasClassicItemsXml || hasAlternateItemsXml) && hasAppearances
+			&& ProbeServerItemIdMap(itemFiles.otb).valid;
+		if (hasCustomPairTable) {
+			return { ServerType::CustomTfsAppearances, 240 };
+		}
 
 		int tfsScore = 0;
 		if (hasClassicItemsOtb) {
@@ -555,6 +563,10 @@ bool ServerWorkspace::usesCanaryCrystalLoader() const {
 	return UsesCanaryCrystalLoader(serverType);
 }
 
+bool ServerWorkspace::usesAppearanceAssetsLoader() const {
+	return UsesAppearanceAssetsLoader(serverType);
+}
+
 bool ServerWorkspace::containsMap(const std::filesystem::path& path) const {
 	return findMap(path) != nullptr;
 }
@@ -778,9 +790,9 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		workspace.serverType = DetectProfileEvidence(root).type;
 	}
 	workspace.serverProfile = ServerTypeName(workspace.serverType);
-	workspace.itemIdMode = workspace.usesCanaryCrystalLoader()
-		? ItemIdMode::ClientId
-		: DetectModeFromMapNames(workspace.maps);
+	workspace.itemIdMode = workspace.serverType == ServerType::CustomTfsAppearances
+		? ItemIdMode::ServerId
+		: (workspace.usesCanaryCrystalLoader() ? ItemIdMode::ClientId : DetectModeFromMapNames(workspace.maps));
 	if (!workspace.hasRequiredResources()) {
 		result.error = "Server folder selected, but neither items.otb nor appearances.dat was found.";
 	} else if (!workspace.itemsXmlFingerprint.exists) {
@@ -805,6 +817,8 @@ const char* ServerTypeName(ServerType type) {
 	switch (type) {
 		case ServerType::Tfs:
 			return "TFS";
+		case ServerType::CustomTfsAppearances:
+			return "TFS Custom (Appearances)";
 		case ServerType::Canary:
 			return "Canary";
 		case ServerType::Crystal:
@@ -818,6 +832,10 @@ const char* ServerTypeName(ServerType type) {
 
 bool UsesCanaryCrystalLoader(ServerType type) {
 	return type == ServerType::Canary || type == ServerType::Crystal || type == ServerType::CanaryCrystal;
+}
+
+bool UsesAppearanceAssetsLoader(ServerType type) {
+	return type == ServerType::CustomTfsAppearances || UsesCanaryCrystalLoader(type);
 }
 
 ItemIdMode ResolveEffectiveItemIdMode(ItemIdModePreference preference, ItemIdMode clientAssetMode, ItemIdMode serverEvidence) {

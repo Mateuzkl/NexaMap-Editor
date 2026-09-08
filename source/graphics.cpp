@@ -27,7 +27,6 @@
 #include "otml.h"
 #include "sprite_appearances.h"
 #include "sprite_preloader.h"
-#include "workspace_session.h"
 
 #include <appearances.pb.h>
 #include <iterator>
@@ -237,6 +236,9 @@ void GraphicManager::swap(GraphicManager& other) noexcept {
 	swap(creature_count, other.creature_count);
 	swap(effect_count, other.effect_count);
 	swap(distance_count, other.distance_count);
+	deferredEffectAppearances.swap(other.deferredEffectAppearances);
+	deferredMissileAppearances.swap(other.deferredMissileAppearances);
+	swap(materializedAppearanceVisuals, other.materializedAppearanceVisuals);
 	swap(otfi_found, other.otfi_found);
 	swap(is_extended, other.is_extended);
 	swap(has_transparency, other.has_transparency);
@@ -554,6 +556,9 @@ void GraphicManager::clear(bool clearPreloader) {
 	creature_count = 0;
 	effect_count = 0;
 	distance_count = 0;
+	deferredEffectAppearances.clear();
+	deferredMissileAppearances.clear();
+	materializedAppearanceVisuals = 0;
 	loaded_textures = 0;
 	lastclean = time(nullptr);
 	spritefile = "";
@@ -613,7 +618,11 @@ GameSprite* GraphicManager::getEffectSprite(int id) {
 	if (id <= 0 || id > effect_count) {
 		return nullptr;
 	}
-	const auto iterator = sprite_space.find(static_cast<int>(item_count) + creature_count + id);
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + id;
+	if (!sprite_space.contains(spriteSpaceId) && !materializeAppearanceVisual(static_cast<uint16_t>(id), false)) {
+		return nullptr;
+	}
+	const auto iterator = sprite_space.find(spriteSpaceId);
 	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
 }
 
@@ -621,7 +630,11 @@ GameSprite* GraphicManager::getDistanceSprite(int id) {
 	if (id <= 0 || id > distance_count) {
 		return nullptr;
 	}
-	const auto iterator = sprite_space.find(static_cast<int>(item_count) + creature_count + effect_count + id);
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + effect_count + id;
+	if (!sprite_space.contains(spriteSpaceId) && !materializeAppearanceVisual(static_cast<uint16_t>(id), true)) {
+		return nullptr;
+	}
+	const auto iterator = sprite_space.find(spriteSpaceId);
 	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
 }
 
@@ -647,6 +660,14 @@ uint16_t GraphicManager::getEffectSpriteMaxID() const {
 
 uint16_t GraphicManager::getDistanceSpriteMaxID() const {
 	return distance_count;
+}
+
+std::size_t GraphicManager::getDeferredAppearanceVisualCount() const {
+	return deferredEffectAppearances.size() + deferredMissileAppearances.size();
+}
+
+std::size_t GraphicManager::getMaterializedAppearanceVisualCount() const {
+	return materializedAppearanceVisuals;
 }
 
 #define loadPNGFile(name) _wxGetBitmapFromMemory(name, sizeof(name))
@@ -1167,14 +1188,13 @@ bool GraphicManager::loadAppearanceEffect(
 		warnings.push_back(wxString::Format("Ignored effect appearance with unsupported ID %u.", appearance.id()));
 		return true;
 	}
-	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + static_cast<int>(appearance.id());
-	if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings)) {
-		return false;
-	}
-	effect_count = std::max<uint16_t>(effect_count, static_cast<uint16_t>(appearance.id()));
+	const uint16_t id = static_cast<uint16_t>(appearance.id());
+	deferredEffectAppearances.insert_or_assign(id, std::make_shared<const rme::protobuf::appearances::Appearance>(appearance));
+	effect_count = std::max<uint16_t>(effect_count, id);
 	unloaded = false;
 	has_transparency = true;
 	has_frame_durations = true;
+	error.clear();
 	return true;
 }
 
@@ -1187,14 +1207,34 @@ bool GraphicManager::loadAppearanceMissile(
 		warnings.push_back(wxString::Format("Ignored missile appearance with unsupported ID %u.", appearance.id()));
 		return true;
 	}
-	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + effect_count + static_cast<int>(appearance.id());
-	if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings)) {
-		return false;
-	}
-	distance_count = std::max<uint16_t>(distance_count, static_cast<uint16_t>(appearance.id()));
+	const uint16_t id = static_cast<uint16_t>(appearance.id());
+	deferredMissileAppearances.insert_or_assign(id, std::make_shared<const rme::protobuf::appearances::Appearance>(appearance));
+	distance_count = std::max<uint16_t>(distance_count, id);
 	unloaded = false;
 	has_transparency = true;
 	has_frame_durations = true;
+	error.clear();
+	return true;
+}
+
+bool GraphicManager::materializeAppearanceVisual(uint16_t id, bool distanceEffect) {
+	auto& deferred = distanceEffect ? deferredMissileAppearances : deferredEffectAppearances;
+	const auto found = deferred.find(id);
+	if (found == deferred.end()) {
+		return false;
+	}
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + (distanceEffect ? effect_count : 0) + id;
+	wxString error;
+	wxArrayString warnings;
+	if (!loadAppearanceSprite(*found->second, spriteSpaceId, error, warnings)) {
+		wxLogError("Could not materialize appearance visual %u: %s", static_cast<unsigned int>(id), error);
+		return false;
+	}
+	for (const wxString& warning : warnings) {
+		wxLogWarning("Appearance visual %u: %s", static_cast<unsigned int>(id), warning);
+	}
+	deferred.erase(found);
+	++materializedAppearanceVisuals;
 	return true;
 }
 
@@ -1629,9 +1669,8 @@ void GameSprite::unloadDC() {
 	dc[SPRITE_SIZE_32x32] = nullptr;
 }
 
-bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ, int patternX, int patternY) {
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ, int patternX, int patternY, int mountClientId) {
 	if (outfit && outfit->lookMount != 0) {
-		const int mountClientId = g_workspace.resolveMountClientId(outfit->lookMount);
 		GameSprite* mountSpr = mountClientId > 0 ? g_gui.gfx.getCreatureSprite(mountClientId) : nullptr;
 		if (mountSpr && mountSpr != this) {
 			Outfit mountOutfit;

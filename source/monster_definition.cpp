@@ -1187,25 +1187,32 @@ std::unique_ptr<MonsterDefinitionDocument> MonsterDefinitionDocument::Load(const
 		return nullptr;
 	}
 
-	auto implementation = std::make_unique<Impl>();
-	implementation->sourceInfo = source;
 	const auto declaration = ReadFile(source.declarationPath, error);
 	if (!declaration) {
 		return nullptr;
 	}
-	implementation->files.push_back({ source.declarationPath, ResourceFingerprint::Read(source.declarationPath), *declaration });
+	std::vector<std::string> files { *declaration };
+	if (source.format == ServerContentFormat::Xml && source.registrationPath && !FileSaveTransaction::PathsReferToSameFile(*source.registrationPath, source.declarationPath)) {
+		const auto registration = ReadFile(*source.registrationPath, error);
+		if (!registration) {
+			return nullptr;
+		}
+		files.push_back(*registration);
+	}
+	return LoadFromText(source, std::move(files), error);
+}
 
+std::unique_ptr<MonsterDefinitionDocument> MonsterDefinitionDocument::LoadFromText(const ServerContentSource& source, std::vector<std::string> files, std::string& error) {
+	auto implementation = std::make_unique<Impl>();
+	implementation->sourceInfo = source;
+	implementation->files.push_back({ source.declarationPath, ResourceFingerprint::Read(source.declarationPath), std::move(files.front()) });
 	if (source.format == ServerContentFormat::Xml) {
 		implementation->parseXmlFile(0, true, error);
 		if (!error.empty()) {
 			return nullptr;
 		}
-		if (source.registrationPath && !FileSaveTransaction::PathsReferToSameFile(*source.registrationPath, source.declarationPath)) {
-			const auto registration = ReadFile(*source.registrationPath, error);
-			if (!registration) {
-				return nullptr;
-			}
-			implementation->files.push_back({ *source.registrationPath, ResourceFingerprint::Read(*source.registrationPath), *registration });
+		if (files.size() > 1 && source.registrationPath) {
+			implementation->files.push_back({ *source.registrationPath, ResourceFingerprint::Read(*source.registrationPath), std::move(files[1]) });
 			implementation->parseXmlFile(1, false, error);
 			if (!error.empty()) {
 				return nullptr;
@@ -1352,7 +1359,7 @@ bool MonsterDefinitionDocument::save(const MonsterDefinition& edited, std::strin
 	if (implementation->sourceInfo.registrationPath) {
 		implementation->sourceInfo.registrationFingerprint = ResourceFingerprint::Read(*implementation->sourceInfo.registrationPath);
 	}
-	auto refreshed = Load(implementation->sourceInfo, error);
+	auto refreshed = LoadFromText(implementation->sourceInfo, std::move(updated), error);
 	if (!refreshed) {
 		return false;
 	}

@@ -139,6 +139,34 @@ int main() {
 
 	{
 		TemporaryDirectory server;
+		std::string pairs;
+		const auto appendPair = [&](uint32_t serverId, uint32_t clientId) {
+			for (int byte = 0; byte < 4; ++byte) {
+				pairs.push_back(static_cast<char>((serverId >> (byte * 8)) & 0xff));
+			}
+			for (int byte = 0; byte < 4; ++byte) {
+				pairs.push_back(static_cast<char>((clientId >> (byte * 8)) & 0xff));
+			}
+		};
+		appendPair(100, 500);
+		appendPair(101, 501);
+		appendPair(102, 502);
+		appendPair(103, 503);
+		server.write("data/items/items.otb", pairs);
+		server.write("data/items/items.xml", "<items/>");
+		server.write("data/items/appearances.dat", "protobuf fixture");
+		server.write("data/world/world.otbm", "map");
+
+		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
+		check(detection.workspace.serverType == ServerType::CustomTfsAppearances, "plain server/client ID table plus appearances.dat detects custom TFS");
+		check(detection.workspace.usesAppearanceAssetsLoader(), "custom TFS selects the appearances asset loader");
+		check(!detection.workspace.usesCanaryCrystalLoader(), "custom TFS keeps its own engine/provider family");
+		check(detection.workspace.itemIdMode == ItemIdMode::ServerId, "custom TFS maps remain keyed by server ID");
+		check(std::string(ServerTypeName(detection.workspace.serverType)) == "TFS Custom (Appearances)", "custom TFS has a clear profile label");
+	}
+
+	{
+		TemporaryDirectory server;
 		server.write("data/items/items.otb");
 		server.write("data/world/forgotten.otbm");
 		server.write("data/cache/maps/forgotten.houses.otbm");

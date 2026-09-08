@@ -3,6 +3,7 @@
 
 #include "client_assets_manifest.h"
 
+#include <filesystem>
 #include <string>
 #include <wx/arrstr.h>
 #include <wx/string.h>
@@ -18,7 +19,7 @@ public:
 	static void loadConfiguredPath();
 	static void saveConfiguredPath();
 	static bool validatePath(const wxString& path, ClientAssetsManifest& manifest, wxString& error, wxArrayString& warnings);
-	static bool load(wxString& error, wxArrayString& warnings);
+	static bool load(wxString& error, wxArrayString& warnings, const std::filesystem::path& appearancesOverride = {});
 	static void unload();
 	static void swapState(State& state);
 

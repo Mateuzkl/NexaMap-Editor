@@ -9,6 +9,7 @@
 #include "monster_spell_area.h"
 
 #include <wx/panel.h>
+#include <wx/bitmap.h>
 #include <wx/timer.h>
 
 #include <string>
@@ -42,6 +43,13 @@ private:
 	int animationTick = 0;
 	int flightStep = 0;
 	int animationInterval = 140;
+	wxBitmap cachedEffectBitmap;
+	wxBitmap cachedProjectileBitmap;
+	int cachedEffectId = -1;
+	int cachedEffectFrame = -1;
+	int cachedProjectileId = -1;
+	int cachedProjectileFrame = -1;
+	int cachedProjectileDirection = -1;
 	std::unique_ptr<wxTimer> timer;
 };
 

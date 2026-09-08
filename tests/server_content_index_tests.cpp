@@ -164,6 +164,13 @@ namespace {
 		Check(index.capabilities().npcs.xmlDefinitions && index.capabilities().npcs.relatedLua, "NPC capabilities distinguish XML declarations from related Lua");
 		Check(index.capabilities().spells.xmlDefinitions && index.capabilities().spells.relatedLua, "spell capabilities distinguish XML registry from related Lua");
 		Check(index.capabilities().isMixed(), "paired XML/Lua server is marked mixed");
+		server.write(
+			"data/monster/monsters.xml",
+			"<monsters><monster name=\"Registry Rat\" file=\"rat.xml\"/></monsters>\n"
+		);
+		const ServerContentIndex registryChanged = ServerContentIndex::RefreshPaths(workspace, index, { workspace.monstersDirectory / "monsters.xml" });
+		Check(registryChanged.stats().filesParsed == 1, "targeted registry refresh reparses only the registry");
+		Check(registryChanged.findExact(ServerContentKind::Monster, "Registry Rat").unique(), "targeted registry refresh updates aliases");
 	}
 
 	void TestAmbiguityAndDiagnostics() {
@@ -190,28 +197,51 @@ namespace {
 
 		const ServerContentIndex first = ServerContentIndex::Build(workspace);
 		Check(first.stats().filesParsed == first.stats().filesDiscovered, "first scan parses every candidate");
+		Check(first.stats().fullScans == 1 && first.stats().targetedRefreshes == 0, "cold build records one full scan");
 		Check(!first.trackedSourcesChanged(), "fresh source fingerprints match current files");
+		const ServerContentLookupResult retainedLookup = first.findExact(ServerContentKind::Monster, "Rat");
 
 		const ServerContentIndex second = ServerContentIndex::Build(workspace, &first);
 		Check(second.stats().filesParsed == 0, "unchanged rescan performs no parsing");
+		Check(second.stats().filesRead == 0, "unchanged rescan reads zero definition files");
 		Check(second.stats().filesReused == second.stats().filesDiscovered, "unchanged rescan reuses every cached file");
+		Check(second.stats().cacheRecordsShared == second.stats().filesDiscovered, "unchanged rescan shares every immutable parsed record");
+		Check(second.snapshot() == first.snapshot(), "unchanged rescan shares the immutable assembled source snapshot");
 		Check(first.sameContentAs(second), "cache reuse does not alter indexed content");
 
 		server.write("data/monsters/rat.lua", "local rat = Game.createMonsterType(\"Cave Rat\")\nrat:register({ description = \"larger\" })\n");
 		Check(first.trackedSourcesChanged(), "modified declaration invalidates tracked source fingerprints");
-		const ServerContentIndex third = ServerContentIndex::Build(workspace, &second);
-		Check(third.stats().filesParsed == 1, "rescan reparses only the modified source");
-		Check(third.stats().filesReused + 1 == third.stats().filesDiscovered, "rescan retains unchanged cached sources");
+		const auto ratPath = workspace.monstersDirectory / "rat.lua";
+		const ServerContentIndex third = ServerContentIndex::RefreshPaths(workspace, second, { ratPath });
+		Check(third.stats().targetedRefreshes == 1 && third.stats().fullScans == 0, "single save uses a targeted refresh");
+		Check(third.stats().filesParsed == 1 && third.stats().filesRead == 1, "targeted refresh reparses only the modified source");
+		Check(third.stats().filesReused + 1 == third.stats().filesDiscovered, "targeted refresh retains unchanged cached sources");
 		Check(third.findExact(ServerContentKind::Monster, "Cave Rat").unique(), "reparsed source updates the exact lookup");
+		Check(retainedLookup.value() != nullptr && retainedLookup.value()->name == "Rat", "lookup keeps its immutable source snapshot alive after index replacement");
 
 		server.write("data/monsters/new.lua", "local added = Game.createMonsterType(\"New Monster\")\nadded:register({})\n");
-		const ServerContentIndex withNewFile = ServerContentIndex::Build(workspace, &third);
+		const auto newPath = workspace.monstersDirectory / "new.lua";
+		const ServerContentIndex withNewFile = ServerContentIndex::RefreshPaths(workspace, third, { newPath });
 		Check(withNewFile.stats().filesParsed == 1, "rescan parses a newly discovered source without invalidating cached files");
 		Check(withNewFile.findExact(ServerContentKind::Monster, "New Monster").unique(), "new source is added to exact lookup on rescan");
 
 		const ServerContentIndex beforeScriptChange = withNewFile;
 		server.write("data/npc/scripts/guide.lua", "function onCreatureSay() return false end -- changed and larger\n");
 		Check(beforeScriptChange.trackedSourcesChanged(), "related Lua implementation participates in source change detection");
+		const auto scriptPath = workspace.npcsDirectory / "scripts/guide.lua";
+		const ServerContentIndex scriptChanged = ServerContentIndex::RefreshPaths(workspace, beforeScriptChange, { scriptPath });
+		const ServerContentSource* guide = scriptChanged.findExact(ServerContentKind::Npc, "Guide").value();
+		Check(guide != nullptr && guide->relatedScriptFingerprint && guide->relatedScriptFingerprint->MatchesCurrentFile(), "targeted related-script refresh updates the owning declaration metadata");
+
+		std::filesystem::remove(ratPath);
+		const ServerContentIndex deleted = ServerContentIndex::RefreshPaths(workspace, scriptChanged, { ratPath });
+		Check(deleted.findExact(ServerContentKind::Monster, "Cave Rat").empty(), "targeted refresh removes a deleted declaration");
+
+		const auto renamedPath = workspace.monstersDirectory / "renamed.lua";
+		std::filesystem::rename(newPath, renamedPath);
+		const ServerContentIndex renamed = ServerContentIndex::RefreshPaths(workspace, deleted, { newPath, renamedPath });
+		const ServerContentSource* renamedMonster = renamed.findExact(ServerContentKind::Monster, "New Monster").value();
+		Check(renamedMonster != nullptr && renamedMonster->declarationPath.filename() == "renamed.lua", "targeted refresh handles declaration rename as delete plus create");
 	}
 
 	void TestFileLimit() {

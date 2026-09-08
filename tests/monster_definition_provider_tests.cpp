@@ -1,6 +1,7 @@
 #include "monster_definition.h"
 #include "monster_definition_creation.h"
 #include "editor_autosave_state.h"
+#include "editor_source_monitor.h"
 #include "server_content_index.h"
 #include "server_workspace.h"
 
@@ -353,7 +354,8 @@ namespace {
 		MonsterCreationRequest request { "Test & Guardian", ServerContentFormat::Xml, xmlDirectory };
 		MonsterCreationResult created;
 		std::string error;
-		Check(CreateMonsterDefinition(xmlWorkspace, xmlIndex, request, created, error), "new XML monster and registry entry are created: " + error);
+		const bool xmlCreated = CreateMonsterDefinition(xmlWorkspace, xmlIndex, request, created, error);
+		Check(xmlCreated, "new XML monster and registry entry are created: " + error);
 		Check(std::filesystem::is_regular_file(xmlDirectory / "test_guardian.xml"), "new XML monster receives a safe filename");
 		const std::string registry = xmlServer.read("data/monster/monsters.xml");
 		Check(registry.find("name=\"Test &amp; Guardian\"") != std::string::npos && registry.find("custom/test_guardian.xml") != std::string::npos, "new XML monster is registered with escaped metadata");
@@ -381,7 +383,8 @@ namespace {
 		);
 		const ServerContentIndex luaIndex = ServerContentIndex::Build(luaWorkspace);
 		request = { "Lua Sentinel", ServerContentFormat::Lua, luaDirectory };
-		Check(CreateMonsterDefinition(luaWorkspace, luaIndex, request, created, error), "new Lua monster is created: " + error);
+		const bool luaCreated = CreateMonsterDefinition(luaWorkspace, luaIndex, request, created, error);
+		Check(luaCreated, "new Lua monster is created: " + error);
 		const std::string tfsLua = luaServer.read("data/monsters/custom/lua_sentinel.lua");
 		Check(created.provider == "TFS Lua registerMonsterType", "TFS Lua creation reports its detected provider");
 		Check(tfsLua.find("monster.summons = {}") != std::string::npos && tfsLua.find("summons = { maxSummons") == std::string::npos, "TFS Lua uses a list for summons and cannot trigger registerMonsterType v.name on a number");
@@ -401,7 +404,8 @@ namespace {
 		canaryWorkspace.serverType = ServerType::Canary;
 		const ServerContentIndex canaryIndex = ServerContentIndex::Build(canaryWorkspace);
 		request = { "Canary Sentinel", ServerContentFormat::Lua, canaryDirectory };
-		Check(CreateMonsterDefinition(canaryWorkspace, canaryIndex, request, created, error), "new Canary Lua monster is created: " + error);
+		const bool canaryCreated = CreateMonsterDefinition(canaryWorkspace, canaryIndex, request, created, error);
+		Check(canaryCreated, "new Canary Lua monster is created: " + error);
 		const std::string canaryLua = canaryServer.read("data-canary/monster/custom/canary_sentinel.lua");
 		Check(created.provider == "Canary/Crystal Lua", "Canary family selects the Canary Lua provider");
 		Check(canaryLua.find("monster.summon = { maxSummons = 0, summons = {} }") != std::string::npos, "Canary Lua uses its nested summon provider shape");
@@ -440,6 +444,28 @@ namespace {
 		Check(!state.hasError() && state.ready(start + 2500ms), "editing after an error schedules validation again");
 		state.saved();
 		Check(!state.dirty() && !state.hasError(), "successful autosave clears dirty and error state");
+
+		EditorChangeCoalescer changes;
+		changes.changed(EditorChangeImpact::Dirty);
+		Check(changes.hasDirty() && !changes.hasPreview(), "ordinary fields schedule autosave without preview work");
+		changes.changed(EditorChangeImpact::Dirty | EditorChangeImpact::Preview);
+		changes.changed(EditorChangeImpact::Preview);
+		Check(changes.takePreview() && !changes.takePreview(), "repeated visual changes coalesce into one preview refresh");
+		Check(changes.takeDirty() && !changes.takeDirty(), "repeated edits coalesce into one dirty action");
+
+		TemporaryDirectory temporary;
+		const auto monitoredPath = temporary.write("monster.lua", "original\n");
+		EditorSourceMonitor monitor;
+		monitor.reset({ { monitoredPath, "original\n" } });
+		Check(monitor.poll().empty(), "source monitor stays quiet while the file is unchanged");
+		temporary.write("monster.lua", "external change\n");
+		const auto external = monitor.poll();
+		Check(external.size() == 1 && external.front().loadedText == "original\n" && external.front().diskText == "external change\n", "source monitor retains loaded and disk versions for conflict comparison");
+		monitor.reset({ { monitoredPath, "external change\n" } });
+		Check(monitor.poll().empty(), "source monitor acknowledges a freshly saved baseline");
+		std::filesystem::remove(monitoredPath);
+		const auto deleted = monitor.poll();
+		Check(deleted.size() == 1 && deleted.front().deleted, "source monitor reports an external deletion without overwriting it");
 	}
 
 	void TestRealServers(const std::filesystem::path& modernRoot, const std::filesystem::path& xmlRoot) {

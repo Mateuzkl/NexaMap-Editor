@@ -21,6 +21,8 @@
 #include "filehandle.h"
 #include "brush_enums.h"
 
+#include <filesystem>
+
 class Brush;
 class GroundBrush;
 class WallBrush;
@@ -435,6 +437,7 @@ public:
 
 	bool loadFromOtb(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadFromAppearances(const rme::protobuf::appearances::Appearances& appearances, wxString& error, wxArrayString& warnings);
+	bool remapAppearancesToServerIds(const std::filesystem::path& mappingFile, wxString& error, wxArrayString& warnings);
 	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds = false);
 	bool loadItemFromGameXml(pugi::xml_node itemNode, int id, bool serverIdsToClientIds = false);
 	bool loadMetaItem(pugi::xml_node node);

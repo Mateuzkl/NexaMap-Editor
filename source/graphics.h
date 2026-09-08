@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <deque>
 #include <memory>
+#include <unordered_map>
 
 #include "client_version.h"
 #include <wx/artprov.h>
@@ -140,7 +141,8 @@ public:
 		int frame = 0,
 		int patternZ = 0,
 		int patternX = 0,
-		int patternY = 0
+		int patternY = 0,
+		int mountClientId = 0
 	);
 	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 
@@ -385,6 +387,8 @@ public:
 	uint16_t getItemSpriteMaxID() const;
 	uint16_t getEffectSpriteMaxID() const;
 	uint16_t getDistanceSpriteMaxID() const;
+	std::size_t getDeferredAppearanceVisualCount() const;
+	std::size_t getMaterializedAppearanceVisualCount() const;
 
 	// Get an unused texture id (this is acquired by simply increasing a value starting from 0x10000000)
 	GLuint getFreeTextureID();
@@ -477,6 +481,7 @@ private:
 		wxString& error,
 		wxArrayString& warnings
 	);
+	bool materializeAppearanceVisual(uint16_t id, bool distanceEffect);
 
 	typedef std::map<int, Sprite*> SpriteMap;
 	SpriteMap sprite_space;
@@ -489,6 +494,9 @@ private:
 	uint16_t creature_count;
 	uint16_t effect_count;
 	uint16_t distance_count;
+	std::unordered_map<uint16_t, std::shared_ptr<const rme::protobuf::appearances::Appearance>> deferredEffectAppearances;
+	std::unordered_map<uint16_t, std::shared_ptr<const rme::protobuf::appearances::Appearance>> deferredMissileAppearances;
+	std::size_t materializedAppearanceVisuals = 0;
 	bool otfi_found;
 	bool is_extended;
 	bool has_transparency;

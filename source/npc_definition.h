@@ -125,6 +125,7 @@ public:
 	[[nodiscard]] bool save(const NpcDefinition& edited, std::string& error);
 
 private:
+	[[nodiscard]] static std::unique_ptr<NpcDefinitionDocument> LoadFromText(const ServerContentSource& source, std::string bytes, std::string& error);
 	explicit NpcDefinitionDocument(std::unique_ptr<Impl> implementation);
 	std::unique_ptr<Impl> implementation;
 };

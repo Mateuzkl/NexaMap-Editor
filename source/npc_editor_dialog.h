@@ -6,6 +6,7 @@
 #define NEXAMAP_NPC_EDITOR_DIALOG_H_
 
 #include "editor_autosave_state.h"
+#include "editor_source_monitor.h"
 #include "npc_definition.h"
 
 #include <wx/dialog.h>
@@ -50,6 +51,9 @@ private:
 	void onBrowse(wxCommandEvent& event);
 	void onFieldChanged(wxCommandEvent& event);
 	void onAutosave(wxTimerEvent& event);
+	void onSourceWatch(wxTimerEvent& event);
+	void onCompareExternal(wxCommandEvent& event);
+	void resetSourceMonitor();
 	void onCancel(wxCommandEvent& event);
 	void onClose(wxCloseEvent& event);
 
@@ -62,9 +66,13 @@ private:
 	wxListCtrl* shopList = nullptr;
 	wxListCtrl* travelList = nullptr;
 	wxTextCtrl* sourceView = nullptr;
+	wxWindow* compareButton = nullptr;
 	wxStaticText* saveStateLabel = nullptr;
 	std::unique_ptr<wxTimer> autosaveTimer;
+	std::unique_ptr<wxTimer> sourceWatchTimer;
 	EditorAutosaveState autosaveState;
+	EditorSourceMonitor sourceMonitor;
+	std::vector<EditorSourceChange> externalChanges;
 	bool constructing = true;
 	bool saved = false;
 	bool browseRequested = false;

@@ -293,6 +293,28 @@ namespace {
 		return true;
 	}
 
+	bool EnsureServerContentIndex(wxWindow* parent, const wxString& title) {
+		wxString error;
+		if (g_workspace.ensureServerContent(error)) {
+			return true;
+		}
+		wxMessageBox(error.empty() ? wxString("The active Server Workspace could not be indexed.") : error, title, wxOK | wxICON_ERROR, parent);
+		return false;
+	}
+
+	std::vector<std::filesystem::path> SourcePaths(const ServerContentSource& source) {
+		std::vector<std::filesystem::path> paths;
+		paths.reserve(3);
+		paths.push_back(source.declarationPath);
+		if (source.registrationPath) {
+			paths.push_back(*source.registrationPath);
+		}
+		if (source.relatedScriptPath) {
+			paths.push_back(*source.relatedScriptPath);
+		}
+		return paths;
+	}
+
 	bool IsInapplicableMaterialItemWarning(const wxString& warning) {
 		wxString normalized = warning;
 		normalized.Trim(true);
@@ -677,7 +699,7 @@ bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
 	const uint64_t generation = g_workspace.getGeneration();
 	force = force || serverResourcesChanged || generation != loaded_workspace_generation;
 	bool loaded = false;
-	if (g_workspace.getServer().usesCanaryCrystalLoader()) {
+	if (g_workspace.getServer().usesAppearanceAssetsLoader()) {
 		loaded = LoadCanaryCrystalAssets(error, warnings, force);
 	} else {
 		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force);
@@ -1014,7 +1036,14 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	SetLoadIndeterminate("Validating package and catalog...");
 	wxLogMessage("Canary/Crystal: validating client package and catalog.");
 
-	if (!ClientAssets::load(error, warnings)) {
+	const ServerWorkspace& workspace = g_workspace.getServer();
+	const bool customTfs = workspace.serverType == ServerType::CustomTfsAppearances;
+	if (!ClientAssets::load(error, warnings, customTfs ? workspace.appearancesPath : std::filesystem::path {})) {
+		DestroyLoadBar();
+		UnloadVersion();
+		return false;
+	}
+	if (customTfs && !g_items.remapAppearancesToServerIds(workspace.itemsOtbPath, error, warnings)) {
 		DestroyLoadBar();
 		UnloadVersion();
 		return false;
@@ -1023,10 +1052,9 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	SetLoadIndeterminate("Loading item metadata...");
 	wxLogMessage("Canary/Crystal: loading dedicated item metadata.");
 	wxString supplementalError;
-	const ServerWorkspace& workspace = g_workspace.getServer();
 	if (workspace.hasItemsXml()) {
 		const wxString serverItemsXml = WorkspacePath(workspace.itemsXmlPath);
-		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, true)) {
+		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, !customTfs)) {
 			warnings.push_back("Couldn't enrich Canary/Crystal items from the server items.xml: " + supplementalError);
 		}
 	} else {
@@ -3017,6 +3045,9 @@ void GUI::ShowMonsterEditor(const std::string& monsterName) {
 	if (!IsEditorOpen() || monsterName.empty()) {
 		return;
 	}
+	if (!EnsureServerContentIndex(root, "Monster Editor")) {
+		return;
+	}
 	ServerContentLookupResult lookup = g_workspace.getServerContent().findExact(ServerContentKind::Monster, monsterName);
 	if (lookup.empty()) {
 		lookup = g_workspace.getServerContent().findCaseInsensitive(ServerContentKind::Monster, monsterName);
@@ -3049,13 +3080,11 @@ void GUI::ShowMonsterEditorBrowser() {
 	if (!IsEditorOpen()) {
 		return;
 	}
-	std::vector<ServerContentSource> monsters;
-	for (const ServerContentSource& source : g_workspace.getServerContent().entries()) {
-		if (source.kind == ServerContentKind::Monster && source.declarationExists) {
-			monsters.push_back(source);
-		}
+	if (!EnsureServerContentIndex(root, "Monster Editor")) {
+		return;
 	}
-	ServerContentBrowserDialog chooser(root, "Monster Editor", "monster", g_workspace.getServer().monstersDirectory, std::move(monsters));
+	const ServerContentIndex& index = g_workspace.getServerContent();
+	ServerContentBrowserDialog chooser(root, "Monster Editor", "monster", g_workspace.getServer().monstersDirectory, index.snapshot(), index.indicesForKind(ServerContentKind::Monster));
 	if (chooser.ShowModal() == wxID_OK) {
 		if (chooser.wantsCreate()) {
 			ShowNewMonsterEditor();
@@ -3067,6 +3096,9 @@ void GUI::ShowMonsterEditorBrowser() {
 
 void GUI::ShowNewMonsterEditor() {
 	if (!IsEditorOpen()) {
+		return;
+	}
+	if (!EnsureServerContentIndex(root, "Create New Monster")) {
 		return;
 	}
 	const ServerWorkspace& workspace = g_workspace.getServer();
@@ -3091,8 +3123,8 @@ void GUI::ShowNewMonsterEditor() {
 	}
 
 	wxString scanError;
-	if (!g_workspace.rescanServer(scanError)) {
-		wxMessageBox("The monster was created, but the Server Workspace could not be reindexed:\n" + scanError, "Monster created", wxOK | wxICON_WARNING, root);
+	if (!g_workspace.refreshServerContentPaths(SourcePaths(created.source), scanError)) {
+		wxMessageBox("The monster was created, but the Server Workspace index could not be refreshed:\n" + scanError, "Monster created", wxOK | wxICON_WARNING, root);
 		return;
 	}
 	const auto found = std::find_if(g_workspace.getServerContent().entries().begin(), g_workspace.getServerContent().entries().end(), [&created](const ServerContentSource& source) {
@@ -3136,8 +3168,8 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 	}
 
 	wxString scanError;
-	if (!g_workspace.rescanServer(scanError)) {
-		wxMessageBox("The monster was saved, but the Server Workspace could not be reindexed:\n" + scanError, "Monster saved", wxOK | wxICON_WARNING, root);
+	if (!g_workspace.refreshServerContentPaths(SourcePaths(source), scanError)) {
+		wxMessageBox("The monster was saved, but the Server Workspace index could not be refreshed:\n" + scanError, "Monster saved", wxOK | wxICON_WARNING, root);
 		browseNext();
 		return;
 	}
@@ -3164,6 +3196,9 @@ void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
 
 void GUI::ShowNpcEditor(const std::string& npcName) {
 	if (!IsEditorOpen() || npcName.empty()) {
+		return;
+	}
+	if (!EnsureServerContentIndex(root, "NPC Editor")) {
 		return;
 	}
 	ServerContentLookupResult lookup = g_workspace.getServerContent().findExact(ServerContentKind::Npc, npcName);
@@ -3210,13 +3245,11 @@ void GUI::ShowNpcEditorBrowser() {
 	if (!IsEditorOpen()) {
 		return;
 	}
-	std::vector<ServerContentSource> npcs;
-	for (const ServerContentSource& source : g_workspace.getServerContent().entries()) {
-		if (source.kind == ServerContentKind::Npc && source.declarationExists) {
-			npcs.push_back(source);
-		}
+	if (!EnsureServerContentIndex(root, "NPC Editor")) {
+		return;
 	}
-	ServerContentBrowserDialog chooser(root, "NPC Editor", "NPC", g_workspace.getServer().npcsDirectory, std::move(npcs));
+	const ServerContentIndex& index = g_workspace.getServerContent();
+	ServerContentBrowserDialog chooser(root, "NPC Editor", "NPC", g_workspace.getServer().npcsDirectory, index.snapshot(), index.indicesForKind(ServerContentKind::Npc));
 	if (chooser.ShowModal() != wxID_OK) {
 		return;
 	}
@@ -3229,6 +3262,9 @@ void GUI::ShowNpcEditorBrowser() {
 
 void GUI::ShowNewNpcEditor() {
 	if (!IsEditorOpen()) {
+		return;
+	}
+	if (!EnsureServerContentIndex(root, "Create New NPC")) {
 		return;
 	}
 	const ServerWorkspace& workspace = g_workspace.getServer();
@@ -3248,8 +3284,8 @@ void GUI::ShowNewNpcEditor() {
 		return;
 	}
 	wxString scanError;
-	if (!g_workspace.rescanServer(scanError)) {
-		wxMessageBox("The NPC was created, but the workspace could not be reindexed:\n" + scanError, "NPC created", wxOK | wxICON_WARNING, root);
+	if (!g_workspace.refreshServerContentPaths(SourcePaths(created.source), scanError)) {
+		wxMessageBox("The NPC was created, but the workspace index could not be refreshed:\n" + scanError, "NPC created", wxOK | wxICON_WARNING, root);
 		return;
 	}
 	const auto found = std::find_if(g_workspace.getServerContent().entries().begin(), g_workspace.getServerContent().entries().end(), [&created](const ServerContentSource& source) { return source.kind == ServerContentKind::Npc && source.declarationPath.lexically_normal() == created.source.declarationPath.lexically_normal(); });
@@ -3285,8 +3321,8 @@ void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
 		return;
 	}
 	wxString scanError;
-	if (!g_workspace.rescanServer(scanError)) {
-		wxMessageBox("The NPC was saved, but the workspace could not be reindexed:\n" + scanError, "NPC saved", wxOK | wxICON_WARNING, root);
+	if (!g_workspace.refreshServerContentPaths(SourcePaths(source), scanError)) {
+		wxMessageBox("The NPC was saved, but the workspace index could not be refreshed:\n" + scanError, "NPC saved", wxOK | wxICON_WARNING, root);
 		browseNext();
 		return;
 	}
@@ -3313,17 +3349,16 @@ void GUI::ShowSpellEditorBrowser() {
 	if (!IsEditorOpen()) {
 		return;
 	}
-	std::vector<ServerContentSource> spells;
-	for (const ServerContentSource& source : g_workspace.getServerContent().entries()) {
-		if (source.kind == ServerContentKind::Spell && source.declarationExists) {
-			spells.push_back(source);
-		}
+	if (!EnsureServerContentIndex(root, "Spell Editor")) {
+		return;
 	}
+	const ServerContentIndex& index = g_workspace.getServerContent();
+	std::vector<std::size_t> spells = index.indicesForKind(ServerContentKind::Spell);
 	if (spells.empty()) {
 		wxMessageBox("No spell definitions were detected in the active Server Workspace.", "Spell Editor", wxOK | wxICON_INFORMATION, root);
 		return;
 	}
-	ServerContentBrowserDialog chooser(root, "Spell Editor", "spell", g_workspace.getServer().spellsDirectory, std::move(spells), false);
+	ServerContentBrowserDialog chooser(root, "Spell Editor", "spell", g_workspace.getServer().spellsDirectory, index.snapshot(), std::move(spells), false);
 	if (chooser.ShowModal() == wxID_OK) {
 		if (const auto source = chooser.selectedSource()) {
 			ShowSpellEditor(*source);
@@ -3338,7 +3373,7 @@ void GUI::ShowSpellEditor(const ServerContentSource& selectedSource) {
 	const ServerContentSource source = selectedSource;
 	const auto workspaceRoot = g_workspace.getServer().rootPath;
 	std::string error;
-	auto document = SpellDefinitionDocument::Load(source, error, &g_workspace.getServer());
+	auto document = SpellDefinitionDocument::Load(source, error, &g_workspace.getServer(), g_workspace.getSpellAreaResolver());
 	if (!document) {
 		wxMessageBox(wxString::FromUTF8(error), "Could not open spell", wxOK | wxICON_ERROR, root);
 		return;
@@ -3360,8 +3395,8 @@ void GUI::ShowSpellEditor(const ServerContentSource& selectedSource) {
 		return;
 	}
 	wxString scanError;
-	if (!g_workspace.rescanServer(scanError)) {
-		wxMessageBox("The spell was saved, but the Server Workspace could not be reindexed:\n" + scanError, "Spell saved", wxOK | wxICON_WARNING, root);
+	if (!g_workspace.refreshServerContentPaths(SourcePaths(source), scanError)) {
+		wxMessageBox("The spell was saved, but the Server Workspace index could not be refreshed:\n" + scanError, "Spell saved", wxOK | wxICON_WARNING, root);
 		browseNext();
 		return;
 	}

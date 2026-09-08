@@ -276,6 +276,7 @@
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
 	</ClCompile>
+	<ClCompile Include="..\..\source\source_compare_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\server_content_browser_dialog.cpp">
 	  <IncludeInUnityFile>false</IncludeInUnityFile>
 	</ClCompile>
@@ -312,10 +313,13 @@
 	<ClCompile Include="..\..\source\npc_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\outfit_color_picker.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\spell_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+	<ClCompile Include="..\..\source\spell_area_library.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+	<ClCompile Include="..\..\source\spell_area_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\spell_area_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\spell_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\spell_visual_browser_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
+	<ClCompile Include="..\..\source\server_item_id_map.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\server_vocation_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\server_visual_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\mount_id_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
@@ -662,6 +666,10 @@
     <ClInclude Include="..\..\source\find_item_window.h" />
 	<ClInclude Include="..\..\source\welcome_dialog.h" />
 	<ClInclude Include="..\..\source\server_content_index.h" />
+	<ClInclude Include="..\..\source\editor_source_monitor.h" />
+	<ClInclude Include="..\..\source\source_compare_dialog.h" />
+	<ClInclude Include="..\..\source\source_text_utils.h" />
+	<ClInclude Include="..\..\source\lua_source_scanner.h" />
 	<ClInclude Include="..\..\source\server_content_browser_dialog.h" />
 	<ClInclude Include="..\..\source\editor_autosave_state.h" />
 	<ClInclude Include="..\..\source\monster_definition.h" />
@@ -675,10 +683,13 @@
 	<ClInclude Include="..\..\source\npc_editor_dialog.h" />
 	<ClInclude Include="..\..\source\outfit_color_picker.h" />
 	<ClInclude Include="..\..\source\spell_definition.h" />
+	<ClInclude Include="..\..\source\spell_area_library.h" />
+	<ClInclude Include="..\..\source\spell_area_editor_dialog.h" />
 	<ClInclude Include="..\..\source\spell_area_resolver.h" />
 	<ClInclude Include="..\..\source\spell_editor_dialog.h" />
 	<ClInclude Include="..\..\source\spell_visual_browser_dialog.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />
+	<ClInclude Include="..\..\source\server_item_id_map.h" />
 	<ClInclude Include="..\..\source\server_vocation_catalog.h" />
 	<ClInclude Include="..\..\source\server_visual_catalog.h" />
 	<ClInclude Include="..\..\source\mount_id_resolver.h" />

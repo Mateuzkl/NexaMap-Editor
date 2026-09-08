@@ -1,5 +1,6 @@
 #include "server_content_index.h"
 #include "server_workspace.h"
+#include "spell_area_library.h"
 #include "spell_definition.h"
 
 #include <algorithm>
@@ -186,6 +187,8 @@ namespace {
 		TemporaryDirectory temporary;
 		Write(
 			temporary.path / "data/scripts/lib/areas.lua",
+			"--[=[ AREA_FAKE_COMMENT = {{3}} } ]=]\n"
+			"local ignored = [==[ AREA_FAKE_STRING = {{3}} } ]==]\n"
 			"AREA_BASE = {\n  {0, 1, 0},\n  {1, 3, 1}\n}\n"
 			"AREA_ALIAS = AREA_BASE\n"
 			"AREA_DYNAMIC = buildArea(radius)\n"
@@ -194,6 +197,11 @@ namespace {
 		workspace.rootPath = temporary.path;
 		workspace.activeDataDirectory = temporary.path / "data";
 		const SpellAreaResolver resolver(workspace);
+		Check(
+			resolver.stats().filesRead == 1 && resolver.stats().definitionsParsed == 3,
+			"area resolver exposes deterministic scan counters (read " + std::to_string(resolver.stats().filesRead)
+				+ ", parsed " + std::to_string(resolver.stats().definitionsParsed) + ")"
+		);
 		const auto literal = resolver.resolve("createCombatArea({{1, 3, 1}})");
 		Check(literal.state == SpellAreaResolutionState::Resolved && literal.tiles.size() == 3, "literal createCombatArea resolves exact tiles");
 		const auto alias = resolver.resolve("AREA_ALIAS");
@@ -202,6 +210,41 @@ namespace {
 		Check(dynamic.state == SpellAreaResolutionState::Unresolved, "dynamic areas stay unresolved instead of falling back to Single");
 		const auto missing = resolver.resolve("AREA_NOT_DEFINED");
 		Check(missing.state == SpellAreaResolutionState::Unresolved, "missing constants stay unresolved instead of falling back to Single");
+		Check(resolver.resolve("AREA_FAKE_COMMENT").state == SpellAreaResolutionState::Unresolved, "long comments with equals do not create area definitions");
+		Check(resolver.resolve("AREA_FAKE_STRING").state == SpellAreaResolutionState::Unresolved, "long strings with equals do not create area definitions");
+	}
+
+	void TestReusableAreaCreation() {
+		TemporaryDirectory temporary;
+		const auto libraryPath = temporary.path / "data/scripts/lib/spell_lib.lua";
+		const std::string original = "-- preserve helper functions\r\nlocal function helper() return true end\r\n\r\nAREA_EXISTING = {\r\n\t{0, 3, 0},\r\n\t{1, 1, 1},\r\n}\r\n";
+		Write(libraryPath, original);
+		ServerWorkspace workspace;
+		workspace.rootPath = temporary.path;
+		workspace.activeDataDirectory = temporary.path / "data";
+		SpellAreaResolver resolver(workspace);
+		const auto targets = SpellAreaLibrary::DiscoverTargets(workspace, resolver);
+		Check(targets.size() == 1 && targets.front().path == libraryPath, "area creator selects the real spell_lib.lua provider");
+		if (targets.empty()) {
+			return;
+		}
+
+		EditableSpellArea area;
+		area.name = "AREA_NEXAMAP_TEST";
+		area.width = 3;
+		area.height = 3;
+		area.cells = { 0, 1, 0, 1, 3, 1, 0, 1, 0 };
+		SpellAreaLibrarySaveResult result;
+		std::string error;
+		Check(SpellAreaLibrary::Save(workspace, resolver, targets.front(), area, result, error), "reusable area saves transactionally: " + error);
+		const std::string saved = Read(libraryPath);
+		Check(saved.starts_with(original), "area creation preserves every existing source byte and CRLF style");
+		Check(saved.find("AREA_NEXAMAP_TEST = {\r\n\t{0, 1, 0},") != std::string::npos, "area creation writes the selected matrix in the server library");
+		const SpellAreaResolver refreshed(workspace);
+		const auto resolved = refreshed.resolve("AREA_NEXAMAP_TEST");
+		Check(resolved.state == SpellAreaResolutionState::Resolved && resolved.tiles.size() == 5, "new reusable area resolves to the exact selected tiles");
+		const auto refreshedTargets = SpellAreaLibrary::DiscoverTargets(workspace, refreshed);
+		Check(!refreshedTargets.empty() && !SpellAreaLibrary::Save(workspace, refreshed, refreshedTargets.front(), area, result, error) && error.find("already exists") != std::string::npos, "duplicate area names are ambiguity-safe");
 	}
 
 	void TestVocationProviders() {
@@ -353,6 +396,7 @@ int main(int argc, char** argv) {
 	TestExactLuaDeclarationSelection();
 	TestXmlRegistryAndLuaImplementation();
 	TestWorkspaceAreaResolver();
+	TestReusableAreaCreation();
 	TestVocationProviders();
 	if (argc > 1) {
 		TestRealBase(argv[1], "TFS Lua");

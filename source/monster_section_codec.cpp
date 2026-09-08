@@ -4,6 +4,8 @@
 
 #include "monster_section_codec.h"
 
+#include "source_text_utils.h"
+
 #include "ext/pugixml.hpp"
 
 #include <algorithm>
@@ -388,7 +390,7 @@ namespace {
 
 		Kind kind = Kind::Expression;
 		std::string text;
-		std::shared_ptr<LuaTable> table;
+		std::unique_ptr<LuaTable> table;
 	};
 
 	struct LuaEntry {
@@ -402,7 +404,7 @@ namespace {
 	};
 
 	struct ParsedLuaTable {
-		std::shared_ptr<LuaTable> table;
+		std::unique_ptr<LuaTable> table;
 		std::size_t closeToken = 0;
 	};
 
@@ -412,7 +414,7 @@ namespace {
 		std::size_t openToken,
 		std::string& error
 	) {
-		auto table = std::make_shared<LuaTable>();
+		auto table = std::make_unique<LuaTable>();
 		std::size_t index = openToken + 1;
 		while (index < tokens.size() && !Symbol(tokens[index], "}")) {
 			if (Symbol(tokens[index], ",")) {
@@ -501,7 +503,7 @@ namespace {
 
 	const LuaEntry* FindLuaField(const LuaTable& table, std::string_view key) {
 		const auto found = std::find_if(table.entries.begin(), table.entries.end(), [key](const LuaEntry& entry) {
-			return entry.key && LowerAscii(*entry.key) == LowerAscii(std::string(key));
+			return entry.key && SourceText::AsciiCaseEqual(*entry.key, key);
 		});
 		return found == table.entries.end() ? nullptr : &*found;
 	}
@@ -785,7 +787,7 @@ namespace {
 			return std::nullopt;
 		}
 		if (!XmlIntegerAliases(node, { "chance", "chance1", "chancemax" }, entry.chance, limitation)
-			|| !XmlIntegerAliases(node, { "countmax", "maxcount", "maxcount" }, entry.maxCount, limitation)
+			|| !XmlIntegerAliases(node, { "countmax", "maxcount" }, entry.maxCount, limitation)
 			|| !XmlIntegerAliases(node, { "subtype", "subType" }, entry.subtype, limitation)
 			|| !XmlIntegerAliases(node, { "actionid", "actionId", "aid" }, entry.actionId, limitation)) {
 			return std::nullopt;

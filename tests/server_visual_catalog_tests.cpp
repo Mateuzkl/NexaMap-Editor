@@ -58,6 +58,7 @@ enum ShootType_t : uint16_t {
 		workspace.rootPath = server.path;
 		workspace.activeDataDirectory = server.path / "data";
 		const ServerVisualCatalog catalog = ServerVisualCatalog::Build(workspace);
+		Check(catalog.stats().filesRead == 2 && catalog.stats().filesInspected == 2, "visual catalog exposes deterministic file-read counters");
 		Check(catalog.resolve(ServerVisualKind::MagicEffect, "CONST_ME_NONE") == 0, "implicit zero effect is resolved");
 		Check(catalog.resolve(ServerVisualKind::MagicEffect, "const_me_implicit") == 2, "implicit enum increment is resolved case-insensitively");
 		Check(catalog.resolve(ServerVisualKind::MagicEffect, "CONST_ME_ALIAS") == 16, "constant aliases are resolved");

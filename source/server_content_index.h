@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 enum class ServerContentKind : uint8_t {
@@ -73,9 +74,14 @@ struct ServerContentSource {
 
 struct ServerContentScanStats {
 	std::size_t filesDiscovered = 0;
+	std::size_t filesFingerprinted = 0;
+	std::size_t filesRead = 0;
 	std::size_t filesParsed = 0;
 	std::size_t filesReused = 0;
+	std::size_t cacheRecordsShared = 0;
 	std::size_t filesSkipped = 0;
+	std::size_t fullScans = 0;
+	std::size_t targetedRefreshes = 0;
 	bool fileLimitReached = false;
 };
 
@@ -93,6 +99,11 @@ struct ServerContentLookupResult {
 	[[nodiscard]] bool ambiguous() const;
 	[[nodiscard]] const ServerContentSource* value() const;
 	[[nodiscard]] const ServerContentSource* uniqueRegisteredValue() const;
+
+private:
+	std::shared_ptr<const std::vector<ServerContentSource>> owner;
+
+	friend class ServerContentIndex;
 };
 
 class ServerContentIndex {
@@ -102,11 +113,21 @@ public:
 		const ServerContentIndex* previous = nullptr,
 		const ServerContentScanOptions& options = {}
 	);
+	[[nodiscard]] static ServerContentIndex RefreshPaths(
+		const ServerWorkspace& workspace,
+		const ServerContentIndex& previous,
+		const std::vector<std::filesystem::path>& changedPaths,
+		const ServerContentScanOptions& options = {}
+	);
 
 	[[nodiscard]] const std::vector<ServerContentSource>& entries() const;
 	[[nodiscard]] const ServerContentCapabilities& capabilities() const;
 	[[nodiscard]] const std::vector<std::string>& diagnostics() const;
 	[[nodiscard]] const ServerContentScanStats& stats() const;
+	[[nodiscard]] bool initialized() const;
+	[[nodiscard]] bool matchesWorkspace(const ServerWorkspace& workspace) const;
+	[[nodiscard]] std::shared_ptr<const std::vector<ServerContentSource>> snapshot() const;
+	[[nodiscard]] std::vector<std::size_t> indicesForKind(ServerContentKind kind, bool existingOnly = true) const;
 
 	[[nodiscard]] ServerContentLookupResult findExact(ServerContentKind kind, const std::string& name) const;
 	[[nodiscard]] ServerContentLookupResult findCaseInsensitive(ServerContentKind kind, const std::string& name) const;
@@ -115,12 +136,28 @@ public:
 
 private:
 	struct CacheState;
+	using LookupMap = std::unordered_map<std::string, std::vector<std::size_t>>;
 
-	std::vector<ServerContentSource> sources;
+	[[nodiscard]] static ServerContentIndex Assemble(
+		const ServerWorkspace& workspace,
+		std::shared_ptr<CacheState> cache,
+		ServerContentScanStats stats,
+		std::vector<std::string> diagnostics = {}
+	);
+	void rebuildLookups();
+
+	std::shared_ptr<const std::vector<ServerContentSource>> sources = std::make_shared<const std::vector<ServerContentSource>>();
 	ServerContentCapabilities detectedCapabilities;
 	std::vector<std::string> scanDiagnostics;
 	ServerContentScanStats scanStats;
 	std::shared_ptr<const CacheState> cache;
+	LookupMap exactLookup;
+	LookupMap caseFoldedLookup;
+	std::filesystem::path workspaceRoot;
+	std::filesystem::path monstersRoot;
+	std::filesystem::path npcsRoot;
+	std::filesystem::path spellsRoot;
+	bool built = false;
 };
 
 [[nodiscard]] const char* ServerContentKindName(ServerContentKind kind);

@@ -776,7 +776,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		m_server_status_label->SetForegroundColour(subtle);
 	}
 
-	if (server.usesCanaryCrystalLoader()) {
+	if (server.usesAppearanceAssetsLoader()) {
 		setResource(m_items_otb_status, "appearances.dat", server.hasAppearances(), "Found", true);
 	} else {
 		setResource(m_items_otb_status, "items.otb", server.hasItemsOtb(), "Found", true);
@@ -794,7 +794,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		: (idPreference == ItemIdModePreference::ClientId ? wxString("Manual") : wxString("Auto"));
 	m_id_mode_value->SetLabel(idMode == ItemIdMode::Unknown ? wxString("Needs review") : preferenceLabel + "  |  " + wxString::FromUTF8(ItemIdModeName(idMode)));
 	m_id_mode_value->SetForegroundColour(idMode == ItemIdMode::Unknown ? warning : cyan);
-	m_items_source_value->SetLabel(server.usesCanaryCrystalLoader() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
+	m_items_source_value->SetLabel(server.usesAppearanceAssetsLoader() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
 	m_workspace_status_value->SetLabel(g_workspace.isReady() ? "Ready" : "Setup required");
 	m_workspace_status_value->SetForegroundColour(g_workspace.isReady() ? green : warning);
 	m_open_workspace_button->Enable(g_workspace.isReady());

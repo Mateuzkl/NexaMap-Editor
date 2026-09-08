@@ -228,3 +228,44 @@ The providers expose only fields backed by unambiguous literal source spans. Sav
 New NPC creation selects a provider from the active server workspace. Modern TFS Lua output uses a registered `Game.createNpcType` definition; traditional TFS output creates an XML definition and its related Lua behavior script. Both outputs are parsed and validated before the transaction is committed.
 
 The implementation is covered by synthetic preservation and creation tests plus discovery/opening checks against the TFS 1.8 8.60 Lua base, the configured Crystal/Canary datapack, and the Dragon Souls XML/Lua base. Menu, palette, and map context actions rescan the workspace and refresh the creature palette after a successful save.
+
+## Phase 8 implementation
+
+### External source changes
+
+Monster, NPC, and Spell editors now keep lightweight fingerprints for every declaration, registration, and related implementation file that was loaded. A timer checks those exact files while the editor is open. When another program changes or deletes one of them, NexaMap pauses autosave, keeps the edited buffer in memory, and exposes a side-by-side comparison between the loaded and disk versions. The user can keep inspecting the current buffer or close the editor and reopen the browser to load the new source. NexaMap never silently overwrites an external change.
+
+### Workspace and editor performance
+
+- Selecting or restoring a Server Workspace no longer builds the full content index on the UI-critical configuration path. The index is created only when a content browser or editor needs it.
+- Ordinary Monster, NPC, and Spell saves refresh only their declaration, registration, and related implementation paths. They no longer recursively rescan the server tree.
+- Parsed file records, the assembled source snapshot, spell-area metadata, visual constants, and vocation metadata are shared per `WorkspaceSession`. An unchanged rescan performs no definition reads or parses and reuses the immutable assembled snapshot.
+- Content lookup uses exact and case-folded indexes. The chooser uses a virtual list, precomputed search keys, and a debounced filter.
+- Editor callbacks synchronize only the changed field. Autosave and visual previews are independently debounced, and nonvisual edits do not rebuild the preview.
+- Canary/Crystal effect and projectile appearances are materialized only when first requested by a preview.
+
+Deterministic counters in `ServerContentScanStats`, `WorkspaceMetadataCacheStats`, and `GraphicManager` cover full scans, targeted refreshes, reads, parses, shared cache records, metadata builds, deferred visuals, and materialized visuals. Regression tests assert zero file reads/parses for unchanged content and one parse for a one-file targeted refresh.
+
+## Reusable spell-area creation
+
+The global Spell Editor and Monster attack editor expose a visual reusable-area creator. It discovers existing area libraries from the active workspace, including TFS `data/scripts/lib/spell_lib.lua`, traditional `data/spells/lib/spells.lua`, and Canary/Crystal `data/scripts/lib/register_spells.lua` layouts. The user draws affected tiles, chooses exactly one caster/target center, and selects the real destination library.
+
+Before writing, NexaMap validates the `AREA_*` identifier and matrix, checks the original fingerprint, rejects duplicate names across the active workspace, appends using the source file's line endings, parses the generated definition again, and compares the resolved tiles with the drawn shape. The transaction preserves every existing function and definition byte-for-byte. The new constant is immediately refreshed in the active workspace metadata and can be selected by compatible registered spell sources. Inline TFS monster attacks continue to use the engine-supported radius, ring, length, and spread fields; NexaMap does not inject an ignored custom area field into that registration API.
+
+## Custom TFS appearances profile
+
+NexaMap also detects a structural custom-TFS layout in which all three item resources have distinct roles:
+
+- `items.otb` is a bounded little-endian `uint32 serverId, uint32 clientId` pair table;
+- `appearances.dat` contains protobuf appearance and item-property data;
+- `items.xml` applies server-side item customizations.
+
+This profile uses the appearances asset loader while retaining the TFS content providers and ServerID map semantics. The pair table is validated before the profile is selected, then appearances are remapped from ClientID to ServerID before `items.xml` is applied. A normal OTB plus an unrelated `appearances.dat` remains a normal TFS workspace.
+
+## Final phase status
+
+- [x] Phase 8a: debounced autosave and visible save/error state
+- [x] Phase 8b: external file monitoring and compare/conflict workflow
+- [x] Phase 8c: performance cleanup, deterministic counters, regression coverage, formatting, and documentation
+
+Phase 7b clone/templates remains a separate future workflow and is not required for the completed Phase 8 safety and performance pass.

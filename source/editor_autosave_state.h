@@ -7,6 +7,46 @@
 
 #include <chrono>
 #include <string>
+#include <utility>
+
+enum class EditorChangeImpact : unsigned int {
+	None = 0,
+	Dirty = 1,
+	Preview = 2,
+};
+
+constexpr EditorChangeImpact operator|(EditorChangeImpact left, EditorChangeImpact right) {
+	return static_cast<EditorChangeImpact>(static_cast<unsigned int>(left) | static_cast<unsigned int>(right));
+}
+
+constexpr bool HasEditorChangeImpact(EditorChangeImpact value, EditorChangeImpact expected) {
+	return (static_cast<unsigned int>(value) & static_cast<unsigned int>(expected)) != 0;
+}
+
+class EditorChangeCoalescer {
+public:
+	void changed(EditorChangeImpact impact) {
+		dirtyPending = dirtyPending || HasEditorChangeImpact(impact, EditorChangeImpact::Dirty);
+		previewPending = previewPending || HasEditorChangeImpact(impact, EditorChangeImpact::Preview);
+	}
+
+	[[nodiscard]] bool takeDirty() {
+		return std::exchange(dirtyPending, false);
+	}
+	[[nodiscard]] bool takePreview() {
+		return std::exchange(previewPending, false);
+	}
+	[[nodiscard]] bool hasDirty() const {
+		return dirtyPending;
+	}
+	[[nodiscard]] bool hasPreview() const {
+		return previewPending;
+	}
+
+private:
+	bool dirtyPending = false;
+	bool previewPending = false;
+};
 
 class EditorAutosaveState {
 public:

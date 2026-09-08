@@ -10,6 +10,7 @@
 #include "gui.h"
 #include "outfit.h"
 #include "outfit_color_picker.h"
+#include "source_compare_dialog.h"
 #include "theme.h"
 #include "workspace_session.h"
 
@@ -227,6 +228,10 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	saveStateLabel = newd wxStaticText(this, wxID_ANY, "No unsaved changes");
 	saveStateLabel->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
 	footer->Add(saveStateLabel, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
+	compareButton = newd wxButton(this, wxID_ANY, "Compare External...");
+	compareButton->Hide();
+	compareButton->Bind(wxEVT_BUTTON, &MonsterEditorDialog::onCompareExternal, this);
+	footer->Add(compareButton, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
 	footer->Add(newd wxButton(this, ID_MONSTER_BACK, "< Back to Monsters"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 	footer->Add(newd wxButton(this, ID_MONSTER_BROWSE, "Browse Monsters..."), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(12));
 	auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
@@ -251,6 +256,10 @@ MonsterEditorDialog::MonsterEditorDialog(wxWindow* parent, std::unique_ptr<Monst
 	Bind(wxEVT_CHECKBOX, &MonsterEditorDialog::onFieldChanged, this);
 	autosaveTimer = std::make_unique<wxTimer>(this);
 	Bind(wxEVT_TIMER, &MonsterEditorDialog::onAutosave, this, autosaveTimer->GetId());
+	sourceWatchTimer = std::make_unique<wxTimer>(this);
+	Bind(wxEVT_TIMER, &MonsterEditorDialog::onSourceWatch, this, sourceWatchTimer->GetId());
+	resetSourceMonitor();
+	sourceWatchTimer->Start(1000);
 	constructing = false;
 	refreshPreview();
 }
@@ -397,7 +406,6 @@ void MonsterEditorDialog::readControls() {
 }
 
 void MonsterEditorDialog::refreshPreview() {
-	readControls();
 	direction = directionChoice ? directionChoice->GetSelection() : direction;
 	Outfit outfit;
 	outfit.lookType = edited.outfit.lookType;
@@ -408,6 +416,7 @@ void MonsterEditorDialog::refreshPreview() {
 	outfit.lookFeet = edited.outfit.feet;
 	outfit.lookAddon = edited.outfit.addons;
 	outfit.lookMount = edited.outfit.mount;
+	int mountClientId = outfit.lookMount > 0 ? g_workspace.resolveMountClientId(outfit.lookMount) : 0;
 	GameSprite* sprite = nullptr;
 	const Outfit* previewOutfit = nullptr;
 	if (outfit.lookItem > 0) {
@@ -416,10 +425,10 @@ void MonsterEditorDialog::refreshPreview() {
 		sprite = g_gui.gfx.getCreatureSprite(outfit.lookType);
 		previewOutfit = &outfit;
 	} else if (outfit.lookMount > 0) {
-		const int resolvedMount = g_workspace.resolveMountClientId(outfit.lookMount);
-		sprite = g_gui.gfx.getCreatureSprite(resolvedMount);
-		outfit.lookType = resolvedMount;
+		sprite = g_gui.gfx.getCreatureSprite(mountClientId);
+		outfit.lookType = mountClientId;
 		outfit.lookMount = 0;
+		mountClientId = 0;
 		previewOutfit = &outfit;
 	}
 	if (!sprite) {
@@ -431,7 +440,7 @@ void MonsterEditorDialog::refreshPreview() {
 	int width = 0;
 	int height = 0;
 	bool pending = false;
-	if (!sprite->getVisualPreviewRGBA(rgba, width, height, pending, false, previewOutfit, direction, frame ? frame->GetValue() : 0)) {
+	if (!sprite->getVisualPreviewRGBA(rgba, width, height, pending, false, previewOutfit, direction, frame ? frame->GetValue() : 0, 0, 0, 0, mountClientId)) {
 		preview->SetBitmap(wxBitmap());
 		preview->SetToolTip(pending ? "Preview is loading from the active client." : "This active-client sprite cannot be previewed.");
 		return;
@@ -466,6 +475,13 @@ void MonsterEditorDialog::onBrowse(wxCommandEvent& WXUNUSED(event)) {
 
 bool MonsterEditorDialog::saveDocument(bool showErrors) {
 	readControls();
+	if (!externalChanges.empty()) {
+		if (showErrors) {
+			wxCommandEvent event;
+			onCompareExternal(event);
+		}
+		return false;
+	}
 	if (edited.name.empty()) {
 		const std::string error = "Monster name cannot be empty.";
 		autosaveState.failed(error);
@@ -487,6 +503,7 @@ bool MonsterEditorDialog::saveDocument(bool showErrors) {
 	edited = document->definition();
 	autosaveState.saved();
 	saved = true;
+	resetSourceMonitor();
 	if (sourceView) {
 		sourceView->ChangeValue(Utf8(document->sourceText()));
 	}
@@ -495,10 +512,9 @@ bool MonsterEditorDialog::saveDocument(bool showErrors) {
 }
 
 void MonsterEditorDialog::scheduleAutosave() {
-	if (constructing || !document) {
+	if (constructing || !document || !externalChanges.empty()) {
 		return;
 	}
-	readControls();
 	if (!document->hasChanges(edited)) {
 		if (!autosaveState.hasError()) {
 			updateSaveState(saved ? "Saved" : "No unsaved changes");
@@ -513,6 +529,7 @@ void MonsterEditorDialog::scheduleAutosave() {
 }
 
 void MonsterEditorDialog::onFieldChanged(wxCommandEvent& event) {
+	readControls();
 	scheduleAutosave();
 	event.Skip();
 }
@@ -520,6 +537,49 @@ void MonsterEditorDialog::onFieldChanged(wxCommandEvent& event) {
 void MonsterEditorDialog::onAutosave(wxTimerEvent& WXUNUSED(event)) {
 	if (autosaveState.ready()) {
 		saveDocument(false);
+	}
+}
+
+void MonsterEditorDialog::resetSourceMonitor() {
+	std::vector<EditorSourceSnapshot> sources { { document->source().declarationPath, document->sourceText() } };
+	const auto addRelated = [&](const std::optional<std::filesystem::path>& path) {
+		if (!path || path->lexically_normal() == document->source().declarationPath.lexically_normal()) {
+			return;
+		}
+		if (const auto text = SourceText::ReadBoundedFile(*path, 32 * 1024 * 1024)) {
+			sources.push_back({ *path, *text });
+		}
+	};
+	addRelated(document->source().registrationPath);
+	addRelated(document->source().relatedScriptPath);
+	sourceMonitor.reset(std::move(sources));
+	externalChanges.clear();
+	if (compareButton) {
+		compareButton->Hide();
+		Layout();
+	}
+}
+
+void MonsterEditorDialog::onSourceWatch(wxTimerEvent&) {
+	if (!externalChanges.empty()) {
+		return;
+	}
+	externalChanges = sourceMonitor.poll();
+	if (externalChanges.empty()) {
+		return;
+	}
+	if (autosaveTimer) {
+		autosaveTimer->Stop();
+	}
+	updateSaveState("External source change detected - autosave paused", true);
+	compareButton->Show();
+	Layout();
+}
+
+void MonsterEditorDialog::onCompareExternal(wxCommandEvent&) {
+	if (ShowSourceConflictDialog(this, externalChanges) == SourceConflictChoice::Reopen) {
+		browseRequested = true;
+		EndModal(wxID_CANCEL);
 	}
 }
 
@@ -562,6 +622,7 @@ void MonsterEditorDialog::onClose(wxCloseEvent& event) {
 }
 
 void MonsterEditorDialog::onLookChanged(wxCommandEvent& WXUNUSED(event)) {
+	readControls();
 	refreshPreview();
 	scheduleAutosave();
 }

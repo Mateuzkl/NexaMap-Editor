@@ -319,6 +319,7 @@
 	<ClInclude Include="..\..\source\server_workspace.h">
 	  <Filter>common</Filter>
 	</ClInclude>
+	<ClInclude Include="..\..\source\server_item_id_map.h"><Filter>common</Filter></ClInclude>
 	<ClInclude Include="..\..\source\mount_id_resolver.h">
 	  <Filter>common</Filter>
 	</ClInclude>
@@ -357,6 +358,8 @@
 	<ClInclude Include="..\..\source\outfit_color_picker.h"><Filter>gui\controls</Filter></ClInclude>
 	<ClInclude Include="..\..\source\spell_definition.h"><Filter>common</Filter></ClInclude>
 	<ClInclude Include="..\..\source\spell_area_resolver.h"><Filter>common</Filter></ClInclude>
+	<ClInclude Include="..\..\source\spell_area_library.h"><Filter>common</Filter></ClInclude>
+	<ClInclude Include="..\..\source\spell_area_editor_dialog.h"><Filter>gui\dialogs</Filter></ClInclude>
 	<ClInclude Include="..\..\source\spell_editor_dialog.h"><Filter>gui\dialogs</Filter></ClInclude>
 	<ClInclude Include="..\..\source\spell_visual_browser_dialog.h"><Filter>gui\dialogs</Filter></ClInclude>
 	<ClInclude Include="..\..\source\workspace_session.h">
@@ -657,6 +660,7 @@
 	<ClCompile Include="..\..\source\server_workspace.cpp">
 	  <Filter>common</Filter>
 	</ClCompile>
+	<ClCompile Include="..\..\source\server_item_id_map.cpp"><Filter>common</Filter></ClCompile>
 	<ClCompile Include="..\..\source\mount_id_resolver.cpp">
 	  <Filter>common</Filter>
 	</ClCompile>
@@ -698,6 +702,8 @@
 	<ClCompile Include="..\..\source\outfit_color_picker.cpp"><Filter>gui\controls</Filter></ClCompile>
 	<ClCompile Include="..\..\source\spell_definition.cpp"><Filter>common</Filter></ClCompile>
 	<ClCompile Include="..\..\source\spell_area_resolver.cpp"><Filter>common</Filter></ClCompile>
+	<ClCompile Include="..\..\source\spell_area_library.cpp"><Filter>common</Filter></ClCompile>
+	<ClCompile Include="..\..\source\spell_area_editor_dialog.cpp"><Filter>gui\dialogs</Filter></ClCompile>
 	<ClCompile Include="..\..\source\spell_editor_dialog.cpp"><Filter>gui\dialogs</Filter></ClCompile>
 	<ClCompile Include="..\..\source\spell_visual_browser_dialog.cpp"><Filter>gui\dialogs</Filter></ClCompile>
 	<ClCompile Include="..\..\source\workspace_session.cpp">

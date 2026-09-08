@@ -4,23 +4,18 @@
 
 #include "spell_area_resolver.h"
 
+#include "lua_source_scanner.h"
+#include "source_text_utils.h"
+
 #include <algorithm>
 #include <charconv>
 #include <cctype>
-#include <fstream>
-#include <iterator>
 #include <optional>
-#include <set>
+#include <unordered_set>
 
 namespace {
 	std::string Trim(std::string_view value) {
-		while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
-			value.remove_prefix(1);
-		}
-		while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
-			value.remove_suffix(1);
-		}
-		return std::string(value);
+		return SourceText::Trim(value);
 	}
 
 	bool IdentifierStart(char value) {
@@ -31,68 +26,12 @@ namespace {
 		return std::isalnum(static_cast<unsigned char>(value)) || value == '_';
 	}
 
-	std::optional<std::string> Read(const std::filesystem::path& path) {
-		std::ifstream stream(path, std::ios::binary);
-		if (!stream) {
-			return std::nullopt;
-		}
-		stream.seekg(0, std::ios::end);
-		const auto size = stream.tellg();
-		if (size < 0 || size > 8 * 1024 * 1024) {
-			return std::nullopt;
-		}
-		stream.seekg(0);
-		std::string bytes(static_cast<std::size_t>(size), '\0');
-		if (!bytes.empty()) {
-			stream.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-		}
-		return stream ? std::optional<std::string>(std::move(bytes)) : std::nullopt;
-	}
-
 	std::size_t SkipSpaceAndComments(std::string_view text, std::size_t cursor) {
-		while (cursor < text.size()) {
-			if (std::isspace(static_cast<unsigned char>(text[cursor]))) {
-				++cursor;
-			} else if (text.substr(cursor, 2) == "--") {
-				if (text.substr(cursor, 4) == "--[[") {
-					const auto end = text.find("]]", cursor + 4);
-					cursor = end == std::string_view::npos ? text.size() : end + 2;
-				} else {
-					const auto end = text.find('\n', cursor + 2);
-					cursor = end == std::string_view::npos ? text.size() : end + 1;
-				}
-			} else {
-				break;
-			}
-		}
-		return cursor;
+		return LuaSource::SkipTrivia(text, cursor);
 	}
 
 	std::optional<std::size_t> BalancedEnd(std::string_view text, std::size_t open, char left, char right) {
-		int depth = 0;
-		char quote = '\0';
-		bool escaped = false;
-		for (std::size_t cursor = open; cursor < text.size(); ++cursor) {
-			const char value = text[cursor];
-			if (quote) {
-				if (escaped) {
-					escaped = false;
-				} else if (value == '\\') {
-					escaped = true;
-				} else if (value == quote) {
-					quote = '\0';
-				}
-				continue;
-			}
-			if (value == '\'' || value == '"') {
-				quote = value;
-			} else if (value == left) {
-				++depth;
-			} else if (value == right && --depth == 0) {
-				return cursor + 1;
-			}
-		}
-		return std::nullopt;
+		return LuaSource::BalancedEnd(text, open, left, right);
 	}
 
 	std::vector<SpellAreaResolver::Definition> ParseDefinitions(const std::filesystem::path& path, std::string_view text) {
@@ -101,6 +40,14 @@ namespace {
 			cursor = SkipSpaceAndComments(text, cursor);
 			if (cursor >= text.size()) {
 				break;
+			}
+			if (const auto bracket = LuaSource::OpenLongBracket(text, cursor)) {
+				cursor = LuaSource::LongBracketEnd(text, bracket->contentBegin, bracket->equals);
+				continue;
+			}
+			if (text[cursor] == '\'' || text[cursor] == '"') {
+				cursor = LuaSource::QuotedStringEnd(text, cursor);
+				continue;
 			}
 			if (!IdentifierStart(text[cursor])) {
 				++cursor;
@@ -120,14 +67,16 @@ namespace {
 			std::size_t expressionEnd = cursor;
 			if (cursor < text.size() && text[cursor] == '{') {
 				expressionEnd = BalancedEnd(text, cursor, '{', '}').value_or(cursor);
+			} else if (const auto bracket = LuaSource::OpenLongBracket(text, cursor)) {
+				expressionEnd = LuaSource::LongBracketEnd(text, bracket->contentBegin, bracket->equals);
 			} else if (cursor < text.size() && IdentifierStart(text[cursor])) {
 				while (cursor < text.size() && (IdentifierPart(text[cursor]) || text[cursor] == '.')) {
 					++cursor;
 				}
 				expressionEnd = cursor;
-				cursor = SkipSpaceAndComments(text, cursor);
-				if (cursor < text.size() && text[cursor] == '(') {
-					expressionEnd = BalancedEnd(text, cursor, '(', ')').value_or(cursor);
+				const std::size_t callCursor = SkipSpaceAndComments(text, cursor);
+				if (callCursor < text.size() && text[callCursor] == '(') {
+					expressionEnd = BalancedEnd(text, callCursor, '(', ')').value_or(callCursor);
 				}
 			}
 			if (expressionEnd > expressionBegin && (name.find("AREA") != std::string::npos || text[expressionBegin] == '{')) {
@@ -241,11 +190,17 @@ SpellAreaResolver::SpellAreaResolver(const ServerWorkspace& workspace) {
 				continue;
 			}
 			++count;
-			if (const auto bytes = Read(iterator->path())) {
+			++scanStats.filesDiscovered;
+			if (const auto bytes = SourceText::ReadBoundedFile(iterator->path(), 8 * 1024 * 1024)) {
+				++scanStats.filesRead;
 				auto parsed = ParseDefinitions(iterator->path(), *bytes);
+				scanStats.definitionsParsed += parsed.size();
 				definitions.insert(definitions.end(), std::make_move_iterator(parsed.begin()), std::make_move_iterator(parsed.end()));
 			}
 		}
+	}
+	for (std::size_t index = 0; index < definitions.size(); ++index) {
+		definitionsByName[definitions[index].name].push_back(index);
 	}
 }
 
@@ -254,7 +209,7 @@ SpellAreaResolution SpellAreaResolver::resolve(std::string_view requested) const
 	if (expression.empty()) {
 		return { SpellAreaResolutionState::Single, {}, "Single target / no combat area", {} };
 	}
-	std::set<std::string> visited;
+	std::unordered_set<std::string> visited;
 	std::filesystem::path source;
 	for (int depth = 0; depth < 24; ++depth) {
 		expression = UnwrapCreateCombatArea(expression);
@@ -272,17 +227,29 @@ SpellAreaResolution SpellAreaResolver::resolve(std::string_view requested) const
 		if (!visited.insert(expression).second) {
 			return { SpellAreaResolutionState::Unresolved, {}, "Ambiguous or cyclic area alias", source };
 		}
-		std::vector<const Definition*> matches;
-		for (const Definition& definition : definitions) {
-			if (definition.name == expression) {
-				matches.push_back(&definition);
-			}
+		const auto matches = definitionsByName.find(expression);
+		if (matches == definitionsByName.end() || matches->second.size() != 1) {
+			return { SpellAreaResolutionState::Unresolved, {}, matches == definitionsByName.end() ? "Area geometry unavailable in active Server Workspace" : "Ambiguous area constant in active Server Workspace", {} };
 		}
-		if (matches.size() != 1) {
-			return { SpellAreaResolutionState::Unresolved, {}, matches.empty() ? "Area geometry unavailable in active Server Workspace" : "Ambiguous area constant in active Server Workspace", {} };
-		}
-		expression = matches.front()->expression;
-		source = matches.front()->path;
+		const Definition& definition = definitions[matches->second.front()];
+		expression = definition.expression;
+		source = definition.path;
 	}
 	return { SpellAreaResolutionState::Unresolved, {}, "Area alias chain is too deep", source };
+}
+
+const SpellAreaResolverStats& SpellAreaResolver::stats() const {
+	return scanStats;
+}
+
+const std::vector<SpellAreaResolver::Definition>& SpellAreaResolver::allDefinitions() const {
+	return definitions;
+}
+
+std::vector<SpellAreaResolver::Definition> SpellAreaResolver::ParseSource(const std::filesystem::path& path, std::string_view text) {
+	return ParseDefinitions(path, text);
+}
+
+std::vector<MonsterAreaTile> SpellAreaResolver::ParseLiteralMatrix(std::string_view expression) {
+	return ParseMatrix(UnwrapCreateCombatArea(Trim(expression)));
 }

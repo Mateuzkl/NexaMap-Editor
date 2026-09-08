@@ -309,6 +309,7 @@ if(BUILD_TESTING)
 		tests/server_workspace_tests.cpp
 		source/mount_id_resolver.cpp
 		source/server_workspace.cpp
+		source/server_item_id_map.cpp
 	)
 	target_include_directories(server_workspace_tests PRIVATE source)
 	set_target_properties(server_workspace_tests PROPERTIES
@@ -321,6 +322,7 @@ if(BUILD_TESTING)
 		tests/server_content_index_tests.cpp
 		source/server_content_index.cpp
 		source/server_workspace.cpp
+		source/server_item_id_map.cpp
 	)
 	target_include_directories(server_content_index_tests PRIVATE source)
 	set_target_properties(server_content_index_tests PROPERTIES
@@ -339,6 +341,7 @@ if(BUILD_TESTING)
 		source/monster_section_codec.cpp
 		source/server_content_index.cpp
 		source/server_workspace.cpp
+		source/server_item_id_map.cpp
 	)
 	target_include_directories(monster_definition_provider_tests PRIVATE source)
 	set_target_properties(monster_definition_provider_tests PROPERTIES
@@ -356,6 +359,7 @@ if(BUILD_TESTING)
 		source/npc_definition_creation.cpp
 		source/server_content_index.cpp
 		source/server_workspace.cpp
+		source/server_item_id_map.cpp
 	)
 	target_include_directories(npc_definition_provider_tests PRIVATE source)
 	set_target_properties(npc_definition_provider_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
@@ -368,8 +372,10 @@ if(BUILD_TESTING)
 		tests/spell_definition_provider_tests.cpp
 		source/spell_definition.cpp
 		source/spell_area_resolver.cpp
+		source/spell_area_library.cpp
 		source/server_content_index.cpp
 		source/server_workspace.cpp
+		source/server_item_id_map.cpp
 	)
 	target_include_directories(spell_definition_provider_tests PRIVATE source)
 	set_target_properties(spell_definition_provider_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
@@ -382,6 +388,7 @@ if(BUILD_TESTING)
 		tests/server_visual_catalog_tests.cpp
 		source/server_visual_catalog.cpp
 		source/server_workspace.cpp
+		source/server_item_id_map.cpp
 	)
 	target_include_directories(server_visual_catalog_tests PRIVATE source)
 	set_target_properties(server_visual_catalog_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)

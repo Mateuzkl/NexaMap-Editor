@@ -8,6 +8,8 @@
 
 #include "monster_spell_area.h"
 #include "monster_spell_preview.h"
+#include "spell_area_editor_dialog.h"
+#include "workspace_session.h"
 
 #include <algorithm>
 #include <limits>
@@ -18,6 +20,7 @@
 #include <wx/choice.h>
 #include <wx/combobox.h>
 #include <wx/listctrl.h>
+#include <wx/msgdlg.h>
 #include <wx/notebook.h>
 #include <wx/spinctrl.h>
 #include <wx/splitter.h>
@@ -203,6 +206,25 @@ bool MonsterEditorDialog::editAttack(MonsterAttackDefinition& attack) {
 	auto* effect = text("Impact effect", attack.effect, Values({ "none", "firearea", "energyarea", "poff", "explosionarea", "icearea", "holyarea", "CONST_ME_NONE", "CONST_ME_FIREAREA", "CONST_ME_ENERGYAREA", "CONST_ME_POFF", "CONST_ME_EXPLOSIONAREA", "CONST_ME_ICEAREA", "CONST_ME_HOLYAREA" }));
 	auto* projectile = text("Projectile", attack.projectile, Values({ "none", "fire", "energy", "poison", "suddendeath", "ice", "holy", "CONST_ANI_NONE", "CONST_ANI_FIRE", "CONST_ANI_ENERGY", "CONST_ANI_POISON", "CONST_ANI_SUDDENDEATH", "CONST_ANI_ICE", "CONST_ANI_HOLY" }));
 	root->Add(grid, 0, wxEXPAND | wxALL, dialog.FromDIP(12));
+	auto* reusableArea = newd wxButton(&dialog, wxID_ANY, "Create Reusable Spell Area...");
+	reusableArea->SetToolTip("Creates a validated AREA_* matrix in the active server library. Registered monster spell scripts can use it without changing this server's inline attack format.");
+	root->Add(reusableArea, 0, wxLEFT | wxRIGHT | wxBOTTOM, dialog.FromDIP(12));
+	reusableArea->Bind(wxEVT_BUTTON, [&dialog](wxCommandEvent&) {
+		auto resolver = g_workspace.getSpellAreaResolver();
+		SpellAreaEditorDialog areaDialog(&dialog, g_workspace.getServer(), resolver);
+		if (areaDialog.ShowModal() != wxID_OK) {
+			return;
+		}
+		const SpellAreaLibrarySaveResult& created = areaDialog.saveResult();
+		wxString refreshError;
+		g_workspace.refreshServerContentPaths({ created.path }, refreshError);
+		wxMessageBox(
+			"Created " + Utf8(created.name) + ". Use this constant in the registered monster spell script, then select that spell in the Attack field.",
+			"Reusable area created",
+			wxOK | wxICON_INFORMATION,
+			&dialog
+		);
+	});
 	root->Add(newd wxStaticText(&dialog, wxID_ANY, "Custom key=value (one per line; Lua expressions remain raw)"), 0, wxLEFT | wxRIGHT, dialog.FromDIP(12));
 	auto* custom = newd wxTextCtrl(&dialog, wxID_ANY, FormatProperties(attack.customProperties), wxDefaultPosition, dialog.FromDIP(wxSize(-1, 90)), wxTE_MULTILINE);
 	root->Add(custom, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, dialog.FromDIP(12));

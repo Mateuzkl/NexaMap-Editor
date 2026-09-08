@@ -54,8 +54,10 @@ namespace {
 		std::vector<ServerVisualConstant>& effects,
 		std::vector<ServerVisualConstant>& projectiles,
 		std::unordered_map<std::string, uint32_t>& known,
-		bool supplementOnly
+		bool supplementOnly,
+		ServerVisualCatalogStats& stats
 	) {
+		++stats.filesInspected;
 		std::error_code error;
 		const std::uintmax_t size = std::filesystem::file_size(path, error);
 		if (error || size > MaximumSourceBytes) {
@@ -65,6 +67,7 @@ namespace {
 		if (!stream) {
 			return;
 		}
+		++stats.filesRead;
 
 		static const std::regex declaration(R"(^\s*(CONST_(ME|ANI)_[A-Z0-9_]+)\s*(?:=\s*([^,}\r\n]+))?\s*,?\s*(?://.*)?$)");
 		std::string line;
@@ -156,7 +159,7 @@ ServerVisualCatalog ServerVisualCatalog::Build(const ServerWorkspace& workspace)
 		if (!std::filesystem::is_regular_file(candidate, error)) {
 			continue;
 		}
-		ParseConstants(candidate, catalog.effectValues, catalog.projectileValues, known, false);
+		ParseConstants(candidate, catalog.effectValues, catalog.projectileValues, known, false, catalog.scanStats);
 		if (!catalog.effectValues.empty() && !catalog.projectileValues.empty()) {
 			break;
 		}
@@ -171,12 +174,13 @@ ServerVisualCatalog ServerVisualCatalog::Build(const ServerWorkspace& workspace)
 				continue;
 			}
 			++inspected;
-			ParseConstants(iterator->path(), catalog.effectValues, catalog.projectileValues, known, true);
+			ParseConstants(iterator->path(), catalog.effectValues, catalog.projectileValues, known, true, catalog.scanStats);
 		}
 	}
 
 	SortAndUnique(catalog.effectValues);
 	SortAndUnique(catalog.projectileValues);
+	catalog.rebuildLookups();
 	return catalog;
 }
 
@@ -192,16 +196,28 @@ std::optional<uint32_t> ServerVisualCatalog::resolve(ServerVisualKind kind, cons
 	if (const auto numeric = ParseNumber(value)) {
 		return numeric;
 	}
-	const std::string normalized = Lower(Trim(value));
-	const auto& values = kind == ServerVisualKind::MagicEffect ? effectValues : projectileValues;
-	const auto found = std::find_if(values.begin(), values.end(), [&](const ServerVisualConstant& entry) {
-		return Lower(entry.name) == normalized;
-	});
-	return found == values.end() ? std::nullopt : std::optional<uint32_t>(found->id);
+	const auto& values = kind == ServerVisualKind::MagicEffect ? effectIdsByName : projectileIdsByName;
+	const auto found = values.find(Lower(Trim(value)));
+	return found == values.end() ? std::nullopt : std::optional<uint32_t>(found->second);
 }
 
 std::string ServerVisualCatalog::nameFor(ServerVisualKind kind, uint32_t id) const {
-	const auto& values = kind == ServerVisualKind::MagicEffect ? effectValues : projectileValues;
-	const auto found = std::find_if(values.begin(), values.end(), [&](const ServerVisualConstant& entry) { return entry.id == id; });
-	return found == values.end() ? std::to_string(id) : found->name;
+	const auto& values = kind == ServerVisualKind::MagicEffect ? effectNamesById : projectileNamesById;
+	const auto found = values.find(id);
+	return found == values.end() ? std::to_string(id) : found->second;
+}
+
+const ServerVisualCatalogStats& ServerVisualCatalog::stats() const {
+	return scanStats;
+}
+
+void ServerVisualCatalog::rebuildLookups() {
+	for (const ServerVisualConstant& value : effectValues) {
+		effectIdsByName.emplace(Lower(value.name), value.id);
+		effectNamesById.emplace(value.id, value.name);
+	}
+	for (const ServerVisualConstant& value : projectileValues) {
+		projectileIdsByName.emplace(Lower(value.name), value.id);
+		projectileNamesById.emplace(value.id, value.name);
+	}
 }

@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <memory>
 #include <unordered_set>
 
@@ -90,11 +91,13 @@ namespace {
 			id = visualId;
 			direction = selectedDirection;
 			frame = 0;
+			cachedId = std::numeric_limits<uint32_t>::max();
 			Refresh();
 		}
 
 		void setDirection(int selectedDirection) {
 			direction = selectedDirection;
+			cachedDirection = -1;
 			Refresh();
 		}
 
@@ -118,20 +121,28 @@ namespace {
 				dc.DrawLabel(id == 0 ? "No visual effect" : "This ID is not available in the active client.", wxRect(FromDIP(12), FromDIP(12), size.x - FromDIP(24), size.y - FromDIP(24)), wxALIGN_CENTER);
 				return;
 			}
-			std::vector<uint8_t> pixels;
-			int width = 0;
-			int height = 0;
-			bool pending = false;
-			const auto [patternX, patternY] = DirectionPattern(direction, *sprite);
-			if (!sprite->getVisualPreviewRGBA(pixels, width, height, pending, true, nullptr, 0, frame, 0, patternX, patternY)) {
-				dc.SetTextForeground(Theme::Get(Theme::Role::TextSubtle));
-				dc.DrawLabel(pending ? "Loading sprite..." : "Sprite unavailable", GetClientRect(), wxALIGN_CENTER);
-				return;
+			if (cachedId != id || cachedFrame != frame || cachedDirection != direction) {
+				std::vector<uint8_t> pixels;
+				int width = 0;
+				int height = 0;
+				bool pending = false;
+				const auto [patternX, patternY] = DirectionPattern(direction, *sprite);
+				if (!sprite->getVisualPreviewRGBA(pixels, width, height, pending, true, nullptr, 0, frame, 0, patternX, patternY)) {
+					dc.SetTextForeground(Theme::Get(Theme::Role::TextSubtle));
+					dc.DrawLabel(pending ? "Loading sprite..." : "Sprite unavailable", GetClientRect(), wxALIGN_CENTER);
+					return;
+				}
+				cachedBitmap = BitmapFromRgba(pixels, width, height);
+				cachedId = id;
+				cachedFrame = frame;
+				cachedDirection = direction;
 			}
-			wxBitmap bitmap = BitmapFromRgba(pixels, width, height);
+			wxBitmap bitmap = cachedBitmap;
 			if (!bitmap.IsOk()) {
 				return;
 			}
+			const int width = bitmap.GetWidth();
+			const int height = bitmap.GetHeight();
 			const int maximum = std::max(32, std::min(size.x - FromDIP(28), size.y - FromDIP(58)));
 			const int scale = std::max(1, std::min(maximum / width, maximum / height));
 			if (scale > 1) {
@@ -149,6 +160,10 @@ namespace {
 		uint32_t id = 0;
 		int direction = 0;
 		int frame = 0;
+		wxBitmap cachedBitmap;
+		uint32_t cachedId = std::numeric_limits<uint32_t>::max();
+		int cachedFrame = -1;
+		int cachedDirection = -1;
 	};
 }
 

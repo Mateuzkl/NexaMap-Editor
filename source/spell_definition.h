@@ -114,6 +114,12 @@ class SpellDefinitionDocument {
 public:
 	static std::unique_ptr<SpellDefinitionDocument> Load(const ServerContentSource& source, std::string& error);
 	static std::unique_ptr<SpellDefinitionDocument> Load(const ServerContentSource& source, std::string& error, const ServerWorkspace* workspace);
+	static std::unique_ptr<SpellDefinitionDocument> Load(
+		const ServerContentSource& source,
+		std::string& error,
+		const ServerWorkspace* workspace,
+		std::shared_ptr<const SpellAreaResolver> areaResolver
+	);
 
 	~SpellDefinitionDocument();
 	SpellDefinitionDocument(SpellDefinitionDocument&&) noexcept;
@@ -132,6 +138,13 @@ public:
 
 private:
 	struct Impl;
+	static std::unique_ptr<SpellDefinitionDocument> LoadFromText(
+		const ServerContentSource& source,
+		std::vector<std::string> files,
+		std::string& error,
+		const ServerWorkspace* workspace,
+		std::shared_ptr<const SpellAreaResolver> areaResolver
+	);
 	explicit SpellDefinitionDocument(std::unique_ptr<Impl> implementation);
 	std::unique_ptr<Impl> implementation;
 };

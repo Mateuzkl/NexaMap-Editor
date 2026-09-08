@@ -7,6 +7,7 @@
 
 #include "monster_definition.h"
 #include "editor_autosave_state.h"
+#include "editor_source_monitor.h"
 
 #include <wx/dialog.h>
 
@@ -72,7 +73,10 @@ private:
 	void onFieldChanged(wxCommandEvent& event);
 	void onAutosave(wxTimerEvent& event);
 	void onLookChanged(wxCommandEvent& event);
+	void onSourceWatch(wxTimerEvent& event);
+	void onCompareExternal(wxCommandEvent& event);
 	void onRotate(wxCommandEvent& event);
+	void resetSourceMonitor();
 	void scheduleAutosave();
 	bool saveDocument(bool showErrors);
 	void updateSaveState(const wxString& label, bool error = false);
@@ -84,6 +88,7 @@ private:
 	OutfitColorPicker* outfitColors = nullptr;
 	wxStaticText* saveStateLabel = nullptr;
 	wxTextCtrl* sourceView = nullptr;
+	wxWindow* compareButton = nullptr;
 	wxChoice* directionChoice = nullptr;
 	wxSpinCtrl* frame = nullptr;
 	wxListCtrl* defenseList = nullptr;
@@ -100,7 +105,10 @@ private:
 	wxListCtrl* voiceList = nullptr;
 	int direction = 2;
 	std::unique_ptr<wxTimer> autosaveTimer;
+	std::unique_ptr<wxTimer> sourceWatchTimer;
 	EditorAutosaveState autosaveState;
+	EditorSourceMonitor sourceMonitor;
+	std::vector<EditorSourceChange> externalChanges;
 	bool constructing = true;
 	bool saved = false;
 	bool browseRequested = false;
