@@ -26,6 +26,10 @@
 #include "multiplayer_session.h"
 
 namespace {
+	inline size_t saturating_add(size_t a, size_t b) {
+		return (SIZE_MAX - b < a) ? SIZE_MAX : a + b;
+	}
+
 	struct HouseRegistryChange {
 		HouseSnapshot snapshot;
 		bool add = true;
@@ -129,29 +133,33 @@ void Change::clear() {
 	data = nullptr;
 }
 
-uint32_t Change::memsize() const {
-	uint32_t mem = sizeof(*this);
+size_t Change::memsize() const {
+	size_t mem = sizeof(*this);
 	switch (type) {
 		case CHANGE_TILE:
 			ASSERT(data);
-			mem += reinterpret_cast<Tile*>(data)->memsize();
+			mem = saturating_add(mem, reinterpret_cast<Tile*>(data)->memsize());
 			break;
 		case CHANGE_ZONE_REGISTRY: {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<ZoneRegistryChange*>(data);
-			mem += sizeof(ZoneRegistryChange) + change->name.capacity();
+			mem = saturating_add(mem, sizeof(ZoneRegistryChange));
+			mem = saturating_add(mem, change->name.capacity());
 			break;
 		}
 		case CHANGE_RENAME_ZONE: {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<ZoneRenameChange*>(data);
-			mem += sizeof(ZoneRenameChange) + change->from.capacity() + change->to.capacity();
+			mem = saturating_add(mem, sizeof(ZoneRenameChange));
+			mem = saturating_add(mem, change->from.capacity());
+			mem = saturating_add(mem, change->to.capacity());
 			break;
 		}
 		case CHANGE_HOUSE_REGISTRY: {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<HouseRegistryChange*>(data);
-			mem += sizeof(HouseRegistryChange) + change->snapshot.name.capacity();
+			mem = saturating_add(mem, sizeof(HouseRegistryChange));
+			mem = saturating_add(mem, change->snapshot.name.capacity());
 			break;
 		}
 		default:
@@ -271,22 +279,22 @@ size_t Action::approx_memsize() const {
 }
 
 size_t Action::memsize() const {
-	uint32_t mem = sizeof(*this);
-	mem += sizeof(Change*) * 3 * changes.size();
+	size_t mem = sizeof(*this);
+	mem = saturating_add(mem, sizeof(Change*) * 3 * changes.size());
 	auto it = changes.begin();
 	while (it != changes.end()) {
 		Change* c = *it;
 		switch (c->type) {
 			case CHANGE_TILE: {
 				ASSERT(c->data);
-				mem += reinterpret_cast<Tile*>(c->data)->memsize();
+				mem = saturating_add(mem, reinterpret_cast<Tile*>(c->data)->memsize());
 				break;
 			}
 
 			case CHANGE_ZONE_REGISTRY:
 			case CHANGE_RENAME_ZONE:
 			case CHANGE_HOUSE_REGISTRY:
-				mem += c->memsize();
+				mem = saturating_add(mem, c->memsize());
 				break;
 
 			default:
@@ -607,15 +615,15 @@ size_t BatchAction::memsize(bool recalc) const {
 		return memory_size;
 	}
 
-	uint32_t mem = sizeof(*this);
-	mem += sizeof(Action*) * 3 * batch.size();
+	size_t mem = sizeof(*this);
+	mem = saturating_add(mem, sizeof(Action*) * 3 * batch.size());
 
 	for (Action* action : batch) {
 #ifdef __USE_EXACT_MEMSIZE__
-		mem += action->memsize();
+		mem = saturating_add(mem, action->memsize());
 #else
 		// Less exact but MUCH faster
-		mem += action->approx_memsize();
+		mem = saturating_add(mem, action->approx_memsize());
 #endif
 	}
 
@@ -882,7 +890,8 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 	}
 
 	while (current != actions.size()) {
-		memory_size -= actions.back()->memsize();
+		const size_t actMem = actions.back()->memsize();
+		memory_size = (actMem > memory_size) ? 0 : memory_size - actMem;
 		BatchAction* todelete = actions.back();
 		actions.pop_back();
 		delete todelete;
@@ -894,15 +903,17 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 		if (lastAction->type == batch->type && g_settings.getInteger(Config::GROUP_ACTIONS) && time(nullptr) - stacking_delay < lastAction->timestamp) {
 			lastAction->merge(batch);
 			lastAction->timestamp = time(nullptr);
-			memory_size -= lastAction->memsize();
-			memory_size += lastAction->memsize(true);
+			const size_t prevMem = lastAction->memsize();
+			const size_t newMem = lastAction->memsize(true);
+			memory_size = (prevMem > memory_size) ? 0 : memory_size - prevMem;
+			memory_size = saturating_add(memory_size, newMem);
 			delete batch;
 			merged = true;
 		}
 	}
 
 	if (!merged) {
-		memory_size += batch->memsize();
+		memory_size = saturating_add(memory_size, batch->memsize());
 		actions.push_back(batch);
 		batch->timestamp = time(nullptr);
 		current++;
@@ -910,7 +921,8 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 
 	const size_t max_undo_memory = static_cast<size_t>(std::max(0, g_settings.getInteger(Config::UNDO_MEM_SIZE))) * 1024ULL * 1024ULL;
 	while (memory_size > max_undo_memory && !actions.empty()) {
-		memory_size -= actions.front()->memsize();
+		const size_t actMem = actions.front()->memsize();
+		memory_size = (actMem > memory_size) ? 0 : memory_size - actMem;
 		delete actions.front();
 		actions.pop_front();
 		current--;
@@ -918,7 +930,8 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 
 	const size_t max_undo_size = static_cast<size_t>(std::max(0, g_settings.getInteger(Config::UNDO_SIZE)));
 	while (actions.size() > max_undo_size && !actions.empty()) {
-		memory_size -= actions.front()->memsize();
+		const size_t actMem = actions.front()->memsize();
+		memory_size = (actMem > memory_size) ? 0 : memory_size - actMem;
 		BatchAction* todelete = actions.front();
 		actions.pop_front();
 		delete todelete;

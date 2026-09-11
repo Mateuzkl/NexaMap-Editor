@@ -28,6 +28,7 @@
 #include <deque>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "client_version.h"
 #include <wx/artprov.h>
@@ -484,6 +485,8 @@ private:
 		wxArrayString& warnings
 	);
 	bool materializeAppearanceVisual(uint16_t id, bool distanceEffect);
+	bool isAppearanceVisualValid(const rme::protobuf::appearances::Appearance& appearance) const;
+	mutable std::unordered_set<int> failedAppearanceVisuals;
 
 	typedef std::map<int, Sprite*> SpriteMap;
 	SpriteMap sprite_space;

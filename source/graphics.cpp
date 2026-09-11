@@ -558,6 +558,7 @@ void GraphicManager::clear(bool clearPreloader) {
 	distance_count = 0;
 	deferredEffectAppearances.clear();
 	deferredMissileAppearances.clear();
+	failedAppearanceVisuals.clear();
 	materializedAppearanceVisuals = 0;
 	loaded_textures = 0;
 	lastclean = time(nullptr);
@@ -646,7 +647,18 @@ bool GraphicManager::hasEffectSprite(int id) const {
 	if (sprite_space.contains(spriteSpaceId)) {
 		return true;
 	}
-	return deferredEffectAppearances.contains(static_cast<uint16_t>(id));
+	if (failedAppearanceVisuals.contains(spriteSpaceId)) {
+		return false;
+	}
+	const auto found = deferredEffectAppearances.find(static_cast<uint16_t>(id));
+	if (found == deferredEffectAppearances.end()) {
+		return false;
+	}
+	if (!isAppearanceVisualValid(*found->second)) {
+		failedAppearanceVisuals.insert(spriteSpaceId);
+		return false;
+	}
+	return true;
 }
 
 bool GraphicManager::hasDistanceSprite(int id) const {
@@ -657,7 +669,18 @@ bool GraphicManager::hasDistanceSprite(int id) const {
 	if (sprite_space.contains(spriteSpaceId)) {
 		return true;
 	}
-	return deferredMissileAppearances.contains(static_cast<uint16_t>(id));
+	if (failedAppearanceVisuals.contains(spriteSpaceId)) {
+		return false;
+	}
+	const auto found = deferredMissileAppearances.find(static_cast<uint16_t>(id));
+	if (found == deferredMissileAppearances.end()) {
+		return false;
+	}
+	if (!isAppearanceVisualValid(*found->second)) {
+		failedAppearanceVisuals.insert(spriteSpaceId);
+		return false;
+	}
+	return true;
 }
 
 GameSprite* GraphicManager::getEditorSprite(int id) {
@@ -1020,6 +1043,26 @@ GameSprite::NormalImage* GraphicManager::getOrCreateAssetImage(uint32_t spriteId
 	return image;
 }
 
+bool GraphicManager::isAppearanceVisualValid(const rme::protobuf::appearances::Appearance& appearance) const {
+	using namespace rme::protobuf::appearances;
+	const FrameGroup* frameGroup = nullptr;
+	for (const FrameGroup& candidate : appearance.frame_group()) {
+		if (candidate.has_sprite_info() && candidate.sprite_info().sprite_id_size() > 0) {
+			frameGroup = &candidate;
+			break;
+		}
+	}
+	if (!frameGroup) {
+		return false;
+	}
+	const SpriteInfo& spriteInfo = frameGroup->sprite_info();
+	const ClientSpriteSheetPtr firstSheet = g_spriteAppearances.getSheetBySpriteId(spriteInfo.sprite_id(0));
+	if (!firstSheet) {
+		return false;
+	}
+	return true;
+}
+
 bool GraphicManager::loadAppearanceSprite(
 	const rme::protobuf::appearances::Appearance& appearance,
 	int spriteSpaceId,
@@ -1037,8 +1080,8 @@ bool GraphicManager::loadAppearanceSprite(
 		}
 	}
 	if (!frameGroup) {
-		warnings.push_back(wxString::Format("Appearance %u has no drawable frame group.", appearance.id()));
-		return true;
+		error = wxString::Format("Appearance %u has no drawable frame group.", appearance.id());
+		return false;
 	}
 
 	const SpriteInfo& spriteInfo = frameGroup->sprite_info();
@@ -1250,6 +1293,8 @@ bool GraphicManager::materializeAppearanceVisual(uint16_t id, bool distanceEffec
 	wxArrayString warnings;
 	if (!loadAppearanceSprite(*found->second, spriteSpaceId, error, warnings)) {
 		wxLogError("Could not materialize appearance visual %u: %s", static_cast<unsigned int>(id), error);
+		failedAppearanceVisuals.insert(spriteSpaceId);
+		deferred.erase(found);
 		return false;
 	}
 	for (const wxString& warning : warnings) {
@@ -2230,6 +2275,7 @@ GameSprite::NormalImage::NormalImage() :
 }
 
 GameSprite::NormalImage::~NormalImage() {
+	unloadGLTexture(0);
 	delete[] dump;
 }
 
@@ -2656,7 +2702,7 @@ GameSprite::TemplateImage::TemplateImage(GameSprite* parent, int v, const Outfit
 }
 
 GameSprite::TemplateImage::~TemplateImage() {
-	////
+	unloadGLTexture(0);
 }
 
 void GameSprite::TemplateImage::colorizePixel(uint8_t color, uint8_t& red, uint8_t& green, uint8_t& blue) {
@@ -2797,6 +2843,7 @@ void GameSprite::TemplateImage::createGLTexture(GLuint unused) {
 
 void GameSprite::TemplateImage::unloadGLTexture(GLuint unused) {
 	Image::unloadGLTexture(gl_tid);
+	gl_tid = 0;
 }
 
 GameSprite* GameSprite::createFromBitmap(const wxArtID& bitmapId) {

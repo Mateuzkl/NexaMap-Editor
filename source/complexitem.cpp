@@ -19,6 +19,12 @@
 
 #include "complexitem.h"
 
+namespace {
+	inline size_t saturating_add(size_t a, size_t b) {
+		return (SIZE_MAX - b < a) ? SIZE_MAX : a + b;
+	}
+}
+
 // Container
 Container::Container(const uint16_t type) :
 	Item(type, 0) {
@@ -53,14 +59,15 @@ double Container::getWeight() const {
 	return g_items[id].weight;
 }
 
-uint32_t Container::memsize() const {
-	uint32_t mem = Item::memsize();
+size_t Container::memsize() const {
+	size_t mem = Item::memsize();
+	mem = saturating_add(mem, sizeof(contents));
+	mem = saturating_add(mem, sizeof(Item*) * contents.capacity());
 	for (const Item* item : contents) {
 		if (item) {
-			mem += item->memsize();
+			mem = saturating_add(mem, item->memsize());
 		}
 	}
-	mem += static_cast<uint32_t>(sizeof(Item*) * contents.capacity());
 	return mem;
 }
 

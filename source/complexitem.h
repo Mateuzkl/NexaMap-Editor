@@ -51,7 +51,7 @@ public:
 		return contents;
 	}
 	double getWeight() const override;
-	uint32_t memsize() const override;
+	size_t memsize() const override;
 
 	bool unserializeItemNode_OTBM(const IOMap& maphandle, BinaryNode* node) override;
 	bool serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const override;

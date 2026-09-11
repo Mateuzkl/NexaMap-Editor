@@ -312,14 +312,18 @@ void SpellVisualBrowserDialog::updateSelection() {
 		return;
 	}
 	const ServerVisualConstant& value = values[visible[static_cast<std::size_t>(row)]];
-	const bool available = HasVisualSprite(kind, value.id);
+	bool available = HasVisualSprite(kind, value.id);
+	static_cast<VisualSpritePanel*>(preview)->setVisual(value.id, kind == ServerVisualKind::DistanceEffect ? 2 : 0);
+	if (available && value.id != 0 && !HasVisualSprite(kind, value.id)) {
+		available = false;
+		list->SetItem(row, 2, "Unavailable");
+	}
 	const wxString source = value.sourcePath.empty() ? wxString("numeric client entry") : PathText(value.sourcePath);
 	const wxString availability = available ? wxString("available in active client") : wxString("not available in active client");
 	const wxString label = wxString::Format("%s = %u  |  %s  |  %s", wxString::FromUTF8(value.name), value.id, availability, source);
 	openButton->Enable(available || value.id == 0);
 	details->SetLabel(label);
 	details->SetToolTip(label);
-	static_cast<VisualSpritePanel*>(preview)->setVisual(value.id, kind == ServerVisualKind::DistanceEffect ? 2 : 0);
 }
 
 void SpellVisualBrowserDialog::openSelection() {

@@ -155,6 +155,26 @@ int main() {
 	const std::string actionSrc((std::istreambuf_iterator<char>(actionFile)), std::istreambuf_iterator<char>());
 	check(actionSrc.find("Action::approx_memsize() const {\n\treturn memsize();") != std::string::npos, "Action::approx_memsize delegates to accurate tile memsize accounting");
 
+	std::ifstream actionHeaderFile(sourceRoot / "source" / "action.h", std::ios::binary);
+	const std::string actionHeader((std::istreambuf_iterator<char>(actionHeaderFile)), std::istreambuf_iterator<char>());
+	check(actionHeader.find("size_t memory_size;") != std::string::npos, "BatchAction::memory_size is 64-bit size_t");
+	check(actionHeader.find("size_t memsize() const;") != std::string::npos, "Change::memsize returns size_t");
+
+	std::ifstream itemHeaderFile(sourceRoot / "source" / "item.h", std::ios::binary);
+	const std::string itemHeader((std::istreambuf_iterator<char>(itemHeaderFile)), std::istreambuf_iterator<char>());
+	check(itemHeader.find("virtual size_t memsize() const;") != std::string::npos, "Item::memsize returns size_t");
+
+	std::ifstream tileHeaderFile(sourceRoot / "source" / "tile.h", std::ios::binary);
+	const std::string tileHeader((std::istreambuf_iterator<char>(tileHeaderFile)), std::istreambuf_iterator<char>());
+	check(tileHeader.find("size_t memsize() const;") != std::string::npos, "Tile::memsize returns size_t");
+
+	std::ifstream complexItemFile(sourceRoot / "source" / "complexitem.cpp", std::ios::binary);
+	const std::string complexItemSrc((std::istreambuf_iterator<char>(complexItemFile)), std::istreambuf_iterator<char>());
+	check(complexItemSrc.find("sizeof(contents)") != std::string::npos, "Container::memsize includes inline sizeof(contents)");
+
+	check(graphics.find("GameSprite::TemplateImage::~TemplateImage() {\n\tunloadGLTexture(0);") != std::string::npos, "TemplateImage destructor unloads GL texture before base destruction");
+	check(graphics.find("isAppearanceVisualValid") != std::string::npos, "GraphicManager validates deferred appearances before reporting availability");
+
 	if (failures == 0) {
 		std::cout << checks << " editor data layout checks passed.\n";
 	}
