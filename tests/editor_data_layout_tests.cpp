@@ -144,6 +144,37 @@ int main() {
 	const std::string assets((std::istreambuf_iterator<char>(assetsFile)), std::istreambuf_iterator<char>());
 	check(assets.find("appearances.effect()") != std::string::npos && assets.find("appearances.missile()") != std::string::npos, "protobuf clients load effect and missile appearances");
 
+	check(graphics.find("bool GraphicManager::hasEffectSprite") != std::string::npos && graphics.find("bool GraphicManager::hasDistanceSprite") != std::string::npos, "GraphicManager provides side-effect-free sprite existence queries");
+	check(graphics.find("MaximumInstancedTemplates") != std::string::npos, "GameSprite caps instanced template allocation");
+
+	std::ifstream spellVisualBrowserFile(sourceRoot / "source" / "spell_visual_browser_dialog.cpp", std::ios::binary);
+	const std::string spellVisualBrowser((std::istreambuf_iterator<char>(spellVisualBrowserFile)), std::istreambuf_iterator<char>());
+	check(spellVisualBrowser.find("HasVisualSprite") != std::string::npos && spellVisualBrowser.find("list->SetItem(row, 2, HasVisualSprite") != std::string::npos, "Spell visual browser populates list availability using lightweight non-materializing queries");
+
+	std::ifstream actionFile(sourceRoot / "source" / "action.cpp", std::ios::binary);
+	const std::string actionSrc((std::istreambuf_iterator<char>(actionFile)), std::istreambuf_iterator<char>());
+	check(actionSrc.find("Action::approx_memsize() const {\n\treturn memsize();") != std::string::npos, "Action::approx_memsize delegates to accurate tile memsize accounting");
+
+	std::ifstream actionHeaderFile(sourceRoot / "source" / "action.h", std::ios::binary);
+	const std::string actionHeader((std::istreambuf_iterator<char>(actionHeaderFile)), std::istreambuf_iterator<char>());
+	check(actionHeader.find("size_t memory_size;") != std::string::npos, "BatchAction::memory_size is 64-bit size_t");
+	check(actionHeader.find("size_t memsize() const;") != std::string::npos, "Change::memsize returns size_t");
+
+	std::ifstream itemHeaderFile(sourceRoot / "source" / "item.h", std::ios::binary);
+	const std::string itemHeader((std::istreambuf_iterator<char>(itemHeaderFile)), std::istreambuf_iterator<char>());
+	check(itemHeader.find("virtual size_t memsize() const;") != std::string::npos, "Item::memsize returns size_t");
+
+	std::ifstream tileHeaderFile(sourceRoot / "source" / "tile.h", std::ios::binary);
+	const std::string tileHeader((std::istreambuf_iterator<char>(tileHeaderFile)), std::istreambuf_iterator<char>());
+	check(tileHeader.find("size_t memsize() const;") != std::string::npos, "Tile::memsize returns size_t");
+
+	std::ifstream complexItemFile(sourceRoot / "source" / "complexitem.cpp", std::ios::binary);
+	const std::string complexItemSrc((std::istreambuf_iterator<char>(complexItemFile)), std::istreambuf_iterator<char>());
+	check(complexItemSrc.find("sizeof(contents)") != std::string::npos, "Container::memsize includes inline sizeof(contents)");
+
+	check(graphics.find("GameSprite::TemplateImage::~TemplateImage() {\n\tunloadGLTexture(0);") != std::string::npos, "TemplateImage destructor unloads GL texture before base destruction");
+	check(graphics.find("isAppearanceVisualValid") != std::string::npos, "GraphicManager validates deferred appearances before reporting availability");
+
 	if (failures == 0) {
 		std::cout << checks << " editor data layout checks passed.\n";
 	}

@@ -30,6 +30,12 @@
 #include "table_brush.h"
 #include "object_pool.h"
 
+namespace {
+	inline size_t saturating_add(size_t a, size_t b) {
+		return (SIZE_MAX - b < a) ? SIZE_MAX : a + b;
+	}
+}
+
 void* Tile::operator new(size_t size) {
 	return rme::allocatePooledObject(size);
 }
@@ -109,21 +115,29 @@ Tile* Tile::deepCopy(BaseMap& map) {
 	return copy;
 }
 
-uint32_t Tile::memsize() const {
-	uint32_t mem = sizeof(*this);
+size_t Tile::memsize() const {
+	size_t mem = sizeof(*this);
 	if (ground) {
-		mem += ground->memsize();
+		mem = saturating_add(mem, ground->memsize());
 	}
 
-	ItemVector::const_iterator it;
-
-	it = items.begin();
-	while (it != items.end()) {
-		mem += (*it)->memsize();
-		++it;
+	for (const Item* item : items) {
+		if (item) {
+			mem = saturating_add(mem, item->memsize());
+		}
 	}
 
-	mem += sizeof(Item*) * items.capacity();
+	mem = saturating_add(mem, sizeof(Item*) * items.capacity());
+
+	if (!zones.empty()) {
+		mem = saturating_add(mem, sizeof(std::set<unsigned int>) + zones.size() * (sizeof(unsigned int) + sizeof(void*) * 4));
+	}
+	if (creature) {
+		mem = saturating_add(mem, 128); // Creature struct + name/outfit overhead
+	}
+	if (spawn) {
+		mem = saturating_add(mem, 64); // Spawn struct overhead
+	}
 
 	return mem;
 }

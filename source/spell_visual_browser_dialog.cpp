@@ -43,6 +43,10 @@ namespace {
 		return kind == ServerVisualKind::MagicEffect ? g_gui.gfx.getEffectSprite(static_cast<int>(id)) : g_gui.gfx.getDistanceSprite(static_cast<int>(id));
 	}
 
+	bool HasVisualSprite(ServerVisualKind kind, uint32_t id) {
+		return kind == ServerVisualKind::MagicEffect ? g_gui.gfx.hasEffectSprite(static_cast<int>(id)) : g_gui.gfx.hasDistanceSprite(static_cast<int>(id));
+	}
+
 	std::pair<int, int> DirectionPattern(int direction, const GameSprite& sprite) {
 		static constexpr int offsets[8][2] {
 			{ 0, -1 },
@@ -64,8 +68,13 @@ namespace {
 		if (width <= 0 || height <= 0 || rgba.size() != static_cast<std::size_t>(width) * height * 4) {
 			return {};
 		}
-		auto* rgb = new unsigned char[static_cast<std::size_t>(width) * height * 3];
-		auto* alpha = new unsigned char[static_cast<std::size_t>(width) * height];
+		auto* rgb = static_cast<unsigned char*>(std::malloc(static_cast<std::size_t>(width) * height * 3));
+		auto* alpha = static_cast<unsigned char*>(std::malloc(static_cast<std::size_t>(width) * height));
+		if (!rgb || !alpha) {
+			std::free(rgb);
+			std::free(alpha);
+			return {};
+		}
 		for (std::size_t pixel = 0; pixel < static_cast<std::size_t>(width) * height; ++pixel) {
 			rgb[pixel * 3] = rgba[pixel * 4];
 			rgb[pixel * 3 + 1] = rgba[pixel * 4 + 1];
@@ -85,6 +94,10 @@ namespace {
 			Bind(wxEVT_PAINT, &VisualSpritePanel::onPaint, this);
 			Bind(wxEVT_TIMER, &VisualSpritePanel::onTimer, this, timer.GetId());
 			timer.Start(120);
+		}
+
+		~VisualSpritePanel() override {
+			timer.Stop();
 		}
 
 		void setVisual(uint32_t visualId, int selectedDirection) {
@@ -279,7 +292,7 @@ void SpellVisualBrowserDialog::rebuildList() {
 		visible.push_back(index);
 		const long row = list->InsertItem(list->GetItemCount(), wxString::FromUTF8(value.name));
 		list->SetItem(row, 1, wxString::Format("%u", value.id));
-		list->SetItem(row, 2, VisualSprite(kind, value.id) ? "Available" : "Unavailable");
+		list->SetItem(row, 2, HasVisualSprite(kind, value.id) ? "Available" : "Unavailable");
 	}
 	if (!visible.empty()) {
 		list->SetItemState(0, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
@@ -299,14 +312,18 @@ void SpellVisualBrowserDialog::updateSelection() {
 		return;
 	}
 	const ServerVisualConstant& value = values[visible[static_cast<std::size_t>(row)]];
-	const bool available = VisualSprite(kind, value.id) != nullptr;
+	bool available = HasVisualSprite(kind, value.id);
+	static_cast<VisualSpritePanel*>(preview)->setVisual(value.id, kind == ServerVisualKind::DistanceEffect ? 2 : 0);
+	if (available && value.id != 0 && !HasVisualSprite(kind, value.id)) {
+		available = false;
+		list->SetItem(row, 2, "Unavailable");
+	}
 	const wxString source = value.sourcePath.empty() ? wxString("numeric client entry") : PathText(value.sourcePath);
 	const wxString availability = available ? wxString("available in active client") : wxString("not available in active client");
 	const wxString label = wxString::Format("%s = %u  |  %s  |  %s", wxString::FromUTF8(value.name), value.id, availability, source);
 	openButton->Enable(available || value.id == 0);
 	details->SetLabel(label);
 	details->SetToolTip(label);
-	static_cast<VisualSpritePanel*>(preview)->setVisual(value.id, kind == ServerVisualKind::DistanceEffect ? 2 : 0);
 }
 
 void SpellVisualBrowserDialog::openSelection() {

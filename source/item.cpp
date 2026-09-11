@@ -30,6 +30,12 @@
 #include "wall_brush.h"
 #include "object_pool.h"
 
+namespace {
+	inline size_t saturating_add(size_t a, size_t b) {
+		return (SIZE_MAX - b < a) ? SIZE_MAX : a + b;
+	}
+}
+
 Item* Item::Create(uint16_t _type, uint16_t _subtype /*= 0xFFFF*/) {
 	if (_type == 0) {
 		return nullptr;
@@ -187,8 +193,18 @@ Item* transformItem(Item* old_item, uint16_t new_id, Tile* parent) {
 	return nullptr;
 }
 
-uint32_t Item::memsize() const {
-	uint32_t mem = sizeof(*this);
+size_t Item::memsize() const {
+	size_t mem = sizeof(*this);
+	if (attributes) {
+		mem = saturating_add(mem, sizeof(ItemAttributeMap));
+		for (const auto& [key, attr] : *attributes) {
+			mem = saturating_add(mem, sizeof(void*) * 4); // std::map node overhead
+			mem = saturating_add(mem, key.capacity());
+			if (attr.type == ItemAttribute::STRING && attr.getString()) {
+				mem = saturating_add(mem, attr.getString()->capacity());
+			}
+		}
+	}
 	return mem;
 }
 

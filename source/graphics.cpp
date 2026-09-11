@@ -558,6 +558,7 @@ void GraphicManager::clear(bool clearPreloader) {
 	distance_count = 0;
 	deferredEffectAppearances.clear();
 	deferredMissileAppearances.clear();
+	failedAppearanceVisuals.clear();
 	materializedAppearanceVisuals = 0;
 	loaded_textures = 0;
 	lastclean = time(nullptr);
@@ -636,6 +637,50 @@ GameSprite* GraphicManager::getDistanceSprite(int id) {
 	}
 	const auto iterator = sprite_space.find(spriteSpaceId);
 	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
+}
+
+bool GraphicManager::hasEffectSprite(int id) const {
+	if (id <= 0 || id > effect_count) {
+		return false;
+	}
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + id;
+	if (sprite_space.contains(spriteSpaceId)) {
+		return true;
+	}
+	if (failedAppearanceVisuals.contains(spriteSpaceId)) {
+		return false;
+	}
+	const auto found = deferredEffectAppearances.find(static_cast<uint16_t>(id));
+	if (found == deferredEffectAppearances.end()) {
+		return false;
+	}
+	if (!isAppearanceVisualValid(*found->second)) {
+		failedAppearanceVisuals.insert(spriteSpaceId);
+		return false;
+	}
+	return true;
+}
+
+bool GraphicManager::hasDistanceSprite(int id) const {
+	if (id <= 0 || id > distance_count) {
+		return false;
+	}
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + effect_count + id;
+	if (sprite_space.contains(spriteSpaceId)) {
+		return true;
+	}
+	if (failedAppearanceVisuals.contains(spriteSpaceId)) {
+		return false;
+	}
+	const auto found = deferredMissileAppearances.find(static_cast<uint16_t>(id));
+	if (found == deferredMissileAppearances.end()) {
+		return false;
+	}
+	if (!isAppearanceVisualValid(*found->second)) {
+		failedAppearanceVisuals.insert(spriteSpaceId);
+		return false;
+	}
+	return true;
 }
 
 GameSprite* GraphicManager::getEditorSprite(int id) {
@@ -998,6 +1043,26 @@ GameSprite::NormalImage* GraphicManager::getOrCreateAssetImage(uint32_t spriteId
 	return image;
 }
 
+bool GraphicManager::isAppearanceVisualValid(const rme::protobuf::appearances::Appearance& appearance) const {
+	using namespace rme::protobuf::appearances;
+	const FrameGroup* frameGroup = nullptr;
+	for (const FrameGroup& candidate : appearance.frame_group()) {
+		if (candidate.has_sprite_info() && candidate.sprite_info().sprite_id_size() > 0) {
+			frameGroup = &candidate;
+			break;
+		}
+	}
+	if (!frameGroup) {
+		return false;
+	}
+	const SpriteInfo& spriteInfo = frameGroup->sprite_info();
+	const ClientSpriteSheetPtr firstSheet = g_spriteAppearances.getSheetBySpriteId(spriteInfo.sprite_id(0));
+	if (!firstSheet) {
+		return false;
+	}
+	return true;
+}
+
 bool GraphicManager::loadAppearanceSprite(
 	const rme::protobuf::appearances::Appearance& appearance,
 	int spriteSpaceId,
@@ -1015,8 +1080,8 @@ bool GraphicManager::loadAppearanceSprite(
 		}
 	}
 	if (!frameGroup) {
-		warnings.push_back(wxString::Format("Appearance %u has no drawable frame group.", appearance.id()));
-		return true;
+		error = wxString::Format("Appearance %u has no drawable frame group.", appearance.id());
+		return false;
 	}
 
 	const SpriteInfo& spriteInfo = frameGroup->sprite_info();
@@ -1228,6 +1293,8 @@ bool GraphicManager::materializeAppearanceVisual(uint16_t id, bool distanceEffec
 	wxArrayString warnings;
 	if (!loadAppearanceSprite(*found->second, spriteSpaceId, error, warnings)) {
 		wxLogError("Could not materialize appearance visual %u: %s", static_cast<unsigned int>(id), error);
+		failedAppearanceVisuals.insert(spriteSpaceId);
+		deferred.erase(found);
 		return false;
 	}
 	for (const wxString& warning : warnings) {
@@ -1655,10 +1722,14 @@ GameSprite::~GameSprite() {
 }
 
 void GameSprite::clean(int time) {
-	for (auto iter = instanced_templates.begin();
-		 iter != instanced_templates.end();
-		 ++iter) {
+	for (auto iter = instanced_templates.begin(); iter != instanced_templates.end();) {
 		(*iter)->clean(time);
+		if (!(*iter)->isGLLoaded && time - (*iter)->lastaccess > g_settings.getInteger(Config::TEXTURE_LONGEVITY)) {
+			delete *iter;
+			iter = instanced_templates.erase(iter);
+		} else {
+			++iter;
+		}
 	}
 }
 
@@ -1670,6 +1741,8 @@ void GameSprite::unloadDC() {
 }
 
 bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ, int patternX, int patternY, int mountClientId) {
+	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
+
 	if (outfit && outfit->lookMount != 0) {
 		GameSprite* mountSpr = mountClientId > 0 ? g_gui.gfx.getCreatureSprite(mountClientId) : nullptr;
 		if (mountSpr && mountSpr != this) {
@@ -1700,7 +1773,16 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 			if (mountOk && riderOk) {
 				const int compositeW = std::max(mountW, riderW);
 				const int compositeH = std::max(mountH, riderH);
-				pixels.assign(static_cast<size_t>(compositeW) * compositeH * 4, 0);
+				if (compositeW <= 0 || compositeH <= 0) {
+					pixels.clear();
+					return false;
+				}
+				const size_t compositePixels = static_cast<size_t>(compositeW) * static_cast<size_t>(compositeH);
+				if (compositePixels > MaximumPreviewBytes / 4) {
+					pixels.clear();
+					return false;
+				}
+				pixels.assign(compositePixels * 4, 0);
 				pixelWidth = compositeW;
 				pixelHeight = compositeH;
 
@@ -1758,7 +1840,6 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 		}
 	}
 
-	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
@@ -2019,6 +2100,17 @@ GameSprite::TemplateImage* GameSprite::getTemplateImage(int sprite_index, const 
 			}
 		}
 	}
+	constexpr size_t MaximumInstancedTemplates = 32;
+	if (instanced_templates.size() >= MaximumInstancedTemplates) {
+		auto oldest = instanced_templates.begin();
+		for (auto it = instanced_templates.begin(); it != instanced_templates.end(); ++it) {
+			if ((*it)->lastaccess < (*oldest)->lastaccess) {
+				oldest = it;
+			}
+		}
+		delete *oldest;
+		instanced_templates.erase(oldest);
+	}
 	auto* img = newd TemplateImage(this, sprite_index, outfit);
 	instanced_templates.push_back(img);
 	return img;
@@ -2183,6 +2275,7 @@ GameSprite::NormalImage::NormalImage() :
 }
 
 GameSprite::NormalImage::~NormalImage() {
+	unloadGLTexture(0);
 	delete[] dump;
 }
 
@@ -2609,7 +2702,7 @@ GameSprite::TemplateImage::TemplateImage(GameSprite* parent, int v, const Outfit
 }
 
 GameSprite::TemplateImage::~TemplateImage() {
-	////
+	unloadGLTexture(0);
 }
 
 void GameSprite::TemplateImage::colorizePixel(uint8_t color, uint8_t& red, uint8_t& green, uint8_t& blue) {
@@ -2750,6 +2843,7 @@ void GameSprite::TemplateImage::createGLTexture(GLuint unused) {
 
 void GameSprite::TemplateImage::unloadGLTexture(GLuint unused) {
 	Image::unloadGLTexture(gl_tid);
+	gl_tid = 0;
 }
 
 GameSprite* GameSprite::createFromBitmap(const wxArtID& bitmapId) {

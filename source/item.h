@@ -128,7 +128,7 @@ public:
 	virtual Item* deepCopy() const;
 
 	// Get memory footprint size
-	uint32_t memsize() const;
+	virtual size_t memsize() const;
 	/*
 	virtual Container* getContainer() {return nullptr;}
 	virtual const Container* getContainer() const {return nullptr;}

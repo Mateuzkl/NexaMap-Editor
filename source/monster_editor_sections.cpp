@@ -746,6 +746,7 @@ void MonsterEditorDialog::refreshLootTree() {
 		return;
 	}
 	lootTree->DeleteAllItems();
+	lootTree->AssignImageList(nullptr);
 	const int imageSize = FromDIP(36);
 	auto* images = newd wxImageList(imageSize, imageSize, true, static_cast<int>(std::max<std::size_t>(1, edited.loot.size())));
 	std::unordered_map<int, int> imageIndexes;

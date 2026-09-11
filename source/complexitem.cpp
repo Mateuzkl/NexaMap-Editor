@@ -19,6 +19,12 @@
 
 #include "complexitem.h"
 
+namespace {
+	inline size_t saturating_add(size_t a, size_t b) {
+		return (SIZE_MAX - b < a) ? SIZE_MAX : a + b;
+	}
+}
+
 // Container
 Container::Container(const uint16_t type) :
 	Item(type, 0) {
@@ -51,6 +57,18 @@ Item* Container::getItem(size_t index) const {
 
 double Container::getWeight() const {
 	return g_items[id].weight;
+}
+
+size_t Container::memsize() const {
+	size_t mem = Item::memsize();
+	mem = saturating_add(mem, sizeof(contents));
+	mem = saturating_add(mem, sizeof(Item*) * contents.capacity());
+	for (const Item* item : contents) {
+		if (item) {
+			mem = saturating_add(mem, item->memsize());
+		}
+	}
+	return mem;
 }
 
 // Teleport

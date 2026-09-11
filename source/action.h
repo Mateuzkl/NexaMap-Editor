@@ -81,7 +81,7 @@ public:
 	}
 
 	// Get memory footprint
-	uint32_t memsize() const;
+	size_t memsize() const;
 
 	friend class Action;
 	friend class BatchAction;
@@ -191,7 +191,7 @@ protected:
 
 	Editor& editor;
 	int timestamp;
-	uint32_t memory_size;
+	size_t memory_size;
 	ActionIdentifier type;
 	ActionVector batch;
 	MultiplayerSession* multiplayerGroup = nullptr;
