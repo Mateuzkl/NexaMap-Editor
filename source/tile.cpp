@@ -115,15 +115,23 @@ uint32_t Tile::memsize() const {
 		mem += ground->memsize();
 	}
 
-	ItemVector::const_iterator it;
-
-	it = items.begin();
-	while (it != items.end()) {
-		mem += (*it)->memsize();
-		++it;
+	for (const Item* item : items) {
+		if (item) {
+			mem += item->memsize();
+		}
 	}
 
-	mem += sizeof(Item*) * items.capacity();
+	mem += static_cast<uint32_t>(sizeof(Item*) * items.capacity());
+
+	if (!zones.empty()) {
+		mem += static_cast<uint32_t>(sizeof(std::set<unsigned int>) + zones.size() * (sizeof(unsigned int) + sizeof(void*) * 4));
+	}
+	if (creature) {
+		mem += 128; // Creature struct + name/outfit overhead
+	}
+	if (spawn) {
+		mem += 64; // Spawn struct overhead
+	}
 
 	return mem;
 }

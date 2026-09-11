@@ -415,6 +415,19 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME editor_data_layout_tests COMMAND editor_data_layout_tests)
 
+	add_executable(spell_visual_browser_memory_tests
+		tests/spell_visual_browser_memory_tests.cpp
+	)
+	target_include_directories(spell_visual_browser_memory_tests PRIVATE source)
+	set_target_properties(spell_visual_browser_memory_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	if(MSVC)
+		target_compile_options(spell_visual_browser_memory_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME spell_visual_browser_memory_tests COMMAND spell_visual_browser_memory_tests)
+
 	add_executable(map_format_tests
 		tests/map_format_tests.cpp
 		source/map_format.cpp

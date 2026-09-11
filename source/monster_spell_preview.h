@@ -19,6 +19,7 @@
 class MonsterSpellPreview final : public wxPanel {
 public:
 	explicit MonsterSpellPreview(wxWindow* parent);
+	~MonsterSpellPreview() override;
 
 	void SetAttack(const MonsterAttackDefinition* attack);
 	void SetCustomArea(const MonsterAttackDefinition* attack, std::vector<MonsterAreaTile> tiles, std::string description);

@@ -189,6 +189,16 @@ Item* transformItem(Item* old_item, uint16_t new_id, Tile* parent) {
 
 uint32_t Item::memsize() const {
 	uint32_t mem = sizeof(*this);
+	if (attributes) {
+		mem += sizeof(ItemAttributeMap);
+		for (const auto& [key, attr] : *attributes) {
+			mem += sizeof(void*) * 4; // std::map node overhead
+			mem += static_cast<uint32_t>(key.capacity());
+			if (attr.type == ItemAttribute::STRING && attr.getString()) {
+				mem += static_cast<uint32_t>(attr.getString()->capacity());
+			}
+		}
+	}
 	return mem;
 }
 

@@ -379,6 +379,8 @@ public:
 	GameSprite* getEffectSprite(int id);
 	GameSprite* getDistanceSprite(int id);
 	GameSprite* getEditorSprite(int id);
+	bool hasEffectSprite(int id) const;
+	bool hasDistanceSprite(int id) const;
 
 	long getElapsedTime() const {
 		return (animation_timer.TimeInMicro() / 1000).ToLong();

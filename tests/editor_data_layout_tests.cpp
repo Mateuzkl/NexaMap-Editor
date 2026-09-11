@@ -144,6 +144,17 @@ int main() {
 	const std::string assets((std::istreambuf_iterator<char>(assetsFile)), std::istreambuf_iterator<char>());
 	check(assets.find("appearances.effect()") != std::string::npos && assets.find("appearances.missile()") != std::string::npos, "protobuf clients load effect and missile appearances");
 
+	check(graphics.find("bool GraphicManager::hasEffectSprite") != std::string::npos && graphics.find("bool GraphicManager::hasDistanceSprite") != std::string::npos, "GraphicManager provides side-effect-free sprite existence queries");
+	check(graphics.find("MaximumInstancedTemplates") != std::string::npos, "GameSprite caps instanced template allocation");
+
+	std::ifstream spellVisualBrowserFile(sourceRoot / "source" / "spell_visual_browser_dialog.cpp", std::ios::binary);
+	const std::string spellVisualBrowser((std::istreambuf_iterator<char>(spellVisualBrowserFile)), std::istreambuf_iterator<char>());
+	check(spellVisualBrowser.find("HasVisualSprite") != std::string::npos && spellVisualBrowser.find("list->SetItem(row, 2, HasVisualSprite") != std::string::npos, "Spell visual browser populates list availability using lightweight non-materializing queries");
+
+	std::ifstream actionFile(sourceRoot / "source" / "action.cpp", std::ios::binary);
+	const std::string actionSrc((std::istreambuf_iterator<char>(actionFile)), std::istreambuf_iterator<char>());
+	check(actionSrc.find("Action::approx_memsize() const {\n\treturn memsize();") != std::string::npos, "Action::approx_memsize delegates to accurate tile memsize accounting");
+
 	if (failures == 0) {
 		std::cout << checks << " editor data layout checks passed.\n";
 	}

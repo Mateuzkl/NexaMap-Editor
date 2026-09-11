@@ -267,9 +267,7 @@ Action::~Action() {
 }
 
 size_t Action::approx_memsize() const {
-	uint32_t mem = sizeof(*this);
-	mem += changes.size() * (sizeof(Change) + sizeof(Tile) + sizeof(Item) + 6 /* approx overhead*/);
-	return mem;
+	return memsize();
 }
 
 size_t Action::memsize() const {

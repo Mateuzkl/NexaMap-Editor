@@ -638,6 +638,28 @@ GameSprite* GraphicManager::getDistanceSprite(int id) {
 	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
 }
 
+bool GraphicManager::hasEffectSprite(int id) const {
+	if (id <= 0 || id > effect_count) {
+		return false;
+	}
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + id;
+	if (sprite_space.contains(spriteSpaceId)) {
+		return true;
+	}
+	return deferredEffectAppearances.contains(static_cast<uint16_t>(id));
+}
+
+bool GraphicManager::hasDistanceSprite(int id) const {
+	if (id <= 0 || id > distance_count) {
+		return false;
+	}
+	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + effect_count + id;
+	if (sprite_space.contains(spriteSpaceId)) {
+		return true;
+	}
+	return deferredMissileAppearances.contains(static_cast<uint16_t>(id));
+}
+
 GameSprite* GraphicManager::getEditorSprite(int id) {
 	if (id >= 0) {
 		return nullptr;
@@ -1655,10 +1677,14 @@ GameSprite::~GameSprite() {
 }
 
 void GameSprite::clean(int time) {
-	for (auto iter = instanced_templates.begin();
-		 iter != instanced_templates.end();
-		 ++iter) {
+	for (auto iter = instanced_templates.begin(); iter != instanced_templates.end();) {
 		(*iter)->clean(time);
+		if (!(*iter)->isGLLoaded && time - (*iter)->lastaccess > g_settings.getInteger(Config::TEXTURE_LONGEVITY)) {
+			delete *iter;
+			iter = instanced_templates.erase(iter);
+		} else {
+			++iter;
+		}
 	}
 }
 
@@ -1670,6 +1696,8 @@ void GameSprite::unloadDC() {
 }
 
 bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ, int patternX, int patternY, int mountClientId) {
+	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
+
 	if (outfit && outfit->lookMount != 0) {
 		GameSprite* mountSpr = mountClientId > 0 ? g_gui.gfx.getCreatureSprite(mountClientId) : nullptr;
 		if (mountSpr && mountSpr != this) {
@@ -1700,7 +1728,16 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 			if (mountOk && riderOk) {
 				const int compositeW = std::max(mountW, riderW);
 				const int compositeH = std::max(mountH, riderH);
-				pixels.assign(static_cast<size_t>(compositeW) * compositeH * 4, 0);
+				if (compositeW <= 0 || compositeH <= 0) {
+					pixels.clear();
+					return false;
+				}
+				const size_t compositePixels = static_cast<size_t>(compositeW) * static_cast<size_t>(compositeH);
+				if (compositePixels > MaximumPreviewBytes / 4) {
+					pixels.clear();
+					return false;
+				}
+				pixels.assign(compositePixels * 4, 0);
 				pixelWidth = compositeW;
 				pixelHeight = compositeH;
 
@@ -1758,7 +1795,6 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 		}
 	}
 
-	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
@@ -2018,6 +2054,17 @@ GameSprite::TemplateImage* GameSprite::getTemplateImage(int sprite_index, const 
 				return img;
 			}
 		}
+	}
+	constexpr size_t MaximumInstancedTemplates = 32;
+	if (instanced_templates.size() >= MaximumInstancedTemplates) {
+		auto oldest = instanced_templates.begin();
+		for (auto it = instanced_templates.begin(); it != instanced_templates.end(); ++it) {
+			if ((*it)->lastaccess < (*oldest)->lastaccess) {
+				oldest = it;
+			}
+		}
+		delete *oldest;
+		instanced_templates.erase(oldest);
 	}
 	auto* img = newd TemplateImage(this, sprite_index, outfit);
 	instanced_templates.push_back(img);

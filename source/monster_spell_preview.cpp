@@ -22,8 +22,13 @@ namespace {
 		if (width <= 0 || height <= 0 || rgba.size() != static_cast<std::size_t>(width) * height * 4) {
 			return {};
 		}
-		auto* rgb = new unsigned char[static_cast<std::size_t>(width) * height * 3];
-		auto* alpha = new unsigned char[static_cast<std::size_t>(width) * height];
+		auto* rgb = static_cast<unsigned char*>(std::malloc(static_cast<std::size_t>(width) * height * 3));
+		auto* alpha = static_cast<unsigned char*>(std::malloc(static_cast<std::size_t>(width) * height));
+		if (!rgb || !alpha) {
+			std::free(rgb);
+			std::free(alpha);
+			return {};
+		}
 		for (std::size_t pixel = 0; pixel < static_cast<std::size_t>(width) * height; ++pixel) {
 			rgb[pixel * 3] = rgba[pixel * 4];
 			rgb[pixel * 3 + 1] = rgba[pixel * 4 + 1];
@@ -90,6 +95,12 @@ MonsterSpellPreview::MonsterSpellPreview(wxWindow* parent) :
 	Bind(wxEVT_PAINT, &MonsterSpellPreview::OnPaint, this);
 	timer = std::make_unique<wxTimer>(this);
 	Bind(wxEVT_TIMER, &MonsterSpellPreview::OnTimer, this, timer->GetId());
+}
+
+MonsterSpellPreview::~MonsterSpellPreview() {
+	if (timer) {
+		timer->Stop();
+	}
 }
 
 void MonsterSpellPreview::SetAttack(const MonsterAttackDefinition* attack) {
