@@ -4,8 +4,6 @@
 
 #include "server_workspace.h"
 
-#include "server_item_id_map.h"
-
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -212,12 +210,6 @@ namespace {
 		const bool hasNpcs = HasDirectory(root, { "data/npc", "data/npcs", "npc", "npcs" });
 		const bool mapInDataWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "data/world");
 		const bool mapInRootWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "world");
-		const KnownItemFiles itemFiles = FindKnownItems(root);
-		const bool hasCustomPairTable = hasItemsOtb && (hasClassicItemsXml || hasAlternateItemsXml) && hasAppearances
-			&& ProbeServerItemIdMap(itemFiles.otb).valid;
-		if (hasCustomPairTable) {
-			return { ServerType::CustomTfsAppearances, 240 };
-		}
 
 		int tfsScore = 0;
 		if (hasClassicItemsOtb) {
@@ -555,16 +547,8 @@ bool ServerWorkspace::hasAppearances() const {
 	return appearancesFingerprint.exists;
 }
 
-bool ServerWorkspace::hasMountsXml() const {
-	return mountsXmlFingerprint.exists;
-}
-
 bool ServerWorkspace::usesCanaryCrystalLoader() const {
 	return UsesCanaryCrystalLoader(serverType);
-}
-
-bool ServerWorkspace::usesAppearanceAssetsLoader() const {
-	return UsesAppearanceAssetsLoader(serverType);
 }
 
 bool ServerWorkspace::containsMap(const std::filesystem::path& path) const {
@@ -587,9 +571,6 @@ bool ServerWorkspace::trackedResourcesChanged() const {
 		return true;
 	}
 	if (!appearancesPath.empty() && !appearancesFingerprint.MatchesCurrentFile()) {
-		return true;
-	}
-	if (!mountsXmlPath.empty() && !mountsXmlFingerprint.MatchesCurrentFile()) {
 		return true;
 	}
 	return std::any_of(maps.begin(), maps.end(), [](const DetectedMap& map) {
@@ -634,33 +615,6 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		}
 	}
 
-	static constexpr std::array<const char*, 6> mountXmlCandidates {
-		"data/XML/mounts.xml",
-		"data/xml/mounts.xml",
-		"data/mounts.xml",
-		"XML/mounts.xml",
-		"xml/mounts.xml",
-		"mounts.xml",
-	};
-	if (!workspace.activeDataDirectory.empty()) {
-		for (const char* candidate : mountXmlCandidates) {
-			const std::filesystem::path path = workspace.activeDataDirectory / candidate;
-			if (IsServerWorkspaceFile(path)) {
-				workspace.mountsXmlPath = Normalize(path);
-				break;
-			}
-		}
-	}
-	if (workspace.mountsXmlPath.empty()) {
-		for (const char* candidate : mountXmlCandidates) {
-			const std::filesystem::path path = root / candidate;
-			if (IsServerWorkspaceFile(path)) {
-				workspace.mountsXmlPath = Normalize(path);
-				break;
-			}
-		}
-	}
-
 	static constexpr std::array<const char*, 8> mapDirectories {
 		"data/world",
 		"data-global/world",
@@ -673,26 +627,18 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	};
 	static constexpr std::array<const char*, 4> monsterDirectories { "data/monster", "data/monsters", "monster", "monsters" };
 	static constexpr std::array<const char*, 4> npcDirectories { "data/npc", "data/npcs", "npc", "npcs" };
-	// Prefer the legacy registry root when both layouts exist. Some XML servers
-	// also carry a data/scripts/spells example directory that is not their
-	// active spell registry.
-	static constexpr std::array<const char*, 4> spellDirectories { "data/spells", "data/scripts/spells", "spells", "scripts/spells" };
 	if (workspace.mapsDirectory.empty()) {
 		workspace.mapsDirectory = FirstExistingDirectory(root, mapDirectories);
 	}
 	if (!workspace.activeDataDirectory.empty()) {
 		workspace.monstersDirectory = FirstExistingDirectory(workspace.activeDataDirectory, monsterDirectories);
 		workspace.npcsDirectory = FirstExistingDirectory(workspace.activeDataDirectory, npcDirectories);
-		workspace.spellsDirectory = FirstExistingDirectory(workspace.activeDataDirectory, spellDirectories);
 	}
 	if (workspace.monstersDirectory.empty()) {
 		workspace.monstersDirectory = FirstExistingDirectory(root, monsterDirectories);
 	}
 	if (workspace.npcsDirectory.empty()) {
 		workspace.npcsDirectory = FirstExistingDirectory(root, npcDirectories);
-	}
-	if (workspace.spellsDirectory.empty()) {
-		workspace.spellsDirectory = FirstExistingDirectory(root, spellDirectories);
 	}
 
 	std::deque<QueueEntry> queue;
@@ -714,8 +660,6 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 					workspace.itemsXmlPath = Normalize(entry.path());
 				} else if (workspace.appearancesPath.empty() && fileName == "appearances.dat") {
 					workspace.appearancesPath = Normalize(entry.path());
-				} else if (workspace.mountsXmlPath.empty() && fileName == "mounts.xml") {
-					workspace.mountsXmlPath = Normalize(entry.path());
 				}
 				const std::string extension = Lower(ServerPathUtf8(entry.path().extension()));
 				if (workspace.activeDataDirectory.empty() && (extension == ".otbm" || extension == ".otgz")) {
@@ -736,9 +680,6 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 			}
 			if (workspace.npcsDirectory.empty() && (directoryName == "npc" || directoryName == "npcs")) {
 				workspace.npcsDirectory = Normalize(entry.path());
-			}
-			if (workspace.spellsDirectory.empty() && directoryName == "spells") {
-				workspace.spellsDirectory = Normalize(entry.path());
 			}
 			queue.push_back({ entry.path(), current.depth + 1 });
 		}
@@ -780,8 +721,6 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	workspace.itemsXmlFingerprint = ResourceFingerprint::Read(workspace.itemsXmlPath);
 	TraceServerScan(options, "Reading appearances.dat metadata", workspace.appearancesPath);
 	workspace.appearancesFingerprint = ResourceFingerprint::Read(workspace.appearancesPath);
-	TraceServerScan(options, "Reading mounts.xml metadata", workspace.mountsXmlPath);
-	workspace.mountsXmlFingerprint = ResourceFingerprint::Read(workspace.mountsXmlPath);
 	TraceServerScan(options, "Finalizing server profile");
 	const DetectedMap* primaryMap = workspace.findMap(workspace.primaryMapPath);
 	if (primaryMap != nullptr) {
@@ -790,9 +729,9 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		workspace.serverType = DetectProfileEvidence(root).type;
 	}
 	workspace.serverProfile = ServerTypeName(workspace.serverType);
-	workspace.itemIdMode = workspace.serverType == ServerType::CustomTfsAppearances
-		? ItemIdMode::ServerId
-		: (workspace.usesCanaryCrystalLoader() ? ItemIdMode::ClientId : DetectModeFromMapNames(workspace.maps));
+	workspace.itemIdMode = workspace.usesCanaryCrystalLoader()
+		? ItemIdMode::ClientId
+		: DetectModeFromMapNames(workspace.maps);
 	if (!workspace.hasRequiredResources()) {
 		result.error = "Server folder selected, but neither items.otb nor appearances.dat was found.";
 	} else if (!workspace.itemsXmlFingerprint.exists) {
@@ -817,8 +756,6 @@ const char* ServerTypeName(ServerType type) {
 	switch (type) {
 		case ServerType::Tfs:
 			return "TFS";
-		case ServerType::CustomTfsAppearances:
-			return "TFS Custom (Appearances)";
 		case ServerType::Canary:
 			return "Canary";
 		case ServerType::Crystal:
@@ -832,10 +769,6 @@ const char* ServerTypeName(ServerType type) {
 
 bool UsesCanaryCrystalLoader(ServerType type) {
 	return type == ServerType::Canary || type == ServerType::Crystal || type == ServerType::CanaryCrystal;
-}
-
-bool UsesAppearanceAssetsLoader(ServerType type) {
-	return type == ServerType::CustomTfsAppearances || UsesCanaryCrystalLoader(type);
 }
 
 ItemIdMode ResolveEffectiveItemIdMode(ItemIdModePreference preference, ItemIdMode clientAssetMode, ItemIdMode serverEvidence) {

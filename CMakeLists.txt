@@ -58,8 +58,8 @@ if(MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8)
 endif()
 if(WIN32)
-	# The diagnostic console is allocated at runtime when enabled in Preferences.
-	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+	# Keep a console in Release too, as in RME Redux, for startup/crash output.
+	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 endif()
 if(ENABLE_UNITY_BUILD)
 	if(CMAKE_VERSION VERSION_LESS 3.16)
@@ -307,9 +307,7 @@ if(BUILD_TESTING)
 
 	add_executable(server_workspace_tests
 		tests/server_workspace_tests.cpp
-		source/mount_id_resolver.cpp
 		source/server_workspace.cpp
-		source/server_item_id_map.cpp
 	)
 	target_include_directories(server_workspace_tests PRIVATE source)
 	set_target_properties(server_workspace_tests PROPERTIES
@@ -317,93 +315,6 @@ if(BUILD_TESTING)
 		CXX_STANDARD_REQUIRED ON
 	)
 	add_test(NAME server_workspace_tests COMMAND server_workspace_tests)
-
-	add_executable(server_content_index_tests
-		tests/server_content_index_tests.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(server_content_index_tests PRIVATE source)
-	set_target_properties(server_content_index_tests PROPERTIES
-		CXX_STANDARD 20
-		CXX_STANDARD_REQUIRED ON
-	)
-	if(MSVC)
-		target_compile_options(server_content_index_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME server_content_index_tests COMMAND server_content_index_tests)
-
-	add_executable(monster_definition_provider_tests
-		tests/monster_definition_provider_tests.cpp
-		source/monster_definition.cpp
-		source/monster_definition_creation.cpp
-		source/monster_section_codec.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(monster_definition_provider_tests PRIVATE source)
-	set_target_properties(monster_definition_provider_tests PROPERTIES
-		CXX_STANDARD 20
-		CXX_STANDARD_REQUIRED ON
-	)
-	if(MSVC)
-		target_compile_options(monster_definition_provider_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME monster_definition_provider_tests COMMAND monster_definition_provider_tests)
-
-	add_executable(npc_definition_provider_tests
-		tests/npc_definition_provider_tests.cpp
-		source/npc_definition.cpp
-		source/npc_definition_creation.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(npc_definition_provider_tests PRIVATE source)
-	set_target_properties(npc_definition_provider_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-	if(MSVC)
-		target_compile_options(npc_definition_provider_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME npc_definition_provider_tests COMMAND npc_definition_provider_tests)
-
-	add_executable(spell_definition_provider_tests
-		tests/spell_definition_provider_tests.cpp
-		source/spell_definition.cpp
-		source/spell_area_resolver.cpp
-		source/spell_area_library.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(spell_definition_provider_tests PRIVATE source)
-	set_target_properties(spell_definition_provider_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-	if(MSVC)
-		target_compile_options(spell_definition_provider_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME spell_definition_provider_tests COMMAND spell_definition_provider_tests)
-
-	add_executable(server_visual_catalog_tests
-		tests/server_visual_catalog_tests.cpp
-		source/server_visual_catalog.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(server_visual_catalog_tests PRIVATE source)
-	set_target_properties(server_visual_catalog_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-	if(MSVC)
-		target_compile_options(server_visual_catalog_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME server_visual_catalog_tests COMMAND server_visual_catalog_tests)
-
-	add_executable(monster_spell_area_tests
-		tests/monster_spell_area_tests.cpp
-		source/monster_spell_area.cpp
-	)
-	target_include_directories(monster_spell_area_tests PRIVATE source)
-	target_compile_features(monster_spell_area_tests PRIVATE cxx_std_20)
-	add_test(NAME monster_spell_area_tests COMMAND monster_spell_area_tests)
 
 	add_executable(editor_data_layout_tests
 		tests/editor_data_layout_tests.cpp

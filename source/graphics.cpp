@@ -187,18 +187,12 @@ static uint32_t TemplateOutfitLookupTable[] = {
 	0x7F0000,
 };
 
-uint32_t GetOutfitColorRgb(std::size_t colorId) {
-	return colorId < std::size(TemplateOutfitLookupTable) ? TemplateOutfitLookupTable[colorId] : 0;
-}
-
 GraphicManager::GraphicManager() :
 	client_version(nullptr),
 	unloaded(true),
 	dat_format(DAT_FORMAT_UNKNOWN),
 	item_count(0),
 	creature_count(0),
-	effect_count(0),
-	distance_count(0),
 	otfi_found(false),
 	is_extended(false),
 	has_transparency(false),
@@ -234,11 +228,6 @@ void GraphicManager::swap(GraphicManager& other) noexcept {
 	swap(dat_format, other.dat_format);
 	swap(item_count, other.item_count);
 	swap(creature_count, other.creature_count);
-	swap(effect_count, other.effect_count);
-	swap(distance_count, other.distance_count);
-	deferredEffectAppearances.swap(other.deferredEffectAppearances);
-	deferredMissileAppearances.swap(other.deferredMissileAppearances);
-	swap(materializedAppearanceVisuals, other.materializedAppearanceVisuals);
 	swap(otfi_found, other.otfi_found);
 	swap(is_extended, other.is_extended);
 	swap(has_transparency, other.has_transparency);
@@ -554,11 +543,6 @@ void GraphicManager::clear(bool clearPreloader) {
 
 	item_count = 0;
 	creature_count = 0;
-	effect_count = 0;
-	distance_count = 0;
-	deferredEffectAppearances.clear();
-	deferredMissileAppearances.clear();
-	materializedAppearanceVisuals = 0;
 	loaded_textures = 0;
 	lastclean = time(nullptr);
 	spritefile = "";
@@ -614,30 +598,6 @@ GameSprite* GraphicManager::getCreatureSprite(int id) {
 	return nullptr;
 }
 
-GameSprite* GraphicManager::getEffectSprite(int id) {
-	if (id <= 0 || id > effect_count) {
-		return nullptr;
-	}
-	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + id;
-	if (!sprite_space.contains(spriteSpaceId) && !materializeAppearanceVisual(static_cast<uint16_t>(id), false)) {
-		return nullptr;
-	}
-	const auto iterator = sprite_space.find(spriteSpaceId);
-	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
-}
-
-GameSprite* GraphicManager::getDistanceSprite(int id) {
-	if (id <= 0 || id > distance_count) {
-		return nullptr;
-	}
-	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + effect_count + id;
-	if (!sprite_space.contains(spriteSpaceId) && !materializeAppearanceVisual(static_cast<uint16_t>(id), true)) {
-		return nullptr;
-	}
-	const auto iterator = sprite_space.find(spriteSpaceId);
-	return iterator == sprite_space.end() ? nullptr : dynamic_cast<GameSprite*>(iterator->second);
-}
-
 GameSprite* GraphicManager::getEditorSprite(int id) {
 	if (id >= 0) {
 		return nullptr;
@@ -652,22 +612,6 @@ GameSprite* GraphicManager::getEditorSprite(int id) {
 
 uint16_t GraphicManager::getItemSpriteMaxID() const {
 	return item_count;
-}
-
-uint16_t GraphicManager::getEffectSpriteMaxID() const {
-	return effect_count;
-}
-
-uint16_t GraphicManager::getDistanceSpriteMaxID() const {
-	return distance_count;
-}
-
-std::size_t GraphicManager::getDeferredAppearanceVisualCount() const {
-	return deferredEffectAppearances.size() + deferredMissileAppearances.size();
-}
-
-std::size_t GraphicManager::getMaterializedAppearanceVisualCount() const {
-	return materializedAppearanceVisuals;
 }
 
 #define loadPNGFile(name) _wxGetBitmapFromMemory(name, sizeof(name))
@@ -867,6 +811,8 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		return false;
 	}
 
+	uint16_t effect_count, distance_count;
+
 	uint32_t datSignature;
 	file.getU32(datSignature);
 	// get max id
@@ -876,7 +822,8 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	file.getU16(distance_count);
 
 	uint32_t minID = 100; // items start with id 100
-	const uint32_t maxID = static_cast<uint32_t>(item_count) + creature_count + effect_count + distance_count;
+	// We don't load distance/effects, if we would, just add effect_count & distance_count here
+	uint32_t maxID = item_count + creature_count;
 
 	dat_format = client_version->getDatFormatForSignature(datSignature);
 
@@ -886,7 +833,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		has_frame_groups = dat_format >= DAT_FORMAT_1057;
 	}
 
-	uint32_t id = minID;
+	uint16_t id = minID;
 	// loop through all ItemDatabase until we reach the end of file
 	while (id <= maxID) {
 		auto* sType = newd GameSprite();
@@ -1176,65 +1123,6 @@ bool GraphicManager::loadAppearanceOutfit(
 	unloaded = false;
 	has_transparency = true;
 	has_frame_durations = true;
-	return true;
-}
-
-bool GraphicManager::loadAppearanceEffect(
-	const rme::protobuf::appearances::Appearance& appearance,
-	wxString& error,
-	wxArrayString& warnings
-) {
-	if (appearance.id() > std::numeric_limits<uint16_t>::max()) {
-		warnings.push_back(wxString::Format("Ignored effect appearance with unsupported ID %u.", appearance.id()));
-		return true;
-	}
-	const uint16_t id = static_cast<uint16_t>(appearance.id());
-	deferredEffectAppearances.insert_or_assign(id, std::make_shared<const rme::protobuf::appearances::Appearance>(appearance));
-	effect_count = std::max<uint16_t>(effect_count, id);
-	unloaded = false;
-	has_transparency = true;
-	has_frame_durations = true;
-	error.clear();
-	return true;
-}
-
-bool GraphicManager::loadAppearanceMissile(
-	const rme::protobuf::appearances::Appearance& appearance,
-	wxString& error,
-	wxArrayString& warnings
-) {
-	if (appearance.id() > std::numeric_limits<uint16_t>::max()) {
-		warnings.push_back(wxString::Format("Ignored missile appearance with unsupported ID %u.", appearance.id()));
-		return true;
-	}
-	const uint16_t id = static_cast<uint16_t>(appearance.id());
-	deferredMissileAppearances.insert_or_assign(id, std::make_shared<const rme::protobuf::appearances::Appearance>(appearance));
-	distance_count = std::max<uint16_t>(distance_count, id);
-	unloaded = false;
-	has_transparency = true;
-	has_frame_durations = true;
-	error.clear();
-	return true;
-}
-
-bool GraphicManager::materializeAppearanceVisual(uint16_t id, bool distanceEffect) {
-	auto& deferred = distanceEffect ? deferredMissileAppearances : deferredEffectAppearances;
-	const auto found = deferred.find(id);
-	if (found == deferred.end()) {
-		return false;
-	}
-	const int spriteSpaceId = static_cast<int>(item_count) + creature_count + (distanceEffect ? effect_count : 0) + id;
-	wxString error;
-	wxArrayString warnings;
-	if (!loadAppearanceSprite(*found->second, spriteSpaceId, error, warnings)) {
-		wxLogError("Could not materialize appearance visual %u: %s", static_cast<unsigned int>(id), error);
-		return false;
-	}
-	for (const wxString& warning : warnings) {
-		wxLogWarning("Appearance visual %u: %s", static_cast<unsigned int>(id), warning);
-	}
-	deferred.erase(found);
-	++materializedAppearanceVisuals;
 	return true;
 }
 
@@ -1669,102 +1557,14 @@ void GameSprite::unloadDC() {
 	dc[SPRITE_SIZE_32x32] = nullptr;
 }
 
-bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int direction, int frame, int patternZ, int patternX, int patternY, int mountClientId) {
-	if (outfit && outfit->lookMount != 0) {
-		GameSprite* mountSpr = mountClientId > 0 ? g_gui.gfx.getCreatureSprite(mountClientId) : nullptr;
-		if (mountSpr && mountSpr != this) {
-			Outfit mountOutfit;
-			mountOutfit.lookType = mountClientId;
-			mountOutfit.lookHead = outfit->lookMountHead;
-			mountOutfit.lookBody = outfit->lookMountBody;
-			mountOutfit.lookLegs = outfit->lookMountLegs;
-			mountOutfit.lookFeet = outfit->lookMountFeet;
-			mountOutfit.lookAddon = 0;
-			mountOutfit.lookMount = 0;
-
-			std::vector<uint8_t> mountPixels;
-			int mountW = 0, mountH = 0;
-			bool mountPending = false;
-			const bool mountOk = mountSpr->getVisualPreviewRGBA(mountPixels, mountW, mountH, mountPending, allowAsync, &mountOutfit, direction, 0, 0);
-
-			Outfit riderOutfit = *outfit;
-			riderOutfit.lookMount = 0;
-			const int riderPatternZ = std::min<int>(1, this->pattern_z - 1);
-			std::vector<uint8_t> riderPixels;
-			int riderW = 0, riderH = 0;
-			bool riderPending = false;
-			const bool riderOk = this->getVisualPreviewRGBA(riderPixels, riderW, riderH, riderPending, allowAsync, &riderOutfit, direction, frame, riderPatternZ);
-
-			pending = pending || mountPending || riderPending;
-
-			if (mountOk && riderOk) {
-				const int compositeW = std::max(mountW, riderW);
-				const int compositeH = std::max(mountH, riderH);
-				pixels.assign(static_cast<size_t>(compositeW) * compositeH * 4, 0);
-				pixelWidth = compositeW;
-				pixelHeight = compositeH;
-
-				const int mountOffsetX = compositeW - mountW;
-				const int mountOffsetY = compositeH - mountH;
-				const int riderOffsetX = compositeW - riderW;
-				const int riderOffsetY = compositeH - riderH;
-
-				for (int y = 0; y < mountH; ++y) {
-					for (int x = 0; x < mountW; ++x) {
-						const size_t srcIdx = (static_cast<size_t>(y) * mountW + x) * 4;
-						const size_t dstIdx = (static_cast<size_t>(mountOffsetY + y) * compositeW + mountOffsetX + x) * 4;
-						std::copy_n(mountPixels.data() + srcIdx, 4, pixels.data() + dstIdx);
-					}
-				}
-
-				for (int y = 0; y < riderH; ++y) {
-					for (int x = 0; x < riderW; ++x) {
-						const size_t srcIdx = (static_cast<size_t>(y) * riderW + x) * 4;
-						const uint8_t srcA = riderPixels[srcIdx + 3];
-						if (srcA == 0) {
-							continue;
-						}
-						const size_t dstIdx = (static_cast<size_t>(riderOffsetY + y) * compositeW + riderOffsetX + x) * 4;
-						const uint8_t dstA = pixels[dstIdx + 3];
-						if (srcA == 255 || dstA == 0) {
-							std::copy_n(riderPixels.data() + srcIdx, 4, pixels.data() + dstIdx);
-						} else {
-							const float sa = srcA / 255.0f;
-							const float da = dstA / 255.0f;
-							const float outA = sa + da * (1.0f - sa);
-							if (outA > 0.0f) {
-								pixels[dstIdx + 0] = static_cast<uint8_t>((riderPixels[srcIdx + 0] * sa + pixels[dstIdx + 0] * da * (1.0f - sa)) / outA);
-								pixels[dstIdx + 1] = static_cast<uint8_t>((riderPixels[srcIdx + 1] * sa + pixels[dstIdx + 1] * da * (1.0f - sa)) / outA);
-								pixels[dstIdx + 2] = static_cast<uint8_t>((riderPixels[srcIdx + 2] * sa + pixels[dstIdx + 2] * da * (1.0f - sa)) / outA);
-								pixels[dstIdx + 3] = static_cast<uint8_t>(outA * 255.0f);
-							}
-						}
-					}
-				}
-				return true;
-			}
-			if (mountOk) {
-				pixels = std::move(mountPixels);
-				pixelWidth = mountW;
-				pixelHeight = mountH;
-				return true;
-			}
-			if (riderOk) {
-				pixels = std::move(riderPixels);
-				pixelWidth = riderW;
-				pixelHeight = riderH;
-				return true;
-			}
-		}
-	}
-
+bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit) {
 	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
 	pixelHeight = static_cast<int>(height) * SPRITE_PIXELS;
 	const size_t pixelCount = static_cast<size_t>(pixelWidth) * static_cast<size_t>(pixelHeight);
 	if (pixelWidth <= 0 || pixelHeight <= 0 || pixelCount > MaximumPreviewBytes / 4
-		|| layers == 0 || pattern_x == 0 || pattern_y == 0 || pattern_z == 0) {
+		|| layers == 0 || (outfit && (pattern_x == 0 || pattern_y == 0))) {
 		pixels.clear();
 		return false;
 	}
@@ -1778,11 +1578,7 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 		}
 		for (uint8_t tileX = 0; tileX < width; ++tileX) {
 			for (uint8_t tileY = 0; tileY < height; ++tileY) {
-				const int patternXIndex = outfit ? std::clamp(direction, 0, static_cast<int>(pattern_x) - 1) : std::clamp(patternX, 0, static_cast<int>(pattern_x) - 1);
-				const int patternYIndex = outfit ? layer : std::clamp(patternY, 0, static_cast<int>(pattern_y) - 1);
-				const int patternZIndex = outfit && pattern_z > 1 ? std::clamp(patternZ, 0, static_cast<int>(pattern_z) - 1) : 0;
-				const int animationFrame = frames > 0 ? std::clamp(frame, 0, static_cast<int>(frames) - 1) : 0;
-				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, patternXIndex, patternYIndex, patternZIndex, animationFrame);
+				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, outfit ? std::min(2, static_cast<int>(pattern_x) - 1) : 0, outfit ? layer : 0, 0, 0);
 				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
 					continue;
 				}
@@ -1849,25 +1645,11 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 				for (int y = 0; y < SPRITE_PIXELS; ++y) {
 					for (int x = 0; x < SPRITE_PIXELS; ++x) {
 						const size_t source = (static_cast<size_t>(y) * SPRITE_PIXELS + x) * 4;
-						const uint8_t srcA = tilePixels[source + 3];
-						if (srcA == 0) {
+						if (tilePixels[source + 3] == 0) {
 							continue;
 						}
 						const size_t destination = (static_cast<size_t>(destinationY + y) * pixelWidth + destinationX + x) * 4;
-						const uint8_t dstA = pixels[destination + 3];
-						if (srcA == 255 || dstA == 0) {
-							std::copy_n(tilePixels.data() + source, 4, pixels.data() + destination);
-						} else {
-							const float sa = srcA / 255.0f;
-							const float da = dstA / 255.0f;
-							const float outA = sa + da * (1.0f - sa);
-							if (outA > 0.0f) {
-								pixels[destination + 0] = static_cast<uint8_t>((tilePixels[source + 0] * sa + pixels[destination + 0] * da * (1.0f - sa)) / outA);
-								pixels[destination + 1] = static_cast<uint8_t>((tilePixels[source + 1] * sa + pixels[destination + 1] * da * (1.0f - sa)) / outA);
-								pixels[destination + 2] = static_cast<uint8_t>((tilePixels[source + 2] * sa + pixels[destination + 2] * da * (1.0f - sa)) / outA);
-								pixels[destination + 3] = static_cast<uint8_t>(outA * 255.0f);
-							}
-						}
+						std::copy_n(tilePixels.data() + source, 4, pixels.data() + destination);
 					}
 				}
 			}

@@ -194,11 +194,6 @@ namespace MenuBar {
 		USE_GPU_GROUND_CACHE,
 		MAP_DIAGNOSTICS,
 		SHOW_CONTAINER_PREVIEW,
-		SERVER_NEW_MONSTER_EDITOR,
-		SERVER_MONSTER_EDITOR,
-		SERVER_NEW_NPC_EDITOR,
-		SERVER_NPC_EDITOR,
-		SERVER_SPELL_EDITOR,
 	};
 }
 
@@ -248,11 +243,6 @@ public:
 	void OnMapItemIdConverter(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSpawnNpcConverter(wxCommandEvent& event);
-	void OnServerNewMonsterEditor(wxCommandEvent& event);
-	void OnServerMonsterEditor(wxCommandEvent& event);
-	void OnServerNewNpcEditor(wxCommandEvent& event);
-	void OnServerNpcEditor(wxCommandEvent& event);
-	void OnServerSpellEditor(wxCommandEvent& event);
 	void OnImportMonsterData(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);
 	void OnExportTilesets(wxCommandEvent& event);

@@ -49,7 +49,7 @@ bool ClientAssets::validatePath(const wxString& candidate, ClientAssetsManifest&
 	return true;
 }
 
-bool ClientAssets::load(wxString& error, wxArrayString& warnings, const std::filesystem::path& appearancesOverride) {
+bool ClientAssets::load(wxString& error, wxArrayString& warnings) {
 	unload();
 
 	ClientAssetsManifest manifest;
@@ -61,10 +61,9 @@ bool ClientAssets::load(wxString& error, wxArrayString& warnings, const std::fil
 		return false;
 	}
 
-	const std::filesystem::path appearancesFile = appearancesOverride.empty() ? manifest.appearancesFile : appearancesOverride;
-	std::ifstream appearanceStream(appearancesFile, std::ios::in | std::ios::binary);
+	std::ifstream appearanceStream(manifest.appearancesFile, std::ios::in | std::ios::binary);
 	if (!appearanceStream.is_open()) {
-		error = "Could not open appearances file: " + wxstr(appearancesFile.string());
+		error = "Could not open appearances file: " + wxstr(manifest.appearancesFile.string());
 		wxLogError(error);
 		g_spriteAppearances.unload();
 		return false;
@@ -73,7 +72,7 @@ bool ClientAssets::load(wxString& error, wxArrayString& warnings, const std::fil
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 	rme::protobuf::appearances::Appearances appearances;
 	if (!appearances.ParseFromIstream(&appearanceStream)) {
-		error = "The appearances file is corrupt or incompatible: " + wxstr(appearancesFile.string());
+		error = "The appearances file is corrupt or incompatible: " + wxstr(manifest.appearancesFile.string());
 		wxLogError(error);
 		g_spriteAppearances.unload();
 		return false;
@@ -94,30 +93,6 @@ bool ClientAssets::load(wxString& error, wxArrayString& warnings, const std::fil
 		if (!g_gui.gfx.loadAppearanceOutfit(outfit, error, warnings)) {
 			if (error.empty()) {
 				error = wxString::Format("Could not load outfit appearance %u.", outfit.id());
-			}
-			wxLogError(error);
-			g_items.clear();
-			g_gui.gfx.clear();
-			g_spriteAppearances.unload();
-			return false;
-		}
-	}
-	for (const auto& effect : appearances.effect()) {
-		if (!g_gui.gfx.loadAppearanceEffect(effect, error, warnings)) {
-			if (error.empty()) {
-				error = wxString::Format("Could not load effect appearance %u.", effect.id());
-			}
-			wxLogError(error);
-			g_items.clear();
-			g_gui.gfx.clear();
-			g_spriteAppearances.unload();
-			return false;
-		}
-	}
-	for (const auto& missile : appearances.missile()) {
-		if (!g_gui.gfx.loadAppearanceMissile(missile, error, warnings)) {
-			if (error.empty()) {
-				error = wxString::Format("Could not load missile appearance %u.", missile.id());
 			}
 			wxLogError(error);
 			g_items.clear();

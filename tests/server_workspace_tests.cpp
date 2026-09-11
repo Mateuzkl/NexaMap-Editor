@@ -1,5 +1,4 @@
 #include "server_workspace.h"
-#include "mount_id_resolver.h"
 
 #include <chrono>
 #include <filesystem>
@@ -82,8 +81,6 @@ int main() {
 		server.write("data/cache/maps/world.houses.otbm");
 		server.write("data/monster/rat.lua");
 		server.write("data/npc/guide.lua");
-		server.write("data/spells/spells.xml", "<spells/>");
-		server.write("data/XML/mounts.xml", "<mounts><mount id='1' clientid='368' name='Widow Queen'/><mount id='7' clientId='374' name='Titanica'/></mounts>");
 
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
 		check(detection.validRoot, "standard TFS root is valid");
@@ -98,14 +95,6 @@ int main() {
 		check(!detection.workspace.usesCanaryCrystalLoader(), "TFS 1.4 never enables the dedicated Canary/Crystal loader");
 		check(!detection.workspace.monstersDirectory.empty(), "standard TFS monsters are detected");
 		check(!detection.workspace.npcsDirectory.empty(), "standard TFS NPCs are detected");
-		check(!detection.workspace.spellsDirectory.empty(), "standard TFS spells are detected");
-		check(detection.workspace.hasMountsXml() && detection.workspace.mountsXmlPath == std::filesystem::weakly_canonical(server.path / "data/XML/mounts.xml"), "standard TFS mounts.xml is detected exactly");
-
-		MountIdResolver mounts;
-		std::string mountError;
-		check(mounts.load(detection.workspace.mountsXmlPath, mountError), "detected mounts.xml loads: " + mountError);
-		check(mounts.size() == 2 && mounts.resolveClientId(1) == 368 && mounts.resolveClientId(7) == 374, "server mount IDs resolve to client look types");
-		check(mounts.resolveClientId(999) == 999, "unknown mount IDs remain usable as direct client look types");
 	}
 
 	{
@@ -115,12 +104,10 @@ int main() {
 		server.write("data/world/world.otbm");
 		server.write("data/monsters/rat.lua");
 		server.write("data/npc/guide.lua");
-		server.write("data/scripts/spells/light.lua");
 
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
 		check(detection.workspace.serverType == ServerType::Tfs, "TFS 1.8 structure is detected as TFS");
 		check(detection.workspace.serverProfile == "TFS", "TFS 1.8 has the stable display label");
-		check(detection.workspace.spellsDirectory.filename() == "spells", "TFS 1.8 revscript spell root is detected");
 	}
 
 	{
@@ -135,34 +122,6 @@ int main() {
 		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
 		check(detection.workspace.serverType == ServerType::Tfs, "appearances.dat alone cannot override a complete TFS structure");
 		check(!detection.workspace.usesCanaryCrystalLoader(), "stray appearances.dat does not start dedicated loading");
-	}
-
-	{
-		TemporaryDirectory server;
-		std::string pairs;
-		const auto appendPair = [&](uint32_t serverId, uint32_t clientId) {
-			for (int byte = 0; byte < 4; ++byte) {
-				pairs.push_back(static_cast<char>((serverId >> (byte * 8)) & 0xff));
-			}
-			for (int byte = 0; byte < 4; ++byte) {
-				pairs.push_back(static_cast<char>((clientId >> (byte * 8)) & 0xff));
-			}
-		};
-		appendPair(100, 500);
-		appendPair(101, 501);
-		appendPair(102, 502);
-		appendPair(103, 503);
-		server.write("data/items/items.otb", pairs);
-		server.write("data/items/items.xml", "<items/>");
-		server.write("data/items/appearances.dat", "protobuf fixture");
-		server.write("data/world/world.otbm", "map");
-
-		const ServerDetectionResult detection = ServerResourceDetector::Detect(server.path);
-		check(detection.workspace.serverType == ServerType::CustomTfsAppearances, "plain server/client ID table plus appearances.dat detects custom TFS");
-		check(detection.workspace.usesAppearanceAssetsLoader(), "custom TFS selects the appearances asset loader");
-		check(!detection.workspace.usesCanaryCrystalLoader(), "custom TFS keeps its own engine/provider family");
-		check(detection.workspace.itemIdMode == ItemIdMode::ServerId, "custom TFS maps remain keyed by server ID");
-		check(std::string(ServerTypeName(detection.workspace.serverType)) == "TFS Custom (Appearances)", "custom TFS has a clear profile label");
 	}
 
 	{

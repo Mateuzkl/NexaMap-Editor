@@ -133,7 +133,7 @@
       <GenerateMapFile>true</GenerateMapFile>
       <MapFileName>$(TargetName).map</MapFileName>
       <MapExports>true</MapExports>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>
       <IgnoreSpecificDefaultLibraries>wxscintillad.lib</IgnoreSpecificDefaultLibraries>
     </Link>
@@ -162,7 +162,7 @@
       <GenerateMapFile>true</GenerateMapFile>
       <MapFileName>$(TargetName).map</MapFileName>
       <MapExports>true</MapExports>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>wxscintillad.lib</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
@@ -189,7 +189,7 @@
     <Link>
       <AdditionalDependencies>comctl32.lib;WS2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <LargeAddressAware>true</LargeAddressAware>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -223,7 +223,7 @@
     <Link>
       <AdditionalDependencies>comctl32.lib;WS2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <LargeAddressAware>true</LargeAddressAware>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -272,57 +272,7 @@
     <ClCompile Include="..\..\source\replace_tool\visual_similarity_index.cpp" />
     <ClCompile Include="..\..\source\tileset_window.cpp" />
 	<ClCompile Include="..\..\source\welcome_dialog.cpp" />
-	<ClCompile Include="..\..\source\server_content_index.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\source_compare_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\server_content_browser_dialog.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_definition.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_definition_creation.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_section_codec.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_editor_dialog.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_editor_sections.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_editor_attacks.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_spell_area.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_spell_preview.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\npc_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\npc_definition_creation.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\npc_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\outfit_color_picker.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\spell_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\spell_area_library.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\spell_area_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\spell_area_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\spell_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\spell_visual_browser_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
-	<ClCompile Include="..\..\source\server_item_id_map.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\server_vocation_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\server_visual_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\mount_id_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\workspace_session.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
     <ClInclude Include="..\..\source\add_tileset_window.h" />
@@ -665,34 +615,7 @@
     <ClCompile Include="..\..\source\zones.cpp" />
     <ClInclude Include="..\..\source\find_item_window.h" />
 	<ClInclude Include="..\..\source\welcome_dialog.h" />
-	<ClInclude Include="..\..\source\server_content_index.h" />
-	<ClInclude Include="..\..\source\editor_source_monitor.h" />
-	<ClInclude Include="..\..\source\source_compare_dialog.h" />
-	<ClInclude Include="..\..\source\source_text_utils.h" />
-	<ClInclude Include="..\..\source\lua_source_scanner.h" />
-	<ClInclude Include="..\..\source\server_content_browser_dialog.h" />
-	<ClInclude Include="..\..\source\editor_autosave_state.h" />
-	<ClInclude Include="..\..\source\monster_definition.h" />
-	<ClInclude Include="..\..\source\monster_definition_creation.h" />
-	<ClInclude Include="..\..\source\monster_section_codec.h" />
-	<ClInclude Include="..\..\source\monster_editor_dialog.h" />
-	<ClInclude Include="..\..\source\monster_spell_area.h" />
-	<ClInclude Include="..\..\source\monster_spell_preview.h" />
-	<ClInclude Include="..\..\source\npc_definition.h" />
-	<ClInclude Include="..\..\source\npc_definition_creation.h" />
-	<ClInclude Include="..\..\source\npc_editor_dialog.h" />
-	<ClInclude Include="..\..\source\outfit_color_picker.h" />
-	<ClInclude Include="..\..\source\spell_definition.h" />
-	<ClInclude Include="..\..\source\spell_area_library.h" />
-	<ClInclude Include="..\..\source\spell_area_editor_dialog.h" />
-	<ClInclude Include="..\..\source\spell_area_resolver.h" />
-	<ClInclude Include="..\..\source\spell_editor_dialog.h" />
-	<ClInclude Include="..\..\source\spell_visual_browser_dialog.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />
-	<ClInclude Include="..\..\source\server_item_id_map.h" />
-	<ClInclude Include="..\..\source\server_vocation_catalog.h" />
-	<ClInclude Include="..\..\source\server_visual_catalog.h" />
-	<ClInclude Include="..\..\source\mount_id_resolver.h" />
 	<ClInclude Include="..\..\source\workspace_session.h" />
     <ClInclude Include="..\..\source\version_info.h" />
   </ItemGroup>

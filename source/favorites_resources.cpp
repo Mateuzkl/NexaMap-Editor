@@ -255,8 +255,7 @@ wxBitmap FavoriteResources::Preview(const FavoriteEntry& entry, int pixels) {
 	std::vector<uint8_t> rgba;
 	int width = 0, height = 0;
 	bool pending = false;
-	const int mountClientId = outfit && outfit->lookMount > 0 ? g_workspace.resolveMountClientId(outfit->lookMount) : 0;
-	if (!sprite->getVisualPreviewRGBA(rgba, width, height, pending, false, outfit, 0, 0, 0, 0, 0, mountClientId)) {
+	if (!sprite->getVisualPreviewRGBA(rgba, width, height, pending, false, outfit)) {
 		return {};
 	}
 	wxImage image(width, height);

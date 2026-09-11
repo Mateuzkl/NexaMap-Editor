@@ -69,14 +69,6 @@
 	<menu name="Tools">
 		<item name="Command Palette..." action="COMMAND_PALETTE" hotkey="Ctrl+Shift+P" help="Search and execute NexaMap commands."/>
 		<separator/>
-		<menu name="Server Content Editors">
-			<item name="New Monster..." action="SERVER_NEW_MONSTER_EDITOR" help="Create a new XML or Lua monster in the active Server Workspace."/>
-			<item name="Browse Monsters..." action="SERVER_MONSTER_EDITOR" help="Browse and edit monster definitions from the active Server Workspace."/>
-			<item name="New NPC..." action="SERVER_NEW_NPC_EDITOR" help="Create a new XML or Lua NPC in the active Server Workspace."/>
-			<item name="Browse NPCs..." action="SERVER_NPC_EDITOR" help="Browse and edit NPC definitions from the active Server Workspace."/>
-			<item name="Browse Spells..." action="SERVER_SPELL_EDITOR" help="Browse and safely edit global spell registrations and implementations from the active Server Workspace."/>
-		</menu>
-		<separator/>
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
 		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>
 		<item name="Learn Border from Selection..." action="LEARN_BORDER_SELECTION" help="Analyze selected map tiles and infer an autoborder draft without changing the map."/>
