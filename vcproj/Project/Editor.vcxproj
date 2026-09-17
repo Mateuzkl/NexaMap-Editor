@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -514,6 +514,7 @@
     <ClInclude Include="..\..\source\map_overlay_text.h" />
     <ClCompile Include="..\..\source\map_drawer.cpp" />
     <ClInclude Include="..\..\source\map_window.h" />
+    <ClInclude Include="..\..\source\viewport_metrics.h" />
     <ClCompile Include="..\..\source\map_window.cpp" />
     <ClInclude Include="..\..\source\action.h" />
     <ClCompile Include="..\..\source\action.cpp" />

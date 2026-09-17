@@ -140,6 +140,7 @@ public:
 		return ingamePreview;
 	}
 	void SetZoom(double value);
+	bool ZoomTo(double targetZoom, int anchorScreenX = -1, int anchorScreenY = -1);
 	void SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame);
 	Position GetIngamePreviewDrawTile() const;
 	void SetIngamePreviewLighting(bool enabled);

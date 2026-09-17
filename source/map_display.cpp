@@ -324,26 +324,51 @@ void MapCanvas::RefreshWithoutDirty() {
 	wxGLCanvas::Refresh();
 }
 
+bool MapCanvas::ZoomTo(double targetZoom, int anchorScreenX, int anchorScreenY) {
+	targetZoom = std::clamp(targetZoom, 0.125, 25.0);
+	if (std::abs(zoom - targetZoom) < 1e-6) {
+		return false;
+	}
+
+	auto* parent = static_cast<MapWindow*>(GetParent());
+	int currentScrollX = 0;
+	int currentScrollY = 0;
+	parent->GetViewStart(&currentScrollX, &currentScrollY);
+
+	int viewW = 0;
+	int viewH = 0;
+	GetSize(&viewW, &viewH);
+
+	if (anchorScreenX < 0 || anchorScreenY < 0) {
+		anchorScreenX = viewW / 2;
+		anchorScreenY = viewH / 2;
+	}
+
+	const double scale = GetContentScaleFactor();
+	const double oldZoom = zoom;
+	zoom = targetZoom;
+
+	parent->UpdateScrollbars();
+
+	const ViewportMetrics metrics = parent->GetViewportMetrics();
+	const int newScrollX = ViewportMetrics::ComputeZoomedScroll(currentScrollX, anchorScreenX, scale, oldZoom, targetZoom, metrics.maxScrollX);
+	const int newScrollY = ViewportMetrics::ComputeZoomedScroll(currentScrollY, anchorScreenY, scale, oldZoom, targetZoom, metrics.maxScrollY);
+
+	parent->hScroll->SetThumbPosition(newScrollX);
+	parent->vScroll->SetThumbPosition(newScrollY);
+
+	if (!ingamePreview) {
+		g_gui.UpdateMinimap();
+	}
+
+	UpdatePositionStatus();
+	UpdateZoomStatus();
+	RefreshViewport();
+	return true;
+}
+
 void MapCanvas::SetZoom(double value) {
-	if (value < 0.125) {
-		value = 0.125;
-	}
-
-	if (value > 25.00) {
-		value = 25.0;
-	}
-
-	if (zoom != value) {
-		int center_x, center_y;
-		GetScreenCenter(&center_x, &center_y);
-
-		zoom = value;
-		static_cast<MapWindow*>(GetParent())->SetScreenCenterPosition(Position(center_x, center_y, floor));
-
-		UpdatePositionStatus();
-		UpdateZoomStatus();
-		RefreshViewport();
-	}
+	ZoomTo(value);
 }
 
 void MapCanvas::SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame) {
@@ -620,9 +645,10 @@ void MapCanvas::ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y) 
 }
 
 void MapCanvas::GetScreenCenter(int* map_x, int* map_y) {
-	int width, height;
-	static_cast<MapWindow*>(GetParent())->GetViewSize(&width, &height);
-	return ScreenToMap(width / 2, height / 2, map_x, map_y);
+	int width = 0;
+	int height = 0;
+	GetSize(&width, &height);
+	ScreenToMap(width / 2, height / 2, map_x, map_y);
 }
 
 Position MapCanvas::GetCursorPosition() const {
@@ -1900,34 +1926,11 @@ void MapCanvas::OnWheel(wxMouseEvent& event) {
 		}
 	} else {
 		viewport_only = true;
-		double diff = -event.GetWheelRotation() * g_settings.getFloat(Config::ZOOM_SPEED) / 640.0;
-		double oldzoom = zoom;
-		zoom += diff;
-
-		if (zoom < 0.125) {
-			diff = 0.125 - oldzoom;
-			zoom = 0.125;
-		}
-		if (zoom > 25.00) {
-			diff = 25.00 - oldzoom;
-			zoom = 25.0;
-		}
-
-		UpdateZoomStatus();
-
-		int screensize_x, screensize_y;
-		static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-		// This took a day to figure out!
-		int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x))) * GetContentScaleFactor();
-		int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y))) * GetContentScaleFactor();
-
-		static_cast<MapWindow*>(GetParent())->ScrollRelative(-scroll_x, -scroll_y);
+		const double diff = -event.GetWheelRotation() * g_settings.getFloat(Config::ZOOM_SPEED) / 640.0;
+		ZoomTo(zoom + diff, cursor_x, cursor_y);
 	}
 
-	if (viewport_only) {
-		RefreshViewport();
-	} else {
+	if (!viewport_only) {
 		Refresh();
 	}
 }

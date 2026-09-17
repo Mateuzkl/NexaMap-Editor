@@ -258,6 +258,9 @@
     <ClInclude Include="..\..\source\map_window.h">
       <Filter>gui\map window</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\viewport_metrics.h">
+      <Filter>gui\map window</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\materials.h">
       <Filter>managers</Filter>
     </ClInclude>

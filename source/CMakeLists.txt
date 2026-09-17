@@ -97,6 +97,7 @@ ${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.h
 ${CMAKE_CURRENT_LIST_DIR}/atlas_page_epochs.h
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.h
 ${CMAKE_CURRENT_LIST_DIR}/map_window.h
+${CMAKE_CURRENT_LIST_DIR}/viewport_metrics.h
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.h
