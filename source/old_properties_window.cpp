@@ -563,21 +563,22 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	ASSERT(edit_creature);
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
-	wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Creature Properties");
+	auto* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Creature Properties");
+	wxWindow* box = boxsizer->GetStaticBox();
 
 	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
 
-	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Creature "));
-	subsizer->Add(newd wxStaticText(this, wxID_ANY, "\"" + wxstr(edit_creature->getName()) + "\""), wxSizerFlags(1).Expand());
+	subsizer->Add(newd wxStaticText(box, wxID_ANY, "Creature "));
+	subsizer->Add(newd wxStaticText(box, wxID_ANY, "\"" + wxstr(edit_creature->getName()) + "\""), wxSizerFlags(1).Expand());
 
-	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Spawn interval"));
-	count_field = newd wxSpinCtrl(this, wxID_ANY, i2ws(edit_creature->getSpawnTime()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 10, 86400, edit_creature->getSpawnTime());
+	subsizer->Add(newd wxStaticText(box, wxID_ANY, "Spawn interval"));
+	count_field = newd wxSpinCtrl(box, wxID_ANY, i2ws(edit_creature->getSpawnTime()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 10, 86400, edit_creature->getSpawnTime());
 	// count_field->SetSelection(-1, -1);
 	subsizer->Add(count_field, wxSizerFlags(1).Expand());
 
-	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Direction"));
-	direction_field = newd wxChoice(this, wxID_ANY);
+	subsizer->Add(newd wxStaticText(box, wxID_ANY, "Direction"));
+	direction_field = newd wxChoice(box, wxID_ANY);
 
 	for (Direction dir = DIRECTION_FIRST; dir <= DIRECTION_LAST; ++dir) {
 		direction_field->Append(wxstr(Creature::DirID2Name(dir)), newd int32_t(dir));
@@ -585,9 +586,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	direction_field->SetSelection(edit_creature->getDirection());
 	subsizer->Add(direction_field, wxSizerFlags(1).Expand());
 
-	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Weight"));
+	subsizer->Add(newd wxStaticText(box, wxID_ANY, "Weight"));
 	const int editableWeight = static_cast<int>(std::min<uint32_t>(edit_creature->getWeight(), std::numeric_limits<int>::max()));
-	creature_weight_field = newd wxSpinCtrl(this, wxID_ANY, i2ws(editableWeight), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::numeric_limits<int>::max(), editableWeight);
+	creature_weight_field = newd wxSpinCtrl(box, wxID_ANY, i2ws(editableWeight), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::numeric_limits<int>::max(), editableWeight);
 	subsizer->Add(creature_weight_field, wxSizerFlags(1).Expand());
 
 	boxsizer->Add(subsizer, wxSizerFlags(1).Expand());
@@ -620,15 +621,16 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	ASSERT(edit_spawn);
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
-	wxSizer* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Spawn Properties");
+	auto* boxsizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Spawn Properties");
+	wxWindow* box = boxsizer->GetStaticBox();
 
 	// if(item->canHoldDescription()) num_items += 1;
 
 	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
 
-	subsizer->Add(newd wxStaticText(this, wxID_ANY, "Spawn size"));
-	count_field = newd wxSpinCtrl(this, wxID_ANY, i2ws(edit_spawn->getSize()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, g_settings.getInteger(Config::MAX_SPAWN_RADIUS), edit_spawn->getSize());
+	subsizer->Add(newd wxStaticText(box, wxID_ANY, "Spawn size"));
+	count_field = newd wxSpinCtrl(box, wxID_ANY, i2ws(edit_spawn->getSize()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, g_settings.getInteger(Config::MAX_SPAWN_RADIUS), edit_spawn->getSize());
 	// count_field->SetSelection(-1, -1);
 	subsizer->Add(count_field, wxSizerFlags(1).Expand());
 
