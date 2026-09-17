@@ -36,7 +36,7 @@ public:
 	explicit NexaPerfScope(std::string_view tag) :
 		tag(tag),
 		enabled(NexaPerf::isEnabled()),
-		start(enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}) {
+		start(enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point {}) {
 	}
 
 	~NexaPerfScope() {
