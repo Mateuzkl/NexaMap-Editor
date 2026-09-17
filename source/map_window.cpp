@@ -34,6 +34,10 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 	GL_settings[1] = WX_GL_DOUBLEBUFFER;
 	GL_settings[2] = 0;
 	canvas = newd MapCanvas(this, editor, GL_settings, ingamePreview);
+	canvas->Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
+		UpdateScrollbars();
+		event.Skip();
+	});
 
 	vScroll = newd MapScrollBar(this, MAP_WINDOW_VSCROLL, wxVERTICAL, canvas);
 	hScroll = newd MapScrollBar(this, MAP_WINDOW_HSCROLL, wxHORIZONTAL, canvas);
@@ -131,6 +135,7 @@ void MapWindow::SetSize(int x, int y, bool center) {
 		return;
 	}
 
+	Layout();
 	const ViewportMetrics metrics = GetViewportMetrics();
 	const int posX = center ? (metrics.maxScrollX / 2) : std::clamp(hScroll->GetThumbPosition(), 0, metrics.maxScrollX);
 	const int posY = center ? (metrics.maxScrollY / 2) : std::clamp(vScroll->GetThumbPosition(), 0, metrics.maxScrollY);
@@ -280,6 +285,7 @@ void MapWindow::OnGem(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MapWindow::OnSize(wxSizeEvent& event) {
+	Layout();
 	UpdateScrollbars();
 	event.Skip();
 }

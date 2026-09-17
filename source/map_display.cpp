@@ -1655,12 +1655,7 @@ void MapCanvas::OnMouseCameraClick(wxMouseEvent& event) {
 	last_mmb_click_x = event.GetX();
 	last_mmb_click_y = event.GetY();
 	if (event.ControlDown()) {
-		int screensize_x, screensize_y;
-		static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-		static_cast<MapWindow*>(GetParent())->ScrollRelative(int(-screensize_x * (1.0 - zoom) * (std::max(cursor_x, 1) / double(screensize_x))), int(-screensize_y * (1.0 - zoom) * (std::max(cursor_y, 1) / double(screensize_y))));
-		zoom = 1.0;
-		RefreshViewport();
+		ZoomTo(1.0, cursor_x, cursor_y);
 	} else {
 		screendragging = true;
 	}
@@ -2001,52 +1996,11 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 			break;
 		}
 		case WXK_NUMPAD_MULTIPLY: {
-			double diff = -0.3;
-
-			double oldzoom = zoom;
-			zoom += diff;
-
-			if (zoom < 0.125) {
-				diff = 0.125 - oldzoom;
-				zoom = 0.125;
-			}
-
-			int screensize_x, screensize_y;
-			static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x)));
-			int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y)));
-
-			static_cast<MapWindow*>(GetParent())->ScrollRelative(-scroll_x, -scroll_y);
-
-			UpdatePositionStatus();
-			UpdateZoomStatus();
-			RefreshViewport();
+			ZoomTo(zoom - 0.3, cursor_x, cursor_y);
 			break;
 		}
 		case WXK_NUMPAD_DIVIDE: {
-			double diff = 0.3;
-			double oldzoom = zoom;
-			zoom += diff;
-
-			if (zoom > 25.00) {
-				diff = 25.00 - oldzoom;
-				zoom = 25.0;
-			}
-
-			int screensize_x, screensize_y;
-			static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x)));
-			int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y)));
-
-			static_cast<MapWindow*>(GetParent())->ScrollRelative(-scroll_x, -scroll_y);
-
-			UpdatePositionStatus();
-			UpdateZoomStatus();
-			RefreshViewport();
+			ZoomTo(zoom + 0.3, cursor_x, cursor_y);
 			break;
 		}
 		// This will work like crap with non-us layouts, well, sucks for them until there is another solution.
