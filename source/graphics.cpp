@@ -23,6 +23,7 @@
 #include "artprovider.h"
 #include "filehandle.h"
 #include "settings.h"
+#include "profiling_perf.h"
 #include "gui.h"
 #include "otml.h"
 #include "sprite_appearances.h"
@@ -287,7 +288,7 @@ bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
 	if (atlas_size == 0) {
 		GLint maxTex = 2048;
 		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTex);
-		atlas_size = std::min(4096, static_cast<int>(maxTex));
+		atlas_size = std::min(2048, static_cast<int>(maxTex));
 		if (atlas_size < CELL) {
 			atlas_size = CELL;
 		}
@@ -307,6 +308,7 @@ bool GraphicManager::allocAtlasSlot(GLuint& outTex, int& outX, int& outY) {
 				return false;
 			}
 		} else {
+			NexaPerfScope perfAtlas("OpenGL atlas texture page allocation (glTexImage2D)");
 			GLuint tex = 0;
 			glGenTextures(1, &tex);
 			if (tex == 0) {
@@ -2231,12 +2233,14 @@ uint8_t* GameSprite::NormalImage::getRGBAData(bool* pending) {
 
 GLuint GameSprite::NormalImage::getHardwareID() {
 	if (!atlas_loaded) {
-		if (!g_gui.gfx.canPrepareTextureUpload()) {
+		bool pending = false;
+		uint8_t* rgba = getRGBAData(&pending);
+		if (!rgba) {
 			return 0;
 		}
-		uint8_t* rgba = getRGBAData();
-		if (!rgba) {
-			g_gui.gfx.cancelTextureUploadAttempt();
+
+		if (!g_gui.gfx.canPrepareTextureUpload()) {
+			delete[] rgba;
 			return 0;
 		}
 
