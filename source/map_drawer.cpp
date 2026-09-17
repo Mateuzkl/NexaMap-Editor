@@ -18,6 +18,7 @@
 #include "main.h"
 #include "multiplayer_session.h"
 #include "profiling.h"
+#include "profiling_perf.h"
 
 #include "bitmap_font.h"
 #include "map_overlay_text.h"
@@ -587,6 +588,11 @@ void MapDrawer::Draw() {
 	}
 
 	if (isSceneDirty()) {
+		const bool isFirstRender = !cached_scene_initialized;
+		std::unique_ptr<NexaPerfScope> firstFramePerf;
+		if (isFirstRender) {
+			firstFramePerf = std::make_unique<NexaPerfScope>("First frame OpenGL DrawScene (cold start)");
+		}
 		renderer->beginFBO();
 		DrawScene();
 		renderer->flush();
