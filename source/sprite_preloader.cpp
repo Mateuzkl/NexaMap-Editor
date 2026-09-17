@@ -13,6 +13,7 @@ namespace {
 SpritePreloader g_spritePreloader;
 
 SpritePreloader::~SpritePreloader() {
+	stopWorkers();
 	clear();
 }
 
@@ -21,6 +22,8 @@ void SpritePreloader::configure(const std::filesystem::path& file, const std::ve
 	if (file.empty() || offsets.empty() || workerCount == 0) {
 		return;
 	}
+
+	workerCount = std::clamp<size_t>(workerCount, 1, 2);
 
 	{
 		std::lock_guard lock(mutex);
@@ -32,14 +35,23 @@ void SpritePreloader::configure(const std::filesystem::path& file, const std::ve
 		++generation;
 	}
 
-	workerCount = std::clamp<size_t>(workerCount, 1, 2);
-	workers.reserve(workerCount);
-	for (size_t index = 0; index < workerCount; ++index) {
-		workers.emplace_back(&SpritePreloader::workerLoop, this);
+	if (workers.size() != workerCount) {
+		stopWorkers();
+		{
+			std::lock_guard lock(mutex);
+			configured = true;
+			stopping = false;
+		}
+		workers.reserve(workerCount);
+		for (size_t index = 0; index < workerCount; ++index) {
+			workers.emplace_back(&SpritePreloader::workerLoop, this);
+		}
+	} else {
+		condition.notify_all();
 	}
 }
 
-void SpritePreloader::clear() {
+void SpritePreloader::stopWorkers() {
 	{
 		std::lock_guard lock(mutex);
 		stopping = true;
@@ -53,7 +65,10 @@ void SpritePreloader::clear() {
 		}
 	}
 	workers.clear();
+	stopping = false;
+}
 
+void SpritePreloader::clear() {
 	std::lock_guard lock(mutex);
 	spriteFile.clear();
 	spriteOffsets.clear();
@@ -62,7 +77,8 @@ void SpritePreloader::clear() {
 	readyOrder.clear();
 	queuedSpriteIds.clear();
 	failedSpriteIds.clear();
-	stopping = false;
+	configured = false;
+	++generation;
 }
 
 SpritePreloadStatus SpritePreloader::getOrRequest(uint32_t spriteId, std::vector<uint8_t>& pixels) {
@@ -73,12 +89,9 @@ SpritePreloadStatus SpritePreloader::getOrRequest(uint32_t spriteId, std::vector
 
 	const auto ready = readySprites.find(spriteId);
 	if (ready != readySprites.end()) {
-		pixels = std::move(ready->second);
+		pixels = std::move(ready->second.pixels);
+		readyOrder.erase(ready->second.orderIt);
 		readySprites.erase(ready);
-		const auto order = std::find(readyOrder.begin(), readyOrder.end(), spriteId);
-		if (order != readyOrder.end()) {
-			readyOrder.erase(order);
-		}
 		return SpritePreloadStatus::Ready;
 	}
 	if (failedSpriteIds.contains(spriteId)) {
@@ -103,19 +116,24 @@ SpritePreloadStatus SpritePreloader::getOrRequest(uint32_t spriteId, std::vector
 	return SpritePreloadStatus::Pending;
 }
 
-bool SpritePreloader::decode(const std::filesystem::path& file, uint32_t offset, bool hasTransparency, std::vector<uint8_t>& pixels) {
-	std::ifstream stream(file, std::ios::binary);
+bool SpritePreloader::decode(std::ifstream& stream, uint32_t offset, bool hasTransparency, std::vector<uint8_t>& pixels) {
 	if (!stream.is_open()) {
 		return false;
 	}
 
+	stream.clear();
 	stream.seekg(static_cast<std::streamoff>(offset) + 3, std::ios::beg);
+	if (!stream) {
+		return false;
+	}
+
 	uint8_t sizeBytes[2] = {};
 	if (!stream.read(reinterpret_cast<char*>(sizeBytes), sizeof(sizeBytes))) {
 		return false;
 	}
 	const uint16_t size = static_cast<uint16_t>(sizeBytes[0] | (static_cast<uint16_t>(sizeBytes[1]) << 8));
-	std::vector<uint8_t> dump(size);
+	thread_local static std::vector<uint8_t> dump;
+	dump.resize(size);
 	if (size != 0 && !stream.read(reinterpret_cast<char*>(dump.data()), size)) {
 		return false;
 	}
@@ -148,6 +166,9 @@ bool SpritePreloader::decode(const std::filesystem::path& file, uint32_t offset,
 }
 
 void SpritePreloader::workerLoop() {
+	std::filesystem::path currentOpenPath;
+	std::ifstream stream;
+
 	for (;;) {
 		Task task;
 		std::filesystem::path file;
@@ -164,8 +185,19 @@ void SpritePreloader::workerLoop() {
 			hasTransparency = transparency;
 		}
 
+		if (currentOpenPath != file) {
+			if (stream.is_open()) {
+				stream.close();
+			}
+			stream.clear();
+			if (!file.empty()) {
+				stream.open(file, std::ios::binary);
+			}
+			currentOpenPath = file;
+		}
+
 		std::vector<uint8_t> pixels;
-		const bool loaded = decode(file, task.offset, hasTransparency, pixels);
+		const bool loaded = decode(stream, task.offset, hasTransparency, pixels);
 
 		std::lock_guard lock(mutex);
 		queuedSpriteIds.erase(task.spriteId);
@@ -181,6 +213,6 @@ void SpritePreloader::workerLoop() {
 			readyOrder.pop_front();
 		}
 		readyOrder.push_back(task.spriteId);
-		readySprites[task.spriteId] = std::move(pixels);
+		readySprites[task.spriteId] = { std::move(pixels), std::prev(readyOrder.end()) };
 	}
 }
