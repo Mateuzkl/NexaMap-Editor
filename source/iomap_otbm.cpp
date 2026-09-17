@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include "profiling.h"
+#include "profiling_perf.h"
 
 #include <wx/file.h>
 
@@ -241,7 +242,18 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 		*itemType = &iType;
 	}
 
-	const SpecialItemAttributeHints specialAttributes = inspectSpecialAttributes ? inspectSpecialItemAttributes(stream, maphandle.version, iType) : SpecialItemAttributeHints {};
+	const bool canHaveSpecialAttributes = inspectSpecialAttributes
+		&& !iType.isGroundTile()
+		&& iType.ground_equivalent == 0
+		&& !iType.isBorder
+		&& !iType.alwaysOnBottom
+		&& !iType.isTeleport()
+		&& !iType.isDoor()
+		&& !iType.isDepot();
+
+	const SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
+		? inspectSpecialItemAttributes(stream, maphandle.version, iType)
+		: SpecialItemAttributeHints {};
 
 	uint16_t _count = 0;
 
@@ -1477,6 +1489,7 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 }
 
 bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
+	NexaPerfScope perfTotal("OTBM parsing total");
 	// `f` outlives this call in none of the callers, and loadMap has many early
 	// returns, so the borrow is scoped rather than cleared by hand at each one.
 	struct ProgressSourceBorrow {
