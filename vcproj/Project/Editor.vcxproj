@@ -492,6 +492,8 @@
     <ClCompile Include="..\..\source\palette_creature.cpp" />
     <ClInclude Include="..\..\source\palette_house.h" />
     <ClCompile Include="..\..\source\palette_house.cpp" />
+    <ClInclude Include="..\..\source\palette_model.h" />
+    <ClCompile Include="..\..\source\palette_model.cpp" />
     <ClInclude Include="..\..\source\palette_waypoints.h" />
     <ClCompile Include="..\..\source\palette_waypoints.cpp" />
     <ClInclude Include="..\..\source\palette_zones.h" />

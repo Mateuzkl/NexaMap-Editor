@@ -372,6 +372,13 @@ void Settings::IO(IOMode mode) {
 	String(PALETTE_DOODAD_STYLE, "large icons");
 	String(PALETTE_ITEM_STYLE, "listbox");
 	String(PALETTE_RAW_STYLE, "listbox");
+	Int(PALETTE_SORT_KEY, 0);
+	Int(PALETTE_SORT_DIR, 0);
+	Int(PALETTE_HAS_SORT, 0);
+	Int(PALETTE_SHOW_LABELS, 0);
+	Int(PALETTE_TILE_SIZE, 0);
+	Int(PALETTE_FILTER_ALL, 0);
+	String(PALETTE_FILTER_QUERY, "");
 	Int(THEME, 0);
 	Int(ACTIVE_THEME, -1);
 	String(SPAWN_CONVERTER_DIRECTORY, "");

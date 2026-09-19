@@ -123,9 +123,9 @@ void ReplaceItemsListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t index)
 	if (sprite1 && sprite2) {
 		int x = rect.GetX();
 		int y = rect.GetY();
-		sprite1->DrawTo(&dc, SPRITE_SIZE_32x32, x + 4, y + 4, rect.GetWidth(), rect.GetHeight());
+		sprite1->DrawTo(&dc, SPRITE_SIZE_32x32, x + 4, y + 4, 32, 32);
 		dc.DrawBitmap(m_arrow_bitmap, x + 38, y + 10, true);
-		sprite2->DrawTo(&dc, SPRITE_SIZE_32x32, x + 56, y + 4, rect.GetWidth(), rect.GetHeight());
+		sprite2->DrawTo(&dc, SPRITE_SIZE_32x32, x + 56, y + 4, 32, 32);
 		dc.SetTextForeground(IsSelected(index) ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::Text));
 		dc.DrawText(wxString::Format("Replace: %d With: %d", item.replaceId, item.withId), x + 104, y + 10);
 
@@ -135,7 +135,6 @@ void ReplaceItemsListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t index)
 			dc.DrawText(wxString::Format("Total: %u", item.total), x, y + 10);
 		}
 	}
-
 }
 
 wxCoord ReplaceItemsListBox::OnMeasureItem(size_t WXUNUSED(index)) const {

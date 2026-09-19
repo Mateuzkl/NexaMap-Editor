@@ -42,8 +42,9 @@ DCButton::DCButton() :
 }
 
 DCButton::DCButton(wxWindow* parent, wxWindowID id, wxPoint pos, int type, RenderSize sz, int sprite_id) :
-	wxPanel(parent, id, pos, (sz == RENDER_SIZE_64x64 ? wxSize(68, 68) : sz == RENDER_SIZE_32x32 ? wxSize(36, 36)
-																								 : wxSize(20, 20))),
+	wxPanel(parent, id, pos, (sz == RENDER_SIZE_128x128 ? wxSize(132, 132) : sz == RENDER_SIZE_64x64 ? wxSize(68, 68)
+								  : sz == RENDER_SIZE_32x32											 ? wxSize(36, 36)
+																									 : wxSize(20, 20))),
 	type(type),
 	state(false),
 	size(sz),
@@ -101,6 +102,12 @@ void DCButton::OnPaint(wxPaintEvent& event) {
 	} else if (size == RENDER_SIZE_32x32) {
 		size_x = 36;
 		size_y = 36;
+	} else if (size == RENDER_SIZE_64x64) {
+		size_x = 68;
+		size_y = 68;
+	} else if (size == RENDER_SIZE_128x128) {
+		size_x = 132;
+		size_y = 132;
 	}
 
 	const bool selected = type == DC_BTN_TOGGLE && GetValue();
@@ -114,21 +121,25 @@ void DCButton::OnPaint(wxPaintEvent& event) {
 
 	if (sprite) {
 		if (size == RENDER_SIZE_16x16) {
-			// Draw the picture!
-			sprite->DrawTo(&pdc, SPRITE_SIZE_16x16, 2, 2);
-
+			sprite->DrawTo(&pdc, SPRITE_SIZE_16x16, 2, 2, 16, 16);
 			if (overlay && type == DC_BTN_TOGGLE && GetValue()) {
-				overlay->DrawTo(&pdc, SPRITE_SIZE_16x16, 2, 2);
+				overlay->DrawTo(&pdc, SPRITE_SIZE_16x16, 2, 2, 16, 16);
 			}
 		} else if (size == RENDER_SIZE_32x32) {
-			// Draw the picture!
-			sprite->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2);
-
+			sprite->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2, 32, 32);
 			if (overlay && type == DC_BTN_TOGGLE && GetValue()) {
-				overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2);
+				overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2, 32, 32);
 			}
 		} else if (size == RENDER_SIZE_64x64) {
-			////
+			sprite->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2, 64, 64);
+			if (overlay && type == DC_BTN_TOGGLE && GetValue()) {
+				overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2, 64, 64);
+			}
+		} else if (size == RENDER_SIZE_128x128) {
+			sprite->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2, 128, 128);
+			if (overlay && type == DC_BTN_TOGGLE && GetValue()) {
+				overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2, 128, 128);
+			}
 		}
 	}
 }

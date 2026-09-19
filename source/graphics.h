@@ -26,6 +26,7 @@
 #include <chrono>
 #include <deque>
 #include <memory>
+#include <array>
 
 #include "client_version.h"
 #include <wx/artprov.h>
@@ -89,7 +90,8 @@ public:
 	void unloadDC() override;
 
 protected:
-	wxBitmap* bm[SPRITE_SIZE_COUNT];
+	std::array<std::unique_ptr<wxBitmap>, SPRITE_SIZE_COUNT> bm;
+	mutable std::map<std::pair<SpriteSize, std::pair<int, int>>, wxBitmap> scaled_cache;
 };
 
 struct SpriteVisualFingerprint {

@@ -22,6 +22,7 @@
 #include "graphics.h"
 #include "browse_tile_window.h"
 #include "theme.h"
+#include "palette_model.h"
 
 // ============================================================================
 //
@@ -39,13 +40,13 @@ public:
 protected:
 	void UpdateItems();
 
-	typedef std::map<int, Item*> ItemsMap;
-	ItemsMap items;
 	Tile* edit_tile;
+	std::map<int, Item*> items;
 };
 
 BrowseTileListBox::BrowseTileListBox(wxWindow* parent, wxWindowID id, Tile* tile) :
-	wxVListBox(parent, id, wxDefaultPosition, wxSize(200, 180), wxLB_MULTIPLE), edit_tile(tile) {
+	wxVListBox(parent, id, wxDefaultPosition, wxSize(200, 180), wxLB_MULTIPLE),
+	edit_tile(tile) {
 	SetBackgroundColour(Theme::Get(Theme::Role::Background));
 	SetForegroundColour(Theme::Get(Theme::Role::Text));
 	SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
@@ -58,11 +59,21 @@ BrowseTileListBox::~BrowseTileListBox() {
 
 void BrowseTileListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
 	auto item_iterator = items.find(int(n));
+	if (item_iterator == items.end() || !item_iterator->second) {
+		return;
+	}
 	Item* item = item_iterator->second;
+
+	constexpr int iconDim = 32;
+	int charHeight = dc.GetCharHeight();
+	if (charHeight <= 0) {
+		charHeight = 14;
+	}
+	auto layout = PaletteModel::CalculateListItemLayout(rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight(), iconDim, charHeight);
 
 	Sprite* sprite = g_gui.gfx.getSprite(item->getClientID());
 	if (sprite) {
-		sprite->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
+		sprite->DrawTo(&dc, SPRITE_SIZE_32x32, layout.iconX, layout.iconY, layout.iconWidth, layout.iconHeight);
 	}
 
 	if (IsSelected(n)) {
@@ -75,11 +86,11 @@ void BrowseTileListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 
 	wxString label;
 	label << item->getID() << " - " << item->getName();
-	dc.DrawText(label, rect.GetX() + 40, rect.GetY() + 6);
+	dc.DrawText(label, layout.textX, layout.textY);
 }
 
 wxCoord BrowseTileListBox::OnMeasureItem(size_t n) const {
-	return 32;
+	return FromDIP(36);
 }
 
 Item* BrowseTileListBox::GetSelectedItem() {

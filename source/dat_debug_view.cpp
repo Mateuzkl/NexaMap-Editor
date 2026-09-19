@@ -22,6 +22,7 @@
 #include "graphics.h"
 #include "gui.h"
 #include "theme.h"
+#include "palette_model.h"
 
 // ============================================================================
 //
@@ -60,9 +61,16 @@ DatDebugViewListBox::~DatDebugViewListBox() {
 }
 
 void DatDebugViewListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
+	constexpr int iconDim = 32;
+	int charHeight = dc.GetCharHeight();
+	if (charHeight <= 0) {
+		charHeight = 14;
+	}
+	auto layout = PaletteModel::CalculateListItemLayout(rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight(), iconDim, charHeight);
+
 	auto spr_iter = sprites.find(int(n));
 	if (spr_iter != sprites.end()) {
-		spr_iter->second->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
+		spr_iter->second->DrawTo(&dc, SPRITE_SIZE_32x32, layout.iconX, layout.iconY, layout.iconWidth, layout.iconHeight);
 	}
 
 	if (IsSelected(n)) {
@@ -71,11 +79,11 @@ void DatDebugViewListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) con
 		dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 	}
 
-	dc.DrawText(wxString() << n, rect.GetX() + 40, rect.GetY() + 6);
+	dc.DrawText(wxString() << n, layout.textX, layout.textY);
 }
 
 wxCoord DatDebugViewListBox::OnMeasureItem(size_t n) const {
-	return 32;
+	return FromDIP(36);
 }
 
 // ============================================================================

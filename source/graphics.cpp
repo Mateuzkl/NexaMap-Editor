@@ -1649,8 +1649,8 @@ void GraphicManager::garbageCollection() {
 }
 
 EditorSprite::EditorSprite(wxBitmap* b16x16, wxBitmap* b32x32) {
-	bm[SPRITE_SIZE_16x16] = b16x16;
-	bm[SPRITE_SIZE_32x32] = b32x32;
+	bm[SPRITE_SIZE_16x16].reset(b16x16);
+	bm[SPRITE_SIZE_32x32].reset(b32x32);
 }
 
 EditorSprite::~EditorSprite() {
@@ -1658,17 +1658,61 @@ EditorSprite::~EditorSprite() {
 }
 
 void EditorSprite::DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width, int height) {
-	wxBitmap* sp = bm[sz];
-	if (sp) {
-		dc->DrawBitmap(*sp, start_x, start_y, true);
+	if (!dc) {
+		return;
 	}
+	wxBitmap* sp = bm[sz].get();
+	if (!sp || !sp->IsOk()) {
+		return;
+	}
+
+	int target_w = (width == -1) ? sp->GetWidth() : width;
+	int target_h = (height == -1) ? sp->GetHeight() : height;
+
+	if (target_w == sp->GetWidth() && target_h == sp->GetHeight()) {
+		dc->DrawBitmap(*sp, start_x, start_y, true);
+		return;
+	}
+
+	// Bound cache to standard icon sizes (16, 32, 64, 128) and cap cache entries
+	const bool can_cache = (target_w == target_h) && (target_w == 16 || target_w == 32 || target_w == 64 || target_w == 128);
+	if (can_cache) {
+		auto key = std::make_pair(sz, std::make_pair(target_w, target_h));
+		auto it = scaled_cache.find(key);
+		if (it == scaled_cache.end()) {
+			if (scaled_cache.size() >= 8) {
+				scaled_cache.clear();
+			}
+			wxImage img = sp->ConvertToImage();
+			if (img.IsOk()) {
+				wxBitmap scaledBm(img.Rescale(target_w, target_h, wxIMAGE_QUALITY_NEAREST));
+				it = scaled_cache.emplace(key, std::move(scaledBm)).first;
+			}
+		}
+
+		if (it != scaled_cache.end() && it->second.IsOk()) {
+			dc->DrawBitmap(it->second, start_x, start_y, true);
+			return;
+		}
+	} else {
+		// Non-standard dimension: scale on the fly without unbounded caching
+		wxImage img = sp->ConvertToImage();
+		if (img.IsOk()) {
+			wxBitmap scaledBm(img.Rescale(target_w, target_h, wxIMAGE_QUALITY_NEAREST));
+			if (scaledBm.IsOk()) {
+				dc->DrawBitmap(scaledBm, start_x, start_y, true);
+				return;
+			}
+		}
+	}
+
+	dc->DrawBitmap(*sp, start_x, start_y, true);
 }
 
 void EditorSprite::unloadDC() {
-	delete bm[SPRITE_SIZE_16x16];
-	delete bm[SPRITE_SIZE_32x32];
-	bm[SPRITE_SIZE_16x16] = nullptr;
-	bm[SPRITE_SIZE_32x32] = nullptr;
+	bm[SPRITE_SIZE_16x16].reset();
+	bm[SPRITE_SIZE_32x32].reset();
+	scaled_cache.clear();
 }
 
 GameSprite::GameSprite() :
@@ -2044,15 +2088,25 @@ wxMemoryDC* GameSprite::getDC(SpriteSize size) {
 }
 
 void GameSprite::DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width, int height) {
+	const int src_dim = (sz == SPRITE_SIZE_32x32 ? 32 : 16);
 	if (width == -1) {
-		width = sz == SPRITE_SIZE_32x32 ? 32 : 16;
+		width = src_dim;
 	}
 	if (height == -1) {
-		height = sz == SPRITE_SIZE_32x32 ? 32 : 16;
+		height = src_dim;
+	}
+	// Safeguard: Sprites are square tiles. If a caller erroneously passes a wide list-row rectangle (e.g. width >= height * 2),
+	// bound width to height so the sprite is never stretched horizontally into a banner.
+	if (width > height && height > 0 && width >= height * 2) {
+		width = height;
 	}
 	wxDC* sdc = getDC(sz);
 	if (sdc) {
-		dc->Blit(start_x, start_y, width, height, sdc, 0, 0, wxCOPY, true);
+		if (width == src_dim && height == src_dim) {
+			dc->Blit(start_x, start_y, width, height, sdc, 0, 0, wxCOPY, true);
+		} else {
+			dc->StretchBlit(start_x, start_y, width, height, sdc, 0, 0, src_dim, src_dim, wxCOPY, true);
+		}
 	} else {
 		const wxBrush& b = dc->GetBrush();
 		dc->SetBrush(*wxRED_BRUSH);
