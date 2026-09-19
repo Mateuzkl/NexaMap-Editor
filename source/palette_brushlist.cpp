@@ -59,6 +59,7 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	m_hasSort(false),
 	m_showLabels(false),
 	m_tileSize(32),
+	m_hasTileSizeOverride(false),
 	m_tilesets(&tilesets) {
 	LoadPaletteFilters();
 
@@ -143,7 +144,9 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 				panel->SetSort(m_sortKey, m_sortDir);
 			}
 			panel->SetShowLabels(m_showLabels);
-			panel->SetTileSize(m_tileSize);
+			if (m_hasTileSizeOverride) {
+				panel->SetTileSize(m_tileSize);
+			}
 			tmp_choicebook->AddPage(panel, wxstr(iter->second->name));
 		}
 	}
@@ -214,6 +217,13 @@ void BrushPalettePanel::SetListType(BrushListType ltype) {
 	if (!choicebook) {
 		return;
 	}
+	if (!m_hasTileSizeOverride) {
+		if (ltype == BRUSHLIST_SMALL_ICONS) {
+			m_tileSize = 16;
+		} else if (ltype == BRUSHLIST_LARGE_ICONS) {
+			m_tileSize = 32;
+		}
+	}
 	for (size_t iz = 0; iz < choicebook->GetPageCount(); ++iz) {
 		auto* panel = dynamic_cast<BrushPanel*>(choicebook->GetPage(iz));
 		if (panel) {
@@ -225,6 +235,13 @@ void BrushPalettePanel::SetListType(BrushListType ltype) {
 void BrushPalettePanel::SetListType(const wxString& ltype) {
 	if (!choicebook) {
 		return;
+	}
+	if (!m_hasTileSizeOverride) {
+		if (ltype == "small icons") {
+			m_tileSize = 16;
+		} else if (ltype == "large icons") {
+			m_tileSize = 32;
+		}
 	}
 	for (size_t iz = 0; iz < choicebook->GetPageCount(); ++iz) {
 		auto* panel = dynamic_cast<BrushPanel*>(choicebook->GetPage(iz));
@@ -438,7 +455,8 @@ void BrushPalettePanel::SetShowLabels(bool show) {
 }
 
 void BrushPalettePanel::SetTileSize(int sizePx) {
-	m_tileSize = sizePx;
+	m_hasTileSizeOverride = true;
+	m_tileSize = PaletteModel::SanitizeTileSize(sizePx);
 	SavePaletteFilters();
 
 	if (!choicebook) {
@@ -724,9 +742,13 @@ void BrushPalettePanel::LoadPaletteFilters() {
 	m_sortDir = static_cast<TilesetSortDirection>(g_settings.getInteger(Config::PALETTE_SORT_DIR));
 	m_hasSort = g_settings.getInteger(Config::PALETTE_HAS_SORT) != 0;
 	m_showLabels = g_settings.getInteger(Config::PALETTE_SHOW_LABELS) != 0;
-	m_tileSize = g_settings.getInteger(Config::PALETTE_TILE_SIZE);
-	if (m_tileSize != 16 && m_tileSize != 32 && m_tileSize != 64 && m_tileSize != 128) {
+	int storedTileSize = g_settings.getInteger(Config::PALETTE_TILE_SIZE);
+	if (storedTileSize == 16 || storedTileSize == 32 || storedTileSize == 64 || storedTileSize == 128) {
+		m_tileSize = storedTileSize;
+		m_hasTileSizeOverride = true;
+	} else {
 		m_tileSize = 32;
+		m_hasTileSizeOverride = false;
 	}
 	m_filterAll = g_settings.getInteger(Config::PALETTE_FILTER_ALL) != 0;
 	m_filterQuery = g_settings.getString(Config::PALETTE_FILTER_QUERY);
@@ -737,7 +759,7 @@ void BrushPalettePanel::SavePaletteFilters() {
 	g_settings.setInteger(Config::PALETTE_SORT_DIR, static_cast<int>(m_sortDir));
 	g_settings.setInteger(Config::PALETTE_HAS_SORT, m_hasSort ? 1 : 0);
 	g_settings.setInteger(Config::PALETTE_SHOW_LABELS, m_showLabels ? 1 : 0);
-	g_settings.setInteger(Config::PALETTE_TILE_SIZE, m_tileSize);
+	g_settings.setInteger(Config::PALETTE_TILE_SIZE, m_hasTileSizeOverride ? m_tileSize : 0);
 	g_settings.setInteger(Config::PALETTE_FILTER_ALL, m_filterAll ? 1 : 0);
 	g_settings.setString(Config::PALETTE_FILTER_QUERY, m_filterQuery);
 }
@@ -761,6 +783,7 @@ BrushPanel::BrushPanel(wxWindow* parent) :
 	sort_dir(TilesetSortDirection::Ascending),
 	show_labels(false),
 	tile_size_px(32),
+	has_explicit_tile_size(false),
 	has_override_brushes(false) {
 	sizer = newd wxBoxSizer(wxVERTICAL);
 	SetSizerAndFit(sizer);
@@ -781,6 +804,13 @@ void BrushPanel::SetListType(BrushListType ltype) {
 	if (list_type != ltype) {
 		InvalidateContents();
 		list_type = ltype;
+		if (!has_explicit_tile_size) {
+			if (list_type == BRUSHLIST_SMALL_ICONS) {
+				tile_size_px = 16;
+			} else if (list_type == BRUSHLIST_LARGE_ICONS) {
+				tile_size_px = 32;
+			}
+		}
 	}
 }
 
@@ -808,6 +838,15 @@ void BrushPanel::LoadContents() {
 	}
 	loaded = true;
 	ASSERT(tileset != nullptr);
+
+	if (!has_explicit_tile_size) {
+		if (list_type == BRUSHLIST_SMALL_ICONS) {
+			tile_size_px = 16;
+		} else if (list_type == BRUSHLIST_LARGE_ICONS) {
+			tile_size_px = 32;
+		}
+	}
+
 	switch (list_type) {
 		case BRUSHLIST_LARGE_ICONS:
 			brushbox = newd BrushIconBox(this, tileset, RENDER_SIZE_32x32);
@@ -943,9 +982,10 @@ void BrushPanel::SetShowLabels(bool show) {
 }
 
 void BrushPanel::SetTileSize(int sizePx) {
-	tile_size_px = sizePx;
+	has_explicit_tile_size = true;
+	tile_size_px = PaletteModel::SanitizeTileSize(sizePx);
 	if (brushbox) {
-		brushbox->SetTileSize(sizePx);
+		brushbox->SetTileSize(tile_size_px);
 	}
 }
 

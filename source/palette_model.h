@@ -57,6 +57,13 @@ namespace PaletteModel {
 		return sizePx;
 	}
 
+	inline int DeriveInitialTileSize(int explicitOverride, bool isSmallIcons) {
+		if (explicitOverride == 16 || explicitOverride == 32 || explicitOverride == 64 || explicitOverride == 128) {
+			return explicitOverride;
+		}
+		return isSmallIcons ? 16 : 32;
+	}
+
 	inline std::string NormalizeQuery(std::string_view query) {
 		std::string result;
 		result.reserve(query.size());

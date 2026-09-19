@@ -233,6 +233,7 @@ protected:
 	TilesetSortDirection sort_dir = TilesetSortDirection::Ascending;
 	bool show_labels = false;
 	int tile_size_px = 32;
+	bool has_explicit_tile_size = false;
 	std::string filter_query;
 	std::vector<Brush*> override_brushes;
 	bool has_override_brushes = false;
@@ -338,6 +339,7 @@ protected:
 	bool m_hasSort;
 	bool m_showLabels;
 	int m_tileSize;
+	bool m_hasTileSizeOverride;
 
 	const TilesetContainer* m_tilesets;
 

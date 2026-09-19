@@ -342,6 +342,17 @@ int main() {
 		check(PaletteModel::SanitizeTileSize(48) == 32, "48px falls back to 32");
 		check(PaletteModel::SanitizeTileSize(256) == 32, "256px falls back to 32");
 		check(PaletteModel::SanitizeTileSize(-10) == 32, "-10px falls back to 32");
+
+		// Derive initial tile size without override
+		check(PaletteModel::DeriveInitialTileSize(0, true) == 16, "small icons without override should derive 16px");
+		check(PaletteModel::DeriveInitialTileSize(0, false) == 32, "large icons without override should derive 32px");
+
+		// Derive initial tile size with explicit user override
+		check(PaletteModel::DeriveInitialTileSize(64, true) == 64, "explicit 64px override overrides small icons");
+		check(PaletteModel::DeriveInitialTileSize(16, false) == 16, "explicit 16px override respected for large icons");
+		check(PaletteModel::DeriveInitialTileSize(128, false) == 128, "explicit 128px override respected");
+		check(PaletteModel::DeriveInitialTileSize(999, true) == 16, "invalid override falls back to 16px for small icons");
+		check(PaletteModel::DeriveInitialTileSize(999, false) == 32, "invalid override falls back to 32px for large icons");
 	}
 
 	// -----------------------------------------------------------------------
