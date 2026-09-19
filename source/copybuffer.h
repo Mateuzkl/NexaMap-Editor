@@ -24,6 +24,7 @@
 #include "basemap.h"
 #include "house.h"
 #include "session_id.h"
+#include "spawn_source_remap.h"
 
 #include <memory>
 
@@ -35,6 +36,9 @@ public:
 	CopyBuffer();
 	virtual ~CopyBuffer();
 	void swap(CopyBuffer& other) noexcept;
+
+	// Spawn dependencies captured during copy/cut for remap on paste.
+	const SpawnDependencyMap& getSpawnDependencies() const { return spawnDependencies; }
 
 	// In-editor implantation
 	void copy(Editor& editor, int floor);
@@ -68,6 +72,7 @@ private:
 	std::unique_ptr<BaseMap> tiles;
 	SessionId sourceMapSessionId;
 	std::map<uint32_t, HouseSnapshot> houses;
+	SpawnDependencyMap spawnDependencies;
 };
 
 #endif

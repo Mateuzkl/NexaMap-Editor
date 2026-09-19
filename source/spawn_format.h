@@ -125,10 +125,21 @@ public:
 	static bool SemanticallyEqual(const SpawnDocument& lhs, const SpawnDocument& rhs, bool compareWeights, std::string& difference);
 };
 
+struct SpawnValidationResult {
+	bool valid = true;
+	int orphanedCreatures = 0;
+	int outOfRadiusCreatures = 0;
+	int staleRegistryEntries = 0;
+	int unregisteredSpawns = 0;
+	int uncapturableCreatures = 0;
+	std::vector<std::string> warnings;
+};
+
 class SpawnMapAdapter {
 public:
 	static bool Apply(Map& map, const SpawnDocument& document, std::vector<std::string>& warnings);
 	static SpawnDocument Capture(Map& map);
+	static SpawnValidationResult Validate(Map& map);
 };
 
 #endif

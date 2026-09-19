@@ -2285,6 +2285,13 @@ bool IOMapOTBM::prependXmlDeclaration(pugi::xml_document& doc) {
 bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	const std::filesystem::path directory(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
 	const std::string mapName = nstr(dir.GetName());
+
+	// Run pre-save spawn validation diagnostics to detect orphaned or uncapturable creatures.
+	const SpawnValidationResult validation = SpawnMapAdapter::Validate(map);
+	for (const std::string& warn : validation.warnings) {
+		warnings.push_back(wxstr(warn));
+	}
+
 	const SpawnDocument document = SpawnMapAdapter::Capture(map);
 	SpawnWriteResult result;
 

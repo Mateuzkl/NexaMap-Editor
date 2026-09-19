@@ -35,6 +35,7 @@
 #include "spawn_format.h"
 #include "item_id_codec.h"
 #include "multiplayer_session.h"
+#include "spawn_source_remap.h"
 
 #include <filesystem>
 #include <optional>
@@ -1265,6 +1266,14 @@ void Editor::moveSelection(Position offset) {
 			// Replace tile instead of just merge
 			tile->setLocation(location);
 			new_dest_tile = tile;
+		}
+
+		// Remap creature spawn_source to the translated position.
+		// moveSelection uses (old_pos - offset) for tile translation,
+		// so apply the same delta to the creature's spawn reference.
+		if (new_dest_tile->creature && new_dest_tile->creature->hasSpawnSource()) {
+			Position translatedSource = new_dest_tile->creature->getSpawnSource() - offset;
+			new_dest_tile->creature->setSpawnSource(translatedSource);
 		}
 
 		action->addChange(newd Change(new_dest_tile));

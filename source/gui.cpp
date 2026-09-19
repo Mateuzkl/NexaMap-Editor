@@ -56,6 +56,7 @@
 #include "new_map_tab_dialog.h"
 #include "cross_client_clipboard.h"
 #include "cross_client_paste_dialog.h"
+#include "creature_cache.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -65,6 +66,61 @@ const wxEventType EVT_UPDATE_MENUS = wxNewEventType();
 
 namespace {
 	constexpr const char* CANARY_CRYSTAL_DATA_DIRECTORY = "canary-crystal";
+
+	/// Build a CreatureCache::WorkspaceKey from the current workspace.
+	CreatureCache::WorkspaceKey buildCacheKey(const ServerWorkspace& workspace) {
+		CreatureCache::WorkspaceKey key;
+		key.serverRoot = workspace.rootPath;
+		key.monstersDir = workspace.monstersDirectory;
+		key.npcsDir = workspace.npcsDirectory;
+		key.clientProfile = workspace.serverProfile;
+		return key;
+	}
+
+	/// Import monsters/NPCs from Lua or cache.
+	void importCreaturesWithCache(
+		const ServerWorkspace& workspace,
+		const wxString& luaDirectory,
+		const std::string& kind,
+		bool isNpc,
+		wxArrayString& warnings,
+		const CreatureDatabase::ImportProgress& creatureProgress
+	) {
+		if (luaDirectory.empty() || !wxDir::Exists(luaDirectory)) {
+			return;
+		}
+		const auto cacheKey = buildCacheKey(workspace);
+		const auto cacheDir = CreatureCache::GetCacheDirectory(cacheKey);
+		const auto luaPath = std::filesystem::u8path(luaDirectory.ToStdString(wxConvUTF8));
+
+		const auto progress = [&](const std::string& msg) {
+			if (creatureProgress) {
+				creatureProgress(wxString::FromUTF8(msg));
+			}
+		};
+
+		if (CreatureCache::ValidateManifest(cacheDir, luaPath, kind)) {
+			if (CreatureCache::LoadCached(g_creatures, cacheDir, kind, progress)) {
+				return; // Cache hit.
+			}
+			// Cache load failed — fall through to full import.
+		}
+
+		// Full Lua import.
+		wxString importError;
+		bool ok;
+		if (isNpc) {
+			ok = g_creatures.importNpcsFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false);
+		} else {
+			ok = g_creatures.importMonstersFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false);
+		}
+		if (!ok) {
+			warnings.push_back(wxString::Format("Couldn't import %s from the Server Workspace: %s", wxString::FromUTF8(kind), importError));
+			return;
+		}
+		// Save cache for next startup.
+		CreatureCache::SaveCache(g_creatures, cacheDir, luaPath, kind, progress);
+	}
 
 	wxString GetCanaryCrystalBundledDataDirectory() {
 		wxString dataDirectory = GUI::GetDataDirectory();
@@ -784,18 +840,16 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		g_creatures.loadFromXML(cdb, false, nerr, nwarn, creatureProgress);
 	}
 
-	if (!workspace.monstersDirectory.empty()) {
-		wxString importError;
-		if (!g_creatures.importMonstersFromLuaDir(WorkspacePath(workspace.monstersDirectory), importError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import monsters from the Server Workspace: " + importError);
-		}
-	}
-	if (!workspace.npcsDirectory.empty()) {
-		wxString importError;
-		if (!g_creatures.importNpcsFromLuaDir(WorkspacePath(workspace.npcsDirectory), importError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import NPCs from the Server Workspace: " + importError);
-		}
-	}
+	importCreaturesWithCache(
+		workspace,
+		!workspace.monstersDirectory.empty() ? WorkspacePath(workspace.monstersDirectory) : wxString{},
+		"monsters", false, warnings, creatureProgress
+	);
+	importCreaturesWithCache(
+		workspace,
+		!workspace.npcsDirectory.empty() ? WorkspacePath(workspace.npcsDirectory) : wxString{},
+		"npcs", true, warnings, creatureProgress
+	);
 
 	g_gui.SetLoadIndeterminate("Loading materials.xml ...");
 	wxArrayString materialWarnings;
@@ -880,21 +934,11 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	const wxString monstersDirectory = !workspace.monstersDirectory.empty()
 		? WorkspacePath(workspace.monstersDirectory)
 		: wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
-	if (!monstersDirectory.empty() && wxDir::Exists(monstersDirectory)) {
-		wxString luaError;
-		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import the configured monsters Lua directory: " + luaError);
-		}
-	}
 	const wxString npcsDirectory = !workspace.npcsDirectory.empty()
 		? WorkspacePath(workspace.npcsDirectory)
 		: wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
-	if (!npcsDirectory.empty() && wxDir::Exists(npcsDirectory)) {
-		wxString luaError;
-		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import the configured NPCs Lua directory: " + luaError);
-		}
-	}
+	importCreaturesWithCache(workspace, monstersDirectory, "monsters", false, warnings, creatureProgress);
+	importCreaturesWithCache(workspace, npcsDirectory, "npcs", true, warnings, creatureProgress);
 
 	SetLoadIndeterminate("Loading materials...");
 	wxLogMessage("Canary/Crystal: loading dedicated materials and borders.");

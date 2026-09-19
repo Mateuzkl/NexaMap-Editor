@@ -21,6 +21,7 @@
 #include "editor.h"
 #include "gui.h"
 #include "creature.h"
+#include "spawn_source_remap.h"
 
 #include <algorithm>
 #include <memory>
@@ -55,6 +56,7 @@ void CopyBuffer::swap(CopyBuffer& other) noexcept {
 	std::swap(boundsValid, other.boundsValid);
 	std::swap(sourceMapSessionId, other.sourceMapSessionId);
 	std::swap(houses, other.houses);
+	std::swap(spawnDependencies, other.spawnDependencies);
 }
 
 Position CopyBuffer::getPosition() const {
@@ -66,6 +68,7 @@ void CopyBuffer::clear() {
 	tiles.reset();
 	sourceMapSessionId = InvalidSessionId;
 	houses.clear();
+	spawnDependencies.clear();
 	resetBounds();
 }
 
@@ -73,6 +76,9 @@ void CopyBuffer::replace(std::unique_ptr<BaseMap> map, const Position& position)
 	clear();
 	tiles = std::move(map);
 	copyPos = position;
+	if (tiles) {
+		spawnDependencies = CaptureSpawnDependencies(*tiles);
+	}
 	rebuildBounds();
 }
 
@@ -188,6 +194,10 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	std::ostringstream ss;
 	ss << "Copied " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+
+	// Capture spawn dependencies so paste can remap Creature::spawn_source.
+	spawnDependencies = CaptureSpawnDependencies(*tiles, &editor.map);
+
 	g_gui.CaptureCrossClientCopy(*this);
 }
 
@@ -298,6 +308,10 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	std::stringstream ss;
 	ss << "Cut out " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+
+	// Capture spawn dependencies so paste can remap Creature::spawn_source.
+	spawnDependencies = CaptureSpawnDependencies(*tiles, &editor.map);
+
 	g_gui.CaptureCrossClientCopy(*this);
 }
 
@@ -381,6 +395,20 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 
 		TileLocation* location = editor.map.createTileL(pos);
 		Tile* copy_tile = buffer_tile->deepCopy(editor.map);
+
+		// Remap creature spawn_source to the translated position.
+		// Without this, SpawnMapAdapter::Capture() silently skips the
+		// creature because its spawn_source still points to the
+		// original (pre-paste) center position.
+		if (copy_tile->creature && copy_tile->creature->hasSpawnSource()) {
+			RemapSingleCreatureSpawnSource(
+				*copy_tile->creature,
+				copyPos,
+				toPosition,
+				spawnDependencies
+			);
+		}
+
 		if (copy_tile->isHouseTile()) {
 			auto remap = house_id_map.find(copy_tile->getHouseID());
 			if (remap == house_id_map.end()) {
@@ -423,6 +451,7 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 			action = editor.actionQueue->createAction(batchAction);
 		}
 	}
+	EnsureDependentSpawnsExist(editor, *action, copyPos, toPosition, spawnDependencies);
 	batchAction->addAndCommitAction(action);
 	if (batchAction->size() == 0) {
 		delete batchAction;

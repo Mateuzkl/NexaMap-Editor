@@ -337,6 +337,12 @@
     <ClInclude Include="..\..\source\spawn_format.h">
       <Filter>objects</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\creature_cache.h">
+      <Filter>objects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\spawn_source_remap.h">
+      <Filter>objects</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\spawn_export_window.h">
       <Filter>gui</Filter>
     </ClInclude>
@@ -666,6 +672,12 @@
       <Filter>objects</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\spawn_format_map.cpp">
+      <Filter>objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\creature_cache.cpp">
+      <Filter>objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\spawn_source_remap.cpp">
       <Filter>objects</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\spawn_export_window.cpp">
