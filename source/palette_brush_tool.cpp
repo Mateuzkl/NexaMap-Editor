@@ -21,6 +21,7 @@
 #include "palette_brush_tool.h"
 #include "gui.h"
 #include "settings.h"
+#include "theme.h"
 
 // ============================================================================
 // Tool Brush Panel
@@ -455,21 +456,123 @@ void BrushToolPanel::OnClickLockDoorCheckbox(wxCommandEvent& event) {
 // Brush Button
 
 BEGIN_EVENT_TABLE(BrushButton, ItemToggleButton)
+EVT_PAINT(BrushButton::OnPaint)
 EVT_KEY_DOWN(BrushButton::OnKey)
 END_EVENT_TABLE()
 
-BrushButton::BrushButton(wxWindow* parent, Brush* _brush, RenderSize sz, uint32_t id) :
+BrushButton::BrushButton(wxWindow* parent, Brush* _brush, RenderSize sz, uint32_t id, bool showLabel) :
 	ItemToggleButton(parent, sz, uint16_t(0), id),
-	brush(_brush) {
-	ASSERT(sz != RENDER_SIZE_64x64);
+	brush(_brush),
+	show_label(showLabel) {
 	ASSERT(brush);
 	SetSprite(brush->getLookID());
 	SetToolTip(wxstr(brush->getName()));
 	Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent&) { FavoriteResources::Popup(this, brush); });
+	SetShowLabel(showLabel);
 }
 
 BrushButton::~BrushButton() {
 	////
+}
+
+void BrushButton::SetShowLabel(bool show) {
+	show_label = show;
+	int base_w = 36;
+	int base_h = 36;
+	if (size == RENDER_SIZE_16x16) {
+		base_w = 20;
+		base_h = 20;
+	} else if (size == RENDER_SIZE_32x32) {
+		base_w = 36;
+		base_h = 36;
+	} else if (size == RENDER_SIZE_64x64) {
+		base_w = 68;
+		base_h = 68;
+	} else if (size == RENDER_SIZE_128x128) {
+		base_w = 132;
+		base_h = 132;
+	}
+
+	if (show_label) {
+		int label_w = std::max(base_w, 64);
+		int label_h = base_h + 16;
+		SetMinSize(wxSize(label_w, label_h));
+		SetSize(wxSize(label_w, label_h));
+	} else {
+		SetMinSize(wxSize(base_w, base_h));
+		SetSize(wxSize(base_w, base_h));
+	}
+	Refresh();
+}
+
+void BrushButton::OnPaint(wxPaintEvent& event) {
+	if (!show_label) {
+		DCButton::OnPaint(event);
+		return;
+	}
+
+	wxBufferedPaintDC pdc(this);
+	if (g_gui.gfx.isUnloaded()) {
+		return;
+	}
+
+	wxSize curSize = GetSize();
+	int w = curSize.GetWidth();
+	int h = curSize.GetHeight();
+
+	const bool selected = (type == DC_BTN_TOGGLE && GetValue());
+	const wxColour background = selected ? Theme::Get(Theme::Role::SelectionFill) : Theme::Get(Theme::Role::RaisedSurface);
+	const wxColour border = selected ? Theme::Get(Theme::Role::AccentHover) : Theme::Get(Theme::Role::Border);
+
+	pdc.SetBackground(wxBrush(Theme::Get(Theme::Role::Surface)));
+	pdc.Clear();
+	pdc.SetBrush(wxBrush(background));
+	pdc.SetPen(wxPen(border));
+	pdc.DrawRectangle(0, 0, w, h);
+
+	int sprite_dim = 32;
+	if (size == RENDER_SIZE_16x16) {
+		sprite_dim = 16;
+	} else if (size == RENDER_SIZE_32x32) {
+		sprite_dim = 32;
+	} else if (size == RENDER_SIZE_64x64) {
+		sprite_dim = 64;
+	} else if (size == RENDER_SIZE_128x128) {
+		sprite_dim = 128;
+	}
+
+	int sprite_x = (w - sprite_dim) / 2;
+	int sprite_y = 2;
+
+	if (sprite) {
+		sprite->DrawTo(&pdc, SPRITE_SIZE_32x32, sprite_x, sprite_y, sprite_dim, sprite_dim);
+		if (overlay && selected) {
+			overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, sprite_x, sprite_y, sprite_dim, sprite_dim);
+		}
+	}
+
+	if (brush) {
+		wxFont font = GetFont();
+		font.SetPointSize(8);
+		pdc.SetFont(font);
+		pdc.SetTextForeground(selected ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::Text));
+
+		wxString text = wxstr(brush->getName());
+		wxCoord tw, th;
+		pdc.GetTextExtent(text, &tw, &th);
+
+		if (tw > w - 4 && text.length() > 3) {
+			while (text.length() > 3 && tw > w - 4) {
+				text.RemoveLast();
+				pdc.GetTextExtent(text + "...", &tw, &th);
+			}
+			text += "...";
+		}
+
+		int text_x = std::max(2, (w - tw) / 2);
+		int text_y = sprite_y + sprite_dim + 1;
+		pdc.DrawText(text, text_x, text_y);
+	}
 }
 
 void BrushButton::OnKey(wxKeyEvent& event) {

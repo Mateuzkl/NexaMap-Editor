@@ -555,4 +555,19 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/unreachable_cleaner_tests"
 	)
 	add_test(NAME unreachable_cleaner_tests COMMAND unreachable_cleaner_tests)
+
+	add_executable(palette_toolbar_tests
+		tests/palette_toolbar_tests.cpp
+	)
+	target_include_directories(palette_toolbar_tests PRIVATE source)
+	if(MSVC)
+		target_compile_options(palette_toolbar_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(palette_toolbar_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/palette_toolbar_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/palette_toolbar_tests"
+	)
+	add_test(NAME palette_toolbar_tests COMMAND palette_toolbar_tests)
 endif()

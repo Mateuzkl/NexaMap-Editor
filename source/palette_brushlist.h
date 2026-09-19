@@ -22,11 +22,26 @@
 #include "palette_common.h"
 #include "palette_brush_tool.h"
 
+#include <wx/aui/auibar.h>
+#include <wx/srchctrl.h>
+
+#include <string_view>
+
 enum BrushListType {
 	BRUSHLIST_LARGE_ICONS,
 	BRUSHLIST_SMALL_ICONS,
 	BRUSHLIST_LISTBOX,
 	BRUSHLIST_TEXT_LISTBOX,
+};
+
+enum class TilesetSortKey {
+	ID,
+	Name,
+};
+
+enum class TilesetSortDirection {
+	Ascending,
+	Descending,
 };
 
 class BrushBoxInterface {
@@ -45,6 +60,12 @@ public:
 	virtual Brush* GetSelectedBrush() const = 0;
 	// Select the brush in the parameter, this only changes the look of the panel
 	virtual bool SelectBrush(const Brush* brush) = 0;
+
+	virtual void SetSort(TilesetSortKey key, TilesetSortDirection dir) { }
+	virtual void ClearSort() { }
+	virtual void SetShowLabels(bool show) { }
+	virtual void SetTileSize(int sizePx) { }
+	virtual void SetFilterQuery(const std::string& query, const std::vector<Brush*>* overrideSource = nullptr) { }
 
 protected:
 	const TilesetCategory* const tileset;
@@ -73,6 +94,21 @@ public:
 
 	void OnKey(wxKeyEvent& event);
 
+	void SetSort(TilesetSortKey key, TilesetSortDirection dir) override;
+	void ClearSort() override;
+	void SetFilterQuery(const std::string& query, const std::vector<Brush*>* overrideSource = nullptr) override;
+
+protected:
+	void UpdateDisplayedBrushes();
+
+	std::vector<Brush*> displayed_brushes;
+	bool has_sort = false;
+	TilesetSortKey sort_key = TilesetSortKey::Name;
+	TilesetSortDirection sort_dir = TilesetSortDirection::Ascending;
+	std::string filter_query;
+	std::vector<Brush*> override_brushes;
+	bool has_override_brushes = false;
+
 	DECLARE_EVENT_TABLE();
 };
 
@@ -96,35 +132,44 @@ public:
 	// Select the brush in the parameter, this only changes the look of the panel
 	bool SelectBrush(const Brush* brush) override;
 
+	void SetSort(TilesetSortKey key, TilesetSortDirection dir) override;
+	void ClearSort() override;
+	void SetShowLabels(bool show) override;
+	void SetTileSize(int sizePx) override;
+	void SetFilterQuery(const std::string& query, const std::vector<Brush*>* overrideSource = nullptr) override;
+
 	// Event handling...
 	void OnClickBrushButton(wxCommandEvent& event);
 
 protected:
-	// Used internally to deselect all buttons before selecting a newd one.
+	// Used internally to deselect all buttons before selecting a new one.
 	void DeselectAll();
+	void RebuildButtons();
 
 protected:
 	std::vector<BrushButton*> brush_buttons;
+	std::vector<Brush*> displayed_brushes;
 	RenderSize icon_size;
+	bool has_sort = false;
+	TilesetSortKey sort_key = TilesetSortKey::Name;
+	TilesetSortDirection sort_dir = TilesetSortDirection::Ascending;
+	bool show_labels = false;
+	int tile_size_px = 32;
+	std::string filter_query;
+	std::vector<Brush*> override_brushes;
+	bool has_override_brushes = false;
 
 	DECLARE_EVENT_TABLE();
 };
 
-// A panel capapable of displaying a collection of brushes
-// Brushes can be arranged in either list or icon fashion
-// Contents are *not* created when the panel is created,
-// but on the first call to LoadContents(), this is to
-// allow procedural loading (faster)
-
+// A panel capable of displaying a collection of brushes
 class BrushPanel : public wxPanel {
 public:
 	BrushPanel(wxWindow* parent);
 	~BrushPanel() override;
 
 	// Interface
-	// Flushes this panel and consequent views will feature reloaded data
 	void InvalidateContents();
-	// Loads the content (This must be called before the panel is displayed, else it will appear empty
 	void LoadContents();
 
 	// Sets the display type (list or icons)
@@ -132,6 +177,16 @@ public:
 	void SetListType(const wxString& ltype);
 	// Assigns a tileset to this list
 	void AssignTileset(const TilesetCategory* tileset);
+
+	const TilesetCategory* GetTileset() const {
+		return tileset;
+	}
+
+	void SetSort(TilesetSortKey key, TilesetSortDirection dir);
+	void ClearSort();
+	void SetShowLabels(bool show);
+	void SetTileSize(int sizePx);
+	void SetFilterQuery(const std::string& query, const std::vector<Brush*>* overrideSource = nullptr);
 
 	// Select the first brush
 	void SelectFirstBrush();
@@ -155,20 +210,43 @@ protected:
 	bool loaded;
 	BrushListType list_type;
 
+	bool has_sort = false;
+	TilesetSortKey sort_key = TilesetSortKey::Name;
+	TilesetSortDirection sort_dir = TilesetSortDirection::Ascending;
+	bool show_labels = false;
+	int tile_size_px = 32;
+	std::string filter_query;
+	std::vector<Brush*> override_brushes;
+	bool has_override_brushes = false;
+
 	DECLARE_EVENT_TABLE();
 };
 
 class BrushPalettePanel : public PalettePanel {
 public:
+	enum ToolID {
+		TOOL_SORT_AZ = wxID_HIGHEST + 6001,
+		TOOL_SORT_ZA,
+		TOOL_TOGGLE_LABELS,
+		TOOL_CHANGE_SIZE,
+		TOOL_FILTER_ALL,
+	};
+
+	enum MenuID {
+		MENU_SORT_BY_ID = wxID_HIGHEST + 6011,
+		MENU_SORT_BY_NAME,
+		MENU_SORT_DEFAULT,
+		MENU_SIZE_32,
+		MENU_SIZE_64,
+		MENU_SIZE_128,
+	};
+
 	BrushPalettePanel(wxWindow* parent, const TilesetContainer& tilesets, TilesetCategoryType category, wxWindowID id = wxID_ANY);
 	~BrushPalettePanel() override;
 
 	// Interface
-	// Flushes this panel and consequent views will feature reloaded data
 	void InvalidateContents() override;
-	// Loads the currently displayed page
 	void LoadCurrentContents() override;
-	// Loads all content in this panel
 	void LoadAllContents() override;
 
 	PaletteType GetType() const override;
@@ -193,11 +271,50 @@ public:
 	void OnClickAddTileset(wxCommandEvent& WXUNUSED(event));
 	void OnClickAddItemToTileset(wxCommandEvent& WXUNUSED(event));
 
+	// Toolbar operations
+	void SetSort(TilesetSortKey key, TilesetSortDirection dir);
+	void ClearSort();
+	void SetShowLabels(bool show);
+	void SetTileSize(int sizePx);
+	void ApplyTheme();
+
+	// Search and filter operations
+	void ResetFilter();
+	bool JumpToTilesetAndBrush(std::string_view tilesetName, const Brush* brush);
+	std::string FindTilesetNameForBrush(const Brush* brush) const;
+	bool IsFilterAllActive() const {
+		return m_filterAll && !m_filterQuery.empty();
+	}
+
 protected:
+	void OnToolClick(wxCommandEvent& event);
+	void OnSortButtonClick(TilesetSortDirection dir, int toolId);
+	void OnSizeButtonClick(int toolId);
+	void OnSearchText(wxCommandEvent& event);
+	void OnSearchCancel(wxCommandEvent& event);
+	void ApplyFilter();
+
+	void LoadPaletteFilters();
+	void SavePaletteFilters();
+
 	PaletteType palette_type;
 	wxChoicebook* choicebook;
 	BrushSizePanel* size_panel;
 	std::map<wxWindow*, Brush*> remembered_brushes;
+
+	wxAuiToolBar* toolbar;
+	wxSearchCtrl* m_searchCtrl;
+	wxAuiToolBar* m_searchToolbar;
+	std::string m_filterQuery;
+	bool m_filterAll;
+
+	TilesetSortKey m_sortKey;
+	TilesetSortDirection m_sortDir;
+	bool m_hasSort;
+	bool m_showLabels;
+	int m_tileSize;
+
+	const TilesetContainer* m_tilesets;
 
 	DECLARE_EVENT_TABLE();
 };

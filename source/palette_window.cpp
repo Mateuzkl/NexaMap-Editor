@@ -499,6 +499,61 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 	return false;
 }
 
+bool PaletteWindow::JumpToBrush(const Brush* brush, const std::string& preferredPalette) {
+	if (!brush || !choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
+		return false;
+	}
+
+	BrushPalettePanel* targetBrushPalettePanel = nullptr;
+	std::string targetTilesetName;
+	int targetPageIndex = wxNOT_FOUND;
+
+	if (!preferredPalette.empty()) {
+		for (size_t i = 0; i < choicebook->GetPageCount(); ++i) {
+			auto* p = dynamic_cast<BrushPalettePanel*>(choicebook->GetPage(i));
+			if (p && (nstr(p->GetName()) == preferredPalette || p->GetName() == wxstr(preferredPalette))) {
+				std::string tsName = p->FindTilesetNameForBrush(brush);
+				if (!tsName.empty()) {
+					targetBrushPalettePanel = p;
+					targetTilesetName = std::move(tsName);
+					targetPageIndex = static_cast<int>(i);
+					break;
+				}
+			}
+		}
+	}
+
+	if (!targetBrushPalettePanel) {
+		for (size_t i = 0; i < choicebook->GetPageCount(); ++i) {
+			auto* p = dynamic_cast<BrushPalettePanel*>(choicebook->GetPage(i));
+			if (p) {
+				std::string tsName = p->FindTilesetNameForBrush(brush);
+				if (!tsName.empty()) {
+					targetBrushPalettePanel = p;
+					targetTilesetName = std::move(tsName);
+					targetPageIndex = static_cast<int>(i);
+					break;
+				}
+			}
+		}
+	}
+
+	if (!targetBrushPalettePanel || targetPageIndex == wxNOT_FOUND) {
+		return OnSelectBrush(brush);
+	}
+
+	auto* currentPanel = dynamic_cast<BrushPalettePanel*>(choicebook->GetCurrentPage());
+	if (currentPanel && currentPanel != targetBrushPalettePanel) {
+		currentPanel->ResetFilter();
+	}
+
+	if (choicebook->GetSelection() != targetPageIndex) {
+		choicebook->SetSelection(targetPageIndex);
+	}
+
+	return targetBrushPalettePanel->JumpToTilesetAndBrush(targetTilesetName, brush);
+}
+
 void PaletteWindow::OnSwitchingPage(wxChoicebookEvent& event) {
 	event.Skip();
 	if (!choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
