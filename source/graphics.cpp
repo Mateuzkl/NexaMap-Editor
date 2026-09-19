@@ -1658,8 +1658,35 @@ EditorSprite::~EditorSprite() {
 }
 
 void EditorSprite::DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width, int height) {
+	if (!dc) {
+		return;
+	}
 	wxBitmap* sp = bm[sz];
-	if (sp) {
+	if (!sp || !sp->IsOk()) {
+		return;
+	}
+
+	int target_w = (width == -1) ? sp->GetWidth() : width;
+	int target_h = (height == -1) ? sp->GetHeight() : height;
+
+	if (target_w == sp->GetWidth() && target_h == sp->GetHeight()) {
+		dc->DrawBitmap(*sp, start_x, start_y, true);
+		return;
+	}
+
+	auto key = std::make_pair(sz, std::make_pair(target_w, target_h));
+	auto it = scaled_cache.find(key);
+	if (it == scaled_cache.end()) {
+		wxImage img = sp->ConvertToImage();
+		if (img.IsOk()) {
+			wxBitmap scaledBm(img.Rescale(target_w, target_h, wxIMAGE_QUALITY_NEAREST));
+			it = scaled_cache.emplace(key, std::move(scaledBm)).first;
+		}
+	}
+
+	if (it != scaled_cache.end() && it->second.IsOk()) {
+		dc->DrawBitmap(it->second, start_x, start_y, true);
+	} else {
 		dc->DrawBitmap(*sp, start_x, start_y, true);
 	}
 }
@@ -1669,6 +1696,7 @@ void EditorSprite::unloadDC() {
 	delete bm[SPRITE_SIZE_32x32];
 	bm[SPRITE_SIZE_16x16] = nullptr;
 	bm[SPRITE_SIZE_32x32] = nullptr;
+	scaled_cache.clear();
 }
 
 GameSprite::GameSprite() :
@@ -2044,15 +2072,20 @@ wxMemoryDC* GameSprite::getDC(SpriteSize size) {
 }
 
 void GameSprite::DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width, int height) {
+	const int src_dim = (sz == SPRITE_SIZE_32x32 ? 32 : 16);
 	if (width == -1) {
-		width = sz == SPRITE_SIZE_32x32 ? 32 : 16;
+		width = src_dim;
 	}
 	if (height == -1) {
-		height = sz == SPRITE_SIZE_32x32 ? 32 : 16;
+		height = src_dim;
 	}
 	wxDC* sdc = getDC(sz);
 	if (sdc) {
-		dc->Blit(start_x, start_y, width, height, sdc, 0, 0, wxCOPY, true);
+		if (width == src_dim && height == src_dim) {
+			dc->Blit(start_x, start_y, width, height, sdc, 0, 0, wxCOPY, true);
+		} else {
+			dc->StretchBlit(start_x, start_y, width, height, sdc, 0, 0, src_dim, src_dim, wxCOPY, true);
+		}
 	} else {
 		const wxBrush& b = dc->GetBrush();
 		dc->SetBrush(*wxRED_BRUSH);
