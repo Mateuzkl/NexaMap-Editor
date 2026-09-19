@@ -121,11 +121,7 @@ public:
 		return this;
 	}
 
-	// Scrolls the window to the position of the named brush button
-	void EnsureVisible(BrushButton* btn);
 	void EnsureVisible(size_t n);
-
-	// Select the first brush
 	void SelectFirstBrush() override;
 	// Returns the currently selected brush (First brush if panel is not loaded)
 	Brush* GetSelectedBrush() const override;
@@ -138,16 +134,21 @@ public:
 	void SetTileSize(int sizePx) override;
 	void SetFilterQuery(const std::string& query, const std::vector<Brush*>* overrideSource = nullptr) override;
 
-	// Event handling...
-	void OnClickBrushButton(wxCommandEvent& event);
+	void OnPaint(wxPaintEvent& event);
+	void OnEraseBackground(wxEraseEvent& event);
+	void OnSize(wxSizeEvent& event);
+	void OnLeftDown(wxMouseEvent& event);
+	void OnRightUp(wxMouseEvent& event);
+	void OnMotion(wxMouseEvent& event);
+	void OnMouseLeave(wxMouseEvent& event);
+	void OnKeyDown(wxKeyEvent& event);
 
 protected:
-	// Used internally to deselect all buttons before selecting a new one.
-	void DeselectAll();
-	void RebuildButtons();
+	void UpdateDisplayedBrushes();
+	void UpdateLayout();
+	void CalculateCellMetrics(int& cell_w, int& cell_h, int& sprite_dim) const;
 
 protected:
-	std::vector<BrushButton*> brush_buttons;
 	std::vector<Brush*> displayed_brushes;
 	RenderSize icon_size;
 	bool has_sort = false;
@@ -155,6 +156,9 @@ protected:
 	TilesetSortDirection sort_dir = TilesetSortDirection::Ascending;
 	bool show_labels = false;
 	int tile_size_px = 32;
+	int selected_index = -1;
+	int hover_index = -1;
+	int m_cols = 1;
 	std::string filter_query;
 	std::vector<Brush*> override_brushes;
 	bool has_override_brushes = false;

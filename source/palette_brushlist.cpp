@@ -28,6 +28,7 @@
 #include "settings.h"
 
 #include <wx/artprov.h>
+#include <wx/dcbuffer.h>
 #include <algorithm>
 #include <cctype>
 #include <unordered_set>
@@ -911,11 +912,18 @@ void BrushPanel::SetFilterQuery(const std::string& query, const std::vector<Brus
 // BrushIconBox
 
 BEGIN_EVENT_TABLE(BrushIconBox, wxScrolledWindow)
-EVT_TOGGLEBUTTON(wxID_ANY, BrushIconBox::OnClickBrushButton)
+EVT_PAINT(BrushIconBox::OnPaint)
+EVT_ERASE_BACKGROUND(BrushIconBox::OnEraseBackground)
+EVT_SIZE(BrushIconBox::OnSize)
+EVT_LEFT_DOWN(BrushIconBox::OnLeftDown)
+EVT_RIGHT_UP(BrushIconBox::OnRightUp)
+EVT_MOTION(BrushIconBox::OnMotion)
+EVT_LEAVE_WINDOW(BrushIconBox::OnMouseLeave)
+EVT_KEY_DOWN(BrushIconBox::OnKeyDown)
 END_EVENT_TABLE()
 
 BrushIconBox::BrushIconBox(wxWindow* parent, const TilesetCategory* _tileset, RenderSize rsz) :
-	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL),
+	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxFULL_REPAINT_ON_RESIZE),
 	BrushBoxInterface(_tileset),
 	icon_size(rsz),
 	has_sort(false),
@@ -923,6 +931,9 @@ BrushIconBox::BrushIconBox(wxWindow* parent, const TilesetCategory* _tileset, Re
 	sort_dir(TilesetSortDirection::Ascending),
 	show_labels(false),
 	tile_size_px(32),
+	selected_index(-1),
+	hover_index(-1),
+	m_cols(1),
 	has_override_brushes(false) {
 	if (icon_size == RENDER_SIZE_16x16) {
 		tile_size_px = 16;
@@ -934,68 +945,71 @@ BrushIconBox::BrushIconBox(wxWindow* parent, const TilesetCategory* _tileset, Re
 		tile_size_px = 32;
 	}
 
-	RebuildButtons();
+	SetBackgroundStyle(wxBG_STYLE_PAINT);
+	UpdateDisplayedBrushes();
 }
 
 BrushIconBox::~BrushIconBox() {
 	////
 }
 
-void BrushIconBox::DeselectAll() {
-	for (auto* btn : brush_buttons) {
-		if (btn) {
-			btn->SetValue(false);
+void BrushIconBox::CalculateCellMetrics(int& cell_w, int& cell_h, int& sprite_dim) const {
+	sprite_dim = tile_size_px;
+	if (sprite_dim != 16 && sprite_dim != 64 && sprite_dim != 128) {
+		sprite_dim = 32;
+	}
+
+	if (show_labels) {
+		if (sprite_dim == 16) {
+			cell_w = 76;
+			cell_h = 36;
+		} else if (sprite_dim == 64) {
+			cell_w = 96;
+			cell_h = 86;
+		} else if (sprite_dim == 128) {
+			cell_w = 144;
+			cell_h = 150;
+		} else {
+			cell_w = 84;
+			cell_h = 54;
+		}
+	} else {
+		if (sprite_dim == 16) {
+			cell_w = 24;
+			cell_h = 24;
+		} else if (sprite_dim == 64) {
+			cell_w = 70;
+			cell_h = 70;
+		} else if (sprite_dim == 128) {
+			cell_w = 134;
+			cell_h = 134;
+		} else {
+			cell_w = 38;
+			cell_h = 38;
 		}
 	}
 }
 
-void BrushIconBox::SetSort(TilesetSortKey key, TilesetSortDirection dir) {
-	has_sort = true;
-	sort_key = key;
-	sort_dir = dir;
-	RebuildButtons();
-}
-
-void BrushIconBox::ClearSort() {
-	has_sort = false;
-	RebuildButtons();
-}
-
-void BrushIconBox::SetShowLabels(bool show) {
-	if (show_labels != show) {
-		show_labels = show;
-		RebuildButtons();
+void BrushIconBox::UpdateLayout() {
+	int client_w = 0, client_h = 0;
+	GetClientSize(&client_w, &client_h);
+	if (client_w <= 0) {
+		client_w = 200;
 	}
+	int cell_w, cell_h, sprite_dim;
+	CalculateCellMetrics(cell_w, cell_h, sprite_dim);
+
+	m_cols = std::max(1, client_w / std::max(1, cell_w));
+	int total_items = static_cast<int>(displayed_brushes.size());
+	int total_rows = (total_items + m_cols - 1) / std::max(1, m_cols);
+	int total_height = total_rows * cell_h;
+
+	SetVirtualSize(client_w, std::max(total_height, client_h));
+	SetScrollRate(0, std::max(10, cell_h / 2));
+	Refresh();
 }
 
-void BrushIconBox::SetTileSize(int sizePx) {
-	if (tile_size_px != sizePx) {
-		tile_size_px = sizePx;
-		RebuildButtons();
-	}
-}
-
-void BrushIconBox::SetFilterQuery(const std::string& query, const std::vector<Brush*>* overrideSource) {
-	filter_query = query;
-	if (overrideSource) {
-		override_brushes = *overrideSource;
-		has_override_brushes = true;
-	} else {
-		override_brushes.clear();
-		has_override_brushes = false;
-	}
-	RebuildButtons();
-}
-
-void BrushIconBox::RebuildButtons() {
-	DeselectAll();
-	brush_buttons.clear();
-
-	wxSizer* existing = GetSizer();
-	if (existing) {
-		existing->Clear(true);
-	}
-
+void BrushIconBox::UpdateDisplayedBrushes() {
 	displayed_brushes.clear();
 	const std::vector<Brush*>& src = has_override_brushes ? override_brushes : (tileset ? tileset->brushlist : std::vector<Brush*>());
 
@@ -1047,147 +1061,355 @@ void BrushIconBox::RebuildButtons() {
 		});
 	}
 
-	RenderSize rsz = RENDER_SIZE_32x32;
-	if (tile_size_px == 128) {
-		rsz = RENDER_SIZE_128x128;
-	} else if (tile_size_px == 64) {
-		rsz = RENDER_SIZE_64x64;
-	} else if (tile_size_px == 16) {
-		rsz = RENDER_SIZE_16x16;
-	} else {
-		rsz = RENDER_SIZE_32x32;
+	if (selected_index >= static_cast<int>(displayed_brushes.size())) {
+		selected_index = -1;
 	}
-	icon_size = rsz;
+	UpdateLayout();
+}
 
-	int width;
-	if (tile_size_px == 128) {
-		width = std::max(1, g_settings.getInteger(Config::PALETTE_COL_COUNT) / 4);
-	} else if (tile_size_px == 64) {
-		width = std::max(1, g_settings.getInteger(Config::PALETTE_COL_COUNT) / 2);
-	} else if (show_labels) {
-		width = std::max(1, g_settings.getInteger(Config::PALETTE_COL_COUNT) / 2);
-	} else {
-		width = std::max(1, g_settings.getInteger(Config::PALETTE_COL_COUNT));
+void BrushIconBox::OnPaint(wxPaintEvent& event) {
+	wxAutoBufferedPaintDC dc(this);
+	DoPrepareDC(dc);
+
+	int client_w = 0, client_h = 0;
+	GetClientSize(&client_w, &client_h);
+
+	dc.SetBackground(wxBrush(Theme::Get(Theme::Role::Surface)));
+	dc.Clear();
+
+	if (displayed_brushes.empty()) {
+		return;
 	}
 
-	wxSizer* stacksizer = newd wxBoxSizer(wxVERTICAL);
-	wxSizer* rowsizer = nullptr;
-	int item_counter = 0;
+	int cell_w, cell_h, sprite_dim;
+	CalculateCellMetrics(cell_w, cell_h, sprite_dim);
+	if (cell_w <= 0 || cell_h <= 0 || m_cols <= 0) {
+		return;
+	}
 
-	for (Brush* b : displayed_brushes) {
-		++item_counter;
-		if (!rowsizer) {
-			rowsizer = newd wxBoxSizer(wxHORIZONTAL);
+	int start_x, start_y;
+	GetViewStart(&start_x, &start_y);
+	int ppx, ppy;
+	GetScrollPixelsPerUnit(&ppx, &ppy);
+	int scroll_y = start_y * ppy;
+
+	int total_items = static_cast<int>(displayed_brushes.size());
+	int total_rows = (total_items + m_cols - 1) / std::max(1, m_cols);
+
+	int first_row = std::max(0, scroll_y / cell_h);
+	int last_row = std::min(total_rows - 1, (scroll_y + client_h + cell_h) / cell_h);
+
+	wxFont labelFont(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	dc.SetFont(labelFont);
+
+	for (int r = first_row; r <= last_row; ++r) {
+		for (int c = 0; c < m_cols; ++c) {
+			int idx = r * m_cols + c;
+			if (idx >= total_items) {
+				break;
+			}
+			Brush* b = displayed_brushes[idx];
+			if (!b) {
+				continue;
+			}
+
+			int x = c * cell_w;
+			int y = r * cell_h;
+			wxRect cellRect(x + 1, y + 1, cell_w - 2, cell_h - 2);
+
+			const bool isSelected = (idx == selected_index);
+			const bool isHover = (idx == hover_index);
+
+			if (isSelected) {
+				dc.SetBrush(wxBrush(Theme::Get(Theme::Role::SelectionFill)));
+				dc.SetPen(wxPen(Theme::Get(Theme::Role::AccentHover)));
+				dc.DrawRoundedRectangle(cellRect, 2);
+			} else if (isHover) {
+				dc.SetBrush(wxBrush(Theme::Get(Theme::Role::RaisedSurface)));
+				dc.SetPen(wxPen(Theme::Get(Theme::Role::Border)));
+				dc.DrawRoundedRectangle(cellRect, 2);
+			} else {
+				dc.SetBrush(wxBrush(Theme::Get(Theme::Role::Surface)));
+				dc.SetPen(wxPen(Theme::Get(Theme::Role::Border)));
+				dc.DrawRoundedRectangle(cellRect, 2);
+			}
+
+			Sprite* spr = g_gui.gfx.getSprite(b->getLookID());
+			int spr_x = x + (cell_w - sprite_dim) / 2;
+			int spr_y = show_labels ? (y + 2) : (y + (cell_h - sprite_dim) / 2);
+			if (spr) {
+				spr->DrawTo(&dc, SPRITE_SIZE_32x32, spr_x, spr_y, sprite_dim, sprite_dim);
+			}
+
+			if (show_labels) {
+				dc.SetTextForeground(isSelected ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::Text));
+				wxString name = wxstr(b->getName());
+				wxCoord tw, th;
+				dc.GetTextExtent(name, &tw, &th);
+				if (tw > cell_w - 4 && name.length() > 3) {
+					while (name.length() > 3 && tw > cell_w - 4) {
+						name.RemoveLast();
+						dc.GetTextExtent(name + "...", &tw, &th);
+					}
+					name += "...";
+				}
+				dc.DrawLabel(name, wxRect(x + 2, y + sprite_dim + 2, cell_w - 4, cell_h - sprite_dim - 4), wxALIGN_CENTER_HORIZONTAL | wxALIGN_TOP);
+			}
 		}
+	}
+}
 
-		auto* bb = newd BrushButton(this, b, rsz, wxID_ANY, show_labels);
-		rowsizer->Add(bb);
-		brush_buttons.push_back(bb);
+void BrushIconBox::OnEraseBackground(wxEraseEvent& WXUNUSED(event)) {
+	// Handled in OnPaint with wxAutoBufferedPaintDC
+}
 
-		if (item_counter % width == 0) {
-			stacksizer->Add(rowsizer);
-			rowsizer = nullptr;
+void BrushIconBox::OnSize(wxSizeEvent& event) {
+	UpdateLayout();
+	event.Skip();
+}
+
+void BrushIconBox::OnLeftDown(wxMouseEvent& event) {
+	int cell_w, cell_h, sprite_dim;
+	CalculateCellMetrics(cell_w, cell_h, sprite_dim);
+	if (cell_w <= 0 || cell_h <= 0 || m_cols <= 0) {
+		return;
+	}
+
+	int vx, vy;
+	CalcUnscrolledPosition(event.GetX(), event.GetY(), &vx, &vy);
+	int col = vx / cell_w;
+	int row = vy / cell_h;
+	if (col >= 0 && col < m_cols && row >= 0) {
+		int idx = row * m_cols + col;
+		if (idx >= 0 && idx < static_cast<int>(displayed_brushes.size())) {
+			selected_index = idx;
+			Refresh();
+			Brush* b = displayed_brushes[idx];
+			if (b) {
+				PaletteWindow* palette = ::GetParentPalette(this);
+				if (palette) {
+					g_gui.ActivatePalette(palette);
+				}
+				wxWindow* w = this->GetParent();
+				BrushPalettePanel* bpp = nullptr;
+				while (w) {
+					bpp = dynamic_cast<BrushPalettePanel*>(w);
+					if (bpp) {
+						break;
+					}
+					w = w->GetParent();
+				}
+				if (bpp && bpp->IsFilterAllActive() && palette) {
+					if (palette->JumpToBrush(b, bpp->GetName().ToStdString())) {
+						return;
+					}
+				}
+				if (tileset) {
+					g_gui.SelectBrush(b, tileset->getType());
+				} else {
+					g_gui.SelectBrushInternal(b);
+				}
+			}
 		}
 	}
-	if (rowsizer) {
-		stacksizer->Add(rowsizer);
+}
+
+void BrushIconBox::OnRightUp(wxMouseEvent& event) {
+	if (!FavoriteResources::IsCurrentPalette(this)) {
+		return;
+	}
+	int cell_w, cell_h, sprite_dim;
+	CalculateCellMetrics(cell_w, cell_h, sprite_dim);
+	if (cell_w <= 0 || cell_h <= 0 || m_cols <= 0) {
+		return;
+	}
+	int vx, vy;
+	CalcUnscrolledPosition(event.GetX(), event.GetY(), &vx, &vy);
+	int col = vx / cell_w;
+	int row = vy / cell_h;
+	if (col >= 0 && col < m_cols && row >= 0) {
+		int idx = row * m_cols + col;
+		if (idx >= 0 && idx < static_cast<int>(displayed_brushes.size())) {
+			FavoriteResources::Popup(this, displayed_brushes[idx]);
+		}
+	}
+}
+
+void BrushIconBox::OnMotion(wxMouseEvent& event) {
+	int cell_w, cell_h, sprite_dim;
+	CalculateCellMetrics(cell_w, cell_h, sprite_dim);
+	if (cell_w <= 0 || cell_h <= 0 || m_cols <= 0) {
+		return;
 	}
 
-	int row_height = (tile_size_px == 128 ? 132 : tile_size_px == 64 ? 68
-																	 : 36)
-		+ (show_labels ? 16 : 0);
-	int total_rows = (item_counter + width - 1) / std::max(1, width);
-	SetScrollbars(20, 20, 8, std::max(1, total_rows * row_height / 20), 0, 0);
-	SetSizer(stacksizer);
-	Layout();
-	Refresh();
+	int vx, vy;
+	CalcUnscrolledPosition(event.GetX(), event.GetY(), &vx, &vy);
+	int col = vx / cell_w;
+	int row = vy / cell_h;
+	int idx = -1;
+	if (col >= 0 && col < m_cols && row >= 0) {
+		int test_idx = row * m_cols + col;
+		if (test_idx >= 0 && test_idx < static_cast<int>(displayed_brushes.size())) {
+			idx = test_idx;
+		}
+	}
+	if (idx != hover_index) {
+		hover_index = idx;
+		if (hover_index != -1 && hover_index < static_cast<int>(displayed_brushes.size())) {
+			SetToolTip(wxstr(displayed_brushes[hover_index]->getName()));
+		} else {
+			UnsetToolTip();
+		}
+		Refresh();
+	}
+}
+
+void BrushIconBox::OnMouseLeave(wxMouseEvent& event) {
+	if (hover_index != -1) {
+		hover_index = -1;
+		UnsetToolTip();
+		Refresh();
+	}
+	event.Skip();
+}
+
+void BrushIconBox::OnKeyDown(wxKeyEvent& event) {
+	int key = event.GetKeyCode();
+	int total = static_cast<int>(displayed_brushes.size());
+	if (total == 0) {
+		event.Skip();
+		return;
+	}
+	int new_sel = selected_index;
+	if (key == WXK_LEFT) {
+		new_sel = std::max(0, selected_index - 1);
+	} else if (key == WXK_RIGHT) {
+		new_sel = std::min(total - 1, selected_index + 1);
+	} else if (key == WXK_UP) {
+		new_sel = std::max(0, selected_index - m_cols);
+	} else if (key == WXK_DOWN) {
+		new_sel = std::min(total - 1, selected_index + m_cols);
+	} else {
+		event.Skip();
+		return;
+	}
+
+	if (new_sel != selected_index) {
+		selected_index = new_sel;
+		EnsureVisible(selected_index);
+		Refresh();
+		Brush* b = displayed_brushes[selected_index];
+		if (b) {
+			if (tileset) {
+				g_gui.SelectBrush(b, tileset->getType());
+			} else {
+				g_gui.SelectBrushInternal(b);
+			}
+		}
+	}
+}
+
+void BrushIconBox::EnsureVisible(size_t n) {
+	if (n >= displayed_brushes.size() || m_cols <= 0) {
+		return;
+	}
+	int cell_w, cell_h, sprite_dim;
+	CalculateCellMetrics(cell_w, cell_h, sprite_dim);
+	if (cell_h <= 0) {
+		return;
+	}
+
+	int row = static_cast<int>(n) / m_cols;
+	int target_y = row * cell_h;
+	int ppx, ppy;
+	GetScrollPixelsPerUnit(&ppx, &ppy);
+	if (ppy <= 0) {
+		ppy = 20;
+	}
+
+	int start_x, start_y;
+	GetViewStart(&start_x, &start_y);
+	int client_w, client_h;
+	GetClientSize(&client_w, &client_h);
+
+	int cur_top = start_y * ppy;
+	int cur_bot = cur_top + client_h;
+
+	if (target_y < cur_top || target_y + cell_h > cur_bot) {
+		Scroll(-1, target_y / ppy);
+	}
 }
 
 void BrushIconBox::SelectFirstBrush() {
-	if (!brush_buttons.empty()) {
-		DeselectAll();
-		brush_buttons[0]->SetValue(true);
-		EnsureVisible((size_t)0);
+	if (!displayed_brushes.empty()) {
+		selected_index = 0;
+		EnsureVisible(0);
+		Refresh();
 	}
 }
 
 Brush* BrushIconBox::GetSelectedBrush() const {
-	for (auto* btn : brush_buttons) {
-		if (btn && btn->GetValue()) {
-			return btn->brush;
-		}
+	if (selected_index >= 0 && selected_index < static_cast<int>(displayed_brushes.size())) {
+		return displayed_brushes[selected_index];
+	}
+	if (!displayed_brushes.empty()) {
+		return displayed_brushes[0];
 	}
 	return nullptr;
 }
 
 bool BrushIconBox::SelectBrush(const Brush* whatbrush) {
-	DeselectAll();
-	for (auto* btn : brush_buttons) {
-		if (btn && btn->brush == whatbrush) {
-			btn->SetValue(true);
-			EnsureVisible(btn);
+	for (size_t i = 0; i < displayed_brushes.size(); ++i) {
+		if (displayed_brushes[i] == whatbrush) {
+			selected_index = static_cast<int>(i);
+			EnsureVisible(i);
+			Refresh();
 			return true;
 		}
 	}
+	selected_index = -1;
+	Refresh();
 	return false;
 }
 
-void BrushIconBox::EnsureVisible(BrushButton* btn) {
-	if (!btn) {
-		return;
-	}
-	int x, y;
-	btn->GetPosition(&x, &y);
-	int scrollUnitX, scrollUnitY;
-	GetScrollPixelsPerUnit(&scrollUnitX, &scrollUnitY);
-	if (scrollUnitY <= 0) {
-		scrollUnitY = 20;
-	}
-	int scrollPosY = y / scrollUnitY;
-	int startScrollPosX, startScrollPosY;
-	GetViewStart(&startScrollPosX, &startScrollPosY);
-	int clientSizeX, clientSizeY;
-	GetClientSize(&clientSizeX, &clientSizeY);
-	int endScrollPosY = startScrollPosY + clientSizeY / scrollUnitY;
-	if (scrollPosY < startScrollPosY || scrollPosY > endScrollPosY) {
-		Scroll(-1, scrollPosY);
+void BrushIconBox::SetSort(TilesetSortKey key, TilesetSortDirection dir) {
+	has_sort = true;
+	sort_key = key;
+	sort_dir = dir;
+	UpdateDisplayedBrushes();
+}
+
+void BrushIconBox::ClearSort() {
+	has_sort = false;
+	UpdateDisplayedBrushes();
+}
+
+void BrushIconBox::SetShowLabels(bool show) {
+	if (show_labels != show) {
+		show_labels = show;
+		UpdateLayout();
+		Refresh();
 	}
 }
 
-void BrushIconBox::EnsureVisible(size_t n) {
-	if (n < brush_buttons.size()) {
-		EnsureVisible(brush_buttons[n]);
+void BrushIconBox::SetTileSize(int sizePx) {
+	if (tile_size_px != sizePx) {
+		tile_size_px = sizePx;
+		UpdateLayout();
+		Refresh();
 	}
 }
 
-void BrushIconBox::OnClickBrushButton(wxCommandEvent& event) {
-	wxObject* obj = event.GetEventObject();
-	auto* btn = dynamic_cast<BrushButton*>(obj);
-	if (btn) {
-		PaletteWindow* palette = GetParentPalette(this);
-		if (palette) {
-			g_gui.ActivatePalette(palette);
-		}
-		wxWindow* w = this->GetParent();
-		BrushPalettePanel* bpp = nullptr;
-		while (w) {
-			bpp = dynamic_cast<BrushPalettePanel*>(w);
-			if (bpp) {
-				break;
-			}
-			w = w->GetParent();
-		}
-		if (bpp && bpp->IsFilterAllActive() && palette) {
-			if (palette->JumpToBrush(btn->brush, bpp->GetName().ToStdString())) {
-				return;
-			}
-		}
-		if (tileset) {
-			g_gui.SelectBrush(btn->brush, tileset->getType());
-		} else {
-			g_gui.SelectBrushInternal(btn->brush);
-		}
+void BrushIconBox::SetFilterQuery(const std::string& query, const std::vector<Brush*>* overrideSource) {
+	filter_query = query;
+	if (overrideSource) {
+		override_brushes = *overrideSource;
+		has_override_brushes = true;
+	} else {
+		override_brushes.clear();
+		has_override_brushes = false;
 	}
+	UpdateDisplayedBrushes();
 }
 
 // ============================================================================
