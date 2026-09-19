@@ -38,7 +38,9 @@ public:
 	void swap(CopyBuffer& other) noexcept;
 
 	// Spawn dependencies captured during copy/cut for remap on paste.
-	const SpawnDependencyMap& getSpawnDependencies() const { return spawnDependencies; }
+	const SpawnDependencyMap& getSpawnDependencies() const {
+		return spawnDependencies;
+	}
 
 	// In-editor implantation
 	void copy(Editor& editor, int floor);
@@ -55,6 +57,7 @@ public:
 
 	// Takes ownership of map and sets the paste anchor (used by terrain stamps).
 	void replace(std::unique_ptr<BaseMap> map, const Position& position);
+	void replace(std::unique_ptr<BaseMap> map, const Position& position, SpawnDependencyMap dependencies);
 
 	BaseMap& getBufferMap();
 

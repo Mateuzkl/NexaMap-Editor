@@ -1,6 +1,10 @@
+#include "main.h"
+
 #include "spawn_format.h"
 #include "spawn_source_remap.h"
 #include "position.h"
+#include "creature.h"
+#include "spawn.h"
 
 #include <chrono>
 #include <filesystem>
@@ -8,7 +12,14 @@
 #include <iostream>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
+
+Creature::Creature(std::string creatureTypeName) :
+	type_name(std::move(creatureTypeName)), direction(SOUTH), spawntime(0), weight(0), saved(false), selected(false) {
+}
+
+Creature::~Creature() = default;
 
 namespace {
 	int failures = 0;
@@ -50,13 +61,13 @@ int main() {
 		dep.centerCopied = true;
 		deps[spawnCenter] = dep;
 
-		// Mock creature representation: test the mathematical delta
 		const Position copyPos(98, 98, 7);
 		const Position pastePos(198, 198, 7);
-		const Position expectedNewCenter = spawnCenter - copyPos + pastePos;
+		Creature creature("Dragon");
+		creature.setSpawnSource(spawnCenter);
 
-		check(expectedNewCenter == Position(200, 200, 7),
-			  "Calculated spawn center translation matches tile delta");
+		check(RemapSingleCreatureSpawnSource(creature, copyPos, pastePos, deps), "Production remapper accepts a captured spawn dependency");
+		check(creature.getSpawnSource() == Position(200, 200, 7), "Production remapper translates the spawn center with the tile delta");
 	}
 
 	// Test 2: TFS Spawn saving and round-trip verification with Monsters and NPCs
@@ -161,8 +172,7 @@ int main() {
 		// Reload Canary/Crystal
 		SpawnDocument loadedCanary;
 		std::string canaryError;
-		check(SpawnFormatIO::LoadCanaryCrystal(monsterFile, npcFile, loadedCanary, canaryError),
-			  "LoadCanaryCrystal successfully reads split monster and NPC files");
+		check(SpawnFormatIO::LoadCanaryCrystal(monsterFile, npcFile, loadedCanary, canaryError), "LoadCanaryCrystal successfully reads split monster and NPC files");
 		check(loadedCanary.monsterCount() == 1, "Canary/Crystal reloaded exactly 1 monster");
 		check(loadedCanary.npcCount() == 1, "Canary/Crystal reloaded exactly 1 NPC");
 	}
@@ -183,29 +193,32 @@ int main() {
 		check(result.warnings.size() == 1, "Validation warning generated");
 	}
 
-	// Test 5: Creature remapping with and without spawn center (Issues 2 & 10)
+	// Test 5: Creature remapping rejects uncaptured centers without corrupting state
 	{
 		const Position origCenter(50, 50, 7);
-		const Position origCreature(52, 51, 7);
-		const Position offset(10, 10, 0);
+		Creature creature("Dragon");
+		creature.setSpawnSource(origCenter);
+		const SpawnDependencyMap noDependencies;
 
-		// Case A: Creature moved together with its spawn center
-		std::set<Position> movedCentersWithCenter = { origCenter };
-		Position creatureSpawnSourceA = origCenter;
-		if (movedCentersWithCenter.contains(creatureSpawnSourceA)) {
-			creatureSpawnSourceA = creatureSpawnSourceA - offset;
-		}
-		check(creatureSpawnSourceA == Position(40, 40, 7),
-			  "Creature moved WITH center has its spawn_source correctly translated");
+		check(!RemapSingleCreatureSpawnSource(creature, Position(40, 40, 7), Position(30, 30, 7), noDependencies), "Production remapper rejects an uncaptured spawn center");
+		check(creature.getSpawnSource() == origCenter, "Rejected production remap preserves the original spawn source");
+	}
 
-		// Case B: Creature moved WITHOUT its spawn center
-		std::set<Position> movedCentersWithoutCenter = {}; // center was not moved
-		Position creatureSpawnSourceB = origCenter;
-		if (movedCentersWithoutCenter.contains(creatureSpawnSourceB)) {
-			creatureSpawnSourceB = creatureSpawnSourceB - offset;
-		}
-		check(creatureSpawnSourceB == origCenter,
-			  "Creature moved WITHOUT center preserves original spawn_source (not translated to nonexistent center)");
+	// Test 6: Existing spawn metadata is merged deterministically
+	{
+		Spawn existing(3);
+		existing.setSourceAttributes(SpawnAreaKind::Monsters, { { "interval", "30" }, { "existing", "keep" } });
+		Spawn incoming(5);
+		incoming.setSourceAttributes(SpawnAreaKind::Monsters, { { "interval", "60" }, { "incoming", "add" } });
+		incoming.setSourceAttributes(SpawnAreaKind::Npcs, { { "npc", "yes" } });
+
+		MergeSpawnMetadata(existing, incoming);
+		const SpawnAttributeMap monsterAttributes = existing.getSourceAttributes(SpawnAreaKind::Monsters);
+		check(existing.getSize() == 5, "Spawn metadata merge enlarges the radius");
+		check(monsterAttributes.at("existing") == "keep", "Spawn metadata merge preserves unrelated existing attributes");
+		check(monsterAttributes.at("incoming") == "add", "Spawn metadata merge adds incoming attributes");
+		check(monsterAttributes.at("interval") == "60", "Spawn metadata merge resolves conflicts in favor of incoming data");
+		check(existing.hasSourceKind(SpawnAreaKind::Npcs), "Spawn metadata merge adds a missing source kind");
 	}
 
 	std::cout << "Spawn Persistence Tests: " << checks << " checks, " << failures << " failures.\n";

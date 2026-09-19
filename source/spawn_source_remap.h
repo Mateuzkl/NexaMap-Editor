@@ -15,6 +15,7 @@
 #include "spawn_format.h"
 
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
 
@@ -63,15 +64,22 @@ bool RemapSingleCreatureSpawnSource(
 	const SpawnDependencyMap& dependencies
 );
 
-/// For any dependencies whose center tile was NOT copied (centerCopied == false),
-/// recreate the dependent spawn on the target map at the translated center,
-/// so the creature's translated spawn_source points to a valid Spawn object.
+/// Merge incoming spawn metadata into an existing spawn. Existing attributes
+/// with unrelated names are preserved; incoming values win key conflicts.
+void MergeSpawnMetadata(Spawn& target, const Spawn& incoming);
+
+/// Recreate every dependency required by a creature that actually survived the
+/// paste unless its center was itself pasted successfully. This also repairs a
+/// dependency whose source center was selected but its translated tile was
+/// skipped at the map boundary.
 void EnsureDependentSpawnsExist(
 	Editor& editor,
 	Action& action,
 	const Position& sourceAnchor,
 	const Position& destinationAnchor,
-	const SpawnDependencyMap& dependencies
+	const SpawnDependencyMap& dependencies,
+	const std::set<Position>& requiredCenters,
+	const std::set<Position>& pastedCenters
 );
 
 #endif // RME_SPAWN_SOURCE_REMAP_H_

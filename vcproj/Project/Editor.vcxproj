@@ -589,6 +589,7 @@
     </ClCompile>
     <ClInclude Include="..\..\source\spawn_source_remap.h" />
     <ClCompile Include="..\..\source\spawn_source_remap.cpp" />
+    <ClCompile Include="..\..\source\spawn_source_remap_core.cpp" />
     <ClInclude Include="..\..\source\spawn_export_window.h" />
     <ClCompile Include="..\..\source\spawn_export_window.cpp" />
     <ClInclude Include="..\..\source\spawn_converter_window.h" />

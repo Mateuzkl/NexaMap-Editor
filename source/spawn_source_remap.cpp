@@ -92,44 +92,18 @@ void RemapCreatureSpawnSources(
 	}
 }
 
-bool RemapSingleCreatureSpawnSource(
-	Creature& creature,
-	const Position& sourceAnchor,
-	const Position& destinationAnchor,
-	const SpawnDependencyMap& dependencies
-) {
-	if (!creature.hasSpawnSource()) {
-		return false;
-	}
-
-	const Position originalSource = creature.getSpawnSource();
-
-	// Only remap if this source was captured as a known dependency.
-	auto it = dependencies.find(originalSource);
-	if (it == dependencies.end()) {
-		return false;
-	}
-
-	// Translate: same delta used for tile positions.
-	const Position translatedSource = originalSource - sourceAnchor + destinationAnchor;
-	creature.setSpawnSource(translatedSource);
-	return true;
-}
-
 void EnsureDependentSpawnsExist(
 	Editor& editor,
 	Action& action,
 	const Position& sourceAnchor,
 	const Position& destinationAnchor,
-	const SpawnDependencyMap& dependencies
+	const SpawnDependencyMap& dependencies,
+	const std::set<Position>& requiredCenters,
+	const std::set<Position>& pastedCenters
 ) {
 	for (const auto& [center, dep] : dependencies) {
-		if (dep.centerCopied) {
-			continue; // Center was already part of the copied tiles and will be placed normally.
-		}
-
 		const Position translatedCenter = center - sourceAnchor + destinationAnchor;
-		if (!translatedCenter.isValid()) {
+		if (!translatedCenter.isValid() || !requiredCenters.contains(translatedCenter) || pastedCenters.contains(translatedCenter)) {
 			continue;
 		}
 
@@ -144,18 +118,21 @@ void EnsureDependentSpawnsExist(
 
 		if (!newTile->spawn) {
 			newTile->spawn = newd Spawn(dep.radius > 0 ? dep.radius : 3);
-			if (dep.hasMonsterSource) {
-				newTile->spawn->setSourceAttributes(SpawnAreaKind::Monsters, dep.monsterAttributes);
-			}
-			if (dep.hasNpcSource) {
-				newTile->spawn->setSourceAttributes(SpawnAreaKind::Npcs, dep.npcAttributes);
-			}
-			if (dep.hasMixedSource) {
-				newTile->spawn->setSourceAttributes(SpawnAreaKind::Mixed, dep.mixedAttributes);
-			}
 		} else if (dep.radius > newTile->spawn->getSize()) {
 			newTile->spawn->setSize(dep.radius);
 		}
+
+		Spawn incomingSpawn(dep.radius > 0 ? dep.radius : 3);
+		if (dep.hasMonsterSource) {
+			incomingSpawn.setSourceAttributes(SpawnAreaKind::Monsters, dep.monsterAttributes);
+		}
+		if (dep.hasNpcSource) {
+			incomingSpawn.setSourceAttributes(SpawnAreaKind::Npcs, dep.npcAttributes);
+		}
+		if (dep.hasMixedSource) {
+			incomingSpawn.setSourceAttributes(SpawnAreaKind::Mixed, dep.mixedAttributes);
+		}
+		MergeSpawnMetadata(*newTile->spawn, incomingSpawn);
 
 		action.addChange(newd Change(newTile));
 	}

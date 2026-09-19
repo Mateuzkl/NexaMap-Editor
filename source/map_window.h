@@ -37,6 +37,7 @@ public:
 
 	// Event handlers
 	void OnSize(wxSizeEvent& event);
+	void OnCanvasSize(wxSizeEvent& event);
 	void OnScroll(wxScrollEvent& event);
 	void OnScrollLineDown(wxScrollEvent& event);
 	void OnScrollLineUp(wxScrollEvent& event);

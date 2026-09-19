@@ -23,6 +23,7 @@
 #include <string>
 #include <map>
 #include <functional>
+#include <memory>
 
 class CreatureType;
 class CreatureBrush;
@@ -58,7 +59,9 @@ public:
 
 	struct ImportedCreatureRecord {
 		std::string normalizedName;
-		CreatureType data;
+		std::string name;
+		bool isNpc = false;
+		Outfit outfit;
 	};
 	using ImportedCreatureList = std::vector<ImportedCreatureRecord>;
 
@@ -71,7 +74,7 @@ public:
 	CreatureType* operator[](const std::string& name);
 	CreatureType* addMissingCreatureType(const std::string& name, bool isNpc);
 	CreatureType* addCreatureType(const std::string& name, bool isNpc, const Outfit& outfit);
-	void applyWorkspaceCreature(CreatureType* creatureType, bool standard = true);
+	void applyWorkspaceCreature(std::unique_ptr<CreatureType> creatureType, bool standard = true);
 
 	bool hasMissing() const;
 	size_t size() const {
@@ -97,4 +100,3 @@ public:
 extern CreatureDatabase g_creatures;
 
 #endif
-

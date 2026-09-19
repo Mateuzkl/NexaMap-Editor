@@ -1244,7 +1244,15 @@ void Editor::moveSelection(Position offset) {
 		action->addChange(newd Change(new_src_tile));
 	}
 	// Commit changes to map
-	batchAction->addAndCommitAction(action);
+	if (!batchAction->addAndCommitAction(action)) {
+		for (Tile* tile : tmp_storage) {
+			delete tile;
+		}
+		batchAction->rollback();
+		delete batchAction;
+		g_gui.SetStatusText("Move cancelled: unable to remove the source tiles.");
+		return;
+	}
 
 	// Remove old borders (and create some newd?)
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_DRAG) && selection.size() < size_t(g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD))) {
@@ -1311,7 +1319,17 @@ void Editor::moveSelection(Position offset) {
 			action->addChange(newd Change(new_tile));
 		}
 		// Commit changes to map
-		batchAction->addAndCommitAction(action);
+		if (action->size() == 0) {
+			delete action;
+		} else if (!batchAction->addAndCommitAction(action)) {
+			for (Tile* tile : tmp_storage) {
+				delete tile;
+			}
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Move cancelled: unable to update source borders.");
+			return;
+		}
 	}
 
 	// New action for adding the destination tiles
@@ -1323,7 +1341,7 @@ void Editor::moveSelection(Position offset) {
 
 		new_pos = old_pos - offset;
 
-		if (new_pos.z < 0 && new_pos.z > MAP_MAX_LAYER) {
+		if (!new_pos.isValid()) {
 			delete tile;
 			continue;
 		}
@@ -1344,6 +1362,15 @@ void Editor::moveSelection(Position offset) {
 			// Move items
 			if (old_dest_tile) {
 				new_dest_tile = old_dest_tile->deepCopy(map);
+				if (new_dest_tile->spawn && tile->spawn) {
+					auto* mergedSpawn = new_dest_tile->spawn->deepCopy();
+					MergeSpawnMetadata(*mergedSpawn, *tile->spawn);
+					if (tile->spawn->isSelected()) {
+						mergedSpawn->select();
+					}
+					delete tile->spawn;
+					tile->spawn = mergedSpawn;
+				}
 			} else {
 				new_dest_tile = map.allocator(location);
 			}
@@ -1359,7 +1386,14 @@ void Editor::moveSelection(Position offset) {
 	}
 
 	// Commit changes to the map
-	batchAction->addAndCommitAction(action);
+	if (action->size() == 0) {
+		delete action;
+	} else if (!batchAction->addAndCommitAction(action)) {
+		batchAction->rollback();
+		delete batchAction;
+		g_gui.SetStatusText("Move cancelled: unable to commit destination tiles.");
+		return;
+	}
 
 	// Create borders
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_DRAG) && selection.size() < size_t(g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD))) {
@@ -1371,11 +1405,6 @@ void Editor::moveSelection(Position offset) {
 			Position pos = (*it)->getPosition();
 			// Go through all neighbours
 			Tile* t;
-			t = map.getTile(pos.x - 1, pos.y - 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
 			t = map.getTile(pos.x - 1, pos.y - 1, pos.z);
 			if (t && !t->isSelected()) {
 				borderize_tiles.push_back(t);
@@ -1446,7 +1475,14 @@ void Editor::moveSelection(Position offset) {
 			}
 		}
 		// Commit changes to map
-		batchAction->addAndCommitAction(action);
+		if (action->size() == 0) {
+			delete action;
+		} else if (!batchAction->addAndCommitAction(action)) {
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Move cancelled: unable to update destination borders.");
+			return;
+		}
 	}
 
 	// Store the action for undo

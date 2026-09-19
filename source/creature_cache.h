@@ -97,4 +97,3 @@ public:
 };
 
 #endif // RME_CREATURE_CACHE_H_
-

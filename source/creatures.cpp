@@ -25,8 +25,10 @@
 #include "lua_parser.h"
 
 #include <wx/dir.h>
+#include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <map>
 
 CreatureDatabase g_creatures;
 
@@ -360,11 +362,11 @@ CreatureType* CreatureDatabase::addCreatureType(const std::string& name, bool is
 	return ct;
 }
 
-void CreatureDatabase::applyWorkspaceCreature(CreatureType* creatureType, bool standard) {
+void CreatureDatabase::applyWorkspaceCreature(std::unique_ptr<CreatureType> creatureType, bool standard) {
 	if (!creatureType) {
 		return;
 	}
-	addOrUpdateLuaCreature(creature_map, creatureType, standard);
+	addOrUpdateLuaCreature(creature_map, creatureType.release(), standard);
 }
 
 bool CreatureDatabase::hasMissing() const {
@@ -614,8 +616,18 @@ static bool importLuaDirectory(
 	Traverser traverser(luaFiles, [&] { report(scanning + wxString::Format(" (%zu found)", luaFiles.size())); });
 	wxDir dir(directory);
 	dir.Traverse(traverser, "*.lua", wxDIR_FILES | wxDIR_DIRS | wxDIR_HIDDEN | wxDIR_NO_FOLLOW);
+	std::sort(luaFiles.begin(), luaFiles.end(), [](const wxString& left, const wxString& right) {
+		wxString normalizedLeft = wxFileName(left).GetFullPath(wxPATH_UNIX).Lower();
+		wxString normalizedRight = wxFileName(right).GetFullPath(wxPATH_UNIX).Lower();
+		if (normalizedLeft == normalizedRight) {
+			return left < right;
+		}
+		return normalizedLeft < normalizedRight;
+	});
 
 	size_t fileCount = 0;
+	std::map<std::string, wxString> importedSources;
+	std::map<std::string, size_t> importedRecordIndexes;
 	auto importStatus = [&] { return wxString::Format("Importing server %s: %zu / %zu Lua files", label, fileCount, luaFiles.size()); };
 	report(importStatus(), true);
 	for (const auto& filePath : luaFiles) {
@@ -625,8 +637,28 @@ static bool importLuaDirectory(
 		// creature overlay, where they would be reloaded as stale duplicates
 		// when another TFS/Canary/Crystal project is opened.
 		if (creatureType) {
+			const std::string normalizedName = as_lower_str(creatureType->name);
+			auto [sourceIt, inserted] = importedSources.emplace(normalizedName, filePath);
+			if (!inserted) {
+				warnings.push_back(
+					"Duplicate server creature '" + wxString::FromUTF8(creatureType->name)
+					+ "': " + sourceIt->second + " is overridden by " + filePath
+				);
+				sourceIt->second = filePath;
+			}
 			if (importedList) {
-				importedList->push_back({ as_lower_str(creatureType->name), *creatureType });
+				CreatureDatabase::ImportedCreatureRecord record {
+					normalizedName,
+					creatureType->name,
+					creatureType->isNpc,
+					creatureType->outfit,
+				};
+				auto [recordIt, recordInserted] = importedRecordIndexes.emplace(normalizedName, importedList->size());
+				if (recordInserted) {
+					importedList->push_back(std::move(record));
+				} else {
+					(*importedList)[recordIt->second] = std::move(record);
+				}
 			}
 			addOrUpdateLuaCreature(creatureMap, creatureType, true);
 		}

@@ -267,9 +267,10 @@ void GraphicManager::swap(GraphicManager& other) noexcept {
 }
 
 void GraphicManager::activateSpritePreloader() {
-	g_spritePreloader.clear();
 	if (!spritefile.empty() && !sprite_offsets.empty()) {
 		g_spritePreloader.configure(spritefile, sprite_offsets, has_transparency);
+	} else {
+		g_spritePreloader.clear();
 	}
 }
 
@@ -539,6 +540,15 @@ void GraphicManager::clear(bool clearPreloader) {
 			new_sprite_space.insert(std::make_pair(iter->first, iter->second));
 		}
 	}
+
+	// Moving creature sprites reference images owned by image_space, so they
+	// must never survive a resource clear/reload.
+	for (auto& [id, sprite] : moving_creature_space) {
+		(void)id;
+		delete sprite;
+	}
+	moving_creature_space.clear();
+	ASSERT(moving_creature_space.empty());
 
 	for (auto iter = image_space.begin(); iter != image_space.end(); ++iter) {
 		delete iter->second;
@@ -850,15 +860,13 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	uint16_t id = minID;
 	// loop through all ItemDatabase until we reach the end of file
 	while (id <= maxID) {
-		auto* sType = newd GameSprite();
-		sprite_space[id] = sType;
-
-		sType->id = id;
+		auto spritePrototype = std::make_unique<GameSprite>();
+		spritePrototype->id = id;
 
 		// Load the sprite flags
-		if (!loadSpriteMetadataFlags(file, sType, error, warnings)) {
+		if (!loadSpriteMetadataFlags(file, spritePrototype.get(), error, warnings)) {
 			wxString msg;
-			msg << "Failed to load flags for sprite " << sType->id;
+			msg << "Failed to load flags for sprite " << spritePrototype->id;
 			warnings.push_back(msg);
 		}
 
@@ -868,33 +876,24 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 			file.getU8(group_count);
 		}
 
+		std::unique_ptr<GameSprite> idleSprite;
+		std::unique_ptr<GameSprite> movingSprite;
 		for (uint32_t k = 0; k < group_count; ++k) {
 			uint8_t group_type = 0;
 			if (has_frame_groups && id > item_count) {
 				file.getU8(group_type);
 			}
 
-			GameSprite* target = sType;
-			if (k > 0) {
-				target = newd GameSprite();
-				target->id = sType->id;
-				target->draw_height = sType->draw_height;
-				target->drawoffset_x = sType->drawoffset_x;
-				target->drawoffset_y = sType->drawoffset_y;
-				target->minimap_color = sType->minimap_color;
-				target->has_light = sType->has_light;
-				target->light = sType->light;
-				if (k == 1 || group_type == 1) {
-					const int creatureId = static_cast<int>(id) - item_count;
-					auto existing = moving_creature_space.find(creatureId);
-					if (existing != moving_creature_space.end()) {
-						delete existing->second;
-						existing->second = target;
-					} else {
-						moving_creature_space[creatureId] = target;
-					}
-				}
-			}
+			auto parsedGroup = std::make_unique<GameSprite>();
+			parsedGroup->id = spritePrototype->id;
+			parsedGroup->draw_height = spritePrototype->draw_height;
+			parsedGroup->drawoffset_x = spritePrototype->drawoffset_x;
+			parsedGroup->drawoffset_y = spritePrototype->drawoffset_y;
+			parsedGroup->ground_speed = spritePrototype->ground_speed;
+			parsedGroup->minimap_color = spritePrototype->minimap_color;
+			parsedGroup->has_light = spritePrototype->has_light;
+			parsedGroup->light = spritePrototype->light;
+			GameSprite* target = parsedGroup.get();
 
 			// Size and GameSprite data
 			file.getByte(target->width);
@@ -957,6 +956,39 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 					image_space[sprite_id] = img;
 				}
 				target->spriteList.push_back(static_cast<GameSprite::NormalImage*>(image_space[sprite_id]));
+			}
+
+			if (group_type == FRAME_GROUP_IDLE && !idleSprite) {
+				idleSprite = std::move(parsedGroup);
+			} else if (group_type == FRAME_GROUP_MOVING && !movingSprite) {
+				movingSprite = std::move(parsedGroup);
+			}
+			// Unknown and duplicate explicit groups are released by RAII.
+		}
+
+		if (!idleSprite && movingSprite) {
+			// A moving-only outfit remains usable for both idle and moving
+			// requests through getCreatureSprite's normal fallback.
+			idleSprite = std::move(movingSprite);
+		}
+
+		if (idleSprite) {
+			auto existing = sprite_space.find(id);
+			if (existing != sprite_space.end()) {
+				delete existing->second;
+				existing->second = idleSprite.release();
+			} else {
+				sprite_space[id] = idleSprite.release();
+			}
+		}
+		if (movingSprite && id > item_count) {
+			const int creatureId = static_cast<int>(id) - item_count;
+			auto existing = moving_creature_space.find(creatureId);
+			if (existing != moving_creature_space.end()) {
+				delete existing->second;
+				existing->second = movingSprite.release();
+			} else {
+				moving_creature_space[creatureId] = movingSprite.release();
 			}
 		}
 		++id;
@@ -1192,29 +1224,56 @@ bool GraphicManager::loadAppearanceOutfit(
 	}
 
 	const int spriteSpaceId = static_cast<int>(appearance.id()) + item_count;
+	GameSprite* idleSpriteRaw = nullptr;
 	if (idleGroup) {
-		if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings, idleGroup, nullptr)) {
+		if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings, idleGroup, &idleSpriteRaw)) {
 			return false;
 		}
 	} else {
-		if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings, nullptr, nullptr)) {
+		if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings, nullptr, &idleSpriteRaw)) {
 			return false;
 		}
 	}
+	std::unique_ptr<GameSprite> idleSprite(idleSpriteRaw);
 
+	const int outfitId = static_cast<int>(appearance.id());
+	std::unique_ptr<GameSprite> movingSprite;
 	if (movingGroup && movingGroup != idleGroup) {
-		GameSprite* movingSprite = nullptr;
-		if (loadAppearanceSprite(appearance, -1, error, warnings, movingGroup, &movingSprite)) {
-			if (movingSprite) {
-				const int outfitId = static_cast<int>(appearance.id());
-				auto existing = moving_creature_space.find(outfitId);
-				if (existing != moving_creature_space.end()) {
-					delete existing->second;
-					existing->second = movingSprite;
-				} else {
-					moving_creature_space[outfitId] = movingSprite;
-				}
-			}
+		GameSprite* movingSpriteRaw = nullptr;
+		if (!loadAppearanceSprite(appearance, -1, error, warnings, movingGroup, &movingSpriteRaw)) {
+			return false;
+		}
+		movingSprite.reset(movingSpriteRaw);
+	}
+
+	if (idleSprite) {
+		auto existing = sprite_space.find(spriteSpaceId);
+		if (existing != sprite_space.end()) {
+			delete existing->second;
+			existing->second = idleSprite.release();
+		} else {
+			sprite_space[spriteSpaceId] = idleSprite.release();
+		}
+	} else {
+		auto existing = sprite_space.find(spriteSpaceId);
+		if (existing != sprite_space.end()) {
+			delete existing->second;
+			sprite_space.erase(existing);
+		}
+	}
+
+	auto existingMoving = moving_creature_space.find(outfitId);
+	if (movingSprite) {
+		if (existingMoving != moving_creature_space.end()) {
+			delete existingMoving->second;
+			existingMoving->second = movingSprite.release();
+		} else {
+			moving_creature_space[outfitId] = movingSprite.release();
+		}
+	} else {
+		if (existingMoving != moving_creature_space.end()) {
+			delete existingMoving->second;
+			moving_creature_space.erase(existingMoving);
 		}
 	}
 

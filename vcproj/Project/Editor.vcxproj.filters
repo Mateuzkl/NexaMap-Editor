@@ -680,6 +680,9 @@
     <ClCompile Include="..\..\source\spawn_source_remap.cpp">
       <Filter>objects</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\spawn_source_remap_core.cpp">
+      <Filter>objects</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\spawn_export_window.cpp">
       <Filter>gui</Filter>
     </ClCompile>

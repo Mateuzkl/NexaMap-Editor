@@ -34,10 +34,7 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 	GL_settings[1] = WX_GL_DOUBLEBUFFER;
 	GL_settings[2] = 0;
 	canvas = newd MapCanvas(this, editor, GL_settings, ingamePreview);
-	canvas->Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
-		UpdateScrollbars();
-		event.Skip();
-	});
+	canvas->Bind(wxEVT_SIZE, &MapWindow::OnCanvasSize, this);
 
 	vScroll = newd MapScrollBar(this, MAP_WINDOW_VSCROLL, wxVERTICAL, canvas);
 	hScroll = newd MapScrollBar(this, MAP_WINDOW_HSCROLL, wxHORIZONTAL, canvas);
@@ -70,7 +67,14 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 }
 
 MapWindow::~MapWindow() {
-	////
+	if (canvas) {
+		canvas->Unbind(wxEVT_SIZE, &MapWindow::OnCanvasSize, this);
+	}
+}
+
+void MapWindow::OnCanvasSize(wxSizeEvent& event) {
+	UpdateScrollbars();
+	event.Skip();
 }
 
 void MapWindow::ShowReplaceItemsDialog(bool selectionOnly) {

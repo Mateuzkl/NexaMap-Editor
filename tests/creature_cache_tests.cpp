@@ -1,5 +1,9 @@
+#include "main.h"
+
 #include "creature_cache.h"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -10,9 +14,18 @@
 
 #include "gui.h"
 
+namespace {
+	std::string normalizeCreatureName(std::string value) {
+		std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+			return static_cast<char>(std::tolower(character));
+		});
+		return value;
+	}
+}
+
 // Stubs for GUI and CreatureDatabase methods needed by creature_cache in test build
 wxString GUI::GetLocalDataDirectory() {
-	return wxString::FromUTF8(std::filesystem::temp_directory_path().u8string());
+	return wxString(std::filesystem::temp_directory_path().wstring());
 }
 
 CreatureDatabase g_creatures;
@@ -23,9 +36,11 @@ CreatureType::CreatureType() :
 	in_other_tileset(false),
 	standard(false),
 	name(""),
-	brush(nullptr) {}
+	brush(nullptr) { }
 
 CreatureType::CreatureType(const CreatureType& ct) = default;
+CreatureType& CreatureType::operator=(const CreatureType& ct) = default;
+CreatureType::~CreatureType() = default;
 
 CreatureDatabase::CreatureDatabase() = default;
 CreatureDatabase::~CreatureDatabase() {
@@ -35,12 +50,13 @@ CreatureDatabase::~CreatureDatabase() {
 }
 
 CreatureType* CreatureDatabase::operator[](const std::string& name) {
-	auto it = creature_map.find(as_lower_str(name));
+	auto it = creature_map.find(normalizeCreatureName(name));
 	return it != creature_map.end() ? it->second : nullptr;
 }
 
 CreatureType* CreatureDatabase::addCreatureType(const std::string& name, bool isNpc, const Outfit& outfit) {
-	auto it = creature_map.find(as_lower_str(name));
+	const std::string normalizedName = normalizeCreatureName(name);
+	auto it = creature_map.find(normalizedName);
 	if (it != creature_map.end()) {
 		delete it->second;
 	}
@@ -48,24 +64,24 @@ CreatureType* CreatureDatabase::addCreatureType(const std::string& name, bool is
 	ct->name = name;
 	ct->isNpc = isNpc;
 	ct->outfit = outfit;
-	creature_map[as_lower_str(name)] = ct;
+	creature_map[normalizedName] = ct;
 	return ct;
 }
 
-void CreatureDatabase::applyWorkspaceCreature(CreatureType* creatureType, bool standard) {
+void CreatureDatabase::applyWorkspaceCreature(std::unique_ptr<CreatureType> creatureType, bool standard) {
 	if (!creatureType) {
 		return;
 	}
-	auto iter = creature_map.find(as_lower_str(creatureType->name));
+	const std::string normalizedName = normalizeCreatureName(creatureType->name);
+	auto iter = creature_map.find(normalizedName);
 	if (iter == creature_map.end()) {
 		creatureType->standard = standard;
-		creature_map[as_lower_str(creatureType->name)] = creatureType;
+		creature_map[normalizedName] = creatureType.release();
 		return;
 	}
 	CreatureType* current = iter->second;
 	*current = *creatureType;
 	current->standard = standard;
-	delete creatureType;
 }
 
 namespace {
@@ -139,8 +155,7 @@ int main() {
 		const auto luaDir = temp.path / "monsters";
 		temp.write("monsters/demon.lua", "monster data");
 
-		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns false when cache directory does not exist");
+		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when cache directory does not exist");
 	}
 
 	// Test 3: ValidateManifest with valid manifest and XML
@@ -179,18 +194,15 @@ int main() {
 		mOut << manifest.dump(2);
 		mOut.close();
 
-		check(CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns true when files and manifest match");
+		check(CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns true when files and manifest match");
 
 		// Test 4: Invalidation on file addition
 		temp.write("monsters/rat.lua", "rat data");
-		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns false when a new file is added");
+		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when a new file is added");
 
 		// Remove the added file
 		std::filesystem::remove(luaDir / "rat.lua");
-		check(CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns true again after added file is removed");
+		check(CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns true again after added file is removed");
 
 		// Test 5: Invalidation on same-size sub-second file edit (no sleep needed)
 		{
@@ -202,14 +214,12 @@ int main() {
 			if (newFtime == oldFtime) {
 				std::filesystem::last_write_time(demonPath, oldFtime + std::filesystem::file_time_type::duration(100));
 			}
-			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-				  "ValidateManifest returns false when a file is modified within the same second with identical size");
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when a file is modified within the same second with identical size");
 		}
 
 		// Test 6: Invalidation on file deletion
 		std::filesystem::remove(luaDir / "dragon.lua");
-		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns false when a file is deleted");
+		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when a file is deleted");
 	}
 
 	// Test 7: Schema version mismatch invalidation
@@ -231,8 +241,7 @@ int main() {
 		mOut << manifest.dump(2);
 		mOut.close();
 
-		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns false when schema version does not match");
+		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when schema version does not match");
 	}
 
 	// Test 8: Corrupted manifest JSON handling
@@ -244,8 +253,7 @@ int main() {
 		temp.write("cache/monsters.xml", "<creatures></creatures>");
 		temp.write("cache/manifest_monsters.json", "{ broken json content !! ");
 
-		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns false when manifest file is corrupted");
+		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when manifest file is corrupted");
 	}
 
 	// Test 9: SafeReplaceFile replaces existing file cleanly
@@ -257,13 +265,27 @@ int main() {
 		temp.write("source.txt", "Updated content");
 
 		std::string err;
-		check(CreatureCache::SafeReplaceFile(fileB, fileA, err),
-			  "SafeReplaceFile successfully replaces existing file");
+		check(CreatureCache::SafeReplaceFile(fileB, fileA, err), "SafeReplaceFile successfully replaces existing file");
 		check(!std::filesystem::exists(fileB), "SafeReplaceFile removes source after replace");
 		std::ifstream reader(fileA);
 		std::string content;
 		std::getline(reader, content);
 		check(content == "Updated content", "SafeReplaceFile content matches source");
+	}
+
+	// Test 9b: replacement failure preserves the last valid destination
+	{
+		TemporaryDirectory temp;
+		const auto target = temp.path / "target.txt";
+		const auto missingSource = temp.path / "missing.txt";
+		temp.write("target.txt", "Last valid cache");
+
+		std::string err;
+		check(!CreatureCache::SafeReplaceFile(missingSource, target, err), "SafeReplaceFile reports replacement failure");
+		std::ifstream reader(target);
+		std::string content;
+		std::getline(reader, content);
+		check(content == "Last valid cache", "SafeReplaceFile preserves the existing destination after failure");
 	}
 
 	// Test 10: Cache equivalence and override semantics
@@ -291,48 +313,38 @@ int main() {
 		// and Behemoth with looktype 55
 		std::vector<CreatureDatabase::ImportedCreatureRecord> serverImported;
 		{
-			CreatureType serverAmazon;
-			serverAmazon.name = "Amazon";
-			serverAmazon.isNpc = false;
-			serverAmazon.outfit.lookType = 500;
-			serverAmazon.standard = true;
-			serverImported.push_back({ "amazon", serverAmazon });
+			Outfit serverAmazon;
+			serverAmazon.lookType = 500;
+			serverImported.push_back({ "amazon", "Amazon", false, serverAmazon });
 
-			CreatureType serverBehemoth;
-			serverBehemoth.name = "Behemoth";
-			serverBehemoth.isNpc = false;
-			serverBehemoth.outfit.lookType = 55;
-			serverBehemoth.standard = true;
-			serverImported.push_back({ "behemoth", serverBehemoth });
+			Outfit serverBehemoth;
+			serverBehemoth.lookType = 55;
+			serverImported.push_back({ "behemoth", "Behemoth", false, serverBehemoth });
 		}
 
 		// Apply server import to db (Run A: Full import)
 		for (const auto& rec : serverImported) {
-			auto* ct = new CreatureType(rec.data);
-			db.applyWorkspaceCreature(ct, true);
+			auto ct = std::make_unique<CreatureType>();
+			ct->name = rec.name;
+			ct->isNpc = rec.isNpc;
+			ct->outfit = rec.outfit;
+			db.applyWorkspaceCreature(std::move(ct), true);
 		}
 
-		check(db["Amazon"] != nullptr && db["Amazon"]->outfit.lookType == 500,
-			  "Run A: Server Amazon overrides bundled Amazon (lookType 500)");
-		check(db["Demon"] != nullptr && db["Demon"]->outfit.lookType == 35,
-			  "Run A: Bundled Demon preserved");
-		check(db["Behemoth"] != nullptr && db["Behemoth"]->outfit.lookType == 55,
-			  "Run A: Server Behemoth inserted");
+		check(db["Amazon"] != nullptr && db["Amazon"]->outfit.lookType == 500, "Run A: Server Amazon overrides bundled Amazon (lookType 500)");
+		check(db["Demon"] != nullptr && db["Demon"]->outfit.lookType == 35, "Run A: Bundled Demon preserved");
+		check(db["Behemoth"] != nullptr && db["Behemoth"]->outfit.lookType == 55, "Run A: Server Behemoth inserted");
 
 		// Save serverImported to cache (only server workspace creatures, NOT Demon)
-		check(CreatureCache::SaveCache(cacheDir, luaDir, "monsters", serverImported),
-			  "SaveCache succeeds with imported records");
+		check(CreatureCache::SaveCache(cacheDir, luaDir, "monsters", serverImported), "SaveCache succeeds with imported records");
 
 		// Inspect cache XML: Demon must NOT be in cache XML
 		{
 			std::ifstream xmlIn(cacheDir / "monsters.xml");
 			std::string xmlStr((std::istreambuf_iterator<char>(xmlIn)), std::istreambuf_iterator<char>());
-			check(xmlStr.find("name=\"Demon\"") == std::string::npos,
-				  "Cache XML does NOT contain bundled Demon");
-			check(xmlStr.find("name=\"Amazon\"") != std::string::npos,
-				  "Cache XML contains server Amazon");
-			check(xmlStr.find("name=\"Behemoth\"") != std::string::npos,
-				  "Cache XML contains server Behemoth");
+			check(xmlStr.find("name=\"Demon\"") == std::string::npos, "Cache XML does NOT contain bundled Demon");
+			check(xmlStr.find("name=\"Amazon\"") != std::string::npos, "Cache XML contains server Amazon");
+			check(xmlStr.find("name=\"Behemoth\"") != std::string::npos, "Cache XML contains server Behemoth");
 		}
 
 		// Run B: Reset database, load same bundled creatures, then LoadCached
@@ -343,19 +355,14 @@ int main() {
 		bDemon2->standard = true;
 
 		size_t loadedCount = 0;
-		check(CreatureCache::LoadCached(db2, cacheDir, luaDir, "monsters", &loadedCount),
-			  "LoadCached succeeds");
+		check(CreatureCache::LoadCached(db2, cacheDir, luaDir, "monsters", &loadedCount), "LoadCached succeeds");
 		check(loadedCount == 2, "LoadCached loaded exactly 2 server creatures");
 
 		// Equivalence asserts: Run A == Run B
-		check(db2["Amazon"] != nullptr && db2["Amazon"]->outfit.lookType == 500,
-			  "Run B: Cache hit server Amazon overrides bundled Amazon with lookType 500");
-		check(db2["Demon"] != nullptr && db2["Demon"]->outfit.lookType == 35,
-			  "Run B: Cache hit preserves bundled Demon");
-		check(db2["Behemoth"] != nullptr && db2["Behemoth"]->outfit.lookType == 55,
-			  "Run B: Cache hit inserts server Behemoth");
-		check(db2["Amazon"]->standard == true && db2["Behemoth"]->standard == true,
-			  "Run B: Standard flags match");
+		check(db2["Amazon"] != nullptr && db2["Amazon"]->outfit.lookType == 500, "Run B: Cache hit server Amazon overrides bundled Amazon with lookType 500");
+		check(db2["Demon"] != nullptr && db2["Demon"]->outfit.lookType == 35, "Run B: Cache hit preserves bundled Demon");
+		check(db2["Behemoth"] != nullptr && db2["Behemoth"]->outfit.lookType == 55, "Run B: Cache hit inserts server Behemoth");
+		check(db2["Amazon"]->standard == true && db2["Behemoth"]->standard == true, "Run B: Standard flags match");
 	}
 
 	// Test 11: Malformed JSON manifest robustness (Issue 1)
@@ -374,8 +381,7 @@ int main() {
 			manifest << "{\"schemaVersion\": \"invalid_string\", \"files\": []}";
 			manifest.close();
 
-			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-				  "ValidateManifest returns false on string schemaVersion without throwing");
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false on string schemaVersion without throwing");
 		}
 
 		// Case B: files is not an array
@@ -384,8 +390,7 @@ int main() {
 			manifest << "{\"schemaVersion\": 2, \"files\": \"not_an_array\"}";
 			manifest.close();
 
-			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-				  "ValidateManifest returns false when files is not an array without throwing");
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when files is not an array without throwing");
 		}
 
 		// Case C: root JSON is an array, not object
@@ -394,9 +399,23 @@ int main() {
 			manifest << "[1, 2, 3]";
 			manifest.close();
 
-			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-				  "ValidateManifest returns false when root JSON is an array without throwing");
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"), "ValidateManifest returns false when root JSON is an array without throwing");
 		}
+	}
+
+	// Test 12: malformed cache XML is rejected transactionally
+	{
+		TemporaryDirectory temp;
+		const auto cacheDir = temp.path / "cache";
+		const auto luaDir = temp.path / "monsters";
+		temp.write("cache/monsters.xml", "<creatures><creature name=\"Orc\" type=\"npc\" looktype=\"abc\"/></creatures>");
+		temp.write("cache/manifest_monsters.json", "{}");
+
+		CreatureDatabase db;
+		size_t loadedCount = 0;
+		check(!CreatureCache::LoadCached(db, cacheDir, luaDir, "monsters", &loadedCount), "LoadCached rejects a record whose type does not match the cache kind");
+		check(db["Orc"] == nullptr, "Malformed cache records are not partially applied");
+		check(!std::filesystem::exists(cacheDir / "monsters.xml"), "Malformed cache XML is invalidated");
 	}
 
 	std::cout << "Creature Cache Tests: " << checks << " checks, " << failures << " failures.\n";

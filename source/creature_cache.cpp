@@ -9,15 +9,17 @@
 #include "gui.h"
 
 #if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
+	#ifndef WIN32_LEAN_AND_MEAN
+		#define WIN32_LEAN_AND_MEAN
+	#endif
+	#include <windows.h>
 #endif
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -57,6 +59,29 @@ namespace {
 		}
 		const auto utf8 = canonical.generic_u8string();
 		return std::string(utf8.begin(), utf8.end());
+	}
+
+	std::string normalizeCreatureName(std::string value) {
+		std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+			return static_cast<char>(std::tolower(character));
+		});
+		return value;
+	}
+
+	bool readNonnegativeInteger(pugi::xml_node node, const char* name, int& value) {
+		const pugi::xml_attribute attribute = node.attribute(name);
+		if (!attribute) {
+			value = 0;
+			return true;
+		}
+		const std::string text = attribute.as_string();
+		int parsed = 0;
+		const auto [end, result] = std::from_chars(text.data(), text.data() + text.size(), parsed);
+		if (result != std::errc {} || end != text.data() + text.size() || parsed < 0) {
+			return false;
+		}
+		value = parsed;
+		return true;
 	}
 
 	/// Collect sorted file entries from a Lua directory.
@@ -186,9 +211,7 @@ bool CreatureCache::ValidateManifest(
 		}
 
 		// Check schema version - must be an unsigned integer matching SchemaVersion.
-		if (!storedManifest.contains("schemaVersion") ||
-			!storedManifest["schemaVersion"].is_number_unsigned() ||
-			storedManifest["schemaVersion"].get<uint32_t>() != SchemaVersion) {
+		if (!storedManifest.contains("schemaVersion") || !storedManifest["schemaVersion"].is_number_unsigned() || storedManifest["schemaVersion"].get<uint32_t>() != SchemaVersion) {
 			std::clog << "[creature_cache] Schema version mismatch or invalid schemaVersion for " << kind << "\n";
 			return false;
 		}
@@ -198,8 +221,7 @@ bool CreatureCache::ValidateManifest(
 		const auto currentManifest = manifestToJson(currentEntries, normalizePath(luaDir), kind);
 
 		// Compare the files arrays.
-		if (!storedManifest.contains("files") || !storedManifest["files"].is_array() ||
-			!currentManifest.contains("files") || !currentManifest["files"].is_array()) {
+		if (!storedManifest.contains("files") || !storedManifest["files"].is_array() || !currentManifest.contains("files") || !currentManifest["files"].is_array()) {
 			std::clog << "[creature_cache] Missing or malformed 'files' array in manifest for " << kind << "\n";
 			return false;
 		}
@@ -235,13 +257,7 @@ bool CreatureCache::SafeReplaceFile(
 		return true;
 	}
 	const DWORD winErr = GetLastError();
-	// Safe fallback: remove destination then rename
-	std::filesystem::remove(to, ec);
-	std::filesystem::rename(from, to, ec);
-	if (!ec) {
-		return true;
-	}
-	error = "MoveFileExW error " + std::to_string(winErr) + "; fallback rename error: " + ec.message();
+	error = "MoveFileExW error " + std::to_string(winErr) + "; existing cache was preserved";
 	std::filesystem::remove(from, ec);
 	return false;
 #else
@@ -249,12 +265,7 @@ bool CreatureCache::SafeReplaceFile(
 	if (!ec) {
 		return true;
 	}
-	std::filesystem::remove(to, ec);
-	std::filesystem::rename(from, to, ec);
-	if (!ec) {
-		return true;
-	}
-	error = "rename error: " + ec.message();
+	error = "rename error: " + ec.message() + "; existing cache was preserved";
 	std::filesystem::remove(from, ec);
 	return false;
 #endif
@@ -268,7 +279,16 @@ bool CreatureCache::LoadCached(
 	size_t* loadedCount,
 	const ProgressCallback& progress
 ) {
+	if (kind != "monsters" && kind != "npcs") {
+		std::clog << "[creature_cache] Rejected unsupported cache kind: " << kind << "\n";
+		return false;
+	}
 	const auto xmlPath = cacheXmlPath(cacheDir, kind);
+	const auto invalidateCache = [&] {
+		std::error_code ec;
+		std::filesystem::remove(xmlPath, ec);
+		std::filesystem::remove(manifestPath(cacheDir, kind), ec);
+	};
 	if (progress) {
 		progress("Loading cached server " + kind + "...");
 	}
@@ -278,53 +298,71 @@ bool CreatureCache::LoadCached(
 	if (!result) {
 		std::clog << "[creature_cache] Failed to parse cache XML " << pathToUtf8(xmlPath)
 				  << ": " << result.description() << "\n";
-		// Delete corrupted cache.
-		std::error_code ec;
-		std::filesystem::remove(xmlPath, ec);
-		std::filesystem::remove(manifestPath(cacheDir, kind), ec);
+		invalidateCache();
 		return false;
 	}
 
 	pugi::xml_node root = doc.child("creatures");
 	if (!root) {
 		std::clog << "[creature_cache] Corrupted cache XML (missing <creatures> root) " << pathToUtf8(xmlPath) << "\n";
-		std::error_code ec;
-		std::filesystem::remove(xmlPath, ec);
-		std::filesystem::remove(manifestPath(cacheDir, kind), ec);
+		invalidateCache();
 		return false;
 	}
 
-	size_t count = 0;
+	std::map<std::string, std::unique_ptr<CreatureType>> parsedCreatures;
+	bool malformed = false;
 	for (pugi::xml_node node = root.child("creature"); node; node = node.next_sibling("creature")) {
 		pugi::xml_attribute attr = node.attribute("name");
 		if (!attr) {
-			continue;
+			malformed = true;
+			break;
 		}
 		const std::string name = attr.as_string();
 		if (name.empty()) {
-			continue;
+			malformed = true;
+			break;
 		}
 
-		auto* ct = newd CreatureType();
+		auto ct = std::make_unique<CreatureType>();
 		ct->name = name;
-		const std::string typeStr = node.attribute("type").as_string("monster");
-		ct->isNpc = (typeStr == "npc");
+		const std::string typeStr = node.attribute("type").as_string();
+		const std::string expectedType = kind == "npcs" ? "npc" : "monster";
+		if ((typeStr != "monster" && typeStr != "npc") || typeStr != expectedType) {
+			std::clog << "[creature_cache] Invalid cache record type for " << kind << ": " << name << "\n";
+			malformed = true;
+			break;
+		}
+		ct->isNpc = typeStr == "npc";
 
-		ct->outfit.lookType = node.attribute("looktype").as_int(0);
-		ct->outfit.lookItem = node.attribute("lookitem").as_int(0);
-		ct->outfit.lookMount = node.attribute("lookmount").as_int(0);
-		ct->outfit.lookAddon = node.attribute("lookaddon").as_int(0);
-		ct->outfit.lookHead = node.attribute("lookhead").as_int(0);
-		ct->outfit.lookBody = node.attribute("lookbody").as_int(0);
-		ct->outfit.lookLegs = node.attribute("looklegs").as_int(0);
-		ct->outfit.lookFeet = node.attribute("lookfeet").as_int(0);
-		ct->outfit.lookMountHead = node.attribute("lookmounthead").as_int(0);
-		ct->outfit.lookMountBody = node.attribute("lookmountbody").as_int(0);
-		ct->outfit.lookMountLegs = node.attribute("lookmountlegs").as_int(0);
-		ct->outfit.lookMountFeet = node.attribute("lookmountfeet").as_int(0);
+		if (!readNonnegativeInteger(node, "looktype", ct->outfit.lookType)
+			|| !readNonnegativeInteger(node, "lookitem", ct->outfit.lookItem)
+			|| !readNonnegativeInteger(node, "lookmount", ct->outfit.lookMount)
+			|| !readNonnegativeInteger(node, "lookaddon", ct->outfit.lookAddon)
+			|| !readNonnegativeInteger(node, "lookhead", ct->outfit.lookHead)
+			|| !readNonnegativeInteger(node, "lookbody", ct->outfit.lookBody)
+			|| !readNonnegativeInteger(node, "looklegs", ct->outfit.lookLegs)
+			|| !readNonnegativeInteger(node, "lookfeet", ct->outfit.lookFeet)
+			|| !readNonnegativeInteger(node, "lookmounthead", ct->outfit.lookMountHead)
+			|| !readNonnegativeInteger(node, "lookmountbody", ct->outfit.lookMountBody)
+			|| !readNonnegativeInteger(node, "lookmountlegs", ct->outfit.lookMountLegs)
+			|| !readNonnegativeInteger(node, "lookmountfeet", ct->outfit.lookMountFeet)) {
+			std::clog << "[creature_cache] Invalid cache outfit values: " << name << "\n";
+			malformed = true;
+			break;
+		}
 
-		db.applyWorkspaceCreature(ct, true);
-		++count;
+		parsedCreatures[normalizeCreatureName(name)] = std::move(ct);
+	}
+
+	if (malformed) {
+		invalidateCache();
+		return false;
+	}
+
+	const size_t count = parsedCreatures.size();
+	for (auto& [normalizedName, creature] : parsedCreatures) {
+		(void)normalizedName;
+		db.applyWorkspaceCreature(std::move(creature), true);
 	}
 
 	if (loadedCount) {
@@ -357,6 +395,22 @@ bool CreatureCache::SaveCache(
 	const std::vector<CreatureDatabase::ImportedCreatureRecord>& creatures,
 	const ProgressCallback& progress
 ) {
+	if (kind != "monsters" && kind != "npcs") {
+		std::clog << "[creature_cache] Refused to save unsupported cache kind: " << kind << "\n";
+		return false;
+	}
+	const bool expectedNpc = kind == "npcs";
+	std::map<std::string, const CreatureDatabase::ImportedCreatureRecord*> normalizedRecords;
+	for (const auto& record : creatures) {
+		const std::string normalizedName = normalizeCreatureName(record.name);
+		if (record.name.empty() || record.isNpc != expectedNpc
+			|| (!record.normalizedName.empty() && record.normalizedName != normalizedName)) {
+			std::clog << "[creature_cache] Refused invalid " << kind << " cache record: " << record.name << "\n";
+			return false;
+		}
+		normalizedRecords[normalizedName] = &record;
+	}
+
 	if (progress) {
 		progress("Saving server creature cache (" + kind + ")...");
 	}
@@ -379,13 +433,14 @@ bool CreatureCache::SaveCache(
 		decl.append_attribute("encoding") = "UTF-8";
 
 		pugi::xml_node root = doc.append_child("creatures");
-		for (const auto& record : creatures) {
-			const CreatureType& type = record.data;
+		for (const auto& [normalizedName, recordPointer] : normalizedRecords) {
+			(void)normalizedName;
+			const auto& record = *recordPointer;
 			pugi::xml_node node = root.append_child("creature");
-			node.append_attribute("name") = type.name.c_str();
-			node.append_attribute("type") = type.isNpc ? "npc" : "monster";
+			node.append_attribute("name") = record.name.c_str();
+			node.append_attribute("type") = record.isNpc ? "npc" : "monster";
 
-			const Outfit& outfit = type.outfit;
+			const Outfit& outfit = record.outfit;
 			node.append_attribute("looktype") = outfit.lookType;
 			node.append_attribute("lookitem") = outfit.lookItem;
 			node.append_attribute("lookmount") = outfit.lookMount;

@@ -857,12 +857,12 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 
 	importCreaturesWithCache(
 		workspace,
-		!workspace.monstersDirectory.empty() ? WorkspacePath(workspace.monstersDirectory) : wxString{},
+		!workspace.monstersDirectory.empty() ? WorkspacePath(workspace.monstersDirectory) : wxString {},
 		"monsters", false, warnings, creatureProgress
 	);
 	importCreaturesWithCache(
 		workspace,
-		!workspace.npcsDirectory.empty() ? WorkspacePath(workspace.npcsDirectory) : wxString{},
+		!workspace.npcsDirectory.empty() ? WorkspacePath(workspace.npcsDirectory) : wxString {},
 		"npcs", true, warnings, creatureProgress
 	);
 

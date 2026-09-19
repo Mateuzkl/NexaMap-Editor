@@ -471,9 +471,10 @@ if(BUILD_TESTING)
 	add_executable(creature_cache_tests
 		tests/creature_cache_tests.cpp
 		source/creature_cache.cpp
+		source/ext/pugixml.cpp
 	)
 	target_include_directories(creature_cache_tests PRIVATE source)
-	target_link_libraries(creature_cache_tests PRIVATE nlohmann_json::nlohmann_json)
+	target_link_libraries(creature_cache_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
 	set_target_properties(creature_cache_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON
@@ -485,8 +486,10 @@ if(BUILD_TESTING)
 	add_executable(spawn_persistence_tests
 		tests/spawn_persistence_tests.cpp
 		source/spawn_format.cpp
+		source/spawn_source_remap_core.cpp
 	)
 	target_include_directories(spawn_persistence_tests PRIVATE source)
+	target_link_libraries(spawn_persistence_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
 	set_target_properties(spawn_persistence_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON

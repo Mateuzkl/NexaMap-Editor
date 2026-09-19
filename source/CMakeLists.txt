@@ -322,6 +322,7 @@ ${CMAKE_CURRENT_LIST_DIR}/spawn.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format_map.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap_core.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.cpp
