@@ -34,6 +34,7 @@ namespace rme {
 	namespace protobuf {
 		namespace appearances {
 			class Appearance;
+			class FrameGroup;
 		}
 	}
 }
@@ -339,6 +340,12 @@ private:
 	bool is_complete;
 };
 
+enum FrameGroupType : int {
+	FRAME_GROUP_DEFAULT = 0,
+	FRAME_GROUP_IDLE = 0,
+	FRAME_GROUP_MOVING = 1
+};
+
 class GraphicManager {
 public:
 	GraphicManager();
@@ -358,7 +365,7 @@ public:
 	}
 
 	Sprite* getSprite(int id);
-	GameSprite* getCreatureSprite(int id);
+	GameSprite* getCreatureSprite(int id, FrameGroupType group = FRAME_GROUP_DEFAULT);
 	GameSprite* getEditorSprite(int id);
 
 	long getElapsedTime() const {
@@ -454,11 +461,15 @@ private:
 		const rme::protobuf::appearances::Appearance& appearance,
 		int spriteSpaceId,
 		wxString& error,
-		wxArrayString& warnings
+		wxArrayString& warnings,
+		const rme::protobuf::appearances::FrameGroup* explicitGroup = nullptr,
+		GameSprite** outSprite = nullptr
 	);
 
 	typedef std::map<int, Sprite*> SpriteMap;
 	SpriteMap sprite_space;
+	typedef std::map<int, GameSprite*> MovingCreatureMap;
+	MovingCreatureMap moving_creature_space;
 	typedef std::map<uint64_t, GameSprite::Image*> ImageMap;
 	ImageMap image_space;
 	std::deque<GameSprite*> cleanup_list;

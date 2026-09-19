@@ -187,6 +187,7 @@ void DrawingOptions::SetDefault() {
 	show_grid = 0;
 	show_all_floors = true;
 	show_creatures = true;
+	show_creature_names = true;
 	show_spawns = true;
 	show_houses = true;
 	show_shade = true;
@@ -224,6 +225,7 @@ void DrawingOptions::SetIngame() {
 	show_grid = 0;
 	show_all_floors = true;
 	show_creatures = true;
+	show_creature_names = false;
 	show_spawns = false;
 	show_houses = false;
 	show_shade = false;
@@ -925,6 +927,9 @@ void MapDrawer::DrawMap() {
 							}
 							if (tile->creature && options.show_creatures) {
 								BlitCreature(draw_x, draw_y, tile->creature);
+								if (options.show_creature_names && zoom <= 3.0) {
+									DrawCreatureName(draw_x, draw_y, tile->creature);
+								}
 							}
 						}
 					}
@@ -1762,13 +1767,13 @@ void MapDrawer::BlitSpriteType(int screenx, int screeny, GameSprite* spr, int re
 	}
 }
 
-void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red, int green, int blue, int alpha, int animationFrame) {
+void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red, int green, int blue, int alpha, int animationFrame, FrameGroupType group) {
 	if (outfit.lookItem != 0) {
 		ItemType& it = g_items[outfit.lookItem];
 		BlitSpriteType(screenx, screeny, it.sprite, red, green, blue, alpha);
 	} else {
 		// get outfit sprite
-		GameSprite* spr = g_gui.gfx.getCreatureSprite(outfit.lookType);
+		GameSprite* spr = g_gui.gfx.getCreatureSprite(outfit.lookType, group);
 		if (!spr || outfit.lookType == 0) {
 			return;
 		}
@@ -1781,7 +1786,7 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 		// mount colors by Zbizu
 		int pattern_z = 0;
 		if (outfit.lookMount != 0) {
-			if (GameSprite* mountSpr = g_gui.gfx.getCreatureSprite(outfit.lookMount)) {
+			if (GameSprite* mountSpr = g_gui.gfx.getCreatureSprite(outfit.lookMount, group)) {
 				// generate mount colors
 				Outfit mountOutfit;
 				mountOutfit.lookType = outfit.lookMount;
@@ -1851,7 +1856,8 @@ void MapDrawer::DrawIngamePreviewPlayer() {
 	const int drawY = position.y * TileSize - view_scroll_y - floorOffset + canvas->ingamePreviewWalkOffsetY;
 
 	drawRect(drawX + 2, drawY + 2, TileSize - 4, TileSize - 4, wxColour(70, 210, 255, 190), 1);
-	BlitCreature(drawX, drawY, canvas->ingamePreviewPlayerOutfit, canvas->ingamePreviewPlayerDirection, 255, 255, 255, 255, canvas->ingamePreviewAnimationFrame);
+	const FrameGroupType previewGroup = (canvas->ingamePreviewWalkOffsetX != 0 || canvas->ingamePreviewWalkOffsetY != 0) ? FRAME_GROUP_MOVING : FRAME_GROUP_IDLE;
+	BlitCreature(drawX, drawY, canvas->ingamePreviewPlayerOutfit, canvas->ingamePreviewPlayerDirection, 255, 255, 255, 255, canvas->ingamePreviewAnimationFrame, previewGroup);
 
 	const int centerX = drawX + TileSize / 2;
 	const int centerY = drawY + TileSize / 2;
@@ -1879,13 +1885,89 @@ void MapDrawer::DrawIngamePreviewPlayer() {
 	renderer->drawLines(directionLine, 1, 70, 210, 255, 230, 2.0f);
 }
 
-void MapDrawer::BlitCreature(int screenx, int screeny, const Creature* c, int red, int green, int blue, int alpha) {
+void MapDrawer::BlitCreature(int screenx, int screeny, const Creature* c, int red, int green, int blue, int alpha, FrameGroupType group) {
 	if (!options.ingame && c->isSelected()) {
 		red /= 2;
 		green /= 2;
 		blue /= 2;
 	}
-	BlitCreature(screenx, screeny, c->getLookType(), c->getDirection(), red, green, blue, alpha);
+	BlitCreature(screenx, screeny, c->getLookType(), c->getDirection(), red, green, blue, alpha, 0, group);
+}
+
+void MapDrawer::DrawCreatureName(int screenx, int screeny, const Creature* c) {
+	if (!c) {
+		return;
+	}
+
+	const std::string& name = c->getName();
+	if (name.empty()) {
+		return;
+	}
+
+	const BitmapFont& font = rme_bitmap_helvetica_12;
+	int textWidth = 0;
+	for (unsigned char ch : name) {
+		textWidth += bitmapCharWidth(font, ch);
+	}
+
+	if (textWidth <= 0) {
+		return;
+	}
+
+	const int paddingX = 4;
+	const int paddingY = 2;
+	const int boxWidth = textWidth + paddingX * 2;
+	const int boxHeight = font.height + paddingY * 2;
+
+	// Center horizontally over the tile, placed just above the tile
+	const int boxX = screenx + (TileSize - boxWidth) / 2;
+	const int boxY = screeny - boxHeight - 2;
+
+	// Background box: dark translucent
+	renderer->drawColoredQuad(
+		static_cast<float>(boxX),
+		static_cast<float>(boxY),
+		static_cast<float>(boxWidth),
+		static_cast<float>(boxHeight),
+		{ 10, 10, 10, 190 }
+	);
+
+	// Subtle border: greenish for NPCs, dark gray for Monsters
+	const bool isNpc = c->isNpc();
+	if (isNpc) {
+		renderer->drawRect(
+			static_cast<float>(boxX),
+			static_cast<float>(boxY),
+			static_cast<float>(boxWidth),
+			static_cast<float>(boxHeight),
+			{ 60, 200, 100, 220 },
+			1.0f
+		);
+	} else {
+		renderer->drawRect(
+			static_cast<float>(boxX),
+			static_cast<float>(boxY),
+			static_cast<float>(boxWidth),
+			static_cast<float>(boxHeight),
+			{ 70, 70, 70, 200 },
+			1.0f
+		);
+	}
+
+	// Flush renderer batch before using raw OpenGL raster pos
+	renderer->flushAndUnbind();
+
+	// Text color: light green for NPCs, white for monsters
+	if (isNpc) {
+		glColor3f(0.5f, 1.0f, 0.6f);
+	} else {
+		glColor3f(1.0f, 1.0f, 1.0f);
+	}
+
+	glRasterPos2i(boxX + paddingX, boxY + boxHeight - paddingY - 2);
+	for (unsigned char ch : name) {
+		drawBitmapChar(font, ch);
+	}
 }
 
 void MapDrawer::BlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size) {
@@ -2262,6 +2344,9 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 			// monster/npc on tile
 			if (!medium_zoom_mode && tile->creature && options.show_creatures) {
 				BlitCreature(draw_x, draw_y, tile->creature);
+				if (options.show_creature_names && zoom <= 3.0) {
+					DrawCreatureName(draw_x, draw_y, tile->creature);
+				}
 			}
 			if (canvas->IsIngamePreview() && tile->getPosition() == canvas->GetIngamePreviewDrawTile()) {
 				DrawIngamePreviewPlayer();

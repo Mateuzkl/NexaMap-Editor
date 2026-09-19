@@ -196,6 +196,7 @@
 		<separator/>
 		<item name="Show zones" hotkey="Shift+N" action="SHOW_ZONES" help="Show zones on the map."/>
 		<item name="Show creatures" hotkey="F" action="SHOW_CREATURES" help="Show creatures on the map."/>
+		<item name="Show creature names" hotkey="Shift+F" action="SHOW_CREATURE_NAMES" help="Show creature names above monsters and NPCs."/>
 		<item name="Show spawns" hotkey="S" action="SHOW_SPAWNS" help="Show spawns on the map."/>
 		<item name="Show special" hotkey="E" action="SHOW_SPECIAL" help="Show special tiles on the map, like PZ."/>
 		<item name="Show houses" hotkey="Ctrl+H" action="SHOW_HOUSES" help="Show houses on the map."/>

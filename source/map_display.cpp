@@ -440,6 +440,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			options.ingame = !g_settings.getBoolean(Config::SHOW_EXTRA);
 			options.show_all_floors = g_settings.getBoolean(Config::SHOW_ALL_FLOORS);
 			options.show_creatures = g_settings.getBoolean(Config::SHOW_CREATURES);
+			options.show_creature_names = g_settings.getBoolean(Config::SHOW_CREATURE_NAMES);
 			options.show_spawns = g_settings.getBoolean(Config::SHOW_SPAWNS);
 			options.show_houses = g_settings.getBoolean(Config::SHOW_HOUSES);
 			options.show_shade = g_settings.getBoolean(Config::SHOW_SHADE);
