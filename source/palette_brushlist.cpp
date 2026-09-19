@@ -66,23 +66,32 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 
 	// Create search bar + filter-all toolbar
 	wxSizer* searchRowSizer = newd wxBoxSizer(wxHORIZONTAL);
-	m_searchCtrl = newd wxSearchCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	m_searchCtrl = newd PaletteSearchCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	m_searchCtrl->ShowSearchButton(true);
 	m_searchCtrl->ShowCancelButton(true);
 	m_searchCtrl->SetDescriptiveText("Search brushes...");
 	if (!m_filterQuery.empty()) {
 		m_searchCtrl->ChangeValue(wxstr(m_filterQuery));
 	}
+	m_debounceTimer.SetOwner(this);
+	Bind(wxEVT_TIMER, &BrushPalettePanel::OnDebounceTimer, this);
+
 	m_searchCtrl->Bind(wxEVT_TEXT, &BrushPalettePanel::OnSearchText, this);
 	m_searchCtrl->Bind(wxEVT_TEXT_ENTER, &BrushPalettePanel::OnSearchText, this);
 	m_searchCtrl->Bind(wxEVT_SEARCHCTRL_SEARCH_BTN, &BrushPalettePanel::OnSearchText, this);
 	m_searchCtrl->Bind(wxEVT_SEARCHCTRL_CANCEL_BTN, &BrushPalettePanel::OnSearchCancel, this);
 	m_searchCtrl->Bind(wxEVT_CHAR_HOOK, [this](wxKeyEvent& event) {
 		if (event.GetKeyCode() == WXK_ESCAPE) {
-			ResetFilter();
-		} else {
-			event.Skip();
+			if (!m_searchCtrl->GetValue().empty()) {
+				ResetFilter();
+				return;
+			}
 		}
+		event.Skip();
+	});
+	m_searchCtrl->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& event) {
+		SavePaletteFilters();
+		event.Skip();
 	});
 	searchRowSizer->Add(m_searchCtrl, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
 
@@ -149,6 +158,8 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 }
 
 BrushPalettePanel::~BrushPalettePanel() {
+	m_debounceTimer.Stop();
+	Unbind(wxEVT_TIMER, &BrushPalettePanel::OnDebounceTimer, this);
 	if (toolbar) {
 		toolbar->Unbind(wxEVT_TOOL, &BrushPalettePanel::OnToolClick, this);
 	}
@@ -317,6 +328,9 @@ void BrushPalettePanel::OnSwitchingPage(wxChoicebookEvent& event) {
 	wxWindow* page = choicebook->GetPage(event.GetSelection());
 	auto* panel = dynamic_cast<BrushPanel*>(page);
 	if (panel) {
+		if (!m_filterQuery.empty() && !m_filterAll) {
+			panel->SetFilterQuery(m_filterQuery, nullptr);
+		}
 		panel->OnSwitchIn();
 		for (auto iter = tool_bars.begin(); iter != tool_bars.end(); ++iter) {
 			(*iter)->SelectBrush(remembered_brushes[panel]);
@@ -501,11 +515,14 @@ void BrushPalettePanel::OnSortButtonClick(TilesetSortDirection dir, int toolId) 
 
 void BrushPalettePanel::OnSizeButtonClick(int toolId) {
 	wxMenu menu;
+	auto* item16 = menu.AppendRadioItem(MENU_SIZE_16, "16x16");
 	auto* item32 = menu.AppendRadioItem(MENU_SIZE_32, "32x32");
 	auto* item64 = menu.AppendRadioItem(MENU_SIZE_64, "64x64");
 	auto* item128 = menu.AppendRadioItem(MENU_SIZE_128, "128x128");
 
-	if (m_tileSize == 64) {
+	if (m_tileSize == 16) {
+		item16->Check(true);
+	} else if (m_tileSize == 64) {
 		item64->Check(true);
 	} else if (m_tileSize == 128) {
 		item128->Check(true);
@@ -516,7 +533,9 @@ void BrushPalettePanel::OnSizeButtonClick(int toolId) {
 	wxRect rect = toolbar->GetToolRect(toolId);
 	wxPoint pos(rect.x, rect.y + rect.height);
 	int selected = toolbar->GetPopupMenuSelectionFromUser(menu, pos);
-	if (selected == MENU_SIZE_32) {
+	if (selected == MENU_SIZE_16) {
+		SetTileSize(16);
+	} else if (selected == MENU_SIZE_32) {
 		SetTileSize(32);
 	} else if (selected == MENU_SIZE_64) {
 		SetTileSize(64);
@@ -526,32 +545,56 @@ void BrushPalettePanel::OnSizeButtonClick(int toolId) {
 }
 
 void BrushPalettePanel::OnSearchText(wxCommandEvent& event) {
-	if (m_searchCtrl) {
-		m_filterQuery = m_searchCtrl->GetValue().ToStdString();
-		SavePaletteFilters();
-		ApplyFilter();
+	if (!m_searchCtrl) {
+		return;
+	}
+	const auto eventType = event.GetEventType();
+	m_filterQuery = m_searchCtrl->GetValue().ToStdString();
 
-		const auto eventType = event.GetEventType();
-		if ((eventType == wxEVT_TEXT_ENTER || eventType == wxEVT_SEARCHCTRL_SEARCH_BTN) && choicebook) {
-			PaletteWindow* pw = GetParentPalette();
-			if (pw) {
-				g_gui.ActivatePalette(pw);
-			}
+	if (eventType == wxEVT_TEXT) {
+		m_debounceTimer.Start(180, wxTIMER_ONE_SHOT);
+		return;
+	}
 
-			auto* panel = dynamic_cast<BrushPanel*>(choicebook->GetCurrentPage());
-			if (panel) {
+	m_debounceTimer.Stop();
+	SavePaletteFilters();
+	ApplyFilter();
+
+	if (choicebook) {
+		PaletteWindow* pw = GetParentPalette();
+		if (pw) {
+			g_gui.ActivatePalette(pw);
+		}
+
+		auto* panel = dynamic_cast<BrushPanel*>(choicebook->GetCurrentPage());
+		if (panel) {
+			Brush* brush = panel->GetSelectedBrush();
+			if (!brush) {
 				panel->SelectFirstBrush();
-				Brush* brush = panel->GetSelectedBrush();
-				if (brush) {
-					if (m_filterAll && pw) {
-						pw->JumpToBrush(brush, GetName().ToStdString());
-					} else {
-						g_gui.SelectBrushInternal(brush);
+				brush = panel->GetSelectedBrush();
+			}
+			if (brush) {
+				if (m_filterAll && pw) {
+					int targetCat = 0;
+					std::string targetTs;
+					for (const auto& res : m_globalResults) {
+						if (res.brush == brush) {
+							targetCat = res.category;
+							targetTs = res.tilesetName;
+							break;
+						}
 					}
+					pw->JumpToBrush(brush, GetName().ToStdString(), targetCat, targetTs);
+				} else {
+					g_gui.SelectBrushInternal(brush);
 				}
 			}
 		}
 	}
+}
+
+void BrushPalettePanel::OnDebounceTimer(wxTimerEvent& WXUNUSED(event)) {
+	ApplyFilter();
 }
 
 void BrushPalettePanel::OnSearchCancel(wxCommandEvent& event) {
@@ -568,30 +611,21 @@ void BrushPalettePanel::ApplyFilter() {
 	}
 
 	if (m_filterAll && !m_filterQuery.empty() && m_tilesets) {
-		std::vector<Brush*> allBrushes;
-		std::unordered_set<const Brush*> seen;
-		for (const auto& kv : *m_tilesets) {
-			const Tileset* ts = kv.second;
-			if (!ts) {
-				continue;
-			}
-			for (int cat = TILESET_UNKNOWN; cat <= TILESET_HOUSE; ++cat) {
-				const TilesetCategory* tcg = ts->getCategory(static_cast<TilesetCategoryType>(cat));
-				if (!tcg) {
-					continue;
-				}
-				for (Brush* b : tcg->brushlist) {
-					if (b && seen.insert(b).second) {
-						allBrushes.push_back(b);
-					}
-				}
+		m_globalResults = PaletteModel::AggregateGlobalBrushes(*m_tilesets, palette_type);
+		std::vector<Brush*> matchingBrushes;
+		matchingBrushes.reserve(m_globalResults.size());
+		std::string queryLower = PaletteModel::NormalizeQuery(m_filterQuery);
+		for (const auto& res : m_globalResults) {
+			if (res.brush && PaletteModel::BrushMatchesQuery(res.brush, queryLower)) {
+				matchingBrushes.push_back(res.brush);
 			}
 		}
-		panel->SetFilterQuery(m_filterQuery, &allBrushes);
+		panel->SetFilterQuery(m_filterQuery, &matchingBrushes);
 		if (choicebook->GetChoiceCtrl()) {
 			choicebook->GetChoiceCtrl()->Enable(false);
 		}
 	} else {
+		m_globalResults.clear();
 		panel->SetFilterQuery(m_filterQuery, nullptr);
 		if (choicebook->GetChoiceCtrl()) {
 			choicebook->GetChoiceCtrl()->Enable(true);
@@ -600,6 +634,7 @@ void BrushPalettePanel::ApplyFilter() {
 }
 
 void BrushPalettePanel::ResetFilter() {
+	m_debounceTimer.Stop();
 	if (m_searchCtrl) {
 		m_searchCtrl->ChangeValue(wxEmptyString);
 	}
@@ -824,6 +859,17 @@ bool BrushPanel::SelectBrush(const Brush* whatbrush) {
 		ASSERT(brushbox != nullptr);
 		return brushbox->SelectBrush(whatbrush);
 	}
+	if (tileset && whatbrush) {
+		for (const Brush* b : tileset->brushlist) {
+			if (b == whatbrush) {
+				LoadContents();
+				if (brushbox) {
+					return brushbox->SelectBrush(whatbrush);
+				}
+				break;
+			}
+		}
+	}
 	return false;
 }
 
@@ -852,7 +898,16 @@ void BrushPanel::OnClickListBoxRow(wxCommandEvent& event) {
 			w = w->GetParent();
 		}
 		if (bpp && bpp->IsFilterAllActive() && palette) {
-			if (palette->JumpToBrush(b, bpp->GetName().ToStdString())) {
+			int targetCat = 0;
+			std::string targetTs;
+			for (const auto& res : bpp->GetGlobalSearchResults()) {
+				if (res.brush == b) {
+					targetCat = res.category;
+					targetTs = res.tilesetName;
+					break;
+				}
+			}
+			if (palette->JumpToBrush(b, bpp->GetName().ToStdString(), targetCat, targetTs)) {
 				return;
 			}
 		}
@@ -1010,60 +1065,16 @@ void BrushIconBox::UpdateLayout() {
 }
 
 void BrushIconBox::UpdateDisplayedBrushes() {
-	displayed_brushes.clear();
+	Brush* selectedBefore = GetSelectedBrush();
 	const std::vector<Brush*>& src = has_override_brushes ? override_brushes : (tileset ? tileset->brushlist : std::vector<Brush*>());
 
-	std::string queryLower = filter_query;
-	for (char& c : queryLower) {
-		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-	}
-
-	for (Brush* b : src) {
-		if (!b) {
-			continue;
-		}
-		if (!queryLower.empty()) {
-			std::string nameLower = b->getName();
-			for (char& c : nameLower) {
-				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-			}
-			std::string idStr = std::to_string(b->getID());
-			if (nameLower.find(queryLower) == std::string::npos && idStr.find(queryLower) == std::string::npos) {
-				continue;
-			}
-		}
-		displayed_brushes.push_back(b);
-	}
+	displayed_brushes = PaletteModel::FilterBrushes(src, filter_query);
 
 	if (has_sort) {
-		std::stable_sort(displayed_brushes.begin(), displayed_brushes.end(), [this](const Brush* a, const Brush* b) {
-			if (!a || !b) {
-				return a != nullptr;
-			}
-			if (sort_key == TilesetSortKey::ID) {
-				if (a->getID() != b->getID()) {
-					return sort_dir == TilesetSortDirection::Ascending ? (a->getID() < b->getID()) : (a->getID() > b->getID());
-				}
-			} else {
-				std::string na = a->getName();
-				std::string nb = b->getName();
-				for (char& c : na) {
-					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-				}
-				for (char& c : nb) {
-					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-				}
-				if (na != nb) {
-					return sort_dir == TilesetSortDirection::Ascending ? (na < nb) : (na > nb);
-				}
-			}
-			return a->getID() < b->getID();
-		});
+		PaletteModel::SortBrushes(displayed_brushes, sort_key, sort_dir);
 	}
 
-	if (selected_index >= static_cast<int>(displayed_brushes.size())) {
-		selected_index = -1;
-	}
+	selected_index = PaletteModel::RestoreSelectionIndex(displayed_brushes, selectedBefore);
 	UpdateLayout();
 }
 
@@ -1200,7 +1211,16 @@ void BrushIconBox::OnLeftDown(wxMouseEvent& event) {
 					w = w->GetParent();
 				}
 				if (bpp && bpp->IsFilterAllActive() && palette) {
-					if (palette->JumpToBrush(b, bpp->GetName().ToStdString())) {
+					int targetCat = 0;
+					std::string targetTs;
+					for (const auto& res : bpp->GetGlobalSearchResults()) {
+						if (res.brush == b) {
+							targetCat = res.category;
+							targetTs = res.tilesetName;
+							break;
+						}
+					}
+					if (palette->JumpToBrush(b, bpp->GetName().ToStdString(), targetCat, targetTs)) {
 						return;
 					}
 				}
@@ -1448,58 +1468,18 @@ BrushListBox::~BrushListBox() {
 }
 
 void BrushListBox::UpdateDisplayedBrushes() {
-	displayed_brushes.clear();
+	Brush* selectedBefore = GetSelectedBrush();
 	const std::vector<Brush*>& src = has_override_brushes ? override_brushes : (tileset ? tileset->brushlist : std::vector<Brush*>());
 
-	std::string queryLower = filter_query;
-	for (char& c : queryLower) {
-		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-	}
-
-	for (Brush* b : src) {
-		if (!b) {
-			continue;
-		}
-		if (!queryLower.empty()) {
-			std::string nameLower = b->getName();
-			for (char& c : nameLower) {
-				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-			}
-			std::string idStr = std::to_string(b->getID());
-			if (nameLower.find(queryLower) == std::string::npos && idStr.find(queryLower) == std::string::npos) {
-				continue;
-			}
-		}
-		displayed_brushes.push_back(b);
-	}
+	displayed_brushes = PaletteModel::FilterBrushes(src, filter_query);
 
 	if (has_sort) {
-		std::stable_sort(displayed_brushes.begin(), displayed_brushes.end(), [this](const Brush* a, const Brush* b) {
-			if (!a || !b) {
-				return a != nullptr;
-			}
-			if (sort_key == TilesetSortKey::ID) {
-				if (a->getID() != b->getID()) {
-					return sort_dir == TilesetSortDirection::Ascending ? (a->getID() < b->getID()) : (a->getID() > b->getID());
-				}
-			} else {
-				std::string na = a->getName();
-				std::string nb = b->getName();
-				for (char& c : na) {
-					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-				}
-				for (char& c : nb) {
-					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-				}
-				if (na != nb) {
-					return sort_dir == TilesetSortDirection::Ascending ? (na < nb) : (na > nb);
-				}
-			}
-			return a->getID() < b->getID();
-		});
+		PaletteModel::SortBrushes(displayed_brushes, sort_key, sort_dir);
 	}
 
 	SetItemCount(displayed_brushes.size());
+	int newSel = PaletteModel::RestoreSelectionIndex(displayed_brushes, selectedBefore);
+	SetSelection(newSel != -1 ? newSel : wxNOT_FOUND);
 	Refresh();
 }
 

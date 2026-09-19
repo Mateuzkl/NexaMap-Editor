@@ -117,6 +117,7 @@ ${CMAKE_CURRENT_LIST_DIR}/palette_brush_tool.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.h
+${CMAKE_CURRENT_LIST_DIR}/palette_model.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_window.h
 ${CMAKE_CURRENT_LIST_DIR}/pngfiles.h
@@ -294,6 +295,7 @@ ${CMAKE_CURRENT_LIST_DIR}/palette_brush_tool.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_model.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_waypoints.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/pngfiles.cpp

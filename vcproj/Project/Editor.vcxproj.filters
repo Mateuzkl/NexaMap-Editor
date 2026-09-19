@@ -743,6 +743,9 @@
     <ClCompile Include="..\..\source\palette_house.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\palette_model.cpp">
+      <Filter>gui\palette</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\palette_waypoints.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>

@@ -62,7 +62,7 @@ public:
 	// Updates the content of the palette (eg. houses, creatures)
 	virtual void OnUpdate(Map* map);
 
-	bool JumpToBrush(const Brush* brush, const std::string& preferredPalette = "");
+	bool JumpToBrush(const Brush* brush, const std::string& preferredPalette = "", int targetCategory = 0, const std::string& targetTilesetName = "");
 
 	// wxWidgets Event Handlers
 	void OnSwitchingPage(wxChoicebookEvent& event);

@@ -22,6 +22,8 @@
 #include "palette_common.h"
 #include "palette_brush_tool.h"
 
+#include "palette_model.h"
+
 #include <wx/aui/auibar.h>
 #include <wx/srchctrl.h>
 
@@ -34,14 +36,26 @@ enum BrushListType {
 	BRUSHLIST_TEXT_LISTBOX,
 };
 
-enum class TilesetSortKey {
-	ID,
-	Name,
-};
+class PaletteSearchCtrl final : public wxSearchCtrl {
+public:
+	using wxSearchCtrl::wxSearchCtrl;
 
-enum class TilesetSortDirection {
-	Ascending,
-	Descending,
+	bool IsTopNavigationDomain(NavigationKind kind) const override {
+		if (kind == Navigation_Accel) {
+			return true;
+		}
+		return wxSearchCtrl::IsTopNavigationDomain(kind);
+	}
+
+#ifdef __WXMSW__
+	bool MSWTranslateMessage(WXMSG* msg) override {
+		return false;
+	}
+
+	bool MSWShouldPreProcessMessage(WXMSG* msg) override {
+		return false;
+	}
+#endif
 };
 
 class BrushBoxInterface {
@@ -240,6 +254,7 @@ public:
 		MENU_SORT_BY_ID = wxID_HIGHEST + 6011,
 		MENU_SORT_BY_NAME,
 		MENU_SORT_DEFAULT,
+		MENU_SIZE_16,
 		MENU_SIZE_32,
 		MENU_SIZE_64,
 		MENU_SIZE_128,
@@ -289,6 +304,9 @@ public:
 	bool IsFilterAllActive() const {
 		return m_filterAll && !m_filterQuery.empty();
 	}
+	const std::vector<PaletteSearchResult>& GetGlobalSearchResults() const {
+		return m_globalResults;
+	}
 
 protected:
 	void OnToolClick(wxCommandEvent& event);
@@ -296,6 +314,7 @@ protected:
 	void OnSizeButtonClick(int toolId);
 	void OnSearchText(wxCommandEvent& event);
 	void OnSearchCancel(wxCommandEvent& event);
+	void OnDebounceTimer(wxTimerEvent& event);
 	void ApplyFilter();
 
 	void LoadPaletteFilters();
@@ -307,10 +326,12 @@ protected:
 	std::map<wxWindow*, Brush*> remembered_brushes;
 
 	wxAuiToolBar* toolbar;
-	wxSearchCtrl* m_searchCtrl;
+	PaletteSearchCtrl* m_searchCtrl;
 	wxAuiToolBar* m_searchToolbar;
+	wxTimer m_debounceTimer;
 	std::string m_filterQuery;
 	bool m_filterAll;
+	std::vector<PaletteSearchResult> m_globalResults;
 
 	TilesetSortKey m_sortKey;
 	TilesetSortDirection m_sortDir;

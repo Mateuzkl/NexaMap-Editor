@@ -499,23 +499,39 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 	return false;
 }
 
-bool PaletteWindow::JumpToBrush(const Brush* brush, const std::string& preferredPalette) {
+bool PaletteWindow::JumpToBrush(const Brush* brush, const std::string& preferredPalette, int targetCategory, const std::string& targetTilesetName) {
 	if (!brush || !choicebook || resource_session.lock() != GetActiveEditorResourceSession()) {
 		return false;
 	}
 
 	BrushPalettePanel* targetBrushPalettePanel = nullptr;
-	std::string targetTilesetName;
+	std::string resolvedTilesetName = targetTilesetName;
 	int targetPageIndex = wxNOT_FOUND;
 
-	if (!preferredPalette.empty()) {
+	// 1. If explicit category provenance is available, find matching palette panel
+	if (targetCategory != 0) {
+		for (size_t i = 0; i < choicebook->GetPageCount(); ++i) {
+			auto* p = dynamic_cast<BrushPalettePanel*>(choicebook->GetPage(i));
+			if (p && p->GetType() == static_cast<PaletteType>(targetCategory)) {
+				targetBrushPalettePanel = p;
+				targetPageIndex = static_cast<int>(i);
+				if (resolvedTilesetName.empty()) {
+					resolvedTilesetName = p->FindTilesetNameForBrush(brush);
+				}
+				break;
+			}
+		}
+	}
+
+	// 2. If not matched, try preferred palette name
+	if (!targetBrushPalettePanel && !preferredPalette.empty()) {
 		for (size_t i = 0; i < choicebook->GetPageCount(); ++i) {
 			auto* p = dynamic_cast<BrushPalettePanel*>(choicebook->GetPage(i));
 			if (p && (nstr(p->GetName()) == preferredPalette || p->GetName() == wxstr(preferredPalette))) {
 				std::string tsName = p->FindTilesetNameForBrush(brush);
 				if (!tsName.empty()) {
 					targetBrushPalettePanel = p;
-					targetTilesetName = std::move(tsName);
+					resolvedTilesetName = std::move(tsName);
 					targetPageIndex = static_cast<int>(i);
 					break;
 				}
@@ -523,6 +539,7 @@ bool PaletteWindow::JumpToBrush(const Brush* brush, const std::string& preferred
 		}
 	}
 
+	// 3. Fallback scan all panels
 	if (!targetBrushPalettePanel) {
 		for (size_t i = 0; i < choicebook->GetPageCount(); ++i) {
 			auto* p = dynamic_cast<BrushPalettePanel*>(choicebook->GetPage(i));
@@ -530,7 +547,7 @@ bool PaletteWindow::JumpToBrush(const Brush* brush, const std::string& preferred
 				std::string tsName = p->FindTilesetNameForBrush(brush);
 				if (!tsName.empty()) {
 					targetBrushPalettePanel = p;
-					targetTilesetName = std::move(tsName);
+					resolvedTilesetName = std::move(tsName);
 					targetPageIndex = static_cast<int>(i);
 					break;
 				}
@@ -551,7 +568,7 @@ bool PaletteWindow::JumpToBrush(const Brush* brush, const std::string& preferred
 		choicebook->SetSelection(targetPageIndex);
 	}
 
-	return targetBrushPalettePanel->JumpToTilesetAndBrush(targetTilesetName, brush);
+	return targetBrushPalettePanel->JumpToTilesetAndBrush(resolvedTilesetName, brush);
 }
 
 void PaletteWindow::OnSwitchingPage(wxChoicebookEvent& event) {

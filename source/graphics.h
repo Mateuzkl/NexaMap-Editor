@@ -90,6 +90,7 @@ public:
 
 protected:
 	wxBitmap* bm[SPRITE_SIZE_COUNT];
+	mutable std::map<std::pair<SpriteSize, std::pair<int, int>>, wxBitmap> scaled_cache;
 };
 
 struct SpriteVisualFingerprint {

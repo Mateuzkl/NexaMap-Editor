@@ -544,10 +544,11 @@ void BrushButton::OnPaint(wxPaintEvent& event) {
 	int sprite_x = (w - sprite_dim) / 2;
 	int sprite_y = 2;
 
+	SpriteSize source_sz = (size == RENDER_SIZE_16x16) ? SPRITE_SIZE_16x16 : SPRITE_SIZE_32x32;
 	if (sprite) {
-		sprite->DrawTo(&pdc, SPRITE_SIZE_32x32, sprite_x, sprite_y, sprite_dim, sprite_dim);
+		sprite->DrawTo(&pdc, source_sz, sprite_x, sprite_y, sprite_dim, sprite_dim);
 		if (overlay && selected) {
-			overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, sprite_x, sprite_y, sprite_dim, sprite_dim);
+			overlay->DrawTo(&pdc, source_sz, sprite_x, sprite_y, sprite_dim, sprite_dim);
 		}
 	}
 

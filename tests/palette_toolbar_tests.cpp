@@ -15,8 +15,8 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
-#include <algorithm>
-#include <cctype>
+#include "palette_model.h"
+
 #include <iostream>
 #include <map>
 #include <memory>
@@ -34,107 +34,60 @@ namespace {
 		}
 	}
 
-	enum class SortKey {
-		Name = 0,
-		ID = 1,
-	};
-
-	enum class SortDirection {
-		Ascending = 0,
-		Descending = 1,
-	};
-
-	struct MockBrush {
+	struct TestItem {
 		std::string name;
-		int id;
+		uint32_t id;
+		uint32_t clientId = 0;
+		uint32_t lookType = 0;
 
-		MockBrush(std::string n, int i) : name(std::move(n)), id(i) { }
+		TestItem(std::string n, uint32_t i, uint32_t cid = 0, uint32_t lt = 0) :
+			name(std::move(n)), id(i), clientId(cid), lookType(lt) { }
+
 		const std::string& getName() const {
 			return name;
 		}
-		int getID() const {
+		uint32_t getID() const {
 			return id;
 		}
+		std::vector<uint32_t> getSearchableIDs() const {
+			std::vector<uint32_t> ids = { id };
+			if (clientId != 0 && clientId != id) {
+				ids.push_back(clientId);
+			}
+			if (lookType != 0 && lookType != id) {
+				ids.push_back(lookType);
+			}
+			return ids;
+		}
 	};
-
-	void sortBrushes(std::vector<const MockBrush*>& brushes, SortKey key, SortDirection dir) {
-		std::stable_sort(brushes.begin(), brushes.end(), [key, dir](const MockBrush* a, const MockBrush* b) {
-			if (!a || !b) {
-				return a != nullptr;
-			}
-			if (key == SortKey::ID) {
-				if (a->getID() != b->getID()) {
-					return dir == SortDirection::Ascending ? (a->getID() < b->getID()) : (a->getID() > b->getID());
-				}
-			} else {
-				std::string na = a->getName();
-				std::string nb = b->getName();
-				for (char& c : na) {
-					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-				}
-				for (char& c : nb) {
-					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-				}
-				if (na != nb) {
-					return dir == SortDirection::Ascending ? (na < nb) : (na > nb);
-				}
-			}
-			return a->getID() < b->getID();
-		});
-	}
-
-	std::vector<const MockBrush*> filterBrushes(const std::vector<const MockBrush*>& src, const std::string& query) {
-		std::vector<const MockBrush*> result;
-		std::string queryLower = query;
-		for (char& c : queryLower) {
-			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-		}
-
-		for (const MockBrush* b : src) {
-			if (!b) {
-				continue;
-			}
-			if (!queryLower.empty()) {
-				std::string nameLower = b->getName();
-				for (char& c : nameLower) {
-					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-				}
-				std::string idStr = std::to_string(b->getID());
-				if (nameLower.find(queryLower) == std::string::npos && idStr.find(queryLower) == std::string::npos) {
-					continue;
-				}
-			}
-			result.push_back(b);
-		}
-		return result;
-	}
-
-	int sanitizeTileSize(int size) {
-		if (size != 16 && size != 32 && size != 64 && size != 128) {
-			return 32;
-		}
-		return size;
-	}
-}
+} // namespace
 
 int main() {
-	std::cout << "Running palette toolbar, search, and sorting tests...\n";
+	std::cout << "Running palette model, search, sorting, and selection tests...\n";
 
-	MockBrush b1("Cobblestone", 101);
-	MockBrush b2("Grass", 102);
-	MockBrush b3("apple tree", 200);
-	MockBrush b4("Banana Tree", 201);
-	MockBrush b5("Water", 50);
-	MockBrush b6("ancient stone", 300);
+	TestItem b1("Cobblestone", 101, 2101);
+	TestItem b2("Grass", 102, 2102);
+	TestItem b3("apple tree", 200, 2200);
+	TestItem b4("Banana Tree", 201, 2201);
+	TestItem b5("Water", 50, 2050);
+	TestItem b6("ancient stone", 300, 2300);
+	TestItem bCreature("Demon", 999, 0, 35); // LookType 35
 
 	// -----------------------------------------------------------------------
-	// 1. Sorting Tests
+	// 1. Sorting Tests (Using Production PaletteModel::SortItems)
 	// -----------------------------------------------------------------------
 	{
-		std::vector<const MockBrush*> list = { &b2, &b1, &b4, &b3, &b5 };
+		std::vector<const TestItem*> list = { &b2, &b1, &b4, &b3, &b5 };
 
 		// Sort by Name Ascending (case-insensitive)
-		sortBrushes(list, SortKey::Name, SortDirection::Ascending);
+		PaletteModel::SortItems(
+			list,
+			TilesetSortKey::Name,
+			TilesetSortDirection::Ascending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
+
 		check(list.size() == 5, "list size should remain 5");
 		check(list[0]->getName() == "apple tree", "1st should be 'apple tree'");
 		check(list[1]->getName() == "Banana Tree", "2nd should be 'Banana Tree'");
@@ -143,7 +96,14 @@ int main() {
 		check(list[4]->getName() == "Water", "5th should be 'Water'");
 
 		// Sort by Name Descending (case-insensitive)
-		sortBrushes(list, SortKey::Name, SortDirection::Descending);
+		PaletteModel::SortItems(
+			list,
+			TilesetSortKey::Name,
+			TilesetSortDirection::Descending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
+
 		check(list[0]->getName() == "Water", "1st should be 'Water'");
 		check(list[1]->getName() == "Grass", "2nd should be 'Grass'");
 		check(list[2]->getName() == "Cobblestone", "3rd should be 'Cobblestone'");
@@ -151,7 +111,14 @@ int main() {
 		check(list[4]->getName() == "apple tree", "5th should be 'apple tree'");
 
 		// Sort by ID Ascending
-		sortBrushes(list, SortKey::ID, SortDirection::Ascending);
+		PaletteModel::SortItems(
+			list,
+			TilesetSortKey::ID,
+			TilesetSortDirection::Ascending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
+
 		check(list[0]->getID() == 50, "1st by ID asc should be 50");
 		check(list[1]->getID() == 101, "2nd by ID asc should be 101");
 		check(list[2]->getID() == 102, "3rd by ID asc should be 102");
@@ -159,7 +126,14 @@ int main() {
 		check(list[4]->getID() == 201, "5th by ID asc should be 201");
 
 		// Sort by ID Descending
-		sortBrushes(list, SortKey::ID, SortDirection::Descending);
+		PaletteModel::SortItems(
+			list,
+			TilesetSortKey::ID,
+			TilesetSortDirection::Descending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
+
 		check(list[0]->getID() == 201, "1st by ID desc should be 201");
 		check(list[1]->getID() == 200, "2nd by ID desc should be 200");
 		check(list[2]->getID() == 102, "3rd by ID desc should be 102");
@@ -171,135 +145,254 @@ int main() {
 	// 2. Sorting Ties & Edge Cases
 	// -----------------------------------------------------------------------
 	{
-		MockBrush t1("Stone", 10);
-		MockBrush t2("Stone", 5);
-		MockBrush t3("stone", 20);
-		std::vector<const MockBrush*> ties = { &t1, &t2, &t3 };
+		TestItem t1("Stone", 10);
+		TestItem t2("Stone", 5);
+		TestItem t3("stone", 20);
+		std::vector<const TestItem*> ties = { &t1, &t2, &t3 };
 
 		// Same name, should break tie deterministically by ID
-		sortBrushes(ties, SortKey::Name, SortDirection::Ascending);
+		PaletteModel::SortItems(
+			ties,
+			TilesetSortKey::Name,
+			TilesetSortDirection::Ascending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
+
 		check(ties[0]->getID() == 5, "tied names should break tie by ID: 5");
 		check(ties[1]->getID() == 10, "tied names should break tie by ID: 10");
 		check(ties[2]->getID() == 20, "tied names should break tie by ID: 20");
 
 		// Empty list
-		std::vector<const MockBrush*> emptyList;
-		sortBrushes(emptyList, SortKey::Name, SortDirection::Ascending);
+		std::vector<const TestItem*> emptyList;
+		PaletteModel::SortItems(
+			emptyList,
+			TilesetSortKey::Name,
+			TilesetSortDirection::Ascending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
 		check(emptyList.empty(), "sorting empty list should not crash");
 
 		// Single element
-		std::vector<const MockBrush*> single = { &b1 };
-		sortBrushes(single, SortKey::ID, SortDirection::Descending);
+		std::vector<const TestItem*> single = { &b1 };
+		PaletteModel::SortItems(
+			single,
+			TilesetSortKey::ID,
+			TilesetSortDirection::Descending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
 		check(single.size() == 1 && single[0] == &b1, "sorting single element preserves it");
 	}
 
 	// -----------------------------------------------------------------------
-	// 3. Filtering Tests
+	// 3. Filtering Tests (Using Production PaletteModel::FilterItems)
 	// -----------------------------------------------------------------------
 	{
-		std::vector<const MockBrush*> pool = { &b1, &b2, &b3, &b4, &b5, &b6 };
+		std::vector<const TestItem*> pool = { &b1, &b2, &b3, &b4, &b5, &b6, &bCreature };
+
+		auto filterHelper = [&](const std::string& query) {
+			return PaletteModel::FilterItems(
+				pool,
+				query,
+				[](const TestItem* i) { return i->getName(); },
+				[](const TestItem* i) { return i->getSearchableIDs(); }
+			);
+		};
 
 		// Substring match case-insensitive
-		auto resTree = filterBrushes(pool, "tree");
+		auto resTree = filterHelper("tree");
 		check(resTree.size() == 2, "filtering 'tree' should return 2 brushes");
 		check(resTree[0]->getName() == "apple tree", "resTree[0] matches");
 		check(resTree[1]->getName() == "Banana Tree", "resTree[1] matches");
 
 		// Substring match uppercase query
-		auto resStone = filterBrushes(pool, "STONE");
+		auto resStone = filterHelper("STONE");
 		check(resStone.size() == 2, "filtering 'STONE' should match 'Cobblestone' and 'ancient stone'");
 
-		// Numeric ID match
-		auto resID = filterBrushes(pool, "50");
+		// Server ID match
+		auto resID = filterHelper("50");
 		check(resID.size() == 1 && resID[0]->getName() == "Water", "filtering '50' matches Water (id=50)");
 
-		auto resPartialID = filterBrushes(pool, "10");
-		check(resPartialID.size() == 2, "filtering '10' matches 101 and 102");
+		// Client ID match
+		auto resClient = filterHelper("2101");
+		check(resClient.size() == 1 && resClient[0]->getName() == "Cobblestone", "filtering ClientID '2101' matches Cobblestone");
 
-		// Empty query returns everything
-		auto resAll = filterBrushes(pool, "");
+		// Creature lookType match
+		auto resLookType = filterHelper("35");
+		check(resLookType.size() == 1 && resLookType[0]->getName() == "Demon", "filtering lookType '35' matches Demon");
+
+		// Empty query returns full pool
+		auto resAll = filterHelper("");
 		check(resAll.size() == pool.size(), "empty query returns full pool");
 
 		// No match query
-		auto resNone = filterBrushes(pool, "dragon");
+		auto resNone = filterHelper("dragon_nonexistent");
 		check(resNone.empty(), "query with no matches returns empty vector");
 	}
 
 	// -----------------------------------------------------------------------
-	// 4. Global Palette Aggregation & Deduplication
+	// 4. Selection Preservation across Sort and Filter
 	// -----------------------------------------------------------------------
 	{
-		// Mock tilesets
-		std::vector<const MockBrush*> tilesetA = { &b1, &b2, &b3 };
-		std::vector<const MockBrush*> tilesetB = { &b3, &b4, &b5 }; // b3 is shared
-		std::vector<const MockBrush*> tilesetC = { &b1, &b5, &b6 }; // b1 and b5 are shared
+		std::vector<const TestItem*> pool = { &b1, &b2, &b3, &b4, &b5 };
+		const TestItem* selected = &b4; // Banana Tree
 
-		std::vector<const MockBrush*> aggregated;
-		std::unordered_set<const MockBrush*> seen;
+		// Sort pool
+		PaletteModel::SortItems(
+			pool,
+			TilesetSortKey::Name,
+			TilesetSortDirection::Ascending,
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getID(); }
+		);
 
-		for (const auto* b : tilesetA) {
-			if (b && seen.insert(b).second) {
-				aggregated.push_back(b);
-			}
-		}
-		for (const auto* b : tilesetB) {
-			if (b && seen.insert(b).second) {
-				aggregated.push_back(b);
-			}
-		}
-		for (const auto* b : tilesetC) {
-			if (b && seen.insert(b).second) {
-				aggregated.push_back(b);
-			}
-		}
+		int newIdx = PaletteModel::RestoreSelection(pool, selected);
+		check(newIdx != -1, "selected item must be found after sort");
+		check(pool[newIdx] == selected, "restored index points to the exact same pointer identity");
 
-		check(aggregated.size() == 6, "aggregated list must deduplicate down to 6 unique brushes");
-		// Verify all 6 exist
-		std::unordered_set<int> uniqueIds;
-		for (const auto* b : aggregated) {
+		// Filter that includes selected
+		auto filtered1 = PaletteModel::FilterItems(
+			pool,
+			"tree",
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getSearchableIDs(); }
+		);
+		int idxInFilter = PaletteModel::RestoreSelection(filtered1, selected);
+		check(idxInFilter != -1, "selected item found when included in filtered results");
+		check(filtered1[idxInFilter] == selected, "identity preserved in filtered subset");
+
+		// Filter that excludes selected
+		auto filtered2 = PaletteModel::FilterItems(
+			pool,
+			"water",
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getSearchableIDs(); }
+		);
+		int idxExcluded = PaletteModel::RestoreSelection(filtered2, selected);
+		check(idxExcluded == -1, "selection safely resolves to -1 when query excludes selected brush");
+	}
+
+	// -----------------------------------------------------------------------
+	// 5. Global Palette Aggregation & Deduplication
+	// -----------------------------------------------------------------------
+	{
+		std::vector<const TestItem*> tilesetA = { &b1, &b2, &b3 };
+		std::vector<const TestItem*> tilesetB = { &b3, &b4, &b5 }; // b3 is shared
+		std::vector<const TestItem*> tilesetC = { &b1, &b5, &b6 }; // b1 and b5 are shared
+
+		std::vector<const TestItem*> all;
+		all.insert(all.end(), tilesetA.begin(), tilesetA.end());
+		all.insert(all.end(), tilesetB.begin(), tilesetB.end());
+		all.insert(all.end(), tilesetC.begin(), tilesetC.end());
+
+		auto deduped = PaletteModel::DeduplicateItems(all);
+		check(deduped.size() == 6, "aggregated list must deduplicate down to 6 unique brushes");
+
+		std::unordered_set<uint32_t> uniqueIds;
+		for (const auto* b : deduped) {
 			uniqueIds.insert(b->getID());
 		}
 		check(uniqueIds.size() == 6, "all 6 distinct brush IDs present");
 	}
 
 	// -----------------------------------------------------------------------
-	// 5. Tile Size Validation
+	// 6. Global Search Metadata & Provenance
 	// -----------------------------------------------------------------------
 	{
-		check(sanitizeTileSize(16) == 16, "16px is valid");
-		check(sanitizeTileSize(32) == 32, "32px is valid");
-		check(sanitizeTileSize(64) == 64, "64px is valid");
-		check(sanitizeTileSize(128) == 128, "128px is valid");
-		check(sanitizeTileSize(0) == 32, "0px falls back to 32");
-		check(sanitizeTileSize(48) == 32, "48px falls back to 32");
-		check(sanitizeTileSize(256) == 32, "256px falls back to 32");
-		check(sanitizeTileSize(-10) == 32, "-10px falls back to 32");
+		struct MockProvenanceResult {
+			const TestItem* item;
+			int category;
+			std::string tilesetName;
+		};
+
+		std::vector<MockProvenanceResult> globalCatalog = {
+			{ &b1, 1 /* TILESET_TERRAIN */, "Nature" },
+			{ &b2, 1 /* TILESET_TERRAIN */, "Nature" },
+			{ &b3, 2 /* TILESET_DOODAD */, "Trees" },
+			{ &b4, 2 /* TILESET_DOODAD */, "Trees" },
+			{ &bCreature, 4 /* TILESET_CREATURE */, "Monsters" },
+		};
+
+		// Filter preserving provenance
+		std::vector<MockProvenanceResult> results;
+		std::string query = "tree";
+		std::string queryLower = PaletteModel::NormalizeQuery(query);
+		for (const auto& entry : globalCatalog) {
+			if (PaletteModel::MatchesSearch(entry.item->getName(), entry.item->getSearchableIDs(), queryLower)) {
+				results.push_back(entry);
+			}
+		}
+
+		check(results.size() == 2, "global search matched 2 entries for 'tree'");
+		check(results[0].category == 2 && results[0].tilesetName == "Trees", "provenance category and tileset preserved for result 0");
+		check(results[1].category == 2 && results[1].tilesetName == "Trees", "provenance category and tileset preserved for result 1");
 	}
 
 	// -----------------------------------------------------------------------
-	// 6. Session Scoping Validation
+	// 7. Tile Size Validation & 16px Preservation
 	// -----------------------------------------------------------------------
 	{
-		// Simulate two separate sessions
-		std::map<std::string, std::vector<const MockBrush*>> session1Tilesets;
-		std::map<std::string, std::vector<const MockBrush*>> session2Tilesets;
+		check(PaletteModel::SanitizeTileSize(16) == 16, "16px is valid");
+		check(PaletteModel::SanitizeTileSize(32) == 32, "32px is valid");
+		check(PaletteModel::SanitizeTileSize(64) == 64, "64px is valid");
+		check(PaletteModel::SanitizeTileSize(128) == 128, "128px is valid");
+		check(PaletteModel::SanitizeTileSize(0) == 32, "0px falls back to 32");
+		check(PaletteModel::SanitizeTileSize(48) == 32, "48px falls back to 32");
+		check(PaletteModel::SanitizeTileSize(256) == 32, "256px falls back to 32");
+		check(PaletteModel::SanitizeTileSize(-10) == 32, "-10px falls back to 32");
+	}
 
-		MockBrush s1_b("Tab1Brush", 1001);
-		MockBrush s2_b("Tab2Brush", 2002);
+	// -----------------------------------------------------------------------
+	// 8. UTF-8 Search Query Normalization
+	// -----------------------------------------------------------------------
+	{
+		std::string ascii = "Stone WALL 123";
+		check(PaletteModel::NormalizeQuery(ascii) == "stone wall 123", "ASCII characters lowercased correctly");
+
+		// Multibyte characters should not be corrupted
+		std::string utf8Str = "Ação";
+		std::string normalized = PaletteModel::NormalizeQuery(utf8Str);
+		check(normalized[0] == 'a', "First letter lowercased to 'a'");
+		check(normalized.find("ção") != std::string::npos, "UTF-8 bytes 'ção' preserved without corruption");
+	}
+
+	// -----------------------------------------------------------------------
+	// 9. Session Scoping Validation
+	// -----------------------------------------------------------------------
+	{
+		std::map<std::string, std::vector<const TestItem*>> session1Tilesets;
+		std::map<std::string, std::vector<const TestItem*>> session2Tilesets;
+
+		TestItem s1_b("Tab1Brush", 1001);
+		TestItem s2_b("Tab2Brush", 2002);
 
 		session1Tilesets["Nature"].push_back(&s1_b);
 		session2Tilesets["Nature"].push_back(&s2_b);
 
-		// Query session 1
-		auto resSession1 = filterBrushes(session1Tilesets["Nature"], "Brush");
+		auto resSession1 = PaletteModel::FilterItems(
+			session1Tilesets["Nature"],
+			"Brush",
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getSearchableIDs(); }
+		);
 		check(resSession1.size() == 1 && resSession1[0]->getID() == 1001, "Session 1 contains only Tab1Brush");
 
-		// Query session 2
-		auto resSession2 = filterBrushes(session2Tilesets["Nature"], "Brush");
+		auto resSession2 = PaletteModel::FilterItems(
+			session2Tilesets["Nature"],
+			"Brush",
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getSearchableIDs(); }
+		);
 		check(resSession2.size() == 1 && resSession2[0]->getID() == 2002, "Session 2 contains only Tab2Brush");
 
-		// Verify no bleed
-		auto crossCheck = filterBrushes(session1Tilesets["Nature"], "Tab2Brush");
+		auto crossCheck = PaletteModel::FilterItems(
+			session1Tilesets["Nature"],
+			"Tab2Brush",
+			[](const TestItem* i) { return i->getName(); },
+			[](const TestItem* i) { return i->getSearchableIDs(); }
+		);
 		check(crossCheck.empty(), "Session 1 does not leak into Session 2");
 	}
 
