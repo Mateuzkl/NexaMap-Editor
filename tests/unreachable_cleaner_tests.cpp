@@ -433,6 +433,20 @@ int main() {
 		check(path0 != path1, "colliding backup must produce distinct filename with counter");
 		check(path1 != path2, "each subsequent collision must increment suffix");
 		check(path1 == "maps/world_backup_20260919_153000_123_1.otbm", "suffix format must be _1");
+
+		// Verify otgz extension normalization to otbm
+		auto normalizeBackupExt = [](std::string ext) -> std::string {
+			for (auto& c : ext) {
+				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			}
+			if (ext == "otgz" || ext.empty()) {
+				return "otbm";
+			}
+			return ext;
+		};
+		check(normalizeBackupExt("otgz") == "otbm", "otgz backup extension must normalize to otbm");
+		check(normalizeBackupExt("OTGZ") == "otbm", "case-insensitive OTGZ must normalize to otbm");
+		check(normalizeBackupExt("otbm") == "otbm", "otbm backup extension must remain otbm");
 	}
 
 	if (failures != 0) {

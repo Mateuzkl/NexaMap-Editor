@@ -100,7 +100,12 @@ std::string MapBackupService::generateBackupPath(const std::string& originalPath
 	wxString baseName;
 	baseName << fn.GetName() << "_backup_" << timestamp << "_" << wxString::Format("%03d", static_cast<int>(ms.count()));
 
-	wxFileName backupPath(fn.GetPath(), baseName + "." + fn.GetExt());
+	wxString ext = fn.GetExt();
+	if (ext.Lower() == "otgz" || ext.IsEmpty()) {
+		ext = "otbm";
+	}
+
+	wxFileName backupPath(fn.GetPath(), baseName + "." + ext);
 	int counter = 1;
 	while (backupPath.FileExists()) {
 		backupPath.SetName(baseName + "_" + std::to_string(counter++));
