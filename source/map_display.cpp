@@ -473,7 +473,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		options.dragging = boundbox_selection;
 
 		const bool animate_position_indicator = drawer->GetPositionIndicatorTime() != 0;
-		const bool animate_preview = !ingamePreview && options.show_preview && zoom <= 2.0;
+		const bool animate_preview = !ingamePreview && options.show_preview && zoom <= 3.0;
 		if (animate_preview && !drawer->isViewportInteractionActive()) {
 			// Mark dirty so the FBO cache is refreshed for the new animation frame
 			drawer->markDirty();

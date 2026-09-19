@@ -1790,7 +1790,14 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 			return;
 		}
 
-		const int frame = spr->frames == 0 ? 0 : animationFrame % spr->frames;
+		int frame = spr->frames == 0 ? 0 : animationFrame % spr->frames;
+		if (animationFrame == 0 && (options.show_preview || canvas->IsIngamePreview())) {
+			if (spr->animator) {
+				frame = spr->animator->getFrame();
+			} else if (spr->frames > 1) {
+				frame = static_cast<int>((g_gui.gfx.getElapsedTime() / 200) % spr->frames);
+			}
+		}
 		std::vector<PreparedSpritePart> parts;
 		bool complete = true;
 
@@ -1814,7 +1821,14 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 							   mountSpr->height,
 							   1,
 							   [&](int cx, int cy, int) {
-								   const int mountFrame = mountSpr->frames == 0 ? 0 : animationFrame % mountSpr->frames;
+								   int mountFrame = mountSpr->frames == 0 ? 0 : animationFrame % mountSpr->frames;
+								   if (animationFrame == 0 && (options.show_preview || canvas->IsIngamePreview())) {
+									   if (mountSpr->animator) {
+										   mountFrame = mountSpr->animator->getFrame();
+									   } else if (mountSpr->frames > 1) {
+										   mountFrame = static_cast<int>((g_gui.gfx.getElapsedTime() / 200) % mountSpr->frames);
+									   }
+								   }
 								   return mountSpr->getSpriteTex(cx, cy, static_cast<int>(dir), 0, 0, mountOutfit, mountFrame);
 							   },
 							   parts
@@ -1910,9 +1924,33 @@ void MapDrawer::DrawCreatureNames() {
 	if (creature_name_overlays.empty()) {
 		return;
 	}
+
+	// Switch to screen-space projection so that UI widgets and bitmap fonts
+	// scale and align with 1:1 pixel precision regardless of zoom level.
+	renderer->flush();
+	renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0, screensize_x, screensize_y, 0, -1, 1);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+
 	for (const auto& overlay : creature_name_overlays) {
 		DrawCreatureName(overlay.screenx, overlay.screeny, overlay.name, overlay.isNpc, overlay.heightOffset);
 	}
+
+	renderer->flushAndUnbind();
+
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
+
+	renderer->setOrtho(0.0f, screensize_x * zoom, screensize_y * zoom, 0.0f);
 }
 
 void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& name, bool isNpc, int heightOffset) {
@@ -1935,14 +1973,22 @@ void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& na
 	const int boxWidth = textWidth + paddingX * 2;
 	const int boxHeight = font.height + paddingY * 2;
 
-	// Center horizontally over the tile, placed just above the creature head
-	const int boxX = screenx + (TileSize - boxWidth) / 2;
-	const int boxY = screeny - heightOffset - boxHeight - 2;
+	// Calculate center anchor above the creature head in screen pixels:
+	const float anchorX = (screenx + TileSize / 2.0f) / zoom;
+	const float anchorY = (screeny - heightOffset) / zoom;
+
+	const float boxX = std::round(anchorX - boxWidth / 2.0f);
+	const float boxY = std::round(anchorY - boxHeight - 2.0f);
+
+	// Don't draw if completely off-screen
+	if (boxX + boxWidth < 0 || boxX > screensize_x || boxY + boxHeight < 0 || boxY > screensize_y) {
+		return;
+	}
 
 	// Background box: dark translucent
 	renderer->drawColoredQuad(
-		static_cast<float>(boxX),
-		static_cast<float>(boxY),
+		boxX,
+		boxY,
 		static_cast<float>(boxWidth),
 		static_cast<float>(boxHeight),
 		{ 10, 10, 10, 190 }
@@ -1951,8 +1997,8 @@ void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& na
 	// Subtle border: greenish for NPCs, dark gray for Monsters
 	if (isNpc) {
 		renderer->drawRect(
-			static_cast<float>(boxX),
-			static_cast<float>(boxY),
+			boxX,
+			boxY,
 			static_cast<float>(boxWidth),
 			static_cast<float>(boxHeight),
 			{ 60, 200, 100, 220 },
@@ -1960,8 +2006,8 @@ void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& na
 		);
 	} else {
 		renderer->drawRect(
-			static_cast<float>(boxX),
-			static_cast<float>(boxY),
+			boxX,
+			boxY,
 			static_cast<float>(boxWidth),
 			static_cast<float>(boxHeight),
 			{ 70, 70, 70, 200 },
@@ -1979,7 +2025,7 @@ void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& na
 		glColor3f(1.0f, 1.0f, 1.0f);
 	}
 
-	glRasterPos2i(boxX + paddingX, boxY + boxHeight - paddingY - 2);
+	glRasterPos2i(static_cast<int>(boxX + paddingX), static_cast<int>(boxY + boxHeight - paddingY - 2));
 	for (unsigned char ch : name) {
 		drawBitmapChar(font, ch);
 	}
@@ -2300,7 +2346,7 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 		}
 	} else {
 		if (tile->ground) {
-			if (options.show_preview && zoom <= 2.0) {
+			if (options.show_preview && zoom <= 3.0) {
 				tile->ground->animate();
 			}
 
@@ -2335,7 +2381,7 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 				}
 
 				// item animation
-				if (options.show_preview && zoom <= 2.0) {
+				if (options.show_preview && zoom <= 3.0) {
 					(*it)->animate();
 				}
 
