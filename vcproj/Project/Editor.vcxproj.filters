@@ -1002,6 +1002,24 @@
     <ClCompile Include="$(AppearancesGeneratedDir)\appearances.pb.cc">
       <Filter>protobuf</Filter>
     </ClCompile>
+    <ClInclude Include="..\..\source\unreachable_cleaner.h">
+      <Filter>editor</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\source\unreachable_cleaner.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\source\map_backup.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\source\map_backup.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\source\remove_unreachable_dialog.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\source\remove_unreachable_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="multiplayer">

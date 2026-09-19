@@ -540,4 +540,19 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/zones_tests"
 	)
 	add_test(NAME zones_tests COMMAND zones_tests)
+
+	add_executable(unreachable_cleaner_tests
+		tests/unreachable_cleaner_tests.cpp
+	)
+	target_include_directories(unreachable_cleaner_tests PRIVATE source)
+	if(MSVC)
+		target_compile_options(unreachable_cleaner_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(unreachable_cleaner_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/unreachable_cleaner_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/unreachable_cleaner_tests"
+	)
+	add_test(NAME unreachable_cleaner_tests COMMAND unreachable_cleaner_tests)
 endif()

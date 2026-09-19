@@ -81,6 +81,7 @@ ${CMAKE_CURRENT_LIST_DIR}/main.h
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.h
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.h
 ${CMAKE_CURRENT_LIST_DIR}/map.h
+${CMAKE_CURRENT_LIST_DIR}/map_backup.h
 ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics.h
 ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_scanner.h
 ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.h
@@ -127,6 +128,7 @@ ${CMAKE_CURRENT_LIST_DIR}/preferences.h
 ${CMAKE_CURRENT_LIST_DIR}/process_com.h
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
+${CMAKE_CURRENT_LIST_DIR}/remove_unreachable_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.h
@@ -167,6 +169,7 @@ ${CMAKE_CURRENT_LIST_DIR}/town.h
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
+${CMAKE_CURRENT_LIST_DIR}/unreachable_cleaner.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/workspace_session.h
 ${CMAKE_CURRENT_LIST_DIR}/version_info.h
@@ -228,6 +231,7 @@ ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_backup.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/post_process_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
@@ -297,6 +301,7 @@ ${CMAKE_CURRENT_LIST_DIR}/preferences.cpp
 ${CMAKE_CURRENT_LIST_DIR}/process_com.cpp
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/remove_unreachable_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.cpp
@@ -338,6 +343,7 @@ ${CMAKE_CURRENT_LIST_DIR}/town.cpp
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp
+${CMAKE_CURRENT_LIST_DIR}/unreachable_cleaner.cpp
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/workspace_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zones.cpp

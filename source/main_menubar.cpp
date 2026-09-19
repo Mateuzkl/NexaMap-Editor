@@ -40,6 +40,7 @@
 #include "settings.h"
 #include "spawn_export_window.h"
 #include "spawn_converter_window.h"
+#include "remove_unreachable_dialog.h"
 
 #include "gui.h"
 #include "hotkey_manager.h"
@@ -1994,80 +1995,13 @@ void MainMenuBar::OnMapRemoveCorpses(wxCommandEvent& WXUNUSED(event)) {
 	}
 }
 
-namespace OnMapRemoveUnreachable {
-	struct condition {
-		condition() { }
-
-		bool isReachable(Tile* tile) {
-			if (tile == nullptr) {
-				return false;
-			}
-			if (!tile->isBlocking()) {
-				return true;
-			}
-			return false;
-		}
-
-		bool operator()(Map& map, Tile* tile, long long removed, long long done, long long total) {
-			if (done % 0x1000 == 0) {
-				g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(100 * done / total)));
-			}
-
-			Position pos = tile->getPosition();
-			int sx = std::max(pos.x - 10, 0);
-			int ex = std::min(pos.x + 10, 65535);
-			int sy = std::max(pos.y - 8, 0);
-			int ey = std::min(pos.y + 8, 65535);
-			int sz, ez;
-
-			if (pos.z <= GROUND_LAYER) {
-				sz = 0;
-				ez = 9;
-			} else {
-				// underground
-				sz = std::max(pos.z - 2, GROUND_LAYER);
-				ez = std::min(pos.z + 2, MAP_MAX_LAYER);
-			}
-
-			for (int z = sz; z <= ez; ++z) {
-				for (int y = sy; y <= ey; ++y) {
-					for (int x = sx; x <= ex; ++x) {
-						if (isReachable(map.getTile(x, y, z))) {
-							return false;
-						}
-					}
-				}
-			}
-			return true;
-		}
-	};
-}
-
 void MainMenuBar::OnMapRemoveUnreachable(wxCommandEvent& WXUNUSED(event)) {
 	if (!g_gui.IsEditorOpen()) {
 		return;
 	}
 
-	int ok = g_gui.PopupDialog("Remove Unreachable Tiles", "Do you want to remove all unreachable items from the map?", wxYES | wxNO);
-
-	if (ok == wxID_YES) {
-		g_gui.GetCurrentEditor()->selection.clear();
-		g_gui.GetCurrentEditor()->actionQueue->clear();
-
-		OnMapRemoveUnreachable::condition func;
-		g_gui.CreateLoadBar("Searching map for tiles to remove...");
-
-		long long removed = remove_if_TileOnMap(g_gui.GetCurrentMap(), func);
-
-		g_gui.DestroyLoadBar();
-
-		wxString msg;
-		msg << removed << " tiles deleted.";
-
-		g_gui.PopupDialog("Search completed", msg, wxOK);
-
-		g_gui.GetCurrentMap().doChange();
-	}
+	RemoveUnreachableDialog dialog(g_gui.root);
+	dialog.ShowModal();
 }
 
 void MainMenuBar::OnMapRemoveEmptySpawns(wxCommandEvent& WXUNUSED(event)) {
