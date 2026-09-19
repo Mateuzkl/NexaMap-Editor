@@ -242,11 +242,11 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 		*itemType = &iType;
 	}
 
+	// When conversion is active (inspectSpecialAttributes == true), do not exclude
+	// ordinary classifications (ground, border, bottom) from special attribute inspection.
+	// Converted items carrying authoritative teleport destination, house door ID, or
+	// depot ID must instantiate their corresponding dynamic derived types (Teleport, Door, Depot).
 	const bool canHaveSpecialAttributes = inspectSpecialAttributes
-		&& !iType.isGroundTile()
-		&& iType.ground_equivalent == 0
-		&& !iType.isBorder
-		&& !iType.alwaysOnBottom
 		&& !iType.isTeleport()
 		&& !iType.isDoor()
 		&& !iType.isDepot();

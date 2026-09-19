@@ -1190,11 +1190,15 @@ void Editor::moveSelection(Position offset) {
 	action = actionQueue->createAction(batchAction); // Our action!
 	bool doborders = false;
 	TileSet tmp_storage;
+	std::set<Position> movedSpawnCenters;
 
 	// Update the tiles with the newd positions
 	for (auto it = selection.begin(); it != selection.end(); ++it) {
 		// First we get the old tile and it's position
 		Tile* tile = (*it);
+		if (tile->spawn && tile->spawn->isSelected()) {
+			movedSpawnCenters.insert(tile->getPosition());
+		}
 		// const Position pos = tile->getPosition();
 
 		// Create the duplicate source tile, which will replace the old one later
@@ -1328,6 +1332,14 @@ void Editor::moveSelection(Position offset) {
 		Tile* old_dest_tile = location->get();
 		Tile* new_dest_tile = nullptr;
 
+		Creature* transferredCreature = tile->creature;
+		if (transferredCreature && transferredCreature->hasSpawnSource()) {
+			const Position origSource = transferredCreature->getSpawnSource();
+			if (movedSpawnCenters.contains(origSource)) {
+				transferredCreature->setSpawnSource(origSource - offset);
+			}
+		}
+
 		if (g_settings.getInteger(Config::MERGE_MOVE) || !tile->ground) {
 			// Move items
 			if (old_dest_tile) {
@@ -1341,14 +1353,6 @@ void Editor::moveSelection(Position offset) {
 			// Replace tile instead of just merge
 			tile->setLocation(location);
 			new_dest_tile = tile;
-		}
-
-		// Remap creature spawn_source to the translated position.
-		// moveSelection uses (old_pos - offset) for tile translation,
-		// so apply the same delta to the creature's spawn reference.
-		if (new_dest_tile->creature && new_dest_tile->creature->hasSpawnSource()) {
-			Position translatedSource = new_dest_tile->creature->getSpawnSource() - offset;
-			new_dest_tile->creature->setSpawnSource(translatedSource);
 		}
 
 		action->addChange(newd Change(new_dest_tile));

@@ -8,6 +8,66 @@
 #include <thread>
 #include <nlohmann/json.hpp>
 
+#include "gui.h"
+
+// Stubs for GUI and CreatureDatabase methods needed by creature_cache in test build
+wxString GUI::GetLocalDataDirectory() {
+	return wxString::FromUTF8(std::filesystem::temp_directory_path().u8string());
+}
+
+CreatureDatabase g_creatures;
+
+CreatureType::CreatureType() :
+	isNpc(false),
+	missing(false),
+	in_other_tileset(false),
+	standard(false),
+	name(""),
+	brush(nullptr) {}
+
+CreatureType::CreatureType(const CreatureType& ct) = default;
+
+CreatureDatabase::CreatureDatabase() = default;
+CreatureDatabase::~CreatureDatabase() {
+	for (auto& pair : creature_map) {
+		delete pair.second;
+	}
+}
+
+CreatureType* CreatureDatabase::operator[](const std::string& name) {
+	auto it = creature_map.find(as_lower_str(name));
+	return it != creature_map.end() ? it->second : nullptr;
+}
+
+CreatureType* CreatureDatabase::addCreatureType(const std::string& name, bool isNpc, const Outfit& outfit) {
+	auto it = creature_map.find(as_lower_str(name));
+	if (it != creature_map.end()) {
+		delete it->second;
+	}
+	auto* ct = new CreatureType();
+	ct->name = name;
+	ct->isNpc = isNpc;
+	ct->outfit = outfit;
+	creature_map[as_lower_str(name)] = ct;
+	return ct;
+}
+
+void CreatureDatabase::applyWorkspaceCreature(CreatureType* creatureType, bool standard) {
+	if (!creatureType) {
+		return;
+	}
+	auto iter = creature_map.find(as_lower_str(creatureType->name));
+	if (iter == creature_map.end()) {
+		creatureType->standard = standard;
+		creature_map[as_lower_str(creatureType->name)] = creatureType;
+		return;
+	}
+	CreatureType* current = iter->second;
+	*current = *creatureType;
+	current->standard = standard;
+	delete creatureType;
+}
+
 namespace {
 	int failures = 0;
 	int checks = 0;
@@ -296,6 +356,47 @@ int main() {
 			  "Run B: Cache hit inserts server Behemoth");
 		check(db2["Amazon"]->standard == true && db2["Behemoth"]->standard == true,
 			  "Run B: Standard flags match");
+	}
+
+	// Test 11: Malformed JSON manifest robustness (Issue 1)
+	{
+		TemporaryDirectory temp;
+		const auto cacheDir = temp.path / "cache";
+		const auto luaDir = temp.path / "monsters";
+		temp.write("monsters/orc.lua", "orc");
+
+		// Case A: string schemaVersion
+		{
+			std::filesystem::create_directories(cacheDir);
+			std::ofstream xml(cacheDir / "monsters.xml");
+			xml << "<creatures><creature name=\"Orc\"/></creatures>";
+			std::ofstream manifest(cacheDir / "manifest_monsters.json");
+			manifest << "{\"schemaVersion\": \"invalid_string\", \"files\": []}";
+			manifest.close();
+
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
+				  "ValidateManifest returns false on string schemaVersion without throwing");
+		}
+
+		// Case B: files is not an array
+		{
+			std::ofstream manifest(cacheDir / "manifest_monsters.json");
+			manifest << "{\"schemaVersion\": 2, \"files\": \"not_an_array\"}";
+			manifest.close();
+
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
+				  "ValidateManifest returns false when files is not an array without throwing");
+		}
+
+		// Case C: root JSON is an array, not object
+		{
+			std::ofstream manifest(cacheDir / "manifest_monsters.json");
+			manifest << "[1, 2, 3]";
+			manifest.close();
+
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
+				  "ValidateManifest returns false when root JSON is an array without throwing");
+		}
 	}
 
 	std::cout << "Creature Cache Tests: " << checks << " checks, " << failures << " failures.\n";

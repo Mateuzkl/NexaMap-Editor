@@ -99,9 +99,22 @@ namespace {
 			}
 		};
 
-		if (CreatureCache::ValidateManifest(cacheDir, luaPath, kind)) {
+		bool cacheValid = false;
+		try {
+			cacheValid = CreatureCache::ValidateManifest(cacheDir, luaPath, kind);
+		} catch (...) {
+			cacheValid = false;
+		}
+
+		if (cacheValid) {
 			size_t loadedCount = 0;
-			if (CreatureCache::LoadCached(g_creatures, cacheDir, luaPath, kind, &loadedCount, progress)) {
+			bool cacheLoaded = false;
+			try {
+				cacheLoaded = CreatureCache::LoadCached(g_creatures, cacheDir, luaPath, kind, &loadedCount, progress);
+			} catch (...) {
+				cacheLoaded = false;
+			}
+			if (cacheLoaded) {
 				return; // Cache hit.
 			}
 			// Cache load failed — fall through to full import.

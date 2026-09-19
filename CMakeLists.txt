@@ -485,7 +485,6 @@ if(BUILD_TESTING)
 	add_executable(spawn_persistence_tests
 		tests/spawn_persistence_tests.cpp
 		source/spawn_format.cpp
-		source/spawn_source_remap.cpp
 	)
 	target_include_directories(spawn_persistence_tests PRIVATE source)
 	set_target_properties(spawn_persistence_tests PROPERTIES

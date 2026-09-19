@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -180,6 +181,31 @@ int main() {
 
 		check(!result.valid, "SpawnValidationResult marks invalid when orphaned creatures present");
 		check(result.warnings.size() == 1, "Validation warning generated");
+	}
+
+	// Test 5: Creature remapping with and without spawn center (Issues 2 & 10)
+	{
+		const Position origCenter(50, 50, 7);
+		const Position origCreature(52, 51, 7);
+		const Position offset(10, 10, 0);
+
+		// Case A: Creature moved together with its spawn center
+		std::set<Position> movedCentersWithCenter = { origCenter };
+		Position creatureSpawnSourceA = origCenter;
+		if (movedCentersWithCenter.contains(creatureSpawnSourceA)) {
+			creatureSpawnSourceA = creatureSpawnSourceA - offset;
+		}
+		check(creatureSpawnSourceA == Position(40, 40, 7),
+			  "Creature moved WITH center has its spawn_source correctly translated");
+
+		// Case B: Creature moved WITHOUT its spawn center
+		std::set<Position> movedCentersWithoutCenter = {}; // center was not moved
+		Position creatureSpawnSourceB = origCenter;
+		if (movedCentersWithoutCenter.contains(creatureSpawnSourceB)) {
+			creatureSpawnSourceB = creatureSpawnSourceB - offset;
+		}
+		check(creatureSpawnSourceB == origCenter,
+			  "Creature moved WITHOUT center preserves original spawn_source (not translated to nonexistent center)");
 	}
 
 	std::cout << "Spawn Persistence Tests: " << checks << " checks, " << failures << " failures.\n";

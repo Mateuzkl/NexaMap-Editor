@@ -18,6 +18,7 @@ SpritePreloader::~SpritePreloader() {
 }
 
 void SpritePreloader::configure(const std::filesystem::path& file, const std::vector<uint32_t>& offsets, bool hasTransparency, size_t workerCount) {
+	stopWorkers();
 	clear();
 	if (file.empty() || offsets.empty() || workerCount == 0) {
 		return;
@@ -35,19 +36,9 @@ void SpritePreloader::configure(const std::filesystem::path& file, const std::ve
 		++generation;
 	}
 
-	if (workers.size() != workerCount) {
-		stopWorkers();
-		{
-			std::lock_guard lock(mutex);
-			configured = true;
-			stopping = false;
-		}
-		workers.reserve(workerCount);
-		for (size_t index = 0; index < workerCount; ++index) {
-			workers.emplace_back(&SpritePreloader::workerLoop, this);
-		}
-	} else {
-		condition.notify_all();
+	workers.reserve(workerCount);
+	for (size_t index = 0; index < workerCount; ++index) {
+		workers.emplace_back(&SpritePreloader::workerLoop, this);
 	}
 }
 
@@ -167,6 +158,7 @@ bool SpritePreloader::decode(std::ifstream& stream, uint32_t offset, bool hasTra
 
 void SpritePreloader::workerLoop() {
 	std::filesystem::path currentOpenPath;
+	uint64_t currentOpenGeneration = 0;
 	std::ifstream stream;
 
 	for (;;) {
@@ -185,7 +177,7 @@ void SpritePreloader::workerLoop() {
 			hasTransparency = transparency;
 		}
 
-		if (currentOpenPath != file) {
+		if (currentOpenPath != file || currentOpenGeneration != task.generation) {
 			if (stream.is_open()) {
 				stream.close();
 			}
@@ -194,13 +186,16 @@ void SpritePreloader::workerLoop() {
 				stream.open(file, std::ios::binary);
 			}
 			currentOpenPath = file;
+			currentOpenGeneration = task.generation;
 		}
 
 		std::vector<uint8_t> pixels;
 		const bool loaded = decode(stream, task.offset, hasTransparency, pixels);
 
 		std::lock_guard lock(mutex);
-		queuedSpriteIds.erase(task.spriteId);
+		if (task.generation == generation) {
+			queuedSpriteIds.erase(task.spriteId);
+		}
 		if (stopping || task.generation != generation) {
 			continue;
 		}

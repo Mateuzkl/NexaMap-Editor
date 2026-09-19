@@ -163,52 +163,63 @@ bool CreatureCache::ValidateManifest(
 	const std::filesystem::path& luaDir,
 	const std::string& kind
 ) {
-	const auto mPath = manifestPath(cacheDir, kind);
-	const auto xmlPath = cacheXmlPath(cacheDir, kind);
-
-	// Both manifest and cache XML must exist.
-	if (!std::filesystem::exists(mPath) || !std::filesystem::exists(xmlPath)) {
-		return false;
-	}
-
-	// Load stored manifest.
-	nlohmann::json storedManifest;
 	try {
+		const auto mPath = manifestPath(cacheDir, kind);
+		const auto xmlPath = cacheXmlPath(cacheDir, kind);
+
+		// Both manifest and cache XML must exist.
+		if (!std::filesystem::exists(mPath) || !std::filesystem::exists(xmlPath)) {
+			return false;
+		}
+
+		// Load stored manifest.
+		nlohmann::json storedManifest;
 		std::ifstream input(mPath);
 		if (!input.is_open()) {
 			return false;
 		}
 		input >> storedManifest;
+
+		if (!storedManifest.is_object()) {
+			std::clog << "[creature_cache] Malformed manifest (not a JSON object): " << pathToUtf8(mPath) << "\n";
+			return false;
+		}
+
+		// Check schema version - must be an unsigned integer matching SchemaVersion.
+		if (!storedManifest.contains("schemaVersion") ||
+			!storedManifest["schemaVersion"].is_number_unsigned() ||
+			storedManifest["schemaVersion"].get<uint32_t>() != SchemaVersion) {
+			std::clog << "[creature_cache] Schema version mismatch or invalid schemaVersion for " << kind << "\n";
+			return false;
+		}
+
+		// Build current manifest and compare.
+		const auto currentEntries = collectFileEntries(luaDir);
+		const auto currentManifest = manifestToJson(currentEntries, normalizePath(luaDir), kind);
+
+		// Compare the files arrays.
+		if (!storedManifest.contains("files") || !storedManifest["files"].is_array() ||
+			!currentManifest.contains("files") || !currentManifest["files"].is_array()) {
+			std::clog << "[creature_cache] Missing or malformed 'files' array in manifest for " << kind << "\n";
+			return false;
+		}
+		if (storedManifest["files"] != currentManifest["files"]) {
+			std::clog << "[creature_cache] Manifest mismatch for " << kind
+					  << " (file count: stored=" << storedManifest["files"].size()
+					  << " current=" << currentManifest["files"].size() << ")\n";
+			return false;
+		}
+
+		std::clog << "[creature_cache] Cache hit for " << kind
+				  << " (" << currentEntries.size() << " files unchanged)\n";
+		return true;
+	} catch (const std::exception& e) {
+		std::clog << "[creature_cache] Exception during manifest validation for " << kind << ": " << e.what() << "\n";
+		return false;
 	} catch (...) {
-		std::clog << "[creature_cache] Failed to parse manifest: " << pathToUtf8(mPath) << "\n";
+		std::clog << "[creature_cache] Unknown exception during manifest validation for " << kind << "\n";
 		return false;
 	}
-
-	// Check schema version.
-	if (!storedManifest.contains("schemaVersion") ||
-		storedManifest["schemaVersion"].get<uint32_t>() != SchemaVersion) {
-		std::clog << "[creature_cache] Schema version mismatch for " << kind << "\n";
-		return false;
-	}
-
-	// Build current manifest and compare.
-	const auto currentEntries = collectFileEntries(luaDir);
-	const auto currentManifest = manifestToJson(currentEntries, normalizePath(luaDir), kind);
-
-	// Compare the files arrays.
-	if (!storedManifest.contains("files") || !currentManifest.contains("files")) {
-		return false;
-	}
-	if (storedManifest["files"] != currentManifest["files"]) {
-		std::clog << "[creature_cache] Manifest mismatch for " << kind
-				  << " (file count: stored=" << storedManifest["files"].size()
-				  << " current=" << currentManifest["files"].size() << ")\n";
-		return false;
-	}
-
-	std::clog << "[creature_cache] Cache hit for " << kind
-			  << " (" << currentEntries.size() << " files unchanged)\n";
-	return true;
 }
 
 bool CreatureCache::SafeReplaceFile(
