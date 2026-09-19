@@ -34,6 +34,7 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 	GL_settings[1] = WX_GL_DOUBLEBUFFER;
 	GL_settings[2] = 0;
 	canvas = newd MapCanvas(this, editor, GL_settings, ingamePreview);
+	canvas->Bind(wxEVT_SIZE, &MapWindow::OnCanvasSize, this);
 
 	vScroll = newd MapScrollBar(this, MAP_WINDOW_VSCROLL, wxVERTICAL, canvas);
 	hScroll = newd MapScrollBar(this, MAP_WINDOW_HSCROLL, wxHORIZONTAL, canvas);
@@ -66,7 +67,14 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 }
 
 MapWindow::~MapWindow() {
-	////
+	if (canvas) {
+		canvas->Unbind(wxEVT_SIZE, &MapWindow::OnCanvasSize, this);
+	}
+}
+
+void MapWindow::OnCanvasSize(wxSizeEvent& event) {
+	UpdateScrollbars();
+	event.Skip();
 }
 
 void MapWindow::ShowReplaceItemsDialog(bool selectionOnly) {
@@ -108,25 +116,61 @@ void MapWindow::OnAdvancedReplaceWindowClose(wxCloseEvent&) {
 	advancedReplaceWindow = nullptr;
 }
 
+ViewportMetrics MapWindow::GetViewportMetrics() const {
+	if (!canvas) {
+		return ViewportMetrics();
+	}
+	int canvasW = 0;
+	int canvasH = 0;
+	canvas->GetSize(&canvasW, &canvasH);
+	return ViewportMetrics::Compute(
+		editor.map.getWidth(),
+		editor.map.getHeight(),
+		TileSize,
+		canvasW,
+		canvasH,
+		canvas->GetContentScaleFactor(),
+		canvas->GetZoom()
+	);
+}
+
 void MapWindow::SetSize(int x, int y, bool center) {
-	if (x == 0 || y == 0) {
+	if (x <= 0 || y <= 0 || !hScroll || !vScroll) {
 		return;
 	}
 
-	int windowSizeX;
-	int windowSizeY;
+	Layout();
+	const ViewportMetrics metrics = GetViewportMetrics();
+	const int posX = center ? (metrics.maxScrollX / 2) : std::clamp(hScroll->GetThumbPosition(), 0, metrics.maxScrollX);
+	const int posY = center ? (metrics.maxScrollY / 2) : std::clamp(vScroll->GetThumbPosition(), 0, metrics.maxScrollY);
 
-	canvas->GetSize(&windowSizeX, &windowSizeY);
+	hScroll->SetScrollbar(posX, metrics.thumbX, metrics.mapWidthPixels, metrics.pageX, true);
+	vScroll->SetScrollbar(posY, metrics.thumbY, metrics.mapHeightPixels, metrics.pageY, true);
 
-	hScroll->SetScrollbar(center ? (x - windowSizeX) / 2 : hScroll->GetThumbPosition(), windowSizeX / x, x, windowSizeX / x);
-	vScroll->SetScrollbar(center ? (y - windowSizeY) / 2 : vScroll->GetThumbPosition(), windowSizeY / y, y, windowSizeY / y);
-	// wxPanel::SetSize(x, y);
+	if (center && !ingamePreview) {
+		g_gui.UpdateMinimap();
+	}
+}
+
+void MapWindow::UpdateScrollbars() {
+	if (!hScroll || !vScroll) {
+		return;
+	}
+
+	const ViewportMetrics metrics = GetViewportMetrics();
+	if (metrics.mapWidthPixels <= 0 || metrics.mapHeightPixels <= 0) {
+		return;
+	}
+
+	const int posX = std::clamp(hScroll->GetThumbPosition(), 0, metrics.maxScrollX);
+	const int posY = std::clamp(vScroll->GetThumbPosition(), 0, metrics.maxScrollY);
+
+	hScroll->SetScrollbar(posX, metrics.thumbX, metrics.mapWidthPixels, metrics.pageX, true);
+	vScroll->SetScrollbar(posY, metrics.thumbY, metrics.mapHeightPixels, metrics.pageY, true);
 }
 
 void MapWindow::UpdateScrollbars(int nx, int ny) {
-	// nx and ny are size of this window
-	hScroll->SetScrollbar(hScroll->GetThumbPosition(), nx / max(1, hScroll->GetRange()), max(1, hScroll->GetRange()), 96);
-	vScroll->SetScrollbar(vScroll->GetThumbPosition(), ny / max(1, vScroll->GetRange()), max(1, vScroll->GetRange()), 96);
+	UpdateScrollbars();
 }
 
 void MapWindow::UpdateDialogs(bool show) {
@@ -212,15 +256,14 @@ void MapWindow::GoToPreviousCenterPosition() {
 }
 
 void MapWindow::Scroll(int x, int y, bool center) {
+	const ViewportMetrics metrics = GetViewportMetrics();
 	if (center) {
-		int windowSizeX, windowSizeY;
-
-		canvas->GetSize(&windowSizeX, &windowSizeY);
-		const double scale = ingamePreview ? canvas->GetContentScaleFactor() : 1.0;
-		const double viewZoom = ingamePreview ? canvas->GetZoom() : g_gui.GetCurrentZoom();
-		x -= int((windowSizeX * scale * viewZoom) / 2.0);
-		y -= int((windowSizeY * scale * viewZoom) / 2.0);
+		x -= metrics.viewportWidthPixels / 2;
+		y -= metrics.viewportHeightPixels / 2;
 	}
+
+	x = std::clamp(x, 0, metrics.maxScrollX);
+	y = std::clamp(y, 0, metrics.maxScrollY);
 
 	hScroll->SetThumbPosition(x);
 	vScroll->SetThumbPosition(y);
@@ -230,8 +273,12 @@ void MapWindow::Scroll(int x, int y, bool center) {
 }
 
 void MapWindow::ScrollRelative(int x, int y) {
-	hScroll->SetThumbPosition(hScroll->GetThumbPosition() + x);
-	vScroll->SetThumbPosition(vScroll->GetThumbPosition() + y);
+	const ViewportMetrics metrics = GetViewportMetrics();
+	const int newX = std::clamp(hScroll->GetThumbPosition() + x, 0, metrics.maxScrollX);
+	const int newY = std::clamp(vScroll->GetThumbPosition() + y, 0, metrics.maxScrollY);
+
+	hScroll->SetThumbPosition(newX);
+	vScroll->SetThumbPosition(newY);
 	if (!ingamePreview) {
 		g_gui.UpdateMinimap();
 	}
@@ -242,11 +289,15 @@ void MapWindow::OnGem(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MapWindow::OnSize(wxSizeEvent& event) {
-	UpdateScrollbars(event.GetSize().GetWidth(), event.GetSize().GetHeight());
+	Layout();
+	UpdateScrollbars();
 	event.Skip();
 }
 
 void MapWindow::OnScroll(wxScrollEvent& event) {
+	if (!ingamePreview) {
+		g_gui.UpdateMinimap();
+	}
 	Refresh();
 }
 

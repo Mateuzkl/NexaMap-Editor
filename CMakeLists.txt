@@ -171,6 +171,11 @@ if(BUILD_TESTING)
 	target_compile_features(map_chunk_revision_tests PRIVATE cxx_std_20)
 	add_test(NAME map_chunk_revision_tests COMMAND map_chunk_revision_tests)
 
+	add_executable(viewport_metrics_tests tests/viewport_metrics_tests.cpp)
+	target_include_directories(viewport_metrics_tests PRIVATE source)
+	target_compile_features(viewport_metrics_tests PRIVATE cxx_std_20)
+	add_test(NAME viewport_metrics_tests COMMAND viewport_metrics_tests)
+
 	add_executable(favorites_manager_tests tests/favorites_manager_tests.cpp source/favorites_manager.cpp)
 	target_include_directories(favorites_manager_tests PRIVATE source)
 	target_link_libraries(favorites_manager_tests PRIVATE nlohmann_json::nlohmann_json)
@@ -462,6 +467,36 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/spawn_format_tests"
 	)
 	add_test(NAME spawn_format_tests COMMAND spawn_format_tests)
+
+	add_executable(creature_cache_tests
+		tests/creature_cache_tests.cpp
+		source/creature_cache.cpp
+		source/ext/pugixml.cpp
+	)
+	target_include_directories(creature_cache_tests PRIVATE source)
+	target_link_libraries(creature_cache_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
+	set_target_properties(creature_cache_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/creature_cache_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/creature_cache_tests"
+	)
+	add_test(NAME creature_cache_tests COMMAND creature_cache_tests)
+
+	add_executable(spawn_persistence_tests
+		tests/spawn_persistence_tests.cpp
+		source/spawn_format.cpp
+		source/spawn_source_remap_core.cpp
+	)
+	target_include_directories(spawn_persistence_tests PRIVATE source)
+	target_link_libraries(spawn_persistence_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
+	set_target_properties(spawn_persistence_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/spawn_persistence_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/spawn_persistence_tests"
+	)
+	add_test(NAME spawn_persistence_tests COMMAND spawn_persistence_tests)
 
 	add_executable(spawn_xml_converter_tests
 		tests/spawn_xml_converter_tests.cpp

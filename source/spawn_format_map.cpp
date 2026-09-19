@@ -256,3 +256,65 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 	}
 	return document;
 }
+
+SpawnValidationResult SpawnMapAdapter::Validate(Map& map) {
+	SpawnValidationResult result;
+	std::unordered_set<Creature*> allCreatures;
+
+	for (const Position& center : map.spawns) {
+		Tile* centerTile = map.getTile(center);
+		if (!centerTile || !centerTile->spawn) {
+			++result.staleRegistryEntries;
+			result.valid = false;
+			result.warnings.push_back("Spawn registry contains center (" + std::to_string(center.x) + "," + std::to_string(center.y) + "," + std::to_string(center.z) + ") but tile has no Spawn.");
+		}
+	}
+
+	for (MapIterator it = map.begin(); it != map.end(); ++it) {
+		Tile* tile = (*it)->get();
+		if (!tile) {
+			continue;
+		}
+
+		if (tile->spawn) {
+			if (std::find(map.spawns.begin(), map.spawns.end(), tile->getPosition()) == map.spawns.end()) {
+				++result.unregisteredSpawns;
+				result.valid = false;
+				result.warnings.push_back("Tile at (" + std::to_string(tile->getX()) + "," + std::to_string(tile->getY()) + "," + std::to_string(tile->getZ()) + ") has a Spawn but is not in map spawn registry.");
+			}
+		}
+
+		if (tile->creature) {
+			allCreatures.insert(tile->creature);
+			Creature* creature = tile->creature;
+			if (creature->hasSpawnSource()) {
+				const Position source = creature->getSpawnSource();
+				Tile* sourceTile = map.getTile(source);
+				if (!sourceTile || !sourceTile->spawn) {
+					++result.orphanedCreatures;
+					result.valid = false;
+					result.warnings.push_back("Creature '" + creature->getName() + "' at (" + std::to_string(tile->getX()) + "," + std::to_string(tile->getY()) + "," + std::to_string(tile->getZ()) + ") references missing spawn center (" + std::to_string(source.x) + "," + std::to_string(source.y) + "," + std::to_string(source.z) + ").");
+				} else {
+					const int radius = std::max(1, sourceTile->spawn->getSize());
+					const int dx = std::abs(tile->getX() - source.x);
+					const int dy = std::abs(tile->getY() - source.y);
+					if (dx > radius || dy > radius || tile->getZ() != source.z) {
+						++result.outOfRadiusCreatures;
+						result.valid = false;
+						result.warnings.push_back("Creature '" + creature->getName() + "' at (" + std::to_string(tile->getX()) + "," + std::to_string(tile->getY()) + "," + std::to_string(tile->getZ()) + ") is outside spawn radius of center (" + std::to_string(source.x) + "," + std::to_string(source.y) + "," + std::to_string(source.z) + ").");
+					}
+				}
+			}
+		}
+	}
+
+	SpawnDocument capturedDoc = Capture(map);
+	size_t totalCaptured = capturedDoc.entryCount();
+	if (totalCaptured < allCreatures.size()) {
+		result.uncapturableCreatures = static_cast<int>(allCreatures.size() - totalCaptured);
+		result.valid = false;
+		result.warnings.push_back("Spawn validation: " + std::to_string(result.uncapturableCreatures) + " creature(s) cannot be serialized because their spawn source is invalid.");
+	}
+
+	return result;
+}

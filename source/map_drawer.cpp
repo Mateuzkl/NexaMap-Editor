@@ -18,6 +18,7 @@
 #include "main.h"
 #include "multiplayer_session.h"
 #include "profiling.h"
+#include "profiling_perf.h"
 
 #include "bitmap_font.h"
 #include "map_overlay_text.h"
@@ -186,6 +187,7 @@ void DrawingOptions::SetDefault() {
 	show_grid = 0;
 	show_all_floors = true;
 	show_creatures = true;
+	show_creature_names = true;
 	show_spawns = true;
 	show_houses = true;
 	show_shade = true;
@@ -223,6 +225,7 @@ void DrawingOptions::SetIngame() {
 	show_grid = 0;
 	show_all_floors = true;
 	show_creatures = true;
+	show_creature_names = false;
 	show_spawns = false;
 	show_houses = false;
 	show_shade = false;
@@ -587,6 +590,11 @@ void MapDrawer::Draw() {
 	}
 
 	if (isSceneDirty()) {
+		const bool isFirstRender = !cached_scene_initialized;
+		std::unique_ptr<NexaPerfScope> firstFramePerf;
+		if (isFirstRender) {
+			firstFramePerf = std::make_unique<NexaPerfScope>("First frame OpenGL DrawScene (cold start)");
+		}
 		renderer->beginFBO();
 		DrawScene();
 		renderer->flush();
@@ -651,6 +659,7 @@ inline int getFloorAdjustment(int floor) {
 }
 
 void MapDrawer::DrawMap() {
+	creature_name_overlays.clear();
 	const bool gpuRequested = g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE);
 	const bool cpuRequested = g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) || gpuRequested;
 	cpu_geometry_enabled = cpuRequested && !far_zoom_mode && !options.isOnlyColors();
@@ -919,6 +928,15 @@ void MapDrawer::DrawMap() {
 							}
 							if (tile->creature && options.show_creatures) {
 								BlitCreature(draw_x, draw_y, tile->creature);
+								if (options.show_creature_names && zoom <= 3.0) {
+									int heightOffset = 0;
+									if (GameSprite* spr = g_gui.gfx.getCreatureSprite(tile->creature->getLookType().lookType)) {
+										if (spr->height > 1) {
+											heightOffset = (spr->height - 1) * TileSize;
+										}
+									}
+									creature_name_overlays.push_back({ draw_x, draw_y, tile->creature->getName(), tile->creature->isNpc(), heightOffset });
+								}
 							}
 						}
 					}
@@ -931,6 +949,11 @@ void MapDrawer::DrawMap() {
 		++end_x;
 		++end_y;
 	}
+
+	if (options.show_creatures && options.show_creature_names && zoom <= 3.0) {
+		DrawCreatureNames();
+	}
+	creature_name_overlays.clear();
 }
 
 void MapDrawer::DrawMapMinimapPages() {
@@ -1756,18 +1779,25 @@ void MapDrawer::BlitSpriteType(int screenx, int screeny, GameSprite* spr, int re
 	}
 }
 
-void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red, int green, int blue, int alpha, int animationFrame) {
+void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red, int green, int blue, int alpha, int animationFrame, FrameGroupType group) {
 	if (outfit.lookItem != 0) {
 		ItemType& it = g_items[outfit.lookItem];
 		BlitSpriteType(screenx, screeny, it.sprite, red, green, blue, alpha);
 	} else {
 		// get outfit sprite
-		GameSprite* spr = g_gui.gfx.getCreatureSprite(outfit.lookType);
+		GameSprite* spr = g_gui.gfx.getCreatureSprite(outfit.lookType, group);
 		if (!spr || outfit.lookType == 0) {
 			return;
 		}
 
-		const int frame = spr->frames == 0 ? 0 : animationFrame % spr->frames;
+		int frame = spr->frames == 0 ? 0 : animationFrame % spr->frames;
+		if (animationFrame == 0 && (options.show_preview || canvas->IsIngamePreview())) {
+			if (spr->animator) {
+				frame = spr->animator->getFrame();
+			} else if (spr->frames > 1) {
+				frame = static_cast<int>((g_gui.gfx.getElapsedTime() / 200) % spr->frames);
+			}
+		}
 		std::vector<PreparedSpritePart> parts;
 		bool complete = true;
 
@@ -1775,7 +1805,7 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 		// mount colors by Zbizu
 		int pattern_z = 0;
 		if (outfit.lookMount != 0) {
-			if (GameSprite* mountSpr = g_gui.gfx.getCreatureSprite(outfit.lookMount)) {
+			if (GameSprite* mountSpr = g_gui.gfx.getCreatureSprite(outfit.lookMount, group)) {
 				// generate mount colors
 				Outfit mountOutfit;
 				mountOutfit.lookType = outfit.lookMount;
@@ -1791,7 +1821,14 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 							   mountSpr->height,
 							   1,
 							   [&](int cx, int cy, int) {
-								   const int mountFrame = mountSpr->frames == 0 ? 0 : animationFrame % mountSpr->frames;
+								   int mountFrame = mountSpr->frames == 0 ? 0 : animationFrame % mountSpr->frames;
+								   if (animationFrame == 0 && (options.show_preview || canvas->IsIngamePreview())) {
+									   if (mountSpr->animator) {
+										   mountFrame = mountSpr->animator->getFrame();
+									   } else if (mountSpr->frames > 1) {
+										   mountFrame = static_cast<int>((g_gui.gfx.getElapsedTime() / 200) % mountSpr->frames);
+									   }
+								   }
 								   return mountSpr->getSpriteTex(cx, cy, static_cast<int>(dir), 0, 0, mountOutfit, mountFrame);
 							   },
 							   parts
@@ -1845,7 +1882,8 @@ void MapDrawer::DrawIngamePreviewPlayer() {
 	const int drawY = position.y * TileSize - view_scroll_y - floorOffset + canvas->ingamePreviewWalkOffsetY;
 
 	drawRect(drawX + 2, drawY + 2, TileSize - 4, TileSize - 4, wxColour(70, 210, 255, 190), 1);
-	BlitCreature(drawX, drawY, canvas->ingamePreviewPlayerOutfit, canvas->ingamePreviewPlayerDirection, 255, 255, 255, 255, canvas->ingamePreviewAnimationFrame);
+	const FrameGroupType previewGroup = (canvas->ingamePreviewWalkOffsetX != 0 || canvas->ingamePreviewWalkOffsetY != 0) ? FRAME_GROUP_MOVING : FRAME_GROUP_IDLE;
+	BlitCreature(drawX, drawY, canvas->ingamePreviewPlayerOutfit, canvas->ingamePreviewPlayerDirection, 255, 255, 255, 255, canvas->ingamePreviewAnimationFrame, previewGroup);
 
 	const int centerX = drawX + TileSize / 2;
 	const int centerY = drawY + TileSize / 2;
@@ -1873,13 +1911,124 @@ void MapDrawer::DrawIngamePreviewPlayer() {
 	renderer->drawLines(directionLine, 1, 70, 210, 255, 230, 2.0f);
 }
 
-void MapDrawer::BlitCreature(int screenx, int screeny, const Creature* c, int red, int green, int blue, int alpha) {
+void MapDrawer::BlitCreature(int screenx, int screeny, const Creature* c, int red, int green, int blue, int alpha, FrameGroupType group) {
 	if (!options.ingame && c->isSelected()) {
 		red /= 2;
 		green /= 2;
 		blue /= 2;
 	}
-	BlitCreature(screenx, screeny, c->getLookType(), c->getDirection(), red, green, blue, alpha);
+	BlitCreature(screenx, screeny, c->getLookType(), c->getDirection(), red, green, blue, alpha, 0, group);
+}
+
+void MapDrawer::DrawCreatureNames() {
+	if (creature_name_overlays.empty()) {
+		return;
+	}
+
+	// Switch to screen-space projection so that UI widgets and bitmap fonts
+	// scale and align with 1:1 pixel precision regardless of zoom level.
+	renderer->flush();
+	renderer->setOrtho(0.0f, static_cast<float>(screensize_x), static_cast<float>(screensize_y), 0.0f);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0, screensize_x, screensize_y, 0, -1, 1);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+
+	for (const auto& overlay : creature_name_overlays) {
+		DrawCreatureName(overlay.screenx, overlay.screeny, overlay.name, overlay.isNpc, overlay.heightOffset);
+	}
+
+	renderer->flushAndUnbind();
+
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
+
+	renderer->setOrtho(0.0f, screensize_x * zoom, screensize_y * zoom, 0.0f);
+}
+
+void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& name, bool isNpc, int heightOffset) {
+	if (name.empty()) {
+		return;
+	}
+
+	const BitmapFont& font = rme_bitmap_helvetica_12;
+	int textWidth = 0;
+	for (unsigned char ch : name) {
+		textWidth += bitmapCharWidth(font, ch);
+	}
+
+	if (textWidth <= 0) {
+		return;
+	}
+
+	const int paddingX = 4;
+	const int paddingY = 2;
+	const int boxWidth = textWidth + paddingX * 2;
+	const int boxHeight = font.height + paddingY * 2;
+
+	// Calculate center anchor above the creature head in screen pixels:
+	const float anchorX = (screenx + TileSize / 2.0f) / zoom;
+	const float anchorY = (screeny - heightOffset) / zoom;
+
+	const float boxX = std::round(anchorX - boxWidth / 2.0f);
+	const float boxY = std::round(anchorY - boxHeight - 2.0f);
+
+	// Don't draw if completely off-screen
+	if (boxX + boxWidth < 0 || boxX > screensize_x || boxY + boxHeight < 0 || boxY > screensize_y) {
+		return;
+	}
+
+	// Background box: dark translucent
+	renderer->drawColoredQuad(
+		boxX,
+		boxY,
+		static_cast<float>(boxWidth),
+		static_cast<float>(boxHeight),
+		{ 10, 10, 10, 190 }
+	);
+
+	// Subtle border: greenish for NPCs, dark gray for Monsters
+	if (isNpc) {
+		renderer->drawRect(
+			boxX,
+			boxY,
+			static_cast<float>(boxWidth),
+			static_cast<float>(boxHeight),
+			{ 60, 200, 100, 220 },
+			1.0f
+		);
+	} else {
+		renderer->drawRect(
+			boxX,
+			boxY,
+			static_cast<float>(boxWidth),
+			static_cast<float>(boxHeight),
+			{ 70, 70, 70, 200 },
+			1.0f
+		);
+	}
+
+	// Flush renderer batch before using raw OpenGL raster pos
+	renderer->flushAndUnbind();
+
+	// Text color: light green for NPCs, white for monsters
+	if (isNpc) {
+		glColor3f(0.5f, 1.0f, 0.6f);
+	} else {
+		glColor3f(1.0f, 1.0f, 1.0f);
+	}
+
+	glRasterPos2i(static_cast<int>(boxX + paddingX), static_cast<int>(boxY + boxHeight - paddingY - 2));
+	for (unsigned char ch : name) {
+		drawBitmapChar(font, ch);
+	}
 }
 
 void MapDrawer::BlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size) {
@@ -2197,7 +2346,7 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 		}
 	} else {
 		if (tile->ground) {
-			if (options.show_preview && zoom <= 2.0) {
+			if (options.show_preview && zoom <= 3.0) {
 				tile->ground->animate();
 			}
 
@@ -2232,7 +2381,7 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 				}
 
 				// item animation
-				if (options.show_preview && zoom <= 2.0) {
+				if (options.show_preview && zoom <= 3.0) {
 					(*it)->animate();
 				}
 
@@ -2256,6 +2405,15 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 			// monster/npc on tile
 			if (!medium_zoom_mode && tile->creature && options.show_creatures) {
 				BlitCreature(draw_x, draw_y, tile->creature);
+				if (options.show_creature_names && zoom <= 3.0) {
+					int heightOffset = 0;
+					if (GameSprite* spr = g_gui.gfx.getCreatureSprite(tile->creature->getLookType().lookType)) {
+						if (spr->height > 1) {
+							heightOffset = (spr->height - 1) * TileSize;
+						}
+					}
+					creature_name_overlays.push_back({ draw_x, draw_y, tile->creature->getName(), tile->creature->isNpc(), heightOffset });
+				}
 			}
 			if (canvas->IsIngamePreview() && tile->getPosition() == canvas->GetIngamePreviewDrawTile()) {
 				DrawIngamePreviewPlayer();

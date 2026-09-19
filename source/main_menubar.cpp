@@ -187,6 +187,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SHOW_WAYPOINTS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_GRID, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_CREATURES, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_CREATURE_NAMES, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_SPAWNS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_SPECIAL, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_ZONES, wxITEM_CHECK, OnChangeViewSettings);
@@ -596,6 +597,7 @@ void MainMenuBar::LoadValues() {
 	CheckItem(HIGHLIGHT_ITEMS, g_settings.getBoolean(Config::HIGHLIGHT_ITEMS));
 	CheckItem(HIGHLIGHT_LOCKED_DOORS, g_settings.getBoolean(Config::HIGHLIGHT_LOCKED_DOORS));
 	CheckItem(SHOW_CREATURES, g_settings.getBoolean(Config::SHOW_CREATURES));
+	CheckItem(SHOW_CREATURE_NAMES, g_settings.getBoolean(Config::SHOW_CREATURE_NAMES));
 	CheckItem(SHOW_SPAWNS, g_settings.getBoolean(Config::SHOW_SPAWNS));
 	CheckItem(SHOW_SPECIAL, g_settings.getBoolean(Config::SHOW_SPECIAL_TILES));
 	CheckItem(SHOW_ZONES, g_settings.getBoolean(Config::SHOW_ZONE_AREAS));
@@ -2076,68 +2078,15 @@ void MainMenuBar::OnMapRemoveEmptySpawns(wxCommandEvent& WXUNUSED(event)) {
 	int ok = g_gui.PopupDialog("Remove Empty Spawns", "Do you want to remove all empty spawns from the map?", wxYES | wxNO);
 	if (ok == wxID_YES) {
 		Editor* editor = g_gui.GetCurrentEditor();
-		editor->selection.clear();
-
-		g_gui.CreateLoadBar("Searching map for empty spawns to remove...");
-
-		Map& map = g_gui.GetCurrentMap();
-		CreatureVector creatures;
-		TileVector toDeleteSpawns;
-		for (const auto& spawnPosition : map.spawns) {
-			Tile* tile = map.getTile(spawnPosition);
-			if (!tile || !tile->spawn) {
-				continue;
-			}
-
-			const int32_t radius = tile->spawn->getSize();
-
-			bool empty = true;
-			for (int32_t y = -radius; y <= radius; ++y) {
-				for (int32_t x = -radius; x <= radius; ++x) {
-					Tile* creature_tile = map.getTile(spawnPosition + Position(x, y, 0));
-					if (creature_tile && creature_tile->creature && !creature_tile->creature->isSaved()) {
-						creature_tile->creature->save();
-						creatures.push_back(creature_tile->creature);
-						empty = false;
-					}
-				}
-			}
-
-			if (empty) {
-				toDeleteSpawns.push_back(tile);
-			}
-		}
-
-		for (Creature* creature : creatures) {
-			creature->reset();
-		}
-
-		BatchAction* batch = editor->actionQueue->createBatch(ACTION_DELETE_TILES);
-		Action* action = editor->actionQueue->createAction(batch);
-
-		const size_t count = toDeleteSpawns.size();
-		size_t removed = 0;
-		for (const auto& tile : toDeleteSpawns) {
-			Tile* newtile = tile->deepCopy(map);
-			map.removeSpawn(newtile);
-			delete newtile->spawn;
-			newtile->spawn = nullptr;
-			if (++removed % 5 == 0) {
-				// update progress bar for each 5 spawns removed
-				g_gui.SetLoadDone(static_cast<int32_t>(100 * removed / count));
-			}
-			action->addChange(newd Change(newtile));
-		}
-
-		batch->addAndCommitAction(action);
-		editor->addBatch(batch);
-
-		g_gui.DestroyLoadBar();
+		size_t removed = editor->removeEmptySpawns(true);
 
 		wxString msg;
-		msg << removed << " empty spawns removed.";
-		g_gui.PopupDialog("Search completed", msg, wxOK);
-		g_gui.GetCurrentMap().doChange();
+		if (removed > 0) {
+			msg = wxString::Format("%zu empty spawn(s) removed.", removed);
+		} else {
+			msg = "No empty spawns found.";
+		}
+		g_gui.PopupDialog("Remove Empty Spawns", msg, wxOK);
 	}
 }
 
@@ -2563,10 +2512,24 @@ void MainMenuBar::OnMapDiagnostics(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnMapCleanup(wxCommandEvent& WXUNUSED(event)) {
-	int ok = g_gui.PopupDialog("Clean map", "Do you want to remove all invalid items from the map?", wxYES | wxNO);
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	int ok = g_gui.PopupDialog("Clean map", "Do you want to clean the map (remove invalid items and empty spawns)?", wxYES | wxNO);
 
 	if (ok == wxID_YES) {
-		g_gui.GetCurrentMap().cleanInvalidTiles(true);
+		Editor* editor = g_gui.GetCurrentEditor();
+		editor->map.cleanInvalidTiles(true);
+		size_t removed = editor->removeEmptySpawns(true);
+
+		wxString msg;
+		if (removed > 0) {
+			msg = wxString::Format("Cleanup completed: invalid items cleaned and %zu empty spawn(s) removed.", removed);
+		} else {
+			msg = "Cleanup completed: invalid items cleaned. No empty spawns found.";
+		}
+		g_gui.PopupDialog("Clean map", msg, wxOK);
 	}
 }
 
@@ -2675,6 +2638,7 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event) {
 	g_settings.setInteger(Config::SHOW_ONLY_TILEFLAGS, IsItemChecked(MenuBar::SHOW_ONLY_COLORS));
 	g_settings.setInteger(Config::SHOW_ONLY_MODIFIED_TILES, IsItemChecked(MenuBar::SHOW_ONLY_MODIFIED));
 	g_settings.setInteger(Config::SHOW_CREATURES, IsItemChecked(MenuBar::SHOW_CREATURES));
+	g_settings.setInteger(Config::SHOW_CREATURE_NAMES, IsItemChecked(MenuBar::SHOW_CREATURE_NAMES));
 	g_settings.setInteger(Config::SHOW_SPAWNS, IsItemChecked(MenuBar::SHOW_SPAWNS));
 	g_settings.setInteger(Config::SHOW_HOUSES, IsItemChecked(MenuBar::SHOW_HOUSES));
 	g_settings.setInteger(Config::HIGHLIGHT_ITEMS, IsItemChecked(MenuBar::HIGHLIGHT_ITEMS));

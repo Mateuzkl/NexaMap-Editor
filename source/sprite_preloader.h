@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <fstream>
+#include <list>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -33,8 +35,14 @@ private:
 		uint64_t generation = 0;
 	};
 
-	static bool decode(const std::filesystem::path& file, uint32_t offset, bool hasTransparency, std::vector<uint8_t>& pixels);
+	struct ReadyEntry {
+		std::vector<uint8_t> pixels;
+		std::list<uint32_t>::iterator orderIt;
+	};
+
+	static bool decode(std::ifstream& stream, uint32_t offset, bool hasTransparency, std::vector<uint8_t>& pixels);
 	void workerLoop();
+	void stopWorkers();
 
 	static constexpr size_t MaximumPendingSprites = 256;
 	static constexpr size_t MaximumReadySprites = 512;
@@ -44,8 +52,8 @@ private:
 	std::filesystem::path spriteFile;
 	std::vector<uint32_t> spriteOffsets;
 	std::deque<Task> pendingTasks;
-	std::unordered_map<uint32_t, std::vector<uint8_t>> readySprites;
-	std::deque<uint32_t> readyOrder;
+	std::unordered_map<uint32_t, ReadyEntry> readySprites;
+	std::list<uint32_t> readyOrder;
 	std::unordered_set<uint32_t> queuedSpriteIds;
 	std::unordered_set<uint32_t> failedSpriteIds;
 	std::vector<std::thread> workers;

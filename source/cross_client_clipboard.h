@@ -3,6 +3,7 @@
 
 #include "graphics.h"
 #include "position.h"
+#include "spawn_source_remap.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -108,6 +109,7 @@ private:
 	wxString sourceClient;
 	wxString sourceServer;
 	std::vector<CrossClientItemSnapshot> items;
+	SpawnDependencyMap spawnDependencies;
 	uint64_t generation = 0;
 };
 

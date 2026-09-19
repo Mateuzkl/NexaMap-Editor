@@ -35,6 +35,7 @@
 #include "spawn_format.h"
 #include "item_id_codec.h"
 #include "multiplayer_session.h"
+#include "spawn_source_remap.h"
 
 #include <filesystem>
 #include <optional>
@@ -1084,6 +1085,81 @@ void Editor::clearInvalidHouseTiles(bool showdialog) {
 	}
 }
 
+size_t Editor::removeEmptySpawns(bool showdialog) {
+	if (showdialog) {
+		g_gui.CreateLoadBar("Searching map for empty spawns to remove...");
+	}
+
+	selection.clear();
+
+	CreatureVector creatures;
+	TileVector toDeleteSpawns;
+	for (const auto& spawnPosition : map.spawns) {
+		Tile* tile = map.getTile(spawnPosition);
+		if (!tile || !tile->spawn) {
+			continue;
+		}
+
+		const int32_t radius = tile->spawn->getSize();
+
+		bool empty = true;
+		for (int32_t y = -radius; y <= radius; ++y) {
+			for (int32_t x = -radius; x <= radius; ++x) {
+				Tile* creature_tile = map.getTile(spawnPosition + Position(x, y, 0));
+				if (creature_tile && creature_tile->creature && !creature_tile->creature->isSaved()) {
+					if (creature_tile->creature->hasSpawnSource() && creature_tile->creature->getSpawnSource() != spawnPosition) {
+						continue;
+					}
+					creature_tile->creature->save();
+					creatures.push_back(creature_tile->creature);
+					empty = false;
+				}
+			}
+		}
+
+		if (empty) {
+			toDeleteSpawns.push_back(tile);
+		}
+	}
+
+	for (Creature* creature : creatures) {
+		creature->reset();
+	}
+
+	const size_t count = toDeleteSpawns.size();
+	if (count == 0) {
+		if (showdialog) {
+			g_gui.DestroyLoadBar();
+		}
+		return 0;
+	}
+
+	BatchAction* batch = actionQueue->createBatch(ACTION_DELETE_TILES);
+	Action* action = actionQueue->createAction(batch);
+
+	size_t removed = 0;
+	for (const auto& tile : toDeleteSpawns) {
+		Tile* newtile = tile->deepCopy(map);
+		delete newtile->spawn;
+		newtile->spawn = nullptr;
+		++removed;
+		if (showdialog && count > 0 && removed % 5 == 0) {
+			g_gui.SetLoadDone(static_cast<int32_t>(100 * removed / count));
+		}
+		action->addChange(newd Change(newtile));
+	}
+
+	batch->addAndCommitAction(action);
+	addBatch(batch);
+
+	if (showdialog) {
+		g_gui.DestroyLoadBar();
+	}
+
+	map.doChange();
+	return removed;
+}
+
 void Editor::clearModifiedTileState(bool showdialog) {
 	if (showdialog) {
 		g_gui.CreateLoadBar("Clearing modified state from all tiles...");
@@ -1114,11 +1190,15 @@ void Editor::moveSelection(Position offset) {
 	action = actionQueue->createAction(batchAction); // Our action!
 	bool doborders = false;
 	TileSet tmp_storage;
+	std::set<Position> movedSpawnCenters;
 
 	// Update the tiles with the newd positions
 	for (auto it = selection.begin(); it != selection.end(); ++it) {
 		// First we get the old tile and it's position
 		Tile* tile = (*it);
+		if (tile->spawn && tile->spawn->isSelected()) {
+			movedSpawnCenters.insert(tile->getPosition());
+		}
 		// const Position pos = tile->getPosition();
 
 		// Create the duplicate source tile, which will replace the old one later
@@ -1164,7 +1244,15 @@ void Editor::moveSelection(Position offset) {
 		action->addChange(newd Change(new_src_tile));
 	}
 	// Commit changes to map
-	batchAction->addAndCommitAction(action);
+	if (!batchAction->addAndCommitAction(action)) {
+		for (Tile* tile : tmp_storage) {
+			delete tile;
+		}
+		batchAction->rollback();
+		delete batchAction;
+		g_gui.SetStatusText("Move cancelled: unable to remove the source tiles.");
+		return;
+	}
 
 	// Remove old borders (and create some newd?)
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_DRAG) && selection.size() < size_t(g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD))) {
@@ -1231,7 +1319,17 @@ void Editor::moveSelection(Position offset) {
 			action->addChange(newd Change(new_tile));
 		}
 		// Commit changes to map
-		batchAction->addAndCommitAction(action);
+		if (action->size() == 0) {
+			delete action;
+		} else if (!batchAction->addAndCommitAction(action)) {
+			for (Tile* tile : tmp_storage) {
+				delete tile;
+			}
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Move cancelled: unable to update source borders.");
+			return;
+		}
 	}
 
 	// New action for adding the destination tiles
@@ -1243,7 +1341,7 @@ void Editor::moveSelection(Position offset) {
 
 		new_pos = old_pos - offset;
 
-		if (new_pos.z < 0 && new_pos.z > MAP_MAX_LAYER) {
+		if (!new_pos.isValid()) {
 			delete tile;
 			continue;
 		}
@@ -1252,10 +1350,27 @@ void Editor::moveSelection(Position offset) {
 		Tile* old_dest_tile = location->get();
 		Tile* new_dest_tile = nullptr;
 
+		Creature* transferredCreature = tile->creature;
+		if (transferredCreature && transferredCreature->hasSpawnSource()) {
+			const Position origSource = transferredCreature->getSpawnSource();
+			if (movedSpawnCenters.contains(origSource)) {
+				transferredCreature->setSpawnSource(origSource - offset);
+			}
+		}
+
 		if (g_settings.getInteger(Config::MERGE_MOVE) || !tile->ground) {
 			// Move items
 			if (old_dest_tile) {
 				new_dest_tile = old_dest_tile->deepCopy(map);
+				if (new_dest_tile->spawn && tile->spawn) {
+					auto* mergedSpawn = new_dest_tile->spawn->deepCopy();
+					MergeSpawnMetadata(*mergedSpawn, *tile->spawn);
+					if (tile->spawn->isSelected()) {
+						mergedSpawn->select();
+					}
+					delete tile->spawn;
+					tile->spawn = mergedSpawn;
+				}
 			} else {
 				new_dest_tile = map.allocator(location);
 			}
@@ -1271,7 +1386,14 @@ void Editor::moveSelection(Position offset) {
 	}
 
 	// Commit changes to the map
-	batchAction->addAndCommitAction(action);
+	if (action->size() == 0) {
+		delete action;
+	} else if (!batchAction->addAndCommitAction(action)) {
+		batchAction->rollback();
+		delete batchAction;
+		g_gui.SetStatusText("Move cancelled: unable to commit destination tiles.");
+		return;
+	}
 
 	// Create borders
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_DRAG) && selection.size() < size_t(g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD))) {
@@ -1283,11 +1405,6 @@ void Editor::moveSelection(Position offset) {
 			Position pos = (*it)->getPosition();
 			// Go through all neighbours
 			Tile* t;
-			t = map.getTile(pos.x - 1, pos.y - 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
 			t = map.getTile(pos.x - 1, pos.y - 1, pos.z);
 			if (t && !t->isSelected()) {
 				borderize_tiles.push_back(t);
@@ -1358,7 +1475,14 @@ void Editor::moveSelection(Position offset) {
 			}
 		}
 		// Commit changes to map
-		batchAction->addAndCommitAction(action);
+		if (action->size() == 0) {
+			delete action;
+		} else if (!batchAction->addAndCommitAction(action)) {
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Move cancelled: unable to update destination borders.");
+			return;
+		}
 	}
 
 	// Store the action for undo

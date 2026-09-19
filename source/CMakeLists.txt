@@ -26,6 +26,7 @@ ${CMAKE_CURRENT_LIST_DIR}/cross_client_clipboard.h
 ${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/creature.h
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.h
+${CMAKE_CURRENT_LIST_DIR}/creature_cache.h
 ${CMAKE_CURRENT_LIST_DIR}/creatures.h
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.h
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.h
@@ -97,6 +98,7 @@ ${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.h
 ${CMAKE_CURRENT_LIST_DIR}/atlas_page_epochs.h
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.h
 ${CMAKE_CURRENT_LIST_DIR}/map_window.h
+${CMAKE_CURRENT_LIST_DIR}/viewport_metrics.h
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.h
@@ -148,6 +150,7 @@ ${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.h
+${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.h
@@ -210,6 +213,7 @@ ${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp
+${CMAKE_CURRENT_LIST_DIR}/creature_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.cpp
@@ -317,6 +321,8 @@ ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap_core.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.cpp

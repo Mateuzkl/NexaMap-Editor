@@ -21,9 +21,11 @@
 #include "editor.h"
 #include "gui.h"
 #include "creature.h"
+#include "spawn_source_remap.h"
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 namespace {
 	HouseSnapshot makeRecoveredHouseSnapshot(uint32_t houseId) {
@@ -55,6 +57,7 @@ void CopyBuffer::swap(CopyBuffer& other) noexcept {
 	std::swap(boundsValid, other.boundsValid);
 	std::swap(sourceMapSessionId, other.sourceMapSessionId);
 	std::swap(houses, other.houses);
+	std::swap(spawnDependencies, other.spawnDependencies);
 }
 
 Position CopyBuffer::getPosition() const {
@@ -66,13 +69,23 @@ void CopyBuffer::clear() {
 	tiles.reset();
 	sourceMapSessionId = InvalidSessionId;
 	houses.clear();
+	spawnDependencies.clear();
 	resetBounds();
 }
 
 void CopyBuffer::replace(std::unique_ptr<BaseMap> map, const Position& position) {
+	SpawnDependencyMap dependencies;
+	if (map) {
+		dependencies = CaptureSpawnDependencies(*map);
+	}
+	replace(std::move(map), position, std::move(dependencies));
+}
+
+void CopyBuffer::replace(std::unique_ptr<BaseMap> map, const Position& position, SpawnDependencyMap dependencies) {
 	clear();
 	tiles = std::move(map);
 	copyPos = position;
+	spawnDependencies = std::move(dependencies);
 	rebuildBounds();
 }
 
@@ -188,6 +201,10 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	std::ostringstream ss;
 	ss << "Copied " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+
+	// Capture spawn dependencies so paste can remap Creature::spawn_source.
+	spawnDependencies = CaptureSpawnDependencies(*tiles, &editor.map);
+
 	g_gui.CaptureCrossClientCopy(*this);
 }
 
@@ -298,6 +315,10 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	std::stringstream ss;
 	ss << "Cut out " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
 	g_gui.SetStatusText(wxstr(ss.str()));
+
+	// Capture spawn dependencies so paste can remap Creature::spawn_source.
+	spawnDependencies = CaptureSpawnDependencies(*tiles, &editor.map);
+
 	g_gui.CaptureCrossClientCopy(*this);
 }
 
@@ -364,6 +385,8 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 	}
 
 	Action* action = editor.actionQueue->createAction(batchAction);
+	std::set<Position> requiredSpawnCenters;
+	std::set<Position> pastedSpawnCenters;
 	uint64_t processedTiles = 0;
 	uint64_t pastedTiles = 0;
 	for (MapIterator it = tiles->begin(); it != tiles->end(); ++it) {
@@ -381,6 +404,27 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 
 		TileLocation* location = editor.map.createTileL(pos);
 		Tile* copy_tile = buffer_tile->deepCopy(editor.map);
+		std::optional<Position> requiredSpawnCenter;
+
+		// Remap creature spawn_source to the translated position.
+		// Without this, SpawnMapAdapter::Capture() silently skips the
+		// creature because its spawn_source still points to the
+		// original (pre-paste) center position.
+		if (copy_tile->creature && copy_tile->creature->hasSpawnSource()) {
+			const bool remapped = RemapSingleCreatureSpawnSource(
+				*copy_tile->creature,
+				copyPos,
+				toPosition,
+				spawnDependencies
+			);
+			if (!remapped || !copy_tile->creature->getSpawnSource().isValid()) {
+				delete copy_tile->creature;
+				copy_tile->creature = nullptr;
+			} else {
+				requiredSpawnCenter = copy_tile->creature->getSpawnSource();
+			}
+		}
+
 		if (copy_tile->isHouseTile()) {
 			auto remap = house_id_map.find(copy_tile->getHouseID());
 			if (remap == house_id_map.end()) {
@@ -396,6 +440,15 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		if (g_settings.getInteger(Config::MERGE_PASTE) || !copy_tile->ground) {
 			if (old_dest_tile) {
 				new_dest_tile = old_dest_tile->deepCopy(editor.map);
+				if (new_dest_tile->spawn && copy_tile->spawn) {
+					auto* mergedSpawn = new_dest_tile->spawn->deepCopy();
+					MergeSpawnMetadata(*mergedSpawn, *copy_tile->spawn);
+					if (copy_tile->spawn->isSelected()) {
+						mergedSpawn->select();
+					}
+					delete copy_tile->spawn;
+					copy_tile->spawn = mergedSpawn;
+				}
 			} else {
 				new_dest_tile = editor.map.allocator(location);
 			}
@@ -417,13 +470,42 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		editor.map.createTile(pos.x + 1, pos.y + 1, pos.z);
 
 		action->addChange(newd Change(new_dest_tile));
+		if (requiredSpawnCenter) {
+			requiredSpawnCenters.insert(*requiredSpawnCenter);
+		}
+		if (buffer_tile->spawn) {
+			pastedSpawnCenters.insert(pos);
+		}
 		++pastedTiles;
 		if (action->size() >= ActionChunkSize) {
-			batchAction->addAndCommitAction(action);
+			if (!batchAction->addAndCommitAction(action)) {
+				batchAction->rollback();
+				delete batchAction;
+				g_gui.SetStatusText("Paste cancelled: unable to commit destination tiles.");
+				return;
+			}
 			action = editor.actionQueue->createAction(batchAction);
 		}
 	}
-	batchAction->addAndCommitAction(action);
+	EnsureDependentSpawnsExist(
+		editor,
+		*action,
+		copyPos,
+		toPosition,
+		spawnDependencies,
+		requiredSpawnCenters,
+		pastedSpawnCenters
+	);
+	if (action->size() != 0) {
+		if (!batchAction->addAndCommitAction(action)) {
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Paste cancelled: unable to commit spawn dependencies.");
+			return;
+		}
+	} else {
+		delete action;
+	}
 	if (batchAction->size() == 0) {
 		delete batchAction;
 		g_gui.SetStatusText("Nothing was pasted because the complete area is outside the valid map bounds.");
@@ -518,7 +600,16 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		}
 
 		// Commit changes to map
-		batchAction->addAndCommitAction(action);
+		if (action->size() != 0) {
+			if (!batchAction->addAndCommitAction(action)) {
+				batchAction->rollback();
+				delete batchAction;
+				g_gui.SetStatusText("Paste cancelled: unable to commit border updates.");
+				return;
+			}
+		} else {
+			delete action;
+		}
 	}
 
 	if (showProgress) {

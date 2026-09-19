@@ -130,6 +130,7 @@
 		<item name="Edit Towns" hotkey="Ctrl+T" action="EDIT_TOWNS" help="Edit towns."/>
 		<separator/>
 		<item name="Cleanup..." action="MAP_CLEANUP" help="Removes all items that do not exist in the OTB file (red tiles the server can't load)."/>
+		<item name="Remove All Empty Respawns" action="MAP_REMOVE_EMPTY_SPAWNS" help="Removes all empty spawns from the map."/>
 		<item name="Remove Duplicated Items..." action="REMOVE_ON_MAP_DUPLICATED_ITEMS" help="Removes duplicated items from the map."/>
 		<item name="Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
 		<item name="Map Diagnostics..." action="MAP_DIAGNOSTICS" help="Scan the active map for invalid items, duplicate IDs, broken teleports, and structural problems."/>
@@ -196,6 +197,7 @@
 		<separator/>
 		<item name="Show zones" hotkey="Shift+N" action="SHOW_ZONES" help="Show zones on the map."/>
 		<item name="Show creatures" hotkey="F" action="SHOW_CREATURES" help="Show creatures on the map."/>
+		<item name="Show creature names" hotkey="Shift+F" action="SHOW_CREATURE_NAMES" help="Show creature names above monsters and NPCs."/>
 		<item name="Show spawns" hotkey="S" action="SHOW_SPAWNS" help="Show spawns on the map."/>
 		<item name="Show special" hotkey="E" action="SHOW_SPECIAL" help="Show special tiles on the map, like PZ."/>
 		<item name="Show houses" hotkey="Ctrl+H" action="SHOW_HOUSES" help="Show houses on the map."/>

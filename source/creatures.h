@@ -23,50 +23,10 @@
 #include <string>
 #include <map>
 #include <functional>
+#include <memory>
 
 class CreatureType;
 class CreatureBrush;
-
-typedef std::map<std::string, CreatureType*> CreatureMap;
-
-class CreatureDatabase {
-protected:
-	CreatureMap creature_map;
-
-public:
-	typedef CreatureMap::iterator iterator;
-	typedef CreatureMap::const_iterator const_iterator;
-
-	CreatureDatabase();
-	~CreatureDatabase();
-
-	void clear();
-	void swap(CreatureDatabase& other) noexcept;
-
-	CreatureType* operator[](const std::string& name);
-	CreatureType* addMissingCreatureType(const std::string& name, bool isNpc);
-	CreatureType* addCreatureType(const std::string& name, bool isNpc, const Outfit& outfit);
-
-	bool hasMissing() const;
-	size_t size() const {
-		return creature_map.size();
-	}
-	iterator begin() {
-		return creature_map.begin();
-	}
-	iterator end() {
-		return creature_map.end();
-	}
-
-	using ImportProgress = std::function<void(const wxString&)>;
-	bool loadFromXML(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {});
-	bool importXMLFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
-	bool importLuaFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
-	bool importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {}, bool updatePalettes = true);
-	bool importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {}, bool updatePalettes = true);
-
-	bool saveToXML(const FileName& filename);
-};
 
 class CreatureType {
 public:
@@ -85,6 +45,56 @@ public:
 
 	static CreatureType* loadFromXML(pugi::xml_node node, wxArrayString& warnings);
 	static CreatureType* loadFromOTXML(const FileName& filename, pugi::xml_document& node, wxArrayString& warnings);
+};
+
+typedef std::map<std::string, CreatureType*> CreatureMap;
+
+class CreatureDatabase {
+protected:
+	CreatureMap creature_map;
+
+public:
+	typedef CreatureMap::iterator iterator;
+	typedef CreatureMap::const_iterator const_iterator;
+
+	struct ImportedCreatureRecord {
+		std::string normalizedName;
+		std::string name;
+		bool isNpc = false;
+		Outfit outfit;
+	};
+	using ImportedCreatureList = std::vector<ImportedCreatureRecord>;
+
+	CreatureDatabase();
+	~CreatureDatabase();
+
+	void clear();
+	void swap(CreatureDatabase& other) noexcept;
+
+	CreatureType* operator[](const std::string& name);
+	CreatureType* addMissingCreatureType(const std::string& name, bool isNpc);
+	CreatureType* addCreatureType(const std::string& name, bool isNpc, const Outfit& outfit);
+	void applyWorkspaceCreature(std::unique_ptr<CreatureType> creatureType, bool standard = true);
+
+	bool hasMissing() const;
+	size_t size() const {
+		return creature_map.size();
+	}
+	iterator begin() {
+		return creature_map.begin();
+	}
+	iterator end() {
+		return creature_map.end();
+	}
+
+	using ImportProgress = std::function<void(const wxString&)>;
+	bool loadFromXML(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {});
+	bool importXMLFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
+	bool importLuaFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
+	bool importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {}, bool updatePalettes = true, ImportedCreatureList* importedList = nullptr);
+	bool importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress = {}, bool updatePalettes = true, ImportedCreatureList* importedList = nullptr);
+
+	bool saveToXML(const FileName& filename);
 };
 
 extern CreatureDatabase g_creatures;

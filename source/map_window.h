@@ -20,6 +20,7 @@
 
 #include "position.h"
 #include "replace_items_window.h"
+#include "viewport_metrics.h"
 
 class MapCanvas;
 class DCButton;
@@ -36,6 +37,7 @@ public:
 
 	// Event handlers
 	void OnSize(wxSizeEvent& event);
+	void OnCanvasSize(wxSizeEvent& event);
 	void OnScroll(wxScrollEvent& event);
 	void OnScrollLineDown(wxScrollEvent& event);
 	void OnScrollLineUp(wxScrollEvent& event);
@@ -76,6 +78,8 @@ public:
 		return canvas;
 	}
 
+	ViewportMetrics GetViewportMetrics() const;
+
 	void ShowReplaceItemsDialog(bool selectionOnly);
 	void OnReplaceItemsDialogClose(wxCloseEvent& event);
 	void ShowAdvancedReplaceWindow();
@@ -83,7 +87,8 @@ public:
 
 protected:
 	// For internal use, call to resize the scrollbars with
-	// the newd dimensions of *this* window
+	// the new dimensions of *this* window
+	void UpdateScrollbars();
 	void UpdateScrollbars(int nx, int ny);
 	void UpdateDialogs(bool show);
 
