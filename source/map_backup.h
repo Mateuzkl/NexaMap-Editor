@@ -35,9 +35,10 @@ public:
 	// If the map has never been saved, prompts the user to save first.
 	static std::string createBackup(Editor& editor, wxWindow* parent);
 
-private:
-	// Generate a backup filename from the original path.
+	// Generate a collision-resistant timestamped backup filename from the original path.
 	static std::string generateBackupPath(const std::string& originalPath);
+
+	class StateGuard;
 };
 
 #endif

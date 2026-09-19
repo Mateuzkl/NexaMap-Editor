@@ -29,6 +29,7 @@
 
 class Map;
 class Tile;
+class Item;
 
 // ---------------------------------------------------------------------------
 // Settings for the unreachable tile cleaner operation.
@@ -40,8 +41,8 @@ struct UnreachableCleanerSettings {
 	bool multiFloor = true;
 
 	enum FloorScope { AllFloors,
-		SurfaceOnly,
-		UndergroundOnly };
+					  SurfaceOnly,
+					  UndergroundOnly };
 	FloorScope floorScope = AllFloors;
 
 	// NexaMap gameplay protection extensions
@@ -55,10 +56,18 @@ struct UnreachableCleanerSettings {
 	bool createBackup = true;
 };
 
+enum class AnalysisStatus {
+	Completed,
+	Cancelled,
+	Failed
+};
+
 // ---------------------------------------------------------------------------
 // Results produced by the analysis pass.
 // ---------------------------------------------------------------------------
 struct UnreachableAnalysisResult {
+	AnalysisStatus status = AnalysisStatus::Completed;
+
 	int64_t totalScanned = 0;
 	int64_t walkableViewpoints = 0;
 	int64_t unreachableCandidates = 0;
@@ -75,6 +84,16 @@ struct UnreachableAnalysisResult {
 	int64_t neighborProtected = 0;
 
 	double analysisTimeMs = 0;
+
+	bool isCancelled() const {
+		return status == AnalysisStatus::Cancelled;
+	}
+	bool isCompleted() const {
+		return status == AnalysisStatus::Completed;
+	}
+	bool isFailed() const {
+		return status == AnalysisStatus::Failed;
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +128,7 @@ public:
 	static bool isFloorInScope(int z, UnreachableCleanerSettings::FloorScope scope);
 	static uint64_t positionHash(int x, int y, int z);
 	static uint64_t chunkKey(int cx, int cy, int cz);
+	static bool containsProtectedItem(const Item* item, const UnreachableCleanerSettings& settings);
 
 private:
 	bool isWalkableViewpoint(const Tile* tile) const;
@@ -117,7 +137,7 @@ private:
 	bool isFloorInScope(int z) const;
 
 	// Spatial hash helpers
-	void buildWalkableIndex(std::function<bool(int, const std::string&)> progressCallback);
+	bool buildWalkableIndex(std::function<bool(int, const std::string&)> progressCallback);
 	bool queryNearbyWalkable(const Position& target) const;
 
 	// Check whether any adjacent position is protected
@@ -150,15 +170,11 @@ private:
 // ---------------------------------------------------------------------------
 
 inline uint64_t UnreachableCleaner::positionHash(int x, int y, int z) {
-	return (static_cast<uint64_t>(static_cast<uint16_t>(x)) << 24) |
-		(static_cast<uint64_t>(static_cast<uint16_t>(y)) << 8) |
-		static_cast<uint64_t>(static_cast<uint8_t>(z));
+	return (static_cast<uint64_t>(static_cast<uint16_t>(x)) << 24) | (static_cast<uint64_t>(static_cast<uint16_t>(y)) << 8) | static_cast<uint64_t>(static_cast<uint8_t>(z));
 }
 
 inline uint64_t UnreachableCleaner::chunkKey(int cx, int cy, int cz) {
-	return (static_cast<uint64_t>(static_cast<uint16_t>(cx)) << 24) |
-		(static_cast<uint64_t>(static_cast<uint16_t>(cy)) << 8) |
-		static_cast<uint64_t>(static_cast<uint8_t>(cz));
+	return (static_cast<uint64_t>(static_cast<uint16_t>(cx)) << 24) | (static_cast<uint64_t>(static_cast<uint16_t>(cy)) << 8) | static_cast<uint64_t>(static_cast<uint8_t>(cz));
 }
 
 inline bool UnreachableCleaner::isFloorInScope(int z, UnreachableCleanerSettings::FloorScope scope) {

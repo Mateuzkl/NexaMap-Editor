@@ -252,6 +252,7 @@ protected:
 	friend class SpawnMapAdapter;
 	friend class GUI;
 	friend class MultiplayerSession;
+	friend class MapBackupService;
 
 public:
 	Waypoints waypoints;

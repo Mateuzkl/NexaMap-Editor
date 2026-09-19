@@ -236,6 +236,15 @@ void RemoveUnreachableDialog::OnAnalyzeRemove(wxCommandEvent& WXUNUSED(event)) {
 	UnreachableAnalysisResult result = cleaner.analyze(progressCallback);
 	g_gui.DestroyLoadBar();
 
+	// Check if analysis was cancelled or failed
+	if (result.isCancelled()) {
+		return;
+	}
+	if (result.isFailed()) {
+		wxMessageBox("Analysis failed.", "Remove Unreachable Tiles", wxOK | wxICON_ERROR, this);
+		return;
+	}
+
 	// Format and show analysis summary
 	wxString summary;
 	summary << "Analysis Results\n"
@@ -289,14 +298,9 @@ void RemoveUnreachableDialog::OnAnalyzeRemove(wxCommandEvent& WXUNUSED(event)) {
 		return;
 	}
 
-	// Create backup if enabled
+	// Create backup if enabled (without nesting load bars)
 	if (settings.createBackup) {
-		g_gui.CreateLoadBar("Creating backup...");
-		g_gui.SetLoadDone(50, "Saving backup...");
-
 		std::string backupPath = MapBackupService::createBackup(*editor, this);
-
-		g_gui.DestroyLoadBar();
 
 		if (backupPath.empty()) {
 			int proceed = wxMessageBox(

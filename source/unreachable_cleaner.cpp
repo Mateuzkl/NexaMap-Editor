@@ -95,12 +95,62 @@ bool UnreachableCleaner::isWalkableViewpoint(const Tile* tile) const {
 
 	// Check for blocking loose items on the tile
 	for (const Item* item : tile->items) {
-		if (item->isBlocking() && !item->isMoveable()) {
+		if (item->isBlocking()) {
 			return false;
 		}
 	}
 
 	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Item tree protection checks
+// ---------------------------------------------------------------------------
+
+namespace {
+	enum class ProtectedItemType {
+		None,
+		Teleport,
+		ActionUniqueID
+	};
+
+	static ProtectedItemType checkItemTreeProtected(const Item* item, const UnreachableCleanerSettings& settings) {
+		if (!item) {
+			return ProtectedItemType::None;
+		}
+
+		if (settings.preserveTeleports) {
+			const ItemType& type = g_items[item->getID()];
+			if (type.isTeleport() || dynamic_cast<const Teleport*>(item) != nullptr) {
+				return ProtectedItemType::Teleport;
+			}
+		}
+
+		if (settings.preserveActionUniqueID) {
+			if (item->getActionID() > 0 || item->getUniqueID() > 0) {
+				return ProtectedItemType::ActionUniqueID;
+			}
+		}
+
+		// Recursive container inspection without const_cast
+		const Container* container = dynamic_cast<const Container*>(item);
+		if (container) {
+			size_t count = container->getItemCount();
+			for (size_t i = 0; i < count; ++i) {
+				const Item* child = container->getItem(i);
+				ProtectedItemType childResult = checkItemTreeProtected(child, settings);
+				if (childResult != ProtectedItemType::None) {
+					return childResult;
+				}
+			}
+		}
+
+		return ProtectedItemType::None;
+	}
+} // namespace
+
+bool UnreachableCleaner::containsProtectedItem(const Item* item, const UnreachableCleanerSettings& settings) {
+	return checkItemTreeProtected(item, settings) != ProtectedItemType::None;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,40 +184,28 @@ bool UnreachableCleaner::isTileProtected(const Tile* tile, UnreachableAnalysisRe
 		return true;
 	}
 
-	// Items check: teleports, action/unique IDs
+	// Items check: teleports, action/unique IDs (recursive through containers)
 	if (tile->ground) {
-		if (settings_.preserveActionUniqueID) {
-			if (tile->ground->getActionID() > 0 || tile->ground->getUniqueID() > 0) {
-				result.actionUidProtected++;
-				return true;
-			}
+		ProtectedItemType prot = checkItemTreeProtected(tile->ground, settings_);
+		if (prot == ProtectedItemType::Teleport) {
+			result.teleportsProtected++;
+			return true;
+		}
+		if (prot == ProtectedItemType::ActionUniqueID) {
+			result.actionUidProtected++;
+			return true;
 		}
 	}
 
 	for (const Item* item : tile->items) {
-		if (settings_.preserveTeleports) {
-			const ItemType& type = g_items[item->getID()];
-			if (type.isTeleport()) {
-				result.teleportsProtected++;
-				return true;
-			}
+		ProtectedItemType prot = checkItemTreeProtected(item, settings_);
+		if (prot == ProtectedItemType::Teleport) {
+			result.teleportsProtected++;
+			return true;
 		}
-		if (settings_.preserveActionUniqueID) {
-			if (item->getActionID() > 0 || item->getUniqueID() > 0) {
-				result.actionUidProtected++;
-				return true;
-			}
-			// Check nested containers
-			const Container* container = dynamic_cast<const Container*>(item);
-			if (container) {
-				const auto& contents = const_cast<Container*>(container)->getVector();
-				for (const Item* nested : contents) {
-					if (nested->getActionID() > 0 || nested->getUniqueID() > 0) {
-						result.actionUidProtected++;
-						return true;
-					}
-				}
-			}
+		if (prot == ProtectedItemType::ActionUniqueID) {
+			result.actionUidProtected++;
+			return true;
 		}
 	}
 
@@ -218,7 +256,7 @@ void UnreachableCleaner::buildWaypointIndex() {
 // Pass 1: Build walkable index
 // ---------------------------------------------------------------------------
 
-void UnreachableCleaner::buildWalkableIndex(std::function<bool(int, const std::string&)> progressCallback) {
+bool UnreachableCleaner::buildWalkableIndex(std::function<bool(int, const std::string&)> progressCallback) {
 	walkableChunks_.clear();
 
 	MapIterator it = map_.begin();
@@ -244,10 +282,11 @@ void UnreachableCleaner::buildWalkableIndex(std::function<bool(int, const std::s
 		if (progressCallback && (done & 0xFFF) == 0) {
 			int pct = total > 0 ? static_cast<int>(done * 40 / total) : 0; // 0-40% for indexing
 			if (!progressCallback(pct, "Indexing walkable tiles...")) {
-				return; // cancelled
+				return false; // cancelled
 			}
 		}
 	}
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +365,7 @@ bool UnreachableCleaner::hasProtectedNeighbor(const Position& pos) const {
 			if (nx < 0 || ny < 0) {
 				continue;
 			}
+			// Same-floor neighbor safety radius
 			if (protectedPositions_.count(positionHash(nx, ny, pos.z))) {
 				return true;
 			}
@@ -350,7 +390,14 @@ UnreachableAnalysisResult UnreachableCleaner::analyze(std::function<bool(int, co
 	buildWaypointIndex();
 
 	// Pass 1: Index walkable viewpoints
-	buildWalkableIndex(progressCallback);
+	if (!buildWalkableIndex(progressCallback)) {
+		walkableChunks_.clear();
+		removalCandidates_.clear();
+		protectedPositions_.clear();
+		analyzed_ = false;
+		result.status = AnalysisStatus::Cancelled;
+		return result;
+	}
 
 	// Count walkable viewpoints
 	for (const auto& pair : walkableChunks_) {
@@ -391,7 +438,12 @@ UnreachableAnalysisResult UnreachableCleaner::analyze(std::function<bool(int, co
 		if (progressCallback && (done & 0xFFF) == 0) {
 			int pct = total > 0 ? static_cast<int>(40 + done * 30 / total) : 40; // 40-70%
 			if (!progressCallback(pct, "Analyzing unreachable areas...")) {
-				return result; // cancelled
+				walkableChunks_.clear();
+				removalCandidates_.clear();
+				protectedPositions_.clear();
+				analyzed_ = false;
+				result.status = AnalysisStatus::Cancelled;
+				return result;
 			}
 		}
 	}
@@ -420,6 +472,11 @@ UnreachableAnalysisResult UnreachableCleaner::analyze(std::function<bool(int, co
 		if (progressCallback && (candidatesDone & 0xFFF) == 0) {
 			int pct = totalCandidates > 0 ? static_cast<int>(70 + candidatesDone * 25 / totalCandidates) : 70; // 70-95%
 			if (!progressCallback(pct, "Checking protected gameplay tiles...")) {
+				walkableChunks_.clear();
+				removalCandidates_.clear();
+				protectedPositions_.clear();
+				analyzed_ = false;
+				result.status = AnalysisStatus::Cancelled;
 				return result;
 			}
 		}
@@ -432,19 +489,13 @@ UnreachableAnalysisResult UnreachableCleaner::analyze(std::function<bool(int, co
 	result.analysisTimeMs = std::chrono::duration<double, std::milli>(endTime - startTime).count();
 
 	analyzed_ = true;
+	result.status = AnalysisStatus::Completed;
 
 	// Log summary
 	logSummary("indexed", result.walkableViewpoints);
 	logSummary("candidates", result.unreachableCandidates);
 	logSummary("protected", result.protectedSkipped);
-	std::printf("[unreachable_cleaner] protected breakdown: houses=%lld spawns=%lld creatures=%lld teleports=%lld aid/uid=%lld waypoints=%lld neighbors=%lld\n",
-		static_cast<long long>(result.housesProtected),
-		static_cast<long long>(result.spawnsProtected),
-		static_cast<long long>(result.creaturesProtected),
-		static_cast<long long>(result.teleportsProtected),
-		static_cast<long long>(result.actionUidProtected),
-		static_cast<long long>(result.waypointsProtected),
-		static_cast<long long>(result.neighborProtected));
+	std::printf("[unreachable_cleaner] protected breakdown: houses=%lld spawns=%lld creatures=%lld teleports=%lld aid/uid=%lld waypoints=%lld neighbors=%lld\n", static_cast<long long>(result.housesProtected), static_cast<long long>(result.spawnsProtected), static_cast<long long>(result.creaturesProtected), static_cast<long long>(result.teleportsProtected), static_cast<long long>(result.actionUidProtected), static_cast<long long>(result.waypointsProtected), static_cast<long long>(result.neighborProtected));
 	logSummary("to_remove", result.tilesToRemove);
 	std::printf("[unreachable_cleaner] analysis_ms: %.1f\n", result.analysisTimeMs);
 
@@ -475,6 +526,22 @@ int64_t UnreachableCleaner::execute(std::function<bool(int, const std::string&)>
 		// Verify tile still exists before removing (defensive)
 		Tile* tile = map_.getTile(pos);
 		if (tile) {
+			// If tile has waypoints and waypoint preservation was disabled, clean them up
+			if (!settings_.preserveWaypoints) {
+				std::vector<std::string> wpsToRemove;
+				for (auto it = map_.waypoints.begin(); it != map_.waypoints.end(); ++it) {
+					if (it->second && it->second->pos == pos) {
+						wpsToRemove.push_back(it->second->name);
+					}
+				}
+				for (const auto& wpName : wpsToRemove) {
+					if (TileLocation* loc = map_.getTileL(pos)) {
+						loc->decreaseWaypointCount();
+					}
+					map_.waypoints.removeWaypoint(wpName);
+				}
+			}
+
 			// If tile has a spawn, remove from spawn registry
 			if (tile->spawn) {
 				map_.removeSpawn(tile);
@@ -483,11 +550,10 @@ int64_t UnreachableCleaner::execute(std::function<bool(int, const std::string&)>
 			++removed;
 		}
 
+		// Keep progress reporting, but removal phase is non-cancellable
 		if (progressCallback && (i & 0xFFF) == 0) {
 			int pct = total > 0 ? static_cast<int>(i * 100 / total) : 0;
-			if (!progressCallback(pct, "Removing unreachable tiles...")) {
-				break; // Allow cancellation during removal
-			}
+			progressCallback(pct, "Removing unreachable tiles...");
 		}
 	}
 

@@ -31,6 +31,51 @@
 #include <ctime>
 #include <sstream>
 
+class MapBackupService::StateGuard {
+public:
+	Map& map;
+	std::string originalFilename;
+	std::string originalName;
+	std::string originalSpawnfile;
+	std::string originalSpawnNpcFile;
+	std::string originalHousefile;
+	std::string originalWaypointfile;
+	std::string originalZonefile;
+	SpawnFormat originalSpawnFormat;
+	bool originalSpawnFilenamesExplicit;
+	bool originalUnnamed;
+	bool originalHasChanged;
+
+	explicit StateGuard(Map& m) :
+		map(m),
+		originalFilename(m.filename),
+		originalName(m.name),
+		originalSpawnfile(m.spawnfile),
+		originalSpawnNpcFile(m.spawnNpcFile),
+		originalHousefile(m.housefile),
+		originalWaypointfile(m.waypointfile),
+		originalZonefile(m.zonefile),
+		originalSpawnFormat(m.spawnFormat),
+		originalSpawnFilenamesExplicit(m.spawnFilenamesExplicit),
+		originalUnnamed(m.unnamed),
+		originalHasChanged(m.has_changed) {
+	}
+
+	~StateGuard() {
+		map.filename = originalFilename;
+		map.name = originalName;
+		map.spawnfile = originalSpawnfile;
+		map.spawnNpcFile = originalSpawnNpcFile;
+		map.housefile = originalHousefile;
+		map.waypointfile = originalWaypointfile;
+		map.zonefile = originalZonefile;
+		map.spawnFormat = originalSpawnFormat;
+		map.spawnFilenamesExplicit = originalSpawnFilenamesExplicit;
+		map.unnamed = originalUnnamed;
+		map.has_changed = originalHasChanged;
+	}
+};
+
 // ---------------------------------------------------------------------------
 // MapBackupService
 // ---------------------------------------------------------------------------
@@ -38,8 +83,9 @@
 std::string MapBackupService::generateBackupPath(const std::string& originalPath) {
 	wxFileName fn(wxString::FromUTF8(originalPath));
 
-	// Generate timestamp
+	// Generate sub-second timestamp
 	auto now = std::chrono::system_clock::now();
+	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 	auto time_t_now = std::chrono::system_clock::to_time_t(now);
 	struct tm tm_buf;
 #ifdef _WIN32
@@ -51,10 +97,14 @@ std::string MapBackupService::generateBackupPath(const std::string& originalPath
 	char timestamp[64];
 	std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tm_buf);
 
-	wxString backupName;
-	backupName << fn.GetName() << "_backup_" << timestamp << "." << fn.GetExt();
+	wxString baseName;
+	baseName << fn.GetName() << "_backup_" << timestamp << "_" << wxString::Format("%03d", static_cast<int>(ms.count()));
 
-	wxFileName backupPath(fn.GetPath(), backupName);
+	wxFileName backupPath(fn.GetPath(), baseName + "." + fn.GetExt());
+	int counter = 1;
+	while (backupPath.FileExists()) {
+		backupPath.SetName(baseName + "_" + std::to_string(counter++));
+	}
 	return backupPath.GetFullPath().utf8_string();
 }
 
@@ -104,11 +154,37 @@ std::string MapBackupService::createBackup(Editor& editor, wxWindow* parent) {
 	const std::string& originalPath = map.getFilename();
 	std::string backupPath = generateBackupPath(originalPath);
 
+	wxFileName fn(wxString::FromUTF8(backupPath));
+	std::string base = fn.GetName().utf8_string();
+
 	std::printf("[unreachable_cleaner] creating backup: %s\n", backupPath.c_str());
+
+	StateGuard guard(map);
+
+	// Assign backup-specific sidecar filenames based on backup path
+	if (map.spawnFormat == SpawnFormat::CanaryCrystal) {
+		map.spawnfile = base + "-monster.xml";
+		map.spawnNpcFile = base + "-npc.xml";
+	} else {
+		map.spawnfile = base + "-spawn.xml";
+		map.spawnNpcFile.clear();
+	}
+	map.housefile = base + "-house.xml";
+	map.waypointfile = base + "-waypoint.xml";
+	map.zonefile = base + "-zones.xml";
 
 	FileName backupFile(wxString::FromUTF8(backupPath));
 	IOMapOTBM writer(map.getVersion());
-	bool success = writer.saveMap(map, backupFile);
+	bool success = false;
+	try {
+		success = writer.saveMap(map, backupFile);
+	} catch (const std::exception& e) {
+		std::printf("[unreachable_cleaner] backup exception: %s\n", e.what());
+		return "";
+	} catch (...) {
+		std::printf("[unreachable_cleaner] backup unknown exception\n");
+		return "";
+	}
 
 	if (!success) {
 		std::printf("[unreachable_cleaner] backup failed\n");
