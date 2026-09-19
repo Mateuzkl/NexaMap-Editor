@@ -269,6 +269,14 @@ class MapDrawer {
 protected:
 	std::unordered_map<unsigned int, std::vector<FinderPosition>> zoneTiles;
 	std::vector<MapTooltip> tooltips;
+	struct CreatureNameOverlay {
+		int screenx;
+		int screeny;
+		std::string name;
+		bool isNpc;
+		int heightOffset;
+	};
+	std::vector<CreatureNameOverlay> creature_name_overlays;
 	struct OverlayTextTexture {
 		std::string text;
 		int maxWidth, maxHeight, fontPixels;
@@ -370,7 +378,8 @@ protected:
 	void BlitSpriteType(int screenx, int screeny, GameSprite* spr, int red = 255, int green = 255, int blue = 255, int alpha = 255);
 	void BlitCreature(int screenx, int screeny, const Creature* c, int red = 255, int green = 255, int blue = 255, int alpha = 255, FrameGroupType group = static_cast<FrameGroupType>(0));
 	void BlitCreature(int screenx, int screeny, const Outfit& outfit, Direction dir, int red = 255, int green = 255, int blue = 255, int alpha = 255, int animationFrame = 0, FrameGroupType group = static_cast<FrameGroupType>(0));
-	void DrawCreatureName(int screenx, int screeny, const Creature* c);
+	void DrawCreatureName(int screenx, int screeny, const std::string& name, bool isNpc, int heightOffset = 0);
+	void DrawCreatureNames();
 	void BlitSquare(int sx, int sy, int red, int green, int blue, int alpha, int size = 0);
 	void DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha);
 	void DrawTile(TileLocation* tile, const MapChunkGroundQuad* groundQuad = nullptr, const MapChunkRenderCache::Entry* gpuChunk = nullptr, size_t slot = 0);

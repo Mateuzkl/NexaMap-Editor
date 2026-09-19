@@ -659,6 +659,7 @@ inline int getFloorAdjustment(int floor) {
 }
 
 void MapDrawer::DrawMap() {
+	creature_name_overlays.clear();
 	const bool gpuRequested = g_settings.getBoolean(Config::USE_GPU_GROUND_CACHE);
 	const bool cpuRequested = g_settings.getBoolean(Config::USE_CPU_GEOMETRY_CACHE) || gpuRequested;
 	cpu_geometry_enabled = cpuRequested && !far_zoom_mode && !options.isOnlyColors();
@@ -928,7 +929,13 @@ void MapDrawer::DrawMap() {
 							if (tile->creature && options.show_creatures) {
 								BlitCreature(draw_x, draw_y, tile->creature);
 								if (options.show_creature_names && zoom <= 3.0) {
-									DrawCreatureName(draw_x, draw_y, tile->creature);
+									int heightOffset = 0;
+									if (GameSprite* spr = g_gui.gfx.getCreatureSprite(tile->creature->getLookType().lookType)) {
+										if (spr->height > 1) {
+											heightOffset = (spr->height - 1) * TileSize;
+										}
+									}
+									creature_name_overlays.push_back({ draw_x, draw_y, tile->creature->getName(), tile->creature->isNpc(), heightOffset });
 								}
 							}
 						}
@@ -942,6 +949,11 @@ void MapDrawer::DrawMap() {
 		++end_x;
 		++end_y;
 	}
+
+	if (options.show_creatures && options.show_creature_names && zoom <= 3.0) {
+		DrawCreatureNames();
+	}
+	creature_name_overlays.clear();
 }
 
 void MapDrawer::DrawMapMinimapPages() {
@@ -1894,12 +1906,16 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Creature* c, int re
 	BlitCreature(screenx, screeny, c->getLookType(), c->getDirection(), red, green, blue, alpha, 0, group);
 }
 
-void MapDrawer::DrawCreatureName(int screenx, int screeny, const Creature* c) {
-	if (!c) {
+void MapDrawer::DrawCreatureNames() {
+	if (creature_name_overlays.empty()) {
 		return;
 	}
+	for (const auto& overlay : creature_name_overlays) {
+		DrawCreatureName(overlay.screenx, overlay.screeny, overlay.name, overlay.isNpc, overlay.heightOffset);
+	}
+}
 
-	const std::string& name = c->getName();
+void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& name, bool isNpc, int heightOffset) {
 	if (name.empty()) {
 		return;
 	}
@@ -1919,9 +1935,9 @@ void MapDrawer::DrawCreatureName(int screenx, int screeny, const Creature* c) {
 	const int boxWidth = textWidth + paddingX * 2;
 	const int boxHeight = font.height + paddingY * 2;
 
-	// Center horizontally over the tile, placed just above the tile
+	// Center horizontally over the tile, placed just above the creature head
 	const int boxX = screenx + (TileSize - boxWidth) / 2;
-	const int boxY = screeny - boxHeight - 2;
+	const int boxY = screeny - heightOffset - boxHeight - 2;
 
 	// Background box: dark translucent
 	renderer->drawColoredQuad(
@@ -1933,7 +1949,6 @@ void MapDrawer::DrawCreatureName(int screenx, int screeny, const Creature* c) {
 	);
 
 	// Subtle border: greenish for NPCs, dark gray for Monsters
-	const bool isNpc = c->isNpc();
 	if (isNpc) {
 		renderer->drawRect(
 			static_cast<float>(boxX),
@@ -2345,7 +2360,13 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 			if (!medium_zoom_mode && tile->creature && options.show_creatures) {
 				BlitCreature(draw_x, draw_y, tile->creature);
 				if (options.show_creature_names && zoom <= 3.0) {
-					DrawCreatureName(draw_x, draw_y, tile->creature);
+					int heightOffset = 0;
+					if (GameSprite* spr = g_gui.gfx.getCreatureSprite(tile->creature->getLookType().lookType)) {
+						if (spr->height > 1) {
+							heightOffset = (spr->height - 1) * TileSize;
+						}
+					}
+					creature_name_overlays.push_back({ draw_x, draw_y, tile->creature->getName(), tile->creature->isNpc(), heightOffset });
 				}
 			}
 			if (canvas->IsIngamePreview() && tile->getPosition() == canvas->GetIngamePreviewDrawTile()) {
