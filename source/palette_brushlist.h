@@ -23,6 +23,7 @@
 #include "palette_brush_tool.h"
 
 #include "palette_model.h"
+#include "editor_resource_session.h"
 
 #include <wx/aui/auibar.h>
 #include <wx/srchctrl.h>
@@ -261,6 +262,10 @@ public:
 		MENU_SIZE_128,
 	};
 
+	enum TimerID {
+		TIMER_DEBOUNCE_SEARCH = wxID_HIGHEST + 6031,
+	};
+
 	BrushPalettePanel(wxWindow* parent, const TilesetContainer& tilesets, TilesetCategoryType category, wxWindowID id = wxID_ANY);
 	~BrushPalettePanel() override;
 
@@ -315,6 +320,8 @@ protected:
 	void OnSizeButtonClick(int toolId);
 	void OnSearchText(wxCommandEvent& event);
 	void OnSearchCancel(wxCommandEvent& event);
+	void OnSearchCharHook(wxKeyEvent& event);
+	void OnSearchKillFocus(wxFocusEvent& event);
 	void OnDebounceTimer(wxTimerEvent& event);
 	void ApplyFilter();
 
@@ -342,6 +349,7 @@ protected:
 	bool m_hasTileSizeOverride;
 
 	const TilesetContainer* m_tilesets;
+	std::weak_ptr<EditorResourceSession> m_resourceSession;
 
 	DECLARE_EVENT_TABLE();
 };

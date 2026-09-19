@@ -427,6 +427,25 @@ int main() {
 		check(l800.textX == 50, "textX accounts for offset and stays after icon");
 	}
 
+	// -----------------------------------------------------------------------
+	// 11. Zero-Allocation SearchIDs Container
+	// -----------------------------------------------------------------------
+	{
+		PaletteModel::SearchIDs sids;
+		check(sids.empty(), "SearchIDs starts empty");
+		check(sids.size() == 0, "size is 0");
+		sids.push_back(100);
+		sids.push_back(200);
+		check(!sids.empty(), "not empty after push");
+		check(sids.size() == 2, "size is 2");
+		check(sids[0] == 100 && sids[1] == 200, "indexed access works");
+
+		// Test MatchesSearch template with SearchIDs
+		check(PaletteModel::MatchesSearch("Test Item", sids, "100"), "MatchesSearch finds id 100");
+		check(PaletteModel::MatchesSearch("Test Item", sids, "200"), "MatchesSearch finds id 200");
+		check(!PaletteModel::MatchesSearch("Test Item", sids, "300"), "MatchesSearch does not find id 300");
+	}
+
 	if (failures == 0) {
 		std::cout << "All palette toolbar tests passed successfully!\n";
 		return 0;

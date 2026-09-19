@@ -19,6 +19,7 @@
 #define NEXAMAP_PALETTE_MODEL_H_
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdint>
 #include <string>
@@ -71,6 +72,7 @@ namespace PaletteModel {
 		int iconHeight = 32;
 		int textX = 0;
 		int textY = 0;
+		int textWidth = 0;
 	};
 
 	inline ListItemLayout CalculateListItemLayout(int rowX, int rowY, int rowWidth, int rowHeight, int iconSize = 32, int charHeight = 14) {
@@ -81,6 +83,7 @@ namespace PaletteModel {
 		layout.iconY = rowY + (rowHeight > iconSize ? (rowHeight - iconSize) / 2 : 0);
 		layout.textX = layout.iconX + layout.iconWidth + 6;
 		layout.textY = rowY + (rowHeight > charHeight ? (rowHeight - charHeight) / 2 : 0);
+		layout.textWidth = std::max(0, (rowX + rowWidth) - layout.textX - 4);
 		return layout;
 	}
 
@@ -99,7 +102,35 @@ namespace PaletteModel {
 		return result;
 	}
 
-	inline bool MatchesSearch(std::string_view name, const std::vector<uint32_t>& ids, const std::string& queryLower) {
+	struct SearchIDs {
+		std::array<uint32_t, 4> ids {};
+		size_t count = 0;
+
+		void push_back(uint32_t id) {
+			if (count < ids.size()) {
+				ids[count++] = id;
+			}
+		}
+
+		const uint32_t* begin() const {
+			return ids.data();
+		}
+		const uint32_t* end() const {
+			return ids.data() + count;
+		}
+		size_t size() const {
+			return count;
+		}
+		bool empty() const {
+			return count == 0;
+		}
+		uint32_t operator[](size_t idx) const {
+			return ids[idx];
+		}
+	};
+
+	template <typename IdContainer>
+	inline bool MatchesSearch(std::string_view name, const IdContainer& ids, const std::string& queryLower) {
 		if (queryLower.empty()) {
 			return true;
 		}
@@ -173,7 +204,7 @@ namespace PaletteModel {
 				continue;
 			}
 			std::string name = getName(item);
-			std::vector<uint32_t> ids = getIds(item);
+			const auto ids = getIds(item);
 			if (MatchesSearch(name, ids, queryLower)) {
 				result.push_back(item);
 			}
@@ -209,13 +240,12 @@ namespace PaletteModel {
 
 	// Concrete functions for Brush* instances, resolved in palette_model.cpp
 	uint32_t GetBrushSortID(const Brush* brush);
-	std::vector<uint32_t> GetSearchableIDs(const Brush* brush);
+	SearchIDs GetSearchableIDs(const Brush* brush);
 	bool BrushMatchesQuery(const Brush* brush, const std::string& queryLower);
 	void SortBrushes(std::vector<Brush*>& brushes, TilesetSortKey key, TilesetSortDirection dir);
 	std::vector<Brush*> FilterBrushes(const std::vector<Brush*>& brushes, const std::string& query);
-	int FindBrushIndex(const std::vector<Brush*>& brushes, const Brush* target);
 	int RestoreSelectionIndex(const std::vector<Brush*>& brushes, const Brush* selectedBefore);
-	std::vector<PaletteSearchResult> AggregateGlobalBrushes(const TilesetContainer& tilesets, int defaultCategory);
+	std::vector<PaletteSearchResult> AggregateGlobalBrushes(const TilesetContainer& tilesets, int defaultCategory = 0);
 
 } // namespace PaletteModel
 

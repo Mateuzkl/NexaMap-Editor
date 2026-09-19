@@ -51,8 +51,8 @@ namespace PaletteModel {
 		return brush->getID();
 	}
 
-	std::vector<uint32_t> GetSearchableIDs(const Brush* brush) {
-		std::vector<uint32_t> ids;
+	SearchIDs GetSearchableIDs(const Brush* brush) {
+		SearchIDs ids;
 		if (!brush) {
 			return ids;
 		}
@@ -92,7 +92,7 @@ namespace PaletteModel {
 			return true;
 		}
 		std::string name = brush->getName();
-		std::vector<uint32_t> ids = GetSearchableIDs(brush);
+		SearchIDs ids = GetSearchableIDs(brush);
 		return MatchesSearch(name, ids, queryLower);
 	}
 
@@ -115,10 +115,6 @@ namespace PaletteModel {
 		);
 	}
 
-	int FindBrushIndex(const std::vector<Brush*>& brushes, const Brush* target) {
-		return RestoreSelection(brushes, const_cast<Brush*>(target));
-	}
-
 	int RestoreSelectionIndex(const std::vector<Brush*>& brushes, const Brush* selectedBefore) {
 		return RestoreSelection(brushes, const_cast<Brush*>(selectedBefore));
 	}
@@ -127,11 +123,36 @@ namespace PaletteModel {
 		std::vector<PaletteSearchResult> results;
 		std::unordered_set<const Brush*> seen;
 
+		// Prioritize defaultCategory first if valid
+		if (defaultCategory >= TILESET_UNKNOWN && defaultCategory <= TILESET_HOUSE) {
+			for (const auto& [name, ts] : tilesets) {
+				if (!ts) {
+					continue;
+				}
+				const auto* tcg = ts->getCategory(static_cast<TilesetCategoryType>(defaultCategory));
+				if (!tcg) {
+					continue;
+				}
+				for (Brush* b : tcg->brushlist) {
+					if (b && seen.insert(b).second) {
+						results.push_back(PaletteSearchResult {
+							.brush = b,
+							.category = defaultCategory,
+							.tilesetName = ts->name,
+						});
+					}
+				}
+			}
+		}
+
 		for (const auto& [name, ts] : tilesets) {
 			if (!ts) {
 				continue;
 			}
 			for (int cat = TILESET_UNKNOWN; cat <= TILESET_HOUSE; ++cat) {
+				if (cat == defaultCategory) {
+					continue;
+				}
 				const auto* tcg = ts->getCategory(static_cast<TilesetCategoryType>(cat));
 				if (!tcg) {
 					continue;

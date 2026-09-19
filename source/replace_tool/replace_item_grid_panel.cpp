@@ -107,7 +107,7 @@ void ReplaceItemGridPanel::OnPaint(wxPaintEvent&) {
 		const ReplaceLibraryItem& item = items[index];
 		if (item.clientId != 0 && !g_gui.gfx.isUnloaded()) {
 			if (Sprite* sprite = g_gui.gfx.getSprite(item.clientId)) {
-				sprite->DrawTo(&dc, SPRITE_SIZE_32x32, cell.x + 6, cell.y + 10, cell.width, cell.height);
+				sprite->DrawTo(&dc, SPRITE_SIZE_32x32, cell.x + 6, cell.y + 10, 32, 32);
 			}
 		}
 

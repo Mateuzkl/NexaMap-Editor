@@ -60,7 +60,8 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	m_showLabels(false),
 	m_tileSize(32),
 	m_hasTileSizeOverride(false),
-	m_tilesets(&tilesets) {
+	m_tilesets(&tilesets),
+	m_resourceSession(GetActiveEditorResourceSession()) {
 	LoadPaletteFilters();
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
@@ -74,26 +75,15 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	if (!m_filterQuery.empty()) {
 		m_searchCtrl->ChangeValue(wxstr(m_filterQuery));
 	}
-	m_debounceTimer.SetOwner(this);
-	Bind(wxEVT_TIMER, &BrushPalettePanel::OnDebounceTimer, this);
+	m_debounceTimer.SetOwner(this, TIMER_DEBOUNCE_SEARCH);
+	Bind(wxEVT_TIMER, &BrushPalettePanel::OnDebounceTimer, this, TIMER_DEBOUNCE_SEARCH);
 
 	m_searchCtrl->Bind(wxEVT_TEXT, &BrushPalettePanel::OnSearchText, this);
 	m_searchCtrl->Bind(wxEVT_TEXT_ENTER, &BrushPalettePanel::OnSearchText, this);
 	m_searchCtrl->Bind(wxEVT_SEARCHCTRL_SEARCH_BTN, &BrushPalettePanel::OnSearchText, this);
 	m_searchCtrl->Bind(wxEVT_SEARCHCTRL_CANCEL_BTN, &BrushPalettePanel::OnSearchCancel, this);
-	m_searchCtrl->Bind(wxEVT_CHAR_HOOK, [this](wxKeyEvent& event) {
-		if (event.GetKeyCode() == WXK_ESCAPE) {
-			if (!m_searchCtrl->GetValue().empty()) {
-				ResetFilter();
-				return;
-			}
-		}
-		event.Skip();
-	});
-	m_searchCtrl->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& event) {
-		SavePaletteFilters();
-		event.Skip();
-	});
+	m_searchCtrl->Bind(wxEVT_CHAR_HOOK, &BrushPalettePanel::OnSearchCharHook, this);
+	m_searchCtrl->Bind(wxEVT_KILL_FOCUS, &BrushPalettePanel::OnSearchKillFocus, this);
 	searchRowSizer->Add(m_searchCtrl, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
 
 	m_searchToolbar = newd wxAuiToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxAUI_TB_DEFAULT_STYLE | wxAUI_TB_PLAIN_BACKGROUND);
@@ -162,12 +152,20 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 
 BrushPalettePanel::~BrushPalettePanel() {
 	m_debounceTimer.Stop();
-	Unbind(wxEVT_TIMER, &BrushPalettePanel::OnDebounceTimer, this);
+	Unbind(wxEVT_TIMER, &BrushPalettePanel::OnDebounceTimer, this, TIMER_DEBOUNCE_SEARCH);
 	if (toolbar) {
 		toolbar->Unbind(wxEVT_TOOL, &BrushPalettePanel::OnToolClick, this);
 	}
 	if (m_searchToolbar) {
 		m_searchToolbar->Unbind(wxEVT_TOOL, &BrushPalettePanel::OnToolClick, this);
+	}
+	if (m_searchCtrl) {
+		m_searchCtrl->Unbind(wxEVT_TEXT, &BrushPalettePanel::OnSearchText, this);
+		m_searchCtrl->Unbind(wxEVT_TEXT_ENTER, &BrushPalettePanel::OnSearchText, this);
+		m_searchCtrl->Unbind(wxEVT_SEARCHCTRL_SEARCH_BTN, &BrushPalettePanel::OnSearchText, this);
+		m_searchCtrl->Unbind(wxEVT_SEARCHCTRL_CANCEL_BTN, &BrushPalettePanel::OnSearchCancel, this);
+		m_searchCtrl->Unbind(wxEVT_CHAR_HOOK, &BrushPalettePanel::OnSearchCharHook, this);
+		m_searchCtrl->Unbind(wxEVT_KILL_FOCUS, &BrushPalettePanel::OnSearchKillFocus, this);
 	}
 }
 
@@ -611,7 +609,26 @@ void BrushPalettePanel::OnSearchText(wxCommandEvent& event) {
 	}
 }
 
+void BrushPalettePanel::OnSearchCharHook(wxKeyEvent& event) {
+	if (event.GetKeyCode() == WXK_ESCAPE) {
+		if (m_searchCtrl && !m_searchCtrl->GetValue().empty()) {
+			ResetFilter();
+			return;
+		}
+	}
+	event.Skip();
+}
+
+void BrushPalettePanel::OnSearchKillFocus(wxFocusEvent& event) {
+	SavePaletteFilters();
+	event.Skip();
+}
+
 void BrushPalettePanel::OnDebounceTimer(wxTimerEvent& WXUNUSED(event)) {
+	if (m_resourceSession.expired() || m_resourceSession.lock() != GetActiveEditorResourceSession()) {
+		m_debounceTimer.Stop();
+		return;
+	}
 	ApplyFilter();
 }
 
@@ -620,6 +637,10 @@ void BrushPalettePanel::OnSearchCancel(wxCommandEvent& event) {
 }
 
 void BrushPalettePanel::ApplyFilter() {
+	if (m_resourceSession.expired() || m_resourceSession.lock() != GetActiveEditorResourceSession()) {
+		m_debounceTimer.Stop();
+		return;
+	}
 	if (!choicebook) {
 		return;
 	}
@@ -737,6 +758,14 @@ std::string BrushPalettePanel::FindTilesetNameForBrush(const Brush* brush) const
 	return "";
 }
 
+namespace {
+	struct PaletteFilterState {
+		std::string query;
+		bool filterAll = false;
+	};
+	std::map<int, PaletteFilterState> s_paletteFilterStates;
+} // namespace
+
 void BrushPalettePanel::LoadPaletteFilters() {
 	m_sortKey = static_cast<TilesetSortKey>(g_settings.getInteger(Config::PALETTE_SORT_KEY));
 	m_sortDir = static_cast<TilesetSortDirection>(g_settings.getInteger(Config::PALETTE_SORT_DIR));
@@ -750,8 +779,14 @@ void BrushPalettePanel::LoadPaletteFilters() {
 		m_tileSize = 32;
 		m_hasTileSizeOverride = false;
 	}
-	m_filterAll = g_settings.getInteger(Config::PALETTE_FILTER_ALL) != 0;
-	m_filterQuery = g_settings.getString(Config::PALETTE_FILTER_QUERY);
+	auto it = s_paletteFilterStates.find(static_cast<int>(palette_type));
+	if (it != s_paletteFilterStates.end()) {
+		m_filterAll = it->second.filterAll;
+		m_filterQuery = it->second.query;
+	} else {
+		m_filterAll = g_settings.getInteger(Config::PALETTE_FILTER_ALL) != 0;
+		m_filterQuery = g_settings.getString(Config::PALETTE_FILTER_QUERY);
+	}
 }
 
 void BrushPalettePanel::SavePaletteFilters() {
@@ -760,6 +795,7 @@ void BrushPalettePanel::SavePaletteFilters() {
 	g_settings.setInteger(Config::PALETTE_HAS_SORT, m_hasSort ? 1 : 0);
 	g_settings.setInteger(Config::PALETTE_SHOW_LABELS, m_showLabels ? 1 : 0);
 	g_settings.setInteger(Config::PALETTE_TILE_SIZE, m_hasTileSizeOverride ? m_tileSize : 0);
+	s_paletteFilterStates[static_cast<int>(palette_type)] = { m_filterQuery, m_filterAll };
 	g_settings.setInteger(Config::PALETTE_FILTER_ALL, m_filterAll ? 1 : 0);
 	g_settings.setString(Config::PALETTE_FILTER_QUERY, m_filterQuery);
 }
@@ -805,11 +841,7 @@ void BrushPanel::SetListType(BrushListType ltype) {
 		InvalidateContents();
 		list_type = ltype;
 		if (!has_explicit_tile_size) {
-			if (list_type == BRUSHLIST_SMALL_ICONS) {
-				tile_size_px = 16;
-			} else if (list_type == BRUSHLIST_LARGE_ICONS) {
-				tile_size_px = 32;
-			}
+			tile_size_px = PaletteModel::DeriveInitialTileSize(0, list_type == BRUSHLIST_SMALL_ICONS);
 		}
 	}
 }
@@ -840,11 +872,7 @@ void BrushPanel::LoadContents() {
 	ASSERT(tileset != nullptr);
 
 	if (!has_explicit_tile_size) {
-		if (list_type == BRUSHLIST_SMALL_ICONS) {
-			tile_size_px = 16;
-		} else if (list_type == BRUSHLIST_LARGE_ICONS) {
-			tile_size_px = 32;
-		}
+		tile_size_px = PaletteModel::DeriveInitialTileSize(0, list_type == BRUSHLIST_SMALL_ICONS);
 	}
 
 	switch (list_type) {
@@ -1412,9 +1440,6 @@ Brush* BrushIconBox::GetSelectedBrush() const {
 	if (selected_index >= 0 && selected_index < static_cast<int>(displayed_brushes.size())) {
 		return displayed_brushes[selected_index];
 	}
-	if (!displayed_brushes.empty()) {
-		return displayed_brushes[0];
-	}
 	return nullptr;
 }
 
@@ -1562,8 +1587,6 @@ Brush* BrushListBox::GetSelectedBrush() const {
 	int n = GetSelection();
 	if (n != wxNOT_FOUND && static_cast<size_t>(n) < displayed_brushes.size()) {
 		return displayed_brushes[n];
-	} else if (!displayed_brushes.empty()) {
-		return displayed_brushes[0];
 	}
 	return nullptr;
 }
