@@ -1582,20 +1582,29 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
 	if (n >= displayed_brushes.size() || !displayed_brushes[n]) {
 		return;
 	}
+
+	constexpr int iconDim = 32;
+	int charHeight = dc.GetCharHeight();
+	if (charHeight <= 0) {
+		charHeight = 14;
+	}
+
+	auto layout = PaletteModel::CalculateListItemLayout(rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight(), iconDim, charHeight);
+
 	Sprite* spr = g_gui.gfx.getSprite(displayed_brushes[n]->getLookID());
 	if (spr) {
-		spr->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
+		spr->DrawTo(&dc, SPRITE_SIZE_32x32, layout.iconX, layout.iconY, layout.iconWidth, layout.iconHeight);
 	}
 	if (IsSelected(n)) {
 		dc.SetTextForeground(Theme::Get(Theme::Role::TextOnAccent));
 	} else {
 		dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 	}
-	dc.DrawText(wxstr(displayed_brushes[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);
+	dc.DrawText(wxstr(displayed_brushes[n]->getName()), layout.textX, layout.textY);
 }
 
 wxCoord BrushListBox::OnMeasureItem(size_t n) const {
-	return 32;
+	return FromDIP(36);
 }
 
 void BrushListBox::OnKey(wxKeyEvent& event) {

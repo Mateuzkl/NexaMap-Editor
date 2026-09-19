@@ -407,6 +407,26 @@ int main() {
 		check(crossCheck.empty(), "Session 1 does not leak into Session 2");
 	}
 
+	// -----------------------------------------------------------------------
+	// 10. List Item Layout Geometry (No Row-Stretching)
+	// -----------------------------------------------------------------------
+	{
+		// Test standard row width 300
+		auto l300 = PaletteModel::CalculateListItemLayout(0, 0, 300, 36, 32, 14);
+		check(l300.iconWidth == 32, "row width 300: icon width must remain 32");
+		check(l300.iconHeight == 32, "row width 300: icon height must remain 32");
+		check(l300.iconX == 2, "iconX has left padding");
+		check(l300.iconY == 2, "iconY is vertically centered: (36 - 32)/2 = 2");
+		check(l300.textX == 40, "text starts after icon without overlapping: 2 + 32 + 6 = 40");
+		check(l300.textY == 11, "text is vertically centered: (36 - 14)/2 = 11");
+
+		// Test wide row width 800
+		auto l800 = PaletteModel::CalculateListItemLayout(10, 50, 800, 36, 32, 14);
+		check(l800.iconWidth == 32, "row width 800: icon width must still remain 32, never 800");
+		check(l800.iconX == 12, "iconX accounts for offset");
+		check(l800.textX == 50, "textX accounts for offset and stays after icon");
+	}
+
 	if (failures == 0) {
 		std::cout << "All palette toolbar tests passed successfully!\n";
 		return 0;

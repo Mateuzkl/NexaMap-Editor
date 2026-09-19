@@ -64,6 +64,26 @@ namespace PaletteModel {
 		return isSmallIcons ? 16 : 32;
 	}
 
+	struct ListItemLayout {
+		int iconX = 0;
+		int iconY = 0;
+		int iconWidth = 32;
+		int iconHeight = 32;
+		int textX = 0;
+		int textY = 0;
+	};
+
+	inline ListItemLayout CalculateListItemLayout(int rowX, int rowY, int rowWidth, int rowHeight, int iconSize = 32, int charHeight = 14) {
+		ListItemLayout layout;
+		layout.iconWidth = iconSize;
+		layout.iconHeight = iconSize;
+		layout.iconX = rowX + 2;
+		layout.iconY = rowY + (rowHeight > iconSize ? (rowHeight - iconSize) / 2 : 0);
+		layout.textX = layout.iconX + layout.iconWidth + 6;
+		layout.textY = rowY + (rowHeight > charHeight ? (rowHeight - charHeight) / 2 : 0);
+		return layout;
+	}
+
 	inline std::string NormalizeQuery(std::string_view query) {
 		std::string result;
 		result.reserve(query.size());
