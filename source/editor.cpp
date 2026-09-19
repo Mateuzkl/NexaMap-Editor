@@ -1085,6 +1085,81 @@ void Editor::clearInvalidHouseTiles(bool showdialog) {
 	}
 }
 
+size_t Editor::removeEmptySpawns(bool showdialog) {
+	if (showdialog) {
+		g_gui.CreateLoadBar("Searching map for empty spawns to remove...");
+	}
+
+	selection.clear();
+
+	CreatureVector creatures;
+	TileVector toDeleteSpawns;
+	for (const auto& spawnPosition : map.spawns) {
+		Tile* tile = map.getTile(spawnPosition);
+		if (!tile || !tile->spawn) {
+			continue;
+		}
+
+		const int32_t radius = tile->spawn->getSize();
+
+		bool empty = true;
+		for (int32_t y = -radius; y <= radius; ++y) {
+			for (int32_t x = -radius; x <= radius; ++x) {
+				Tile* creature_tile = map.getTile(spawnPosition + Position(x, y, 0));
+				if (creature_tile && creature_tile->creature && !creature_tile->creature->isSaved()) {
+					if (creature_tile->creature->hasSpawnSource() && creature_tile->creature->getSpawnSource() != spawnPosition) {
+						continue;
+					}
+					creature_tile->creature->save();
+					creatures.push_back(creature_tile->creature);
+					empty = false;
+				}
+			}
+		}
+
+		if (empty) {
+			toDeleteSpawns.push_back(tile);
+		}
+	}
+
+	for (Creature* creature : creatures) {
+		creature->reset();
+	}
+
+	const size_t count = toDeleteSpawns.size();
+	if (count == 0) {
+		if (showdialog) {
+			g_gui.DestroyLoadBar();
+		}
+		return 0;
+	}
+
+	BatchAction* batch = actionQueue->createBatch(ACTION_DELETE_TILES);
+	Action* action = actionQueue->createAction(batch);
+
+	size_t removed = 0;
+	for (const auto& tile : toDeleteSpawns) {
+		Tile* newtile = tile->deepCopy(map);
+		delete newtile->spawn;
+		newtile->spawn = nullptr;
+		++removed;
+		if (showdialog && count > 0 && removed % 5 == 0) {
+			g_gui.SetLoadDone(static_cast<int32_t>(100 * removed / count));
+		}
+		action->addChange(newd Change(newtile));
+	}
+
+	batch->addAndCommitAction(action);
+	addBatch(batch);
+
+	if (showdialog) {
+		g_gui.DestroyLoadBar();
+	}
+
+	map.doChange();
+	return removed;
+}
+
 void Editor::clearModifiedTileState(bool showdialog) {
 	if (showdialog) {
 		g_gui.CreateLoadBar("Clearing modified state from all tiles...");
