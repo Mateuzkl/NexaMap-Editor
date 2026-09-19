@@ -25,13 +25,13 @@
 #ifndef RME_CREATURE_CACHE_H_
 #define RME_CREATURE_CACHE_H_
 
+#include "creatures.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
-
-class CreatureDatabase;
 
 class CreatureCache {
 public:
@@ -59,31 +59,42 @@ public:
 		const std::string& kind // "monsters" or "npcs"
 	);
 
-	/// Load cached creatures from the cache XML into the database.
-	/// @returns true on success.  On any parse error the cache is
+	/// Load cached creatures from the cache XML into the database using
+	/// workspace override semantics (identical to normal Lua import).
+	/// @returns true on success. On any parse error the cache is
 	/// deleted and false is returned so the caller falls back to
 	/// a full Lua import.
 	static bool LoadCached(
 		CreatureDatabase& db,
 		const std::filesystem::path& cacheDir,
+		const std::filesystem::path& luaDir,
 		const std::string& kind,
+		size_t* loadedCount = nullptr,
 		const ProgressCallback& progress = {}
 	);
 
-	/// Save the current standard creatures in the database to the
-	/// cache directory and write a fresh manifest of the Lua directory.
-	/// Uses atomic write (temp + rename).
+	/// Save the exact imported workspace creatures to the cache directory
+	/// and write a fresh manifest of the Lua directory.
+	/// Uses atomic Windows-safe replacement (temp + SafeReplaceFile).
 	static bool SaveCache(
-		const CreatureDatabase& db,
 		const std::filesystem::path& cacheDir,
 		const std::filesystem::path& luaDir,
 		const std::string& kind,
+		const std::vector<CreatureDatabase::ImportedCreatureRecord>& creatures,
 		const ProgressCallback& progress = {}
 	);
 
-	/// Current cache format version.  Bump when the creature XML
+	/// Windows-safe atomic file replacement helper.
+	static bool SafeReplaceFile(
+		const std::filesystem::path& from,
+		const std::filesystem::path& to,
+		std::string& error
+	);
+
+	/// Current cache format version. Bump when the creature XML
 	/// schema or manifest format changes.
-	static constexpr uint32_t SchemaVersion = 1;
+	static constexpr uint32_t SchemaVersion = 2;
 };
 
 #endif // RME_CREATURE_CACHE_H_
+

@@ -8,6 +8,13 @@
 #include "creatures.h"
 #include "gui.h"
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -97,9 +104,7 @@ namespace {
 			if (ec) {
 				entry.modifiedTime = 0;
 			} else {
-				entry.modifiedTime = std::chrono::duration_cast<std::chrono::seconds>(
-					ftime.time_since_epoch()
-				).count();
+				entry.modifiedTime = static_cast<int64_t>(ftime.time_since_epoch().count());
 			}
 			entries.push_back(std::move(entry));
 		}
@@ -206,10 +211,50 @@ bool CreatureCache::ValidateManifest(
 	return true;
 }
 
+bool CreatureCache::SafeReplaceFile(
+	const std::filesystem::path& from,
+	const std::filesystem::path& to,
+	std::string& error
+) {
+	std::error_code ec;
+#if defined(_WIN32)
+	// On Windows, std::filesystem::rename fails if destination exists.
+	// MoveFileExW with MOVEFILE_REPLACE_EXISTING is atomic and safe.
+	if (MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+		return true;
+	}
+	const DWORD winErr = GetLastError();
+	// Safe fallback: remove destination then rename
+	std::filesystem::remove(to, ec);
+	std::filesystem::rename(from, to, ec);
+	if (!ec) {
+		return true;
+	}
+	error = "MoveFileExW error " + std::to_string(winErr) + "; fallback rename error: " + ec.message();
+	std::filesystem::remove(from, ec);
+	return false;
+#else
+	std::filesystem::rename(from, to, ec);
+	if (!ec) {
+		return true;
+	}
+	std::filesystem::remove(to, ec);
+	std::filesystem::rename(from, to, ec);
+	if (!ec) {
+		return true;
+	}
+	error = "rename error: " + ec.message();
+	std::filesystem::remove(from, ec);
+	return false;
+#endif
+}
+
 bool CreatureCache::LoadCached(
 	CreatureDatabase& db,
 	const std::filesystem::path& cacheDir,
+	const std::filesystem::path& luaDir,
 	const std::string& kind,
+	size_t* loadedCount,
 	const ProgressCallback& progress
 ) {
 	const auto xmlPath = cacheXmlPath(cacheDir, kind);
@@ -217,20 +262,11 @@ bool CreatureCache::LoadCached(
 		progress("Loading cached server " + kind + "...");
 	}
 
-	wxString error;
-	wxArrayString warnings;
-	const FileName cacheFile(wxString::FromUTF8(pathToUtf8(xmlPath)));
-
-	const auto wxProgress = [&](const wxString& status) {
-		if (progress) {
-			progress(status.ToStdString(wxConvUTF8));
-		}
-	};
-
-	// Load as standard=true creatures (same as server-workspace imports).
-	if (!db.loadFromXML(cacheFile, true, error, warnings, wxProgress)) {
-		std::clog << "[creature_cache] Failed to load cache XML " << pathToUtf8(xmlPath)
-				  << ": " << error.ToStdString() << "\n";
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file(xmlPath.c_str());
+	if (!result) {
+		std::clog << "[creature_cache] Failed to parse cache XML " << pathToUtf8(xmlPath)
+				  << ": " << result.description() << "\n";
 		// Delete corrupted cache.
 		std::error_code ec;
 		std::filesystem::remove(xmlPath, ec);
@@ -238,22 +274,76 @@ bool CreatureCache::LoadCached(
 		return false;
 	}
 
-	if (!warnings.empty()) {
-		for (const auto& w : warnings) {
-			std::clog << "[creature_cache] Warning loading cache: " << w.ToStdString() << "\n";
-		}
+	pugi::xml_node root = doc.child("creatures");
+	if (!root) {
+		std::clog << "[creature_cache] Corrupted cache XML (missing <creatures> root) " << pathToUtf8(xmlPath) << "\n";
+		std::error_code ec;
+		std::filesystem::remove(xmlPath, ec);
+		std::filesystem::remove(manifestPath(cacheDir, kind), ec);
+		return false;
 	}
 
-	std::clog << "[creature_cache] Loaded cached " << kind
-			  << " from " << pathToUtf8(xmlPath) << "\n";
+	size_t count = 0;
+	for (pugi::xml_node node = root.child("creature"); node; node = node.next_sibling("creature")) {
+		pugi::xml_attribute attr = node.attribute("name");
+		if (!attr) {
+			continue;
+		}
+		const std::string name = attr.as_string();
+		if (name.empty()) {
+			continue;
+		}
+
+		auto* ct = newd CreatureType();
+		ct->name = name;
+		const std::string typeStr = node.attribute("type").as_string("monster");
+		ct->isNpc = (typeStr == "npc");
+
+		ct->outfit.lookType = node.attribute("looktype").as_int(0);
+		ct->outfit.lookItem = node.attribute("lookitem").as_int(0);
+		ct->outfit.lookMount = node.attribute("lookmount").as_int(0);
+		ct->outfit.lookAddon = node.attribute("lookaddon").as_int(0);
+		ct->outfit.lookHead = node.attribute("lookhead").as_int(0);
+		ct->outfit.lookBody = node.attribute("lookbody").as_int(0);
+		ct->outfit.lookLegs = node.attribute("looklegs").as_int(0);
+		ct->outfit.lookFeet = node.attribute("lookfeet").as_int(0);
+		ct->outfit.lookMountHead = node.attribute("lookmounthead").as_int(0);
+		ct->outfit.lookMountBody = node.attribute("lookmountbody").as_int(0);
+		ct->outfit.lookMountLegs = node.attribute("lookmountlegs").as_int(0);
+		ct->outfit.lookMountFeet = node.attribute("lookmountfeet").as_int(0);
+
+		db.applyWorkspaceCreature(ct, true);
+		++count;
+	}
+
+	if (loadedCount) {
+		*loadedCount = count;
+	}
+
+	size_t sourceFileCount = 0;
+	try {
+		std::ifstream mFile(manifestPath(cacheDir, kind));
+		if (mFile.is_open()) {
+			nlohmann::json m;
+			mFile >> m;
+			if (m.contains("files") && m["files"].is_array()) {
+				sourceFileCount = m["files"].size();
+			}
+		}
+	} catch (...) {
+	}
+
+	std::clog << "[creature_cache] Cache hit for " << kind << ": "
+			  << sourceFileCount << " source Lua files unchanged, "
+			  << count << " cached creature definitions loaded\n";
 	return true;
 }
 
 bool CreatureCache::SaveCache(
-	const CreatureDatabase& db,
 	const std::filesystem::path& cacheDir,
 	const std::filesystem::path& luaDir,
 	const std::string& kind,
+	const std::vector<CreatureDatabase::ImportedCreatureRecord>& creatures,
 	const ProgressCallback& progress
 ) {
 	if (progress) {
@@ -268,37 +358,23 @@ bool CreatureCache::SaveCache(
 		return false;
 	}
 
-	// Save creatures XML via pugi (reusing the existing saveToXML infrastructure).
-	// We save ALL standard creatures to a temporary file, then rename atomically.
 	const auto xmlPath = cacheXmlPath(cacheDir, kind);
 	const auto tmpXmlPath = cacheDir / (kind + ".xml.tmp");
 
-	// Use the existing saveToXML but filter for standard creatures.
-	// Since saveToXML only saves non-standard, we need a dedicated save.
 	{
 		pugi::xml_document doc;
 		pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
 		decl.append_attribute("version") = "1.0";
+		decl.append_attribute("encoding") = "UTF-8";
 
 		pugi::xml_node root = doc.append_child("creatures");
-		const bool isNpcKind = (kind == "npcs");
-		size_t count = 0;
-		for (auto it = const_cast<CreatureDatabase&>(db).begin();
-			 it != const_cast<CreatureDatabase&>(db).end(); ++it) {
-			CreatureType* type = it->second;
-			// Only cache standard (server-workspace-imported) creatures.
-			if (!type->standard) {
-				continue;
-			}
-			// Filter by kind.
-			if (type->isNpc != isNpcKind) {
-				continue;
-			}
+		for (const auto& record : creatures) {
+			const CreatureType& type = record.data;
 			pugi::xml_node node = root.append_child("creature");
-			node.append_attribute("name") = type->name.c_str();
-			node.append_attribute("type") = type->isNpc ? "npc" : "monster";
+			node.append_attribute("name") = type.name.c_str();
+			node.append_attribute("type") = type.isNpc ? "npc" : "monster";
 
-			const Outfit& outfit = type->outfit;
+			const Outfit& outfit = type.outfit;
 			node.append_attribute("looktype") = outfit.lookType;
 			node.append_attribute("lookitem") = outfit.lookItem;
 			node.append_attribute("lookmount") = outfit.lookMount;
@@ -311,21 +387,17 @@ bool CreatureCache::SaveCache(
 			node.append_attribute("lookmountbody") = outfit.lookMountBody;
 			node.append_attribute("lookmountlegs") = outfit.lookMountLegs;
 			node.append_attribute("lookmountfeet") = outfit.lookMountFeet;
-			++count;
 		}
 
 		if (!doc.save_file(tmpXmlPath.c_str(), "\t", pugi::format_default, pugi::encoding_utf8)) {
 			std::clog << "[creature_cache] Failed to write cache XML: " << pathToUtf8(tmpXmlPath) << "\n";
 			return false;
 		}
-		std::clog << "[creature_cache] Wrote " << count << " " << kind << " to cache\n";
 	}
 
-	// Atomic rename.
-	std::filesystem::rename(tmpXmlPath, xmlPath, ec);
-	if (ec) {
-		std::clog << "[creature_cache] Failed to rename cache XML: " << ec.message() << "\n";
-		std::filesystem::remove(tmpXmlPath, ec);
+	std::string error;
+	if (!SafeReplaceFile(tmpXmlPath, xmlPath, error)) {
+		std::clog << "[creature_cache] Failed to replace cache XML: " << error << "\n";
 		return false;
 	}
 
@@ -343,14 +415,13 @@ bool CreatureCache::SaveCache(
 		}
 		output << manifest.dump(2);
 	}
-	std::filesystem::rename(tmpMPath, mPath, ec);
-	if (ec) {
-		std::clog << "[creature_cache] Failed to rename manifest: " << ec.message() << "\n";
-		std::filesystem::remove(tmpMPath, ec);
+
+	if (!SafeReplaceFile(tmpMPath, mPath, error)) {
+		std::clog << "[creature_cache] Failed to replace manifest: " << error << "\n";
 		return false;
 	}
 
-	std::clog << "[creature_cache] Cache saved for " << kind
-			  << " (" << entries.size() << " Lua files)\n";
+	std::clog << "[creature_cache] Saved workspace " << kind << " cache: "
+			  << creatures.size() << " definitions from " << entries.size() << " Lua files\n";
 	return true;
 }

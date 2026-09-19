@@ -100,7 +100,8 @@ namespace {
 		};
 
 		if (CreatureCache::ValidateManifest(cacheDir, luaPath, kind)) {
-			if (CreatureCache::LoadCached(g_creatures, cacheDir, kind, progress)) {
+			size_t loadedCount = 0;
+			if (CreatureCache::LoadCached(g_creatures, cacheDir, luaPath, kind, &loadedCount, progress)) {
 				return; // Cache hit.
 			}
 			// Cache load failed — fall through to full import.
@@ -108,18 +109,19 @@ namespace {
 
 		// Full Lua import.
 		wxString importError;
+		CreatureDatabase::ImportedCreatureList importedRecords;
 		bool ok;
 		if (isNpc) {
-			ok = g_creatures.importNpcsFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false);
+			ok = g_creatures.importNpcsFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false, &importedRecords);
 		} else {
-			ok = g_creatures.importMonstersFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false);
+			ok = g_creatures.importMonstersFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false, &importedRecords);
 		}
 		if (!ok) {
 			warnings.push_back(wxString::Format("Couldn't import %s from the Server Workspace: %s", wxString::FromUTF8(kind), importError));
 			return;
 		}
 		// Save cache for next startup.
-		CreatureCache::SaveCache(g_creatures, cacheDir, luaPath, kind, progress);
+		CreatureCache::SaveCache(cacheDir, luaPath, kind, importedRecords, progress);
 	}
 
 	wxString GetCanaryCrystalBundledDataDirectory() {

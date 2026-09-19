@@ -107,9 +107,7 @@ int main() {
 			nlohmann::json f;
 			f["path"] = entry.path().filename().generic_string();
 			f["size"] = entry.file_size();
-			f["modifiedAt"] = std::chrono::duration_cast<std::chrono::seconds>(
-				entry.last_write_time().time_since_epoch()
-			).count();
+			f["modifiedAt"] = static_cast<int64_t>(entry.last_write_time().time_since_epoch().count());
 			files.push_back(f);
 		}
 		std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) {
@@ -134,11 +132,19 @@ int main() {
 		check(CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
 			  "ValidateManifest returns true again after added file is removed");
 
-		// Test 5: Invalidation on file modification
-		std::this_thread::sleep_for(std::chrono::milliseconds(1100)); // ensure mtime second increments
-		temp.write("monsters/demon.lua", "monster data updated with different size");
-		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
-			  "ValidateManifest returns false when a file size/mtime changes");
+		// Test 5: Invalidation on same-size sub-second file edit (no sleep needed)
+		{
+			const auto demonPath = luaDir / "demon.lua";
+			const auto oldFtime = std::filesystem::last_write_time(demonPath);
+			// Write same-size content ("monster date" is 12 bytes, same as "monster data")
+			temp.write("monsters/demon.lua", "monster date");
+			auto newFtime = std::filesystem::last_write_time(demonPath);
+			if (newFtime == oldFtime) {
+				std::filesystem::last_write_time(demonPath, oldFtime + std::filesystem::file_time_type::duration(100));
+			}
+			check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
+				  "ValidateManifest returns false when a file is modified within the same second with identical size");
+		}
 
 		// Test 6: Invalidation on file deletion
 		std::filesystem::remove(luaDir / "dragon.lua");
@@ -180,6 +186,116 @@ int main() {
 
 		check(!CreatureCache::ValidateManifest(cacheDir, luaDir, "monsters"),
 			  "ValidateManifest returns false when manifest file is corrupted");
+	}
+
+	// Test 9: SafeReplaceFile replaces existing file cleanly
+	{
+		TemporaryDirectory temp;
+		const auto fileA = temp.path / "target.txt";
+		const auto fileB = temp.path / "source.txt";
+		temp.write("target.txt", "Initial content");
+		temp.write("source.txt", "Updated content");
+
+		std::string err;
+		check(CreatureCache::SafeReplaceFile(fileB, fileA, err),
+			  "SafeReplaceFile successfully replaces existing file");
+		check(!std::filesystem::exists(fileB), "SafeReplaceFile removes source after replace");
+		std::ifstream reader(fileA);
+		std::string content;
+		std::getline(reader, content);
+		check(content == "Updated content", "SafeReplaceFile content matches source");
+	}
+
+	// Test 10: Cache equivalence and override semantics
+	{
+		TemporaryDirectory temp;
+		const auto cacheDir = temp.path / "cache";
+		const auto luaDir = temp.path / "monsters";
+		temp.write("monsters/amazon.lua", "amazon");
+		temp.write("monsters/behemoth.lua", "behemoth");
+
+		CreatureDatabase db;
+		// Bundled creature: Amazon with looktype 130
+		Outfit bundledOutfit;
+		bundledOutfit.lookType = 130;
+		CreatureType* bundledAmazon = db.addCreatureType("Amazon", false, bundledOutfit);
+		bundledAmazon->standard = true;
+
+		// Bundled creature: Demon with looktype 35
+		Outfit bundledDemonOutfit;
+		bundledDemonOutfit.lookType = 35;
+		CreatureType* bundledDemon = db.addCreatureType("Demon", false, bundledDemonOutfit);
+		bundledDemon->standard = true;
+
+		// Simulated server import: Amazon with looktype 500 (overriding bundled)
+		// and Behemoth with looktype 55
+		std::vector<CreatureDatabase::ImportedCreatureRecord> serverImported;
+		{
+			CreatureType serverAmazon;
+			serverAmazon.name = "Amazon";
+			serverAmazon.isNpc = false;
+			serverAmazon.outfit.lookType = 500;
+			serverAmazon.standard = true;
+			serverImported.push_back({ "amazon", serverAmazon });
+
+			CreatureType serverBehemoth;
+			serverBehemoth.name = "Behemoth";
+			serverBehemoth.isNpc = false;
+			serverBehemoth.outfit.lookType = 55;
+			serverBehemoth.standard = true;
+			serverImported.push_back({ "behemoth", serverBehemoth });
+		}
+
+		// Apply server import to db (Run A: Full import)
+		for (const auto& rec : serverImported) {
+			auto* ct = new CreatureType(rec.data);
+			db.applyWorkspaceCreature(ct, true);
+		}
+
+		check(db["Amazon"] != nullptr && db["Amazon"]->outfit.lookType == 500,
+			  "Run A: Server Amazon overrides bundled Amazon (lookType 500)");
+		check(db["Demon"] != nullptr && db["Demon"]->outfit.lookType == 35,
+			  "Run A: Bundled Demon preserved");
+		check(db["Behemoth"] != nullptr && db["Behemoth"]->outfit.lookType == 55,
+			  "Run A: Server Behemoth inserted");
+
+		// Save serverImported to cache (only server workspace creatures, NOT Demon)
+		check(CreatureCache::SaveCache(cacheDir, luaDir, "monsters", serverImported),
+			  "SaveCache succeeds with imported records");
+
+		// Inspect cache XML: Demon must NOT be in cache XML
+		{
+			std::ifstream xmlIn(cacheDir / "monsters.xml");
+			std::string xmlStr((std::istreambuf_iterator<char>(xmlIn)), std::istreambuf_iterator<char>());
+			check(xmlStr.find("name=\"Demon\"") == std::string::npos,
+				  "Cache XML does NOT contain bundled Demon");
+			check(xmlStr.find("name=\"Amazon\"") != std::string::npos,
+				  "Cache XML contains server Amazon");
+			check(xmlStr.find("name=\"Behemoth\"") != std::string::npos,
+				  "Cache XML contains server Behemoth");
+		}
+
+		// Run B: Reset database, load same bundled creatures, then LoadCached
+		CreatureDatabase db2;
+		CreatureType* bAmazon2 = db2.addCreatureType("Amazon", false, bundledOutfit);
+		bAmazon2->standard = true;
+		CreatureType* bDemon2 = db2.addCreatureType("Demon", false, bundledDemonOutfit);
+		bDemon2->standard = true;
+
+		size_t loadedCount = 0;
+		check(CreatureCache::LoadCached(db2, cacheDir, luaDir, "monsters", &loadedCount),
+			  "LoadCached succeeds");
+		check(loadedCount == 2, "LoadCached loaded exactly 2 server creatures");
+
+		// Equivalence asserts: Run A == Run B
+		check(db2["Amazon"] != nullptr && db2["Amazon"]->outfit.lookType == 500,
+			  "Run B: Cache hit server Amazon overrides bundled Amazon with lookType 500");
+		check(db2["Demon"] != nullptr && db2["Demon"]->outfit.lookType == 35,
+			  "Run B: Cache hit preserves bundled Demon");
+		check(db2["Behemoth"] != nullptr && db2["Behemoth"]->outfit.lookType == 55,
+			  "Run B: Cache hit inserts server Behemoth");
+		check(db2["Amazon"]->standard == true && db2["Behemoth"]->standard == true,
+			  "Run B: Standard flags match");
 	}
 
 	std::cout << "Creature Cache Tests: " << checks << " checks, " << failures << " failures.\n";

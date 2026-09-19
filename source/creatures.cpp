@@ -360,6 +360,13 @@ CreatureType* CreatureDatabase::addCreatureType(const std::string& name, bool is
 	return ct;
 }
 
+void CreatureDatabase::applyWorkspaceCreature(CreatureType* creatureType, bool standard) {
+	if (!creatureType) {
+		return;
+	}
+	addOrUpdateLuaCreature(creature_map, creatureType, standard);
+}
+
 bool CreatureDatabase::hasMissing() const {
 	for (auto iter = creature_map.begin(); iter != creature_map.end(); ++iter) {
 		if (iter->second->missing) {
@@ -547,7 +554,17 @@ bool CreatureDatabase::importLuaFromOT(const FileName& filename, wxString& error
 	return true;
 }
 
-static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directory, LuaCreatureKind kind, wxString& error, wxArrayString& warnings, const wxString& label, const CreatureDatabase::ImportProgress& progress, bool updatePalettes) {
+static bool importLuaDirectory(
+	CreatureMap& creatureMap,
+	const wxString& directory,
+	LuaCreatureKind kind,
+	wxString& error,
+	wxArrayString& warnings,
+	const wxString& label,
+	const CreatureDatabase::ImportProgress& progress,
+	bool updatePalettes,
+	CreatureDatabase::ImportedCreatureList* importedList = nullptr
+) {
 	if (directory.IsEmpty()) {
 		return true;
 	}
@@ -608,6 +625,9 @@ static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directo
 		// creature overlay, where they would be reloaded as stale duplicates
 		// when another TFS/Canary/Crystal project is opened.
 		if (creatureType) {
+			if (importedList) {
+				importedList->push_back({ as_lower_str(creatureType->name), *creatureType });
+			}
 			addOrUpdateLuaCreature(creatureMap, creatureType, true);
 		}
 		++fileCount;
@@ -624,12 +644,12 @@ static bool importLuaDirectory(CreatureMap& creatureMap, const wxString& directo
 	return true;
 }
 
-bool CreatureDatabase::importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress, bool updatePalettes) {
-	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Monster, error, warnings, "monsters", progress, updatePalettes);
+bool CreatureDatabase::importMonstersFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress, bool updatePalettes, ImportedCreatureList* importedList) {
+	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Monster, error, warnings, "monsters", progress, updatePalettes, importedList);
 }
 
-bool CreatureDatabase::importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress, bool updatePalettes) {
-	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Npc, error, warnings, "NPCs", progress, updatePalettes);
+bool CreatureDatabase::importNpcsFromLuaDir(const wxString& directory, wxString& error, wxArrayString& warnings, const ImportProgress& progress, bool updatePalettes, ImportedCreatureList* importedList) {
+	return importLuaDirectory(creature_map, directory, LuaCreatureKind::Npc, error, warnings, "NPCs", progress, updatePalettes, importedList);
 }
 
 bool CreatureDatabase::saveToXML(const FileName& filename) {
