@@ -274,7 +274,13 @@
 	<ClCompile Include="..\..\source\welcome_dialog.cpp" />
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
 	<ClCompile Include="..\..\source\workspace_session.cpp" />
+	<ClCompile Include="..\..\source\unreachable_cleaner.cpp" />
+	<ClCompile Include="..\..\source\remove_unreachable_dialog.cpp" />
+	<ClCompile Include="..\..\source\map_backup.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
+    <ClInclude Include="..\..\source\unreachable_cleaner.h" />
+    <ClInclude Include="..\..\source\remove_unreachable_dialog.h" />
+    <ClInclude Include="..\..\source\map_backup.h" />
     <ClInclude Include="..\..\source\add_tileset_window.h" />
     <ClInclude Include="..\..\source\artprovider.h" />
     <ClInclude Include="..\..\source\autoborder_preview.h" />

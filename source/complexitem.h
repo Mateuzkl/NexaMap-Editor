@@ -50,6 +50,9 @@ public:
 	ItemVector& getVector() {
 		return contents;
 	}
+	const ItemVector& getVector() const {
+		return contents;
+	}
 	double getWeight() const override;
 
 	bool unserializeItemNode_OTBM(const IOMap& maphandle, BinaryNode* node) override;
