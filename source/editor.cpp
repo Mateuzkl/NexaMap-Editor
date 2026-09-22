@@ -429,44 +429,58 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		save_otgz = true;
 		if (converter.FileExists()) {
 			backup_otbm = map_path + nstr(converter.GetName()) + ".otgz~";
-			if (!makeBackup(savefile, backup_otbm)) return false;
+			if (!makeBackup(savefile, backup_otbm)) {
+				return false;
+			}
 		}
 	} else {
 		if (converter.FileExists()) {
 			backup_otbm = map_path + nstr(converter.GetName()) + ".otbm~";
-			if (!makeBackup(savefile, backup_otbm)) return false;
+			if (!makeBackup(savefile, backup_otbm)) {
+				return false;
+			}
 		}
 
 		converter.SetFullName(wxstr(map.housefile));
 		if (converter.FileExists()) {
 			backup_house = map_path + nstr(converter.GetName()) + ".xml~";
-			if (!makeBackup(map_path + map.housefile, backup_house)) return false;
+			if (!makeBackup(map_path + map.housefile, backup_house)) {
+				return false;
+			}
 		}
 
 		converter.SetFullName(wxstr(map.spawnfile));
 		if (converter.FileExists()) {
 			backup_spawn = map_path + nstr(converter.GetName()) + ".xml~";
-			if (!makeBackup(map_path + map.spawnfile, backup_spawn)) return false;
+			if (!makeBackup(map_path + map.spawnfile, backup_spawn)) {
+				return false;
+			}
 		}
 
 		if (!map.spawnNpcFile.empty()) {
 			converter.SetFullName(wxstr(map.spawnNpcFile));
 			if (converter.FileExists()) {
 				backup_spawn_npc = map_path + nstr(converter.GetName()) + ".xml~";
-				if (!makeBackup(map_path + map.spawnNpcFile, backup_spawn_npc)) return false;
+				if (!makeBackup(map_path + map.spawnNpcFile, backup_spawn_npc)) {
+					return false;
+				}
 			}
 		}
 
 		converter.SetFullName(wxstr(map.waypointfile));
 		if (converter.FileExists()) {
 			backup_waypoint = map_path + nstr(converter.GetName()) + ".xml~";
-			if (!makeBackup(map_path + map.waypointfile, backup_waypoint)) return false;
+			if (!makeBackup(map_path + map.waypointfile, backup_waypoint)) {
+				return false;
+			}
 		}
 
 		converter.SetFullName(wxstr(map.zonefile));
 		if (converter.FileExists()) {
 			backup_zones = map_path + nstr(converter.GetName()) + ".xml~";
-			if (!makeBackup(map_path + map.zonefile, backup_zones)) return false;
+			if (!makeBackup(map_path + map.zonefile, backup_zones)) {
+				return false;
+			}
 		}
 	}
 
