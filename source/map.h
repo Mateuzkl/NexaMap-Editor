@@ -172,6 +172,15 @@ public:
 	void setSpawnNpcFilename(const std::string& new_spawnfile) {
 		spawnNpcFile = new_spawnfile;
 	}
+	const std::string& getWaypointFilename() const {
+		return waypointfile;
+	}
+	void setWaypointFilename(const std::string& new_waypointfile) {
+		waypointfile = new_waypointfile;
+	}
+	void setFilename(const std::string& new_filename) {
+		filename = new_filename;
+	}
 	void setSpawnFormat(SpawnFormat format) {
 		spawnFormat = format;
 	}

@@ -15,6 +15,9 @@
 #include <wx/socket.h>
 #include <chrono>
 #include <filesystem>
+#include <charconv>
+#include <algorithm>
+#include <string_view>
 #ifndef _WIN32
 	#include <netinet/tcp.h>
 	#include <sys/socket.h>
@@ -174,6 +177,8 @@ bool MultiplayerSession::host(const Options& opts, std::string& error) {
 		participants[0] = { 0, options.name, Role::Host, {}, playerColor(0) };
 		connectionStatus = "Hosting";
 		lastBackup = lastActivity = nowMs();
+		lastBackedUpRevision.reset();
+		backupInProgress = false;
 		timer.Start(50);
 		log("Host started on port " + std::to_string(options.port) + ".");
 		return true;
@@ -253,6 +258,9 @@ void MultiplayerSession::disconnect(const std::string& reason) {
 	pending.reset();
 	history.clear();
 	historyBytes = historyPosition = 0;
+	lastBackedUpRevision.reset();
+	backupInProgress = false;
+	lastBackup = 0;
 	if (activeSession == this) {
 		activeSession = nullptr;
 	}
@@ -1699,8 +1707,11 @@ void MultiplayerSession::onTimer(wxTimerEvent&) {
 			sendPlayers();
 			sendLocks();
 		}
-		if (!editDepth && hosting && options.autosaveMinutes && now - lastBackup >= uint64_t(options.autosaveMinutes) * 60000) {
-			saveBackup();
+		if (!editDepth && hosting && options.autosaveMinutes > 0 && now - lastBackup >= uint64_t(options.autosaveMinutes) * 60000) {
+			lastBackup = now;
+			if (editor.map.hasFile() && editor.map.hasChanged() && (!lastBackedUpRevision || *lastBackedUpRevision != revisions.current())) {
+				saveBackup(BackupReason::Automatic);
+			}
 		}
 	}
 	if (ready && (cursorDirty || heartbeat) && now - lastCursorSent >= 50) {
@@ -2018,45 +2029,236 @@ void MultiplayerSession::requestResync() {
 		}
 	}
 }
-void MultiplayerSession::saveBackup() {
-	lastBackup = nowMs();
-	if (!hosting || !editor.map.hasFile() || !editor.map.hasChanged()) {
-		return;
+struct MultiplayerSession::MapSidecarsGuard {
+	Map& map;
+	std::string spawnfile;
+	std::string spawnNpcFile;
+	std::string housefile;
+	std::string waypointfile;
+	std::string zonefile;
+	SpawnFormat spawnFormat;
+
+	explicit MapSidecarsGuard(Map& m) :
+		map(m),
+		spawnfile(m.spawnfile),
+		spawnNpcFile(m.spawnNpcFile),
+		housefile(m.housefile),
+		waypointfile(m.waypointfile),
+		zonefile(m.zonefile),
+		spawnFormat(m.spawnFormat) { }
+
+	~MapSidecarsGuard() {
+		map.spawnfile = spawnfile;
+		map.spawnNpcFile = spawnNpcFile;
+		map.housefile = housefile;
+		map.waypointfile = waypointfile;
+		map.zonefile = zonefile;
+		map.spawnFormat = spawnFormat;
 	}
+
+	MapSidecarsGuard(const MapSidecarsGuard&) = delete;
+	MapSidecarsGuard& operator=(const MapSidecarsGuard&) = delete;
+};
+
+bool MultiplayerSession::saveBackup(BackupReason reason) {
+	if (backupInProgress) {
+		return false;
+	}
+	if (!hosting) {
+		if (reason == BackupReason::Manual) {
+			log("Manual backup is only available to the host.");
+		}
+		return false;
+	}
+	if (!editor.map.hasFile()) {
+		if (reason == BackupReason::Manual) {
+			log("Cannot create multiplayer backup: map must be saved to a file first.");
+		}
+		return false;
+	}
+	if (reason == BackupReason::Automatic) {
+		if (!editor.map.hasChanged() || (lastBackedUpRevision && *lastBackedUpRevision == revisions.current())) {
+			return false;
+		}
+	}
+
+	BoolScope inProgress(backupInProgress);
+
 	try {
 		auto path = std::filesystem::path(editor.map.getFilename());
 		auto directory = path.parent_path() / "multiplayer-backups";
-		std::filesystem::create_directories(directory);
+		std::error_code ec;
+		std::filesystem::create_directories(directory, ec);
+		if (ec) {
+			log("Backup failed: could not create directory: " + ec.message());
+			return false;
+		}
+
 		auto stamp = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 		auto base = path.stem().string() + "-r" + std::to_string(revisions.current()) + "-" + std::to_string(stamp);
 		auto backup = directory / (base + ".otbm");
+
 		// Backups have independent sidecars and do not change the open document's path.
-		const auto oldSpawn = editor.map.spawnfile, oldNpc = editor.map.spawnNpcFile, oldHouse = editor.map.housefile, oldWaypoint = editor.map.waypointfile, oldZone = editor.map.zonefile;
-		editor.map.spawnfile = base + "-spawn.xml";
-		editor.map.spawnNpcFile = base + "-npc.xml";
+		MapSidecarsGuard sidecars(editor.map);
+
+		if (editor.map.spawnFormat == SpawnFormat::CanaryCrystal) {
+			editor.map.spawnfile = base + "-monster.xml";
+			editor.map.spawnNpcFile = base + "-npc.xml";
+		} else {
+			editor.map.spawnfile = base + "-spawn.xml";
+			editor.map.spawnNpcFile.clear();
+		}
 		editor.map.housefile = base + "-house.xml";
 		editor.map.waypointfile = base + "-waypoint.xml";
 		editor.map.zonefile = base + "-zones.xml";
+
 		bool saved = false;
 		try {
 			IOMapOTBM writer(editor.map.getVersion());
 			saved = writer.saveMap(editor.map, wxstr(backup.string()));
+		} catch (const std::exception& e) {
+			log(std::string("Backup failed: ") + e.what());
+			return false;
 		} catch (...) {
-			editor.map.spawnfile = oldSpawn;
-			editor.map.spawnNpcFile = oldNpc;
-			editor.map.housefile = oldHouse;
-			editor.map.waypointfile = oldWaypoint;
-			editor.map.zonefile = oldZone;
-			throw;
+			log("Backup failed: unknown exception while writing map.");
+			return false;
 		}
-		editor.map.spawnfile = oldSpawn;
-		editor.map.spawnNpcFile = oldNpc;
-		editor.map.housefile = oldHouse;
-		editor.map.waypointfile = oldWaypoint;
-		editor.map.zonefile = oldZone;
-		log(saved ? "Multiplayer backup saved: " + backup.string() : "Multiplayer backup could not be saved.");
+
+		if (saved) {
+			lastBackedUpRevision = revisions.current();
+			const std::string prefix = (reason == BackupReason::Manual) ? "Manual multiplayer backup saved: " : "Automatic multiplayer backup saved: ";
+			log(prefix + backup.string());
+			pruneOldBackups(directory, path.stem().string(), options.maxBackupSets);
+			return true;
+		} else {
+			log("Backup failed: map writer returned false.");
+			return false;
+		}
 	} catch (const std::exception& e) {
 		log(std::string("Backup failed: ") + e.what());
+		return false;
+	} catch (...) {
+		log("Backup failed: unknown exception.");
+		return false;
+	}
+}
+
+void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory, const std::string& mapStem, uint32_t maxSets) {
+	if (maxSets == 0) {
+		return;
+	}
+	struct BackupSet {
+		std::string base;
+		uint64_t revision = 0;
+		uint64_t timestamp = 0;
+		std::vector<std::filesystem::path> files;
+	};
+
+	std::map<std::string, BackupSet> setsByBase;
+	const std::string prefix = mapStem + "-r";
+
+	std::error_code ec;
+	for (const auto& entry : std::filesystem::directory_iterator(directory, ec)) {
+		if (ec) {
+			break;
+		}
+		if (!entry.is_regular_file()) {
+			continue;
+		}
+		const std::string filename = entry.path().filename().string();
+		if (!filename.starts_with(prefix)) {
+			continue;
+		}
+		std::string_view rest(filename);
+		rest.remove_prefix(prefix.size());
+
+		// Parse revision: digits followed by '-'
+		size_t revLen = 0;
+		while (revLen < rest.size() && rest[revLen] >= '0' && rest[revLen] <= '9') {
+			++revLen;
+		}
+		if (revLen == 0 || revLen >= rest.size() || rest[revLen] != '-') {
+			continue;
+		}
+		uint64_t rev = 0;
+		const auto revRes = std::from_chars(rest.data(), rest.data() + revLen, rev);
+		if (revRes.ec != std::errc()) {
+			continue;
+		}
+		rest.remove_prefix(revLen + 1);
+
+		// Parse timestamp: digits
+		size_t stampLen = 0;
+		while (stampLen < rest.size() && rest[stampLen] >= '0' && rest[stampLen] <= '9') {
+			++stampLen;
+		}
+		if (stampLen == 0) {
+			continue;
+		}
+		uint64_t stamp = 0;
+		const auto stampRes = std::from_chars(rest.data(), rest.data() + stampLen, stamp);
+		if (stampRes.ec != std::errc()) {
+			continue;
+		}
+		const std::string_view suffix = rest.substr(stampLen);
+
+		// Suffix must strictly match one of the known sidecar/otbm extensions
+		static constexpr std::string_view validSuffixes[] = {
+			".otbm",
+			"-spawn.xml",
+			"-monster.xml",
+			"-npc.xml",
+			"-house.xml",
+			"-waypoint.xml",
+			"-zones.xml"
+		};
+		bool valid = false;
+		for (const auto& s : validSuffixes) {
+			if (suffix == s) {
+				valid = true;
+				break;
+			}
+		}
+		if (!valid) {
+			continue;
+		}
+
+		const std::string base = filename.substr(0, prefix.size() + revLen + 1 + stampLen);
+		auto& set = setsByBase[base];
+		set.base = base;
+		set.revision = rev;
+		set.timestamp = stamp;
+		set.files.push_back(entry.path());
+	}
+
+	if (setsByBase.size() <= maxSets) {
+		return;
+	}
+
+	std::vector<BackupSet> sortedSets;
+	sortedSets.reserve(setsByBase.size());
+	for (auto& [k, v] : setsByBase) {
+		sortedSets.push_back(std::move(v));
+	}
+	std::sort(sortedSets.begin(), sortedSets.end(), [](const BackupSet& a, const BackupSet& b) {
+		if (a.timestamp != b.timestamp) {
+			return a.timestamp < b.timestamp;
+		}
+		return a.revision < b.revision;
+	});
+
+	const size_t toRemove = sortedSets.size() - maxSets;
+	size_t removedCount = 0;
+	for (size_t i = 0; i < toRemove; ++i) {
+		for (const auto& f : sortedSets[i].files) {
+			std::error_code rmEc;
+			std::filesystem::remove(f, rmEc);
+		}
+		++removedCount;
+	}
+
+	if (removedCount > 0) {
+		log("Backup cleanup: removed " + std::to_string(removedCount) + (removedCount == 1 ? " old backup set." : " old backup sets."));
 	}
 }
 MultiplayerSession::MetadataEdit::MetadataEdit(Map* map, House* affectedHouse) {

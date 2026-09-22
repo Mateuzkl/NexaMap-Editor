@@ -36,6 +36,7 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 	wxChoice* role = nullptr;
 	wxCheckBox* approvals = nullptr;
 	wxSpinCtrl* autosave = nullptr;
+	wxSpinCtrl* backupSets = nullptr;
 	if (hosting) {
 		maxPlayers = new wxSpinCtrl(&dialog, wxID_ANY);
 		maxPlayers->SetRange(2, Multiplayer::MaxPlayers);
@@ -53,7 +54,11 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 		autosave = new wxSpinCtrl(&dialog, wxID_ANY);
 		autosave->SetRange(0, 120);
 		autosave->SetValue(options.autosaveMinutes);
-		field("Backup interval in minutes (0 = off)", autosave);
+		field("Automatic backup interval in minutes (0 = manual only)", autosave);
+		backupSets = new wxSpinCtrl(&dialog, wxID_ANY);
+		backupSets->SetRange(1, 100);
+		backupSets->SetValue(options.maxBackupSets);
+		field("Backup retention count", backupSets);
 	}
 	if (hosting) {
 		auto* endpoints = new wxChoice(&dialog, wxID_ANY);
@@ -109,6 +114,7 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 		options.defaultRole = static_cast<Multiplayer::Role>(role->GetSelection() + 1);
 		options.approvals = approvals->GetValue();
 		options.autosaveMinutes = autosave->GetValue();
+		options.maxBackupSets = backupSets->GetValue();
 	}
 	return true;
 }
@@ -136,7 +142,14 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 		auto* connection = new wxBoxSizer(wxHORIZONTAL);
 		connection->Add(new wxStaticText(panel, wxID_ANY, wxString::Format("Listening port: %u", live.settings().port)), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
 		connection->Add(endpoints, 1, wxRIGHT, FromDIP(8));
-		connection->Add(copy);
+		connection->Add(copy, 0, wxRIGHT, FromDIP(8));
+		auto* backupBtn = new wxButton(panel, wxID_ANY, "Backup now");
+		backupBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+			if (session && session->isHost()) {
+				session->saveBackup(MultiplayerSession::BackupReason::Manual);
+			}
+		});
+		connection->Add(backupBtn);
 		layout->Add(connection, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 	}
 	auto* book = new wxNotebook(panel, wxID_ANY);
@@ -175,6 +188,12 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 	kick->Enable(live.isHost());
 	button(playerPage, buttons, "Resync", [this](wxCommandEvent&) { if (session){ session->requestResync();
 } });
+	auto* backup = button(playerPage, buttons, "Backup now", [this](wxCommandEvent&) {
+		if (session && session->isHost()) {
+			session->saveBackup(MultiplayerSession::BackupReason::Manual);
+		}
+	});
+	backup->Enable(live.isHost());
 	playerLayout->Add(buttons, 0, wxALL, 8);
 	playerPage->SetSizer(playerLayout);
 	book->AddPage(playerPage, "Players & diagnostics");
@@ -286,5 +305,6 @@ void MultiplayerWindow::update() {
 		chat->ChangeValue(wxstr(log));
 		chat->ShowPosition(chat->GetLastPosition());
 	}
-	diagnostics->SetLabel(wxstr(session->status() + " | Revision " + std::to_string(session->revision()) + " | Queued " + std::to_string(session->pendingBytes() / 1024) + " KiB | Locks " + std::to_string(session->locks().size()) + "\nSession " + session->sessionId() + " | Port " + std::to_string(session->settings().port)));
+	const std::string backupStatus = session->settings().autosaveMinutes == 0 ? "Backup: Manual only" : ("Backup: every " + std::to_string(session->settings().autosaveMinutes) + " min");
+	diagnostics->SetLabel(wxstr(session->status() + " | Revision " + std::to_string(session->revision()) + " | " + backupStatus + " | Queued " + std::to_string(session->pendingBytes() / 1024) + " KiB | Locks " + std::to_string(session->locks().size()) + "\nSession " + session->sessionId() + " | Port " + std::to_string(session->settings().port)));
 }
