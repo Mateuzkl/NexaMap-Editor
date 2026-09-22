@@ -153,7 +153,7 @@ public:
 		m_what(error) { }
 	OTMLException(const OTMLNodePtr& node, const std::string& error);
 	OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line = -1);
-	~OTMLException() throw() override {};
+	~OTMLException() throw() override { };
 
 	const char* what() const throw() override {
 		return m_what.c_str();
@@ -702,16 +702,31 @@ inline std::string OTMLParser::getNextLine() {
 }
 
 inline int OTMLParser::getLineDepth(const std::string& line, bool multilining) {
-	std::size_t spaces = 0;
-	while (line[spaces] == ' ') {
-		spaces++;
+	std::size_t i = 0;
+	int depth = 0;
+	int spaces = 0;
+	while (i < line.size()) {
+		if (line[i] == ' ') {
+			spaces++;
+			if (spaces == 2) {
+				depth++;
+				spaces = 0;
+			}
+			i++;
+		} else if (line[i] == '\t') {
+			depth++;
+			spaces = 0;
+			i++;
+		} else {
+			break;
+		}
 	}
 
-	int depth = spaces / 2;
+	if (i == line.size() || (i + 1 < line.size() && line[i] == '/' && line[i + 1] == '/')) {
+		return -1;
+	}
+
 	if (!multilining || depth <= currentDepth) {
-		if (line[spaces] == '\t') {
-			throw OTMLException(doc, "indentation with tabs are not allowed", currentLine);
-		}
 		if (spaces % 2 != 0) {
 			throw OTMLException(doc, "must indent every 2 spaces", currentLine);
 		}

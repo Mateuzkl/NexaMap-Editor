@@ -197,7 +197,7 @@ namespace {
 	}
 
 	bool IsSupportedSpriteType(uint32_t spriteType) {
-		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 || spriteType == 11 || spriteType == 16 || spriteType == 22;
+		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 || spriteType == 11 || spriteType == 14 || spriteType == 16 || spriteType == 21 || spriteType == 22;
 	}
 
 	uint32_t SpriteSheetCapacity(uint32_t spriteType) {
@@ -208,8 +208,10 @@ namespace {
 			case 3:
 				return 36;
 			case 11:
+			case 14:
 				return 16;
 			case 16:
+			case 21:
 				return 9;
 			case 22:
 				return 4;

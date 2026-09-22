@@ -43,8 +43,10 @@ ClientSpriteSize ClientSpriteSheet::getSpriteSize() const noexcept {
 		case ClientSpriteLayout::TwoByTwo:
 			return { 64, 64 };
 		case ClientSpriteLayout::ThreeByThree:
+		case ClientSpriteLayout::ThreeByThree_OTC:
 			return { 96, 96 };
 		case ClientSpriteLayout::FourByFour:
+		case ClientSpriteLayout::FourByFour_OTC:
 			return { 128, 128 };
 		case ClientSpriteLayout::FiveByFive:
 			return { 160, 160 };

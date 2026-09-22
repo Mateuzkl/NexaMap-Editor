@@ -99,6 +99,34 @@ int main() {
 	check(samePath(preferredOtc.manifest.assetsDirectory, newerOtcAssets), "newest OTC version is preferred over direct catalog");
 	check(preferredOtc.manifest.version == "15.26 (OTC)", "preferred OTC version is retained");
 
+	const std::filesystem::path otc1530Assets = directOtcAssets / "1530";
+	std::filesystem::create_directories(otc1530Assets);
+	write(otc1530Assets / "catalog-content.json", R"([
+		{"type":"appearances","file":"appearances.dat"},
+		{"type":"sprite","file":"sheet14.lzma","firstspriteid":100,"lastspriteid":115,"spritetype":14},
+		{"type":"sprite","file":"sheet21.lzma","firstspriteid":200,"lastspriteid":208,"spritetype":21}
+	])");
+	write(otc1530Assets / "appearances.dat", "");
+	write(otc1530Assets / "sheet14.lzma", "");
+	write(otc1530Assets / "sheet21.lzma", "");
+	const ClientAssetsValidationResult otc1530 = ClientAssetsManifestLoader::Validate(otc1530Assets);
+	check(otc1530.valid, "OTC 1530 version assets directory with sprite types 14 and 21 is accepted");
+	check(otc1530.manifest.version == "15.30 (OTC)", "OTC 1530 directory version is formatted as 15.30 (OTC)");
+	check(otc1530.manifest.spriteSheets.size() == 2, "sprite sheets for types 14 and 21 are retained");
+
+	// Test exceeding capacity for layout 14 (max 16) and 21 (max 9)
+	write(otc1530Assets / "catalog-content.json", R"([
+		{"type":"appearances","file":"appearances.dat"},
+		{"type":"sprite","file":"sheet14.lzma","firstspriteid":100,"lastspriteid":116,"spritetype":14}
+	])");
+	check(!ClientAssetsManifestLoader::Validate(otc1530Assets).valid, "sprite type 14 exceeding capacity 16 is rejected");
+
+	write(otc1530Assets / "catalog-content.json", R"([
+		{"type":"appearances","file":"appearances.dat"},
+		{"type":"sprite","file":"sheet21.lzma","firstspriteid":200,"lastspriteid":209,"spritetype":21}
+	])");
+	check(!ClientAssetsManifestLoader::Validate(otc1530Assets).valid, "sprite type 21 exceeding capacity 9 is rejected");
+
 	write(root / "assets" / "catalog-content.json", R"([
 		{"type":"appearances","file":"appearances.dat"},
 		{"type":"sprite","file":"sheet.lzma","firstspriteid":1,"lastspriteid":144,"spritetype":4}
