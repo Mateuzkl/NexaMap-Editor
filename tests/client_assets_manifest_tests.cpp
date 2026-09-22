@@ -114,6 +114,20 @@ int main() {
 	check(otc1530.manifest.version == "15.30 (OTC)", "OTC 1530 directory version is formatted as 15.30 (OTC)");
 	check(otc1530.manifest.spriteSheets.size() == 2, "sprite sheets for types 14 and 21 are retained");
 
+	const std::filesystem::path nestedSubdir = otc1530Assets / "subfolder";
+	std::filesystem::create_directories(nestedSubdir);
+	write(nestedSubdir / "catalog-content.json", "[]");
+	const ClientAssetsValidationResult directWithSubdir = ClientAssetsManifestLoader::Validate(otc1530Assets);
+	check(directWithSubdir.valid, "direct OTC version with subfolder catalog is valid");
+	bool hasMultipleWarning = false;
+	for (const auto& w : directWithSubdir.manifest.warnings) {
+		if (w.find("Multiple OTC Assets versions") != std::string::npos) {
+			hasMultipleWarning = true;
+		}
+	}
+	check(!hasMultipleWarning, "direct OTC version selection does not produce multiple versions warning");
+	std::filesystem::remove_all(nestedSubdir, error);
+
 	// Test exceeding capacity for layout 14 (max 16) and 21 (max 9)
 	write(otc1530Assets / "catalog-content.json", R"([
 		{"type":"appearances","file":"appearances.dat"},

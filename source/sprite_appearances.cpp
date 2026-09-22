@@ -98,7 +98,10 @@ bool SpriteAppearances::loadCatalog(const ClientAssetsManifest& manifest, wxStri
 		return false;
 	}
 	for (const std::string& warning : manifest.warnings) {
-		warnings.push_back(wxstr(warning));
+		const wxString warningString = wxstr(warning);
+		if (std::find(warnings.begin(), warnings.end(), warningString) == warnings.end()) {
+			warnings.push_back(warningString);
+		}
 	}
 	return true;
 }

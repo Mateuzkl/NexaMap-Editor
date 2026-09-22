@@ -663,13 +663,10 @@ void WelcomeDialogPanel::OnSelectClient(wxCommandEvent& WXUNUSED(event)) {
 	wxArrayString warnings;
 	if (!g_workspace.configureClient(dialog.GetPath(), error, warnings)) {
 		wxMessageBox(error, "Client folder not supported", wxOK | wxICON_ERROR, this);
-	}
-	if (!warnings.empty()) {
-		wxString message;
+	} else {
 		for (const wxString& warning : warnings) {
-			message << warning << "\n";
+			wxLogWarning("Client detection: %s", warning);
 		}
-		wxMessageBox(message, "Client detection warnings", wxOK | wxICON_WARNING, this);
 	}
 	RefreshWorkspaceDashboard();
 }
