@@ -299,6 +299,7 @@ public:
 private:
 	std::string getNextLine();
 	int getLineDepth(const std::string& line, bool multilining = false);
+	std::size_t getIndentationOffset(const std::string& line, int levels);
 	void parseLine(std::string line);
 	void parseNode(const std::string& data);
 
@@ -734,6 +735,29 @@ inline int OTMLParser::getLineDepth(const std::string& line, bool multilining) {
 	return depth;
 }
 
+inline std::size_t OTMLParser::getIndentationOffset(const std::string& line, int levels) {
+	std::size_t i = 0;
+	int depth = 0;
+	int spaces = 0;
+	while (i < line.size() && depth < levels) {
+		if (line[i] == ' ') {
+			spaces++;
+			if (spaces == 2) {
+				depth++;
+				spaces = 0;
+			}
+			i++;
+		} else if (line[i] == '\t') {
+			depth++;
+			spaces = 0;
+			i++;
+		} else {
+			break;
+		}
+	}
+	return i;
+}
+
 inline void OTMLParser::parseLine(std::string line) {
 	int depth = getLineDepth(line);
 	if (depth == -1) {
@@ -784,7 +808,10 @@ inline void OTMLParser::parseNode(const std::string& data) {
 			std::string line = getNextLine();
 			int depth = getLineDepth(line, true);
 			if (depth > currentDepth) {
-				multiLineData += line.substr((currentDepth + 1) * 2);
+				const std::size_t offset = getIndentationOffset(line, currentDepth + 1);
+				if (offset < line.size()) {
+					multiLineData += line.substr(offset);
+				}
 			} else {
 				trim(line);
 				if (!line.empty()) {

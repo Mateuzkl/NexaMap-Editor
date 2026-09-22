@@ -317,6 +317,16 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME client_assets_manifest_tests COMMAND client_assets_manifest_tests)
 
+	add_executable(otml_tests
+		tests/otml_tests.cpp
+	)
+	target_include_directories(otml_tests PRIVATE source)
+	set_target_properties(otml_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME otml_tests COMMAND otml_tests)
+
 	add_executable(server_workspace_tests
 		tests/server_workspace_tests.cpp
 		source/server_workspace.cpp

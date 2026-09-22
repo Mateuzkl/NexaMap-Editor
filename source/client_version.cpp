@@ -422,11 +422,16 @@ ClientVersion* ClientVersion::detectFromPath(const FileName& requestedPath, wxSt
 				const OTMLNodePtr node = document->get("DatSpr");
 				metadata = wxFileName(clientDirectory, wxstr(node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat")));
 				sprites = wxFileName(clientDirectory, wxstr(node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr")));
+			} else {
+				error = wxString::Format("The OTML file '%s' does not contain a valid 'DatSpr' configuration.", otfi.GetFullPath());
+				return nullptr;
 			}
 		} catch (const std::exception& e) {
-			wxLogWarning("Failed to parse OTML file %s: %s", otfi.GetFullPath(), wxString::FromUTF8(e.what()));
+			error = wxString::Format("Failed to parse OTML file %s: %s", otfi.GetFullPath(), wxString::FromUTF8(e.what()));
+			return nullptr;
 		} catch (...) {
-			wxLogWarning("Unknown exception parsing OTML file %s", otfi.GetFullPath());
+			error = wxString::Format("Unknown exception parsing OTML file %s", otfi.GetFullPath());
+			return nullptr;
 		}
 	}
 
@@ -516,11 +521,15 @@ bool ClientVersion::hasValidPaths() {
 				auto sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
 				metadata_path = wxFileName(client_path.GetFullPath(), wxString(metadata));
 				sprites_path = wxFileName(client_path.GetFullPath(), wxString(sprites));
+			} else {
+				return false;
 			}
 		} catch (const std::exception& e) {
 			wxLogWarning("Failed to parse OTML file %s: %s", otfi.GetFullPath(), wxString::FromUTF8(e.what()));
+			return false;
 		} catch (...) {
 			wxLogWarning("Unknown exception parsing OTML file %s", otfi.GetFullPath());
+			return false;
 		}
 	}
 
