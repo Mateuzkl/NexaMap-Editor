@@ -424,7 +424,7 @@ ClientVersion* ClientVersion::detectFromPath(const FileName& requestedPath, wxSt
 				sprites = wxFileName(clientDirectory, wxstr(node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr")));
 			}
 		} catch (const std::exception& e) {
-			wxLogWarning("Failed to parse OTML file %s: %s", otfi.GetFullPath(), wxstr(e.what()));
+			wxLogWarning("Failed to parse OTML file %s: %s", otfi.GetFullPath(), wxString::FromUTF8(e.what()));
 		} catch (...) {
 			wxLogWarning("Unknown exception parsing OTML file %s", otfi.GetFullPath());
 		}
@@ -518,7 +518,7 @@ bool ClientVersion::hasValidPaths() {
 				sprites_path = wxFileName(client_path.GetFullPath(), wxString(sprites));
 			}
 		} catch (const std::exception& e) {
-			wxLogWarning("Failed to parse OTML file %s: %s", otfi.GetFullPath(), wxstr(e.what()));
+			wxLogWarning("Failed to parse OTML file %s: %s", otfi.GetFullPath(), wxString::FromUTF8(e.what()));
 		} catch (...) {
 			wxLogWarning("Unknown exception parsing OTML file %s", otfi.GetFullPath());
 		}

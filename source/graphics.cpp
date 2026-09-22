@@ -813,7 +813,7 @@ bool GraphicManager::loadOTFI(const FileName& filename, wxString& error, wxArray
 				return false;
 			}
 		} catch (const std::exception& e) {
-			error += wxString::Format("Could not parse OTML file %s: %s", otfi.GetFullPath(), wxstr(e.what()));
+			error += wxString::Format("Could not parse OTML file %s: %s", otfi.GetFullPath(), wxString::FromUTF8(e.what()));
 			return false;
 		} catch (...) {
 			error += wxString::Format("Unknown exception parsing OTML file %s", otfi.GetFullPath());
