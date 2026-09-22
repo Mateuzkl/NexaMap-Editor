@@ -468,6 +468,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_open_project.png", "Workspace", "Client + server resources", "Open the configured Server Workspace.", WELCOME_DIALOG_OPEN_WORKSPACE, true);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_new_map.png", "New Map", "Create an OTBM map", "Create a new OTBM map.", wxID_NEW);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_open_project.png", "Open Map", "Open an existing map", "Open an existing OTBM map.", wxID_OPEN);
+	AddNavigationItem(navigationPanel, navigationSizer, "icon_multiplayer.png", "Multiplayer", "Join a shared map", "Join a multiplayer NexaMap session by host/IP, port and password.", WELCOME_DIALOG_MULTIPLAYER_JOIN);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_map_converter.png", "Converters", "Maps, spawns and IDs", "Open the map item ID converter.", WELCOME_DIALOG_MAP_CONVERTER);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_preferences.png", "Preferences", "Configure the editor", "Configure NexaMap Editor.", wxID_PREFERENCES);
 

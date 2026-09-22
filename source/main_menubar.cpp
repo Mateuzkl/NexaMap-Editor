@@ -909,36 +909,7 @@ void MainMenuBar::OnMultiplayerHost(wxCommandEvent&) {
 	}
 }
 void MainMenuBar::OnMultiplayerJoin(wxCommandEvent&) {
-	if (MultiplayerSession::current()) {
-		return;
-	}
-	MultiplayerSession::Options options;
-	if (!MultiplayerWindow::configure(frame, false, options) || MultiplayerSession::current() || g_gui.IsApplicationClosing()) {
-		return;
-	}
-	Editor* editor = g_gui.GetCurrentEditor();
-	if (!editor || editor->map.hasFile() || editor->map.getTileCount()) {
-		if (!g_gui.NewMap()) {
-			return;
-		}
-		editor = g_gui.GetCurrentEditor();
-	}
-	if (!editor || MultiplayerSession::current() || g_gui.IsApplicationClosing()) {
-		return;
-	}
-	try {
-		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor);
-		std::string error;
-		if (!editor->multiplayer->join(options, error)) {
-			editor->multiplayer.reset();
-			g_gui.PopupDialog("Multiplayer", wxstr(error), wxOK);
-			return;
-		}
-		editor->multiplayer->showWindow();
-		g_gui.UpdateMenus();
-	} catch (const std::exception& e) {
-		g_gui.PopupDialog("Multiplayer", wxString::FromUTF8(e.what()), wxOK);
-	}
+	g_gui.JoinMultiplayerSession(frame);
 }
 void MainMenuBar::OnMultiplayerDisconnect(wxCommandEvent&) {
 	if (auto* live = MultiplayerSession::current()) {

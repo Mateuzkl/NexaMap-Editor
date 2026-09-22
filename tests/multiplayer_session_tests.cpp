@@ -7,6 +7,7 @@
 #include "multiplayer_session.h"
 #include "multiplayer_codec.h"
 #include "multiplayer_crypto.h"
+#include "welcome_dialog.h"
 #include <wx/evtloop.h>
 #include <chrono>
 #include <iostream>
@@ -271,18 +272,25 @@ public:
 			std::filesystem::create_directories(tempDir);
 			const std::string stem = "world";
 
-			// Create 12 backup sets (stamp 1000..1011) with various sidecars
+			// Create 12 backup sets (stamp 1000..1011) with various sidecars and .complete markers
 			for (uint64_t i = 0; i < 12; ++i) {
 				std::string base = stem + "-r1-" + std::to_string(1000 + i);
 				std::ofstream(tempDir / (base + ".otbm")) << "test";
 				std::ofstream(tempDir / (base + "-spawn.xml")) << "test";
 				std::ofstream(tempDir / (base + "-house.xml")) << "test";
 				std::ofstream(tempDir / (base + "-zones.xml")) << "test";
+				std::ofstream(tempDir / (base + ".complete")) << "done";
 			}
 
 			// Create an incomplete remnant lacking .otbm (must be purged without consuming a retention slot)
 			auto remnantSpawn = tempDir / (stem + "-r1-999-spawn.xml");
 			std::ofstream(remnantSpawn) << "remnant";
+
+			// Create an uncommitted crash-partial set having .otbm and sidecars but missing .complete
+			auto uncommittedOtbm = tempDir / (stem + "-r1-1002_1.otbm");
+			auto uncommittedSpawn = tempDir / (stem + "-r1-1002_1-spawn.xml");
+			std::ofstream(uncommittedOtbm) << "crash";
+			std::ofstream(uncommittedSpawn) << "crash";
 
 			// Create unrelated files in the same directory that MUST NOT be touched
 			auto unrelated1 = tempDir / "world.otbm";
@@ -298,25 +306,31 @@ public:
 			// Incomplete remnant must be removed
 			check(!std::filesystem::exists(remnantSpawn), "Retention failed to purge incomplete remnant lacking .otbm");
 
+			// Uncommitted crash-partial set must be removed
+			check(!std::filesystem::exists(uncommittedOtbm), "Retention failed to purge uncommitted crash-partial .otbm lacking .complete");
+			check(!std::filesystem::exists(uncommittedSpawn), "Retention failed to purge uncommitted crash-partial sidecar");
+
 			// Unrelated files must still exist
 			check(std::filesystem::exists(unrelated1), "Retention deleted unrelated file world.otbm");
 			check(std::filesystem::exists(unrelated2), "Retention deleted unrelated file world-r1-notabackup.txt");
 			check(std::filesystem::exists(unrelated3), "Retention deleted other map backup");
 
-			// Oldest 2 sets (1000 and 1001) should be removed completely
+			// Oldest 2 sets (1000 and 1001) should be removed completely, including .complete
 			for (uint64_t i = 0; i < 2; ++i) {
 				std::string base = stem + "-r1-" + std::to_string(1000 + i);
 				check(!std::filesystem::exists(tempDir / (base + ".otbm")), "Oldest otbm was not pruned");
 				check(!std::filesystem::exists(tempDir / (base + "-spawn.xml")), "Oldest spawn was not pruned");
 				check(!std::filesystem::exists(tempDir / (base + "-house.xml")), "Oldest house was not pruned");
 				check(!std::filesystem::exists(tempDir / (base + "-zones.xml")), "Oldest zones was not pruned");
+				check(!std::filesystem::exists(tempDir / (base + ".complete")), "Oldest .complete was not pruned");
 			}
 
-			// Newer 10 sets (1002..1011) must remain
+			// Newer 10 sets (1002..1011) must remain, including .complete
 			for (uint64_t i = 2; i < 12; ++i) {
 				std::string base = stem + "-r1-" + std::to_string(1000 + i);
 				check(std::filesystem::exists(tempDir / (base + ".otbm")), "Retained otbm was erroneously pruned");
 				check(std::filesystem::exists(tempDir / (base + "-spawn.xml")), "Retained spawn was erroneously pruned");
+				check(std::filesystem::exists(tempDir / (base + ".complete")), "Retained .complete was erroneously pruned");
 			}
 
 			std::filesystem::remove_all(tempDir);
@@ -356,12 +370,17 @@ public:
 			// Rapid manual backup within same revision creates unique collision-resistant file without overwriting
 			check(f.host().saveBackup(MultiplayerSession::BackupReason::Manual), "Second rapid manual backup failed");
 			size_t otbmCount = 0;
+			size_t completeCount = 0;
 			for (const auto& entry : std::filesystem::directory_iterator(backupDir)) {
 				if (entry.path().extension() == ".otbm") {
 					++otbmCount;
+				} else if (entry.path().extension() == ".complete") {
+					++completeCount;
 				}
 			}
 			check(otbmCount == 2, "Second manual backup must not overwrite earlier backup set");
+			check(completeCount == 2, "Each completed backup set must produce a .complete marker");
+			check(WELCOME_DIALOG_MULTIPLAYER_JOIN == wxID_HIGHEST + 7003, "WELCOME_DIALOG_MULTIPLAYER_JOIN action ID mismatch");
 
 			// Scenario 7: Verify sidecar paths are preserved exactly
 			check(f.hostEditor.map.getSpawnFilename() == "testworld-spawn.xml", "Spawn filename was corrupted by backup");

@@ -15,6 +15,7 @@ wxDECLARE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 constexpr wxWindowID WELCOME_DIALOG_MAP_CONVERTER = wxID_HIGHEST + 7000;
 constexpr wxWindowID WELCOME_DIALOG_SPAWN_CONVERTER = wxID_HIGHEST + 7001;
 constexpr wxWindowID WELCOME_DIALOG_OPEN_WORKSPACE = wxID_HIGHEST + 7002;
+constexpr wxWindowID WELCOME_DIALOG_MULTIPLAYER_JOIN = wxID_HIGHEST + 7003;
 
 class WelcomeBrandPanel;
 class WelcomeFeatureItem;

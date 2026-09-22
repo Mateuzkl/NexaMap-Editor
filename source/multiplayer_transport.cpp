@@ -206,14 +206,49 @@ namespace Multiplayer {
 			adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
 			result = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr, adapters, &size);
 		}
+		std::vector<std::string> primaryAddresses;
+		std::vector<std::string> virtualAddresses;
+		auto addWithCategory = [&](const sockaddr* address, bool isVirtual) {
+			if (!address || address->sa_family != AF_INET) {
+				return;
+			}
+			const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(address);
+			const auto value = ntohl(ipv4->sin_addr.s_addr);
+			if (!value || (value >> 24) == 127) {
+				return;
+			}
+			const std::string ipStr = std::to_string(value >> 24) + "." + std::to_string((value >> 16) & 255) + "." + std::to_string((value >> 8) & 255) + "." + std::to_string(value & 255);
+			if (isVirtual) {
+				virtualAddresses.push_back(ipStr);
+			} else {
+				primaryAddresses.push_back(ipStr);
+			}
+		};
 		if (result == NO_ERROR) {
 			for (auto* adapter = adapters; adapter; adapter = adapter->Next) {
-				if (adapter->OperStatus != IfOperStatusUp) {
+				if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
 					continue;
 				}
-				for (auto* address = adapter->FirstUnicastAddress; address; address = address->Next) {
-					add(address->Address.lpSockaddr);
+				bool isVirtual = false;
+				if (adapter->Description && (wcsstr(adapter->Description, L"Virtual") || wcsstr(adapter->Description, L"Hyper-V") || wcsstr(adapter->Description, L"WSL"))) {
+					isVirtual = true;
 				}
+				if (adapter->FriendlyName && (wcsstr(adapter->FriendlyName, L"vEthernet") || wcsstr(adapter->FriendlyName, L"WSL"))) {
+					isVirtual = true;
+				}
+				for (auto* address = adapter->FirstUnicastAddress; address; address = address->Next) {
+					addWithCategory(address->Address.lpSockaddr, isVirtual);
+				}
+			}
+		}
+		std::sort(primaryAddresses.begin(), primaryAddresses.end());
+		primaryAddresses.erase(std::unique(primaryAddresses.begin(), primaryAddresses.end()), primaryAddresses.end());
+		std::sort(virtualAddresses.begin(), virtualAddresses.end());
+		virtualAddresses.erase(std::unique(virtualAddresses.begin(), virtualAddresses.end()), virtualAddresses.end());
+		addresses = std::move(primaryAddresses);
+		for (const auto& vip : virtualAddresses) {
+			if (std::find(addresses.begin(), addresses.end(), vip) == addresses.end()) {
+				addresses.push_back(vip);
 			}
 		}
 #else
@@ -226,9 +261,9 @@ namespace Multiplayer {
 			}
 			freeifaddrs(interfaces);
 		}
-#endif
 		std::sort(addresses.begin(), addresses.end());
 		addresses.erase(std::unique(addresses.begin(), addresses.end()), addresses.end());
+#endif
 		return addresses;
 	}
 }

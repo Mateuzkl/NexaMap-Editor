@@ -2118,7 +2118,7 @@ bool MultiplayerSession::saveBackup(BackupReason reason) {
 
 		auto cleanupPartialFiles = [&]() {
 			static constexpr std::string_view extensions[] = {
-				".otbm", "-spawn.xml", "-monster.xml", "-npc.xml", "-house.xml", "-waypoint.xml", "-zones.xml"
+				".otbm", "-spawn.xml", "-monster.xml", "-npc.xml", "-house.xml", "-waypoint.xml", "-zones.xml", ".complete"
 			};
 			for (const auto ext : extensions) {
 				std::error_code rmEc;
@@ -2160,6 +2160,11 @@ bool MultiplayerSession::saveBackup(BackupReason reason) {
 			return false;
 		}
 
+		// Write the crash-safe commit marker indicating the entire multi-file backup succeeded
+		{
+			std::ofstream markerFile(directory / (base + ".complete"));
+		}
+
 		lastBackedUpRevision = currentRev;
 		lastBackedUpGeneration = currentGen;
 		const std::string prefix = (reason == BackupReason::Manual) ? "Manual multiplayer backup saved: " : "Automatic multiplayer backup saved: ";
@@ -2193,6 +2198,7 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 		uint64_t timestamp = 0;
 		uint32_t collisionIndex = 0;
 		bool hasOtbm = false;
+		bool hasCompleteMarker = false;
 		std::vector<std::filesystem::path> files;
 	};
 
@@ -2267,7 +2273,8 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 			"-npc.xml",
 			"-house.xml",
 			"-waypoint.xml",
-			"-zones.xml"
+			"-zones.xml",
+			".complete"
 		};
 		bool valid = false;
 		for (const auto& s : validSuffixes) {
@@ -2288,14 +2295,30 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 		set.collisionIndex = collisionIndex;
 		if (rest == ".otbm") {
 			set.hasOtbm = true;
+		} else if (rest == ".complete") {
+			set.hasCompleteMarker = true;
 		}
 		set.files.push_back(entry.path());
 	}
 
-	// Purge orphaned/incomplete remnants that lack an .otbm file (Issue 5)
+	// Check if directory contains completion markers to preserve legacy pre-marker backups
+	bool hasAnyCompleteMarkers = false;
+	for (const auto& [_, s] : setsByBase) {
+		if (s.hasCompleteMarker) {
+			hasAnyCompleteMarkers = true;
+			break;
+		}
+	}
+
+	// Purge orphaned/incomplete remnants:
+	// - If completion markers are present, any set missing .complete or .otbm is an uncommitted/partial remnant.
+	// - If no markers exist anywhere (legacy directory), fall back to hasOtbm check.
 	std::vector<BackupSet> completeSets;
 	for (auto& [baseName, set] : setsByBase) {
-		if (!set.hasOtbm) {
+		const bool isCommitted = hasAnyCompleteMarkers
+			? (set.hasOtbm && set.hasCompleteMarker)
+			: set.hasOtbm;
+		if (!isCommitted) {
 			for (const auto& f : set.files) {
 				std::error_code rmEc;
 				std::filesystem::remove(f, rmEc);
