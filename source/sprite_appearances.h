@@ -22,7 +22,9 @@ enum class ClientSpriteLayout : uint8_t {
 	TwoByOne = 2,
 	TwoByTwo = 3,
 	ThreeByThree = 11,
+	ThreeByThree_OTC = 14,
 	FourByFour = 16,
+	FourByFour_OTC = 21,
 	FiveByFive = 22,
 };
 

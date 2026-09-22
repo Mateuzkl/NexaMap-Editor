@@ -164,8 +164,15 @@ namespace {
 			return detected;
 		}
 
+		// Direct OTC version folder (e.g. data/things/1530).
+		if (HasCatalog(root)) {
+			detected.layout = ClientAssetsLayout::OtClient;
+			detected.assetsDirectory = root;
+			detected.otcVersion = root.filename().string();
+			return detected;
+		}
+
 		std::vector<std::filesystem::path> otcCandidates;
-		AddOtcCatalogDirectory(root, otcCandidates);
 		AddOtcCatalogDirectory(root / "data" / "things", otcCandidates);
 		AddOtcVersionDirectories(root / "data" / "things", otcCandidates);
 		AddOtcCatalogDirectory(root / "things", otcCandidates);
@@ -197,7 +204,7 @@ namespace {
 	}
 
 	bool IsSupportedSpriteType(uint32_t spriteType) {
-		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 || spriteType == 11 || spriteType == 16 || spriteType == 22;
+		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 || spriteType == 11 || spriteType == 14 || spriteType == 16 || spriteType == 21 || spriteType == 22;
 	}
 
 	uint32_t SpriteSheetCapacity(uint32_t spriteType) {
@@ -208,8 +215,10 @@ namespace {
 			case 3:
 				return 36;
 			case 11:
+			case 14:
 				return 16;
 			case 16:
+			case 21:
 				return 9;
 			case 22:
 				return 4;

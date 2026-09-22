@@ -795,22 +795,30 @@ bool GraphicManager::loadOTFI(const FileName& filename, wxString& error, wxArray
 
 	if (dir.GetFirst(&otfi_file, "*.otfi", wxDIR_FILES)) {
 		wxFileName otfi(filename.GetFullPath(), otfi_file);
-		OTMLDocumentPtr doc = OTMLDocument::parse(otfi.GetFullPath().ToStdString());
-		if (doc->size() == 0 || !doc->hasChildAt("DatSpr")) {
-			error += "'DatSpr' tag not found";
+		try {
+			OTMLDocumentPtr doc = OTMLDocument::parse(otfi.GetFullPath().ToStdString());
+			if (doc && doc->size() != 0 && doc->hasChildAt("DatSpr")) {
+				OTMLNodePtr node = doc->get("DatSpr");
+				is_extended = node->valueAt<bool>("extended");
+				has_transparency = node->valueAt<bool>("transparency");
+				has_frame_durations = node->valueAt<bool>("frame-durations");
+				has_frame_groups = node->valueAt<bool>("frame-groups");
+				auto metadata = node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat");
+				auto sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
+				metadata_file = wxFileName(filename.GetFullPath(), wxString(metadata));
+				sprites_file = wxFileName(filename.GetFullPath(), wxString(sprites));
+				otfi_found = true;
+			} else {
+				error += "'DatSpr' tag not found";
+				return false;
+			}
+		} catch (const std::exception& e) {
+			error += wxString::Format("Could not parse OTML file %s: %s", otfi.GetFullPath(), wxString::FromUTF8(e.what()));
+			return false;
+		} catch (...) {
+			error += wxString::Format("Unknown exception parsing OTML file %s", otfi.GetFullPath());
 			return false;
 		}
-
-		OTMLNodePtr node = doc->get("DatSpr");
-		is_extended = node->valueAt<bool>("extended");
-		has_transparency = node->valueAt<bool>("transparency");
-		has_frame_durations = node->valueAt<bool>("frame-durations");
-		has_frame_groups = node->valueAt<bool>("frame-groups");
-		auto metadata = node->valueAt<std::string>("metadata-file", std::string(ASSETS_NAME) + ".dat");
-		auto sprites = node->valueAt<std::string>("sprites-file", std::string(ASSETS_NAME) + ".spr");
-		metadata_file = wxFileName(filename.GetFullPath(), wxString(metadata));
-		sprites_file = wxFileName(filename.GetFullPath(), wxString(sprites));
-		otfi_found = true;
 	}
 
 	if (!otfi_found) {

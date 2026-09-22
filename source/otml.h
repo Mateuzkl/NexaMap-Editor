@@ -153,7 +153,7 @@ public:
 		m_what(error) { }
 	OTMLException(const OTMLNodePtr& node, const std::string& error);
 	OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line = -1);
-	~OTMLException() throw() override {};
+	~OTMLException() throw() override { }
 
 	const char* what() const throw() override {
 		return m_what.c_str();
@@ -299,6 +299,7 @@ public:
 private:
 	std::string getNextLine();
 	int getLineDepth(const std::string& line, bool multilining = false);
+	std::size_t getIndentationOffset(const std::string& line, int levels);
 	void parseLine(std::string line);
 	void parseNode(const std::string& data);
 
@@ -702,21 +703,59 @@ inline std::string OTMLParser::getNextLine() {
 }
 
 inline int OTMLParser::getLineDepth(const std::string& line, bool multilining) {
-	std::size_t spaces = 0;
-	while (line[spaces] == ' ') {
-		spaces++;
+	std::size_t i = 0;
+	int depth = 0;
+	int spaces = 0;
+	while (i < line.size()) {
+		if (line[i] == ' ') {
+			spaces++;
+			if (spaces == 2) {
+				depth++;
+				spaces = 0;
+			}
+			i++;
+		} else if (line[i] == '\t') {
+			depth++;
+			spaces = 0;
+			i++;
+		} else {
+			break;
+		}
 	}
 
-	int depth = spaces / 2;
+	if (i == line.size() || (i + 1 < line.size() && line[i] == '/' && line[i + 1] == '/')) {
+		return -1;
+	}
+
 	if (!multilining || depth <= currentDepth) {
-		if (line[spaces] == '\t') {
-			throw OTMLException(doc, "indentation with tabs are not allowed", currentLine);
-		}
 		if (spaces % 2 != 0) {
 			throw OTMLException(doc, "must indent every 2 spaces", currentLine);
 		}
 	}
 	return depth;
+}
+
+inline std::size_t OTMLParser::getIndentationOffset(const std::string& line, int levels) {
+	std::size_t i = 0;
+	int depth = 0;
+	int spaces = 0;
+	while (i < line.size() && depth < levels) {
+		if (line[i] == ' ') {
+			spaces++;
+			if (spaces == 2) {
+				depth++;
+				spaces = 0;
+			}
+			i++;
+		} else if (line[i] == '\t') {
+			depth++;
+			spaces = 0;
+			i++;
+		} else {
+			break;
+		}
+	}
+	return i;
 }
 
 inline void OTMLParser::parseLine(std::string line) {
@@ -732,9 +771,15 @@ inline void OTMLParser::parseLine(std::string line) {
 		return;
 	}
 	if (depth == currentDepth + 1) {
+		if (!previousNode) {
+			throw OTMLException(doc, "invalid indentation depth, no parent node is available", currentLine);
+		}
 		currentParent = previousNode;
 	} else if (depth < currentDepth) {
 		for (int i = 0; i < currentDepth - depth; ++i) {
+			if (!currentParent || !currentParent->parent()) {
+				throw OTMLException(doc, "invalid indentation depth, no parent node is available", currentLine);
+			}
 			currentParent = currentParent->parent();
 		}
 	} else if (depth != currentDepth) {
@@ -769,7 +814,10 @@ inline void OTMLParser::parseNode(const std::string& data) {
 			std::string line = getNextLine();
 			int depth = getLineDepth(line, true);
 			if (depth > currentDepth) {
-				multiLineData += line.substr((currentDepth + 1) * 2);
+				const std::size_t offset = getIndentationOffset(line, currentDepth + 1);
+				if (offset < line.size()) {
+					multiLineData += line.substr(offset);
+				}
 			} else {
 				trim(line);
 				if (!line.empty()) {
@@ -781,13 +829,12 @@ inline void OTMLParser::parseNode(const std::string& data) {
 			multiLineData += "\n";
 		} while (!in.eof());
 		if (value == "|" || value == "|-") {
-			int lastPos = multiLineData.length();
-			while (multiLineData[--lastPos] == '\n') {
-				multiLineData.erase(lastPos, 1);
+			while (!multiLineData.empty() && multiLineData.back() == '\n') {
+				multiLineData.pop_back();
 			}
 
 			if (value == "|") {
-				multiLineData.append("\n");
+				multiLineData.push_back('\n');
 			}
 		}
 		value = multiLineData;
@@ -814,6 +861,9 @@ inline void OTMLParser::parseNode(const std::string& data) {
 		}
 	}
 
+	if (!currentParent) {
+		throw OTMLException(doc, "cannot add node, no parent node is available", currentLine);
+	}
 	currentParent->addChild(node);
 	previousNode = node;
 }
