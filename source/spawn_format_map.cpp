@@ -35,6 +35,35 @@ namespace {
 		return "Spawn conflict at " + std::to_string(pos.x) + ":" + std::to_string(pos.y) + ":" + std::to_string(pos.z) + " (center " + std::to_string(center.x) + ":" + std::to_string(center.y) + ":" + std::to_string(center.z) + "): existing " + existingDesc + ", incoming " + incomingDesc + "; reason: " + reason + "; no spawn data was applied.";
 	}
 
+	bool HasValidSpawnIdentity(const SpawnEntryData& entry) {
+		if (!entry.name.empty()) {
+			return true;
+		}
+		if (entry.alternatives.empty()) {
+			return false;
+		}
+		for (const SpawnVariantData& variant : entry.alternatives) {
+			if (variant.name.empty()) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	void ValidateAgainstExistingCreature(const Tile* tile, const Position& pos, const Position& center, const std::string& entryName, SpawnAlternativeKind entryKind, size_t& conflictCount, size_t maxWarnings, std::vector<std::string>& warnings) {
+		if (!tile || !tile->creature) {
+			return;
+		}
+		const Creature* mapCreature = tile->creature;
+		SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
+		if (!MergeSpawnAlternativeKinds(mapCreature->getAlternativeKind(), entryKind, mergedKind)) {
+			if (conflictCount < maxWarnings) {
+				warnings.push_back(FormatConflictWarning(pos, center, "map creature '" + mapCreature->getName() + "'", "entry '" + entryName + "'", "incompatible alternative kinds"));
+			}
+			++conflictCount;
+		}
+	}
+
 	bool ValidateBeforeApply(const Map& map, const SpawnDocument& document, std::vector<std::string>& warnings) {
 		constexpr size_t MAX_CONFLICT_WARNINGS = 10;
 		size_t conflictCount = 0;
@@ -45,7 +74,9 @@ namespace {
 			++conflictCount;
 		};
 
-		std::map<Position, PositionEntryInfo> signatures;
+		std::map<Position, PositionEntryInfo> monsterSignatures;
+		std::map<Position, PositionEntryInfo> npcSignatures;
+
 		for (const SpawnAreaData& area : document.areas) {
 			const Position center(area.centerX, area.centerY, area.centerZ);
 			if (area.centerX < 0 || area.centerX > 65535 || area.centerY < 0 || area.centerY > 65535 || area.centerZ < 0 || area.centerZ > 255 || area.radius < 0 || area.radius > 255) {
@@ -53,7 +84,7 @@ namespace {
 				continue;
 			}
 			for (const SpawnEntryData& entry : area.entries) {
-				if (entry.name.empty() || entry.x < 0 || entry.x > 65535 || entry.y < 0 || entry.y > 65535 || entry.z != area.centerZ || entry.spawnTime < 1) {
+				if (!HasValidSpawnIdentity(entry) || entry.x < 0 || entry.x > 65535 || entry.y < 0 || entry.y > 65535 || entry.z != area.centerZ || entry.spawnTime < 1) {
 					recordConflict("Spawn document contains an invalid creature entry '" + entry.name + "' at " + std::to_string(entry.x) + ":" + std::to_string(entry.y) + ":" + std::to_string(entry.z) + " (center " + std::to_string(area.centerX) + ":" + std::to_string(area.centerY) + ":" + std::to_string(area.centerZ) + "); no spawn data was applied.");
 					continue;
 				}
@@ -71,13 +102,11 @@ namespace {
 
 				const Position position(entry.x, entry.y, entry.z);
 				const Direction direction = static_cast<Direction>(std::clamp(entry.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST)));
-				SpawnAlternativeKind initialKind = entry.alternativeKind;
-				if (initialKind == SpawnAlternativeKind::None && document.format == SpawnFormat::CanaryCrystal && (!entry.alternatives.empty() || entry.hasWeight)) {
-					initialKind = SpawnAlternativeKind::CanaryWeight;
-				}
+				const SpawnAlternativeKind initialKind = AuthoritativeAlternativeKind(document.format, entry.alternativeKind, entry.hasWeight, entry.alternatives.size());
+				const std::string entryName = entry.name.empty() && !entry.alternatives.empty() ? entry.alternatives.front().name : entry.name;
 
 				const PositionEntryInfo incoming {
-					entry.name.empty() && !entry.alternatives.empty() ? entry.alternatives.front().name : entry.name,
+					entryName,
 					center,
 					entry.spawnTime,
 					direction,
@@ -88,61 +117,20 @@ namespace {
 					initialKind
 				};
 
+				auto& signatures = entry.isNpc ? npcSignatures : monsterSignatures;
 				auto [iterator, inserted] = signatures.emplace(position, incoming);
 				if (!inserted) {
 					PositionEntryInfo& existing = iterator->second;
-					const std::string existingDesc = "entry " + FormatEntryDetails(existing.name, existing.spawnTime, existing.direction, existing.hasDirection, existing.weight, existing.hasWeight);
-					const std::string incomingDesc = "entry " + FormatEntryDetails(incoming.name, incoming.spawnTime, incoming.direction, incoming.hasDirection, incoming.weight, incoming.hasWeight);
-
-					if (existing.isNpc != incoming.isNpc) {
-						recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "cannot mix monster and NPC at the same position"));
-					}
-
 					SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
 					if (!MergeSpawnAlternativeKinds(existing.alternativeKind, incoming.alternativeKind, mergedKind)) {
-						recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "incompatible alternative kinds"));
+						recordConflict(FormatConflictWarning(position, incoming.center, "entry " + FormatEntryDetails(existing.name, existing.spawnTime, existing.direction, existing.hasDirection, existing.weight, existing.hasWeight), "entry " + FormatEntryDetails(incoming.name, incoming.spawnTime, incoming.direction, incoming.hasDirection, incoming.weight, incoming.hasWeight), "incompatible alternative kinds"));
 					} else {
-						if (mergedKind == SpawnAlternativeKind::None && document.format == SpawnFormat::CanaryCrystal) {
-							mergedKind = SpawnAlternativeKind::CanaryWeight;
-						}
-						existing.alternativeKind = mergedKind;
-					}
-
-					if (existing.spawnTime != incoming.spawnTime) {
-						recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "spawntimes disagree (" + std::to_string(existing.spawnTime) + " vs " + std::to_string(incoming.spawnTime) + ")"));
-					}
-
-					if (existing.hasDirection && incoming.hasDirection && existing.direction != incoming.direction) {
-						recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "explicit directions disagree (" + std::to_string(static_cast<int>(existing.direction)) + " vs " + std::to_string(static_cast<int>(incoming.direction)) + ")"));
-					} else if (!existing.hasDirection && incoming.hasDirection) {
-						existing.direction = incoming.direction;
-						existing.hasDirection = true;
-					}
-				} else {
-					const Tile* tile = map.getTile(position);
-					if (tile && tile->creature) {
-						const Creature* mapCreature = tile->creature;
-						const std::string existingDesc = "map creature " + FormatEntryDetails(mapCreature->getName(), mapCreature->getSpawnTime(), mapCreature->getDirection(), mapCreature->hasSpawnDirection(), mapCreature->getWeight(), mapCreature->hasSpawnWeight());
-						const std::string incomingDesc = "entry " + FormatEntryDetails(incoming.name, incoming.spawnTime, incoming.direction, incoming.hasDirection, incoming.weight, incoming.hasWeight);
-
-						if (mapCreature->isNpc() != incoming.isNpc) {
-							recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "cannot mix monster and NPC at the same position"));
-						}
-
-						SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
-						if (!MergeSpawnAlternativeKinds(mapCreature->getAlternativeKind(), incoming.alternativeKind, mergedKind)) {
-							recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "incompatible alternative kinds"));
-						}
-
-						if (mapCreature->getSpawnTime() != incoming.spawnTime) {
-							recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "spawntimes disagree (" + std::to_string(mapCreature->getSpawnTime()) + " vs " + std::to_string(incoming.spawnTime) + ")"));
-						}
-
-						if (mapCreature->hasSpawnDirection() && incoming.hasDirection && mapCreature->getDirection() != incoming.direction) {
-							recordConflict(FormatConflictWarning(position, incoming.center, existingDesc, incomingDesc, "explicit directions disagree (" + std::to_string(static_cast<int>(mapCreature->getDirection())) + " vs " + std::to_string(static_cast<int>(incoming.direction)) + ")"));
-						}
+						existing.alternativeKind = AuthoritativeAlternativeKind(document.format, mergedKind, existing.hasWeight || incoming.hasWeight, 2);
 					}
 				}
+
+				// Validate compatibility against existing map creature (evaluated for every entry)
+				ValidateAgainstExistingCreature(map.getTile(position), position, center, entryName, initialKind, conflictCount, MAX_CONFLICT_WARNINGS, warnings);
 			}
 		}
 
@@ -198,6 +186,9 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 				variant.isNpc = entry.isNpc;
 				variant.weight = entry.weight;
 				variant.hasWeight = entry.hasWeight;
+				variant.spawnTime = entry.spawnTime;
+				variant.direction = entry.direction;
+				variant.hasDirection = entry.hasDirection;
 				variant.attributes = entry.attributes;
 				variants.push_back(std::move(variant));
 			}
@@ -212,35 +203,27 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 				creatureTile->markRenderChunkChanged();
 				creatureTile->creature->setSpawnType(primary.isNpc);
 				creatureTile->creature->setSpawnDirection(
-					static_cast<Direction>(std::clamp(entry.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),
-					entry.hasDirection
+					static_cast<Direction>(std::clamp(primary.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),
+					primary.hasDirection
 				);
-				creatureTile->creature->setSpawnTime(entry.spawnTime);
+				creatureTile->creature->setSpawnTime(primary.spawnTime);
 				creatureTile->creature->setSpawnWeight(primary.weight, primary.hasWeight);
 				creatureTile->creature->setSpawnAttributes(primary.attributes);
 				creatureTile->creature->setSpawnSource(center);
-				SpawnAlternativeKind initialKind = entry.alternativeKind;
-				if (initialKind == SpawnAlternativeKind::None && document.format == SpawnFormat::CanaryCrystal && variants.size() > 1) {
-					initialKind = SpawnAlternativeKind::CanaryWeight;
-				}
+				const SpawnAlternativeKind initialKind = AuthoritativeAlternativeKind(document.format, entry.alternativeKind, primary.hasWeight, variants.size());
 				creatureTile->creature->setAlternativeKind(initialKind);
 				for (size_t index = 1; index < variants.size(); ++index) {
 					creatureTile->creature->addSpawnAlternative(variants[index]);
 				}
 			} else {
 				Creature* creature = creatureTile->creature;
+				const SpawnAlternativeKind incomingKind = AuthoritativeAlternativeKind(document.format, entry.alternativeKind, entry.hasWeight, variants.size());
 				SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
-				MergeSpawnAlternativeKinds(creature->getAlternativeKind(), entry.alternativeKind, mergedKind);
-				if (mergedKind == SpawnAlternativeKind::None && document.format == SpawnFormat::CanaryCrystal) {
-					mergedKind = SpawnAlternativeKind::CanaryWeight;
+				if (!MergeSpawnAlternativeKinds(creature->getAlternativeKind(), incomingKind, mergedKind)) {
+					warnings.push_back("SpawnMapAdapter::Apply: Failed to merge alternative kinds at " + std::to_string(position.x) + ":" + std::to_string(position.y) + ":" + std::to_string(position.z));
+					return false;
 				}
-				creature->setAlternativeKind(mergedKind);
-				if (!creature->hasSpawnDirection() && entry.hasDirection) {
-					creature->setSpawnDirection(
-						static_cast<Direction>(std::clamp(entry.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),
-						true
-					);
-				}
+				creature->setAlternativeKind(AuthoritativeAlternativeKind(document.format, mergedKind, entry.hasWeight || creature->hasSpawnWeight(), creature->getSpawnAlternatives().size() + variants.size()));
 				for (const SpawnVariantData& variant : variants) {
 					creature->addSpawnAlternative(variant);
 				}
@@ -299,6 +282,9 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 					primary.isNpc = entry.isNpc;
 					primary.weight = entry.weight;
 					primary.hasWeight = entry.hasWeight;
+					primary.spawnTime = entry.spawnTime;
+					primary.direction = entry.direction;
+					primary.hasDirection = entry.hasDirection;
 					primary.attributes = entry.attributes;
 					entry.alternatives.push_back(std::move(primary));
 					entry.alternatives.insert(entry.alternatives.end(), creature->getSpawnAlternatives().begin(), creature->getSpawnAlternatives().end());

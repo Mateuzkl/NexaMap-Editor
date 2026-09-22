@@ -207,13 +207,11 @@ namespace {
 			if (ReadInteger(node.attribute("weight"), numericValue) && numericValue >= 1) {
 				entry.weight = static_cast<uint32_t>(numericValue);
 				entry.hasWeight = true;
-				if (format == SpawnFormat::CanaryCrystal) {
-					entry.alternativeKind = SpawnAlternativeKind::CanaryWeight;
-				}
 			} else {
 				AppendWarning(warnings, file.string() + ": creature '" + entry.name + "' has invalid weight '" + node.attribute("weight").value() + "'; default " + std::to_string(entry.weight) + " was used.");
 			}
 		}
+		entry.alternativeKind = AuthoritativeAlternativeKind(format, entry.alternativeKind, entry.hasWeight, entry.alternatives.size());
 		entry.attributes = ReadExtraAttributes(node, { "name", "x", "y", "z", "spawntime", "direction", "weight" });
 	}
 
@@ -314,6 +312,9 @@ namespace {
 						variant.name = variantNode.attribute("name").as_string();
 						variant.weight = variantNode.attribute("chance").as_uint(1);
 						variant.hasWeight = static_cast<bool>(variantNode.attribute("chance"));
+						variant.spawnTime = entry.spawnTime;
+						variant.direction = entry.direction;
+						variant.hasDirection = entry.hasDirection;
 						variant.attributes = ReadExtraAttributes(variantNode, { "name", "chance" });
 						entry.alternatives.push_back(std::move(variant));
 					}
@@ -437,19 +438,19 @@ namespace {
 		std::vector<std::string> entries;
 		for (const SpawnAreaData& area : document.areas) {
 			for (const SpawnEntryData& entry : area.entries) {
-				const auto append = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight) {
+				const auto append = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, int spawnTime, int direction) {
 					std::ostringstream stream;
-					stream << (npc ? "npc" : "monster") << '|' << name << '|' << entry.x << '|' << entry.y << '|' << entry.z << '|' << entry.spawnTime << '|' << entry.direction;
+					stream << (npc ? "npc" : "monster") << '|' << name << '|' << entry.x << '|' << entry.y << '|' << entry.z << '|' << spawnTime << '|' << direction;
 					if (includeWeights && hasWeight) {
 						stream << '|' << weight;
 					}
 					entries.push_back(stream.str());
 				};
 				if (entry.alternatives.empty()) {
-					append(entry.name, entry.isNpc, entry.weight, entry.hasWeight);
+					append(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.spawnTime, entry.direction);
 				} else {
 					for (const SpawnVariantData& variant : entry.alternatives) {
-						append(variant.name, variant.isNpc, variant.weight, variant.hasWeight);
+						append(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.spawnTime, variant.direction);
 					}
 				}
 			}
@@ -849,9 +850,13 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 					output.isNpc = variant.isNpc;
 					output.weight = variant.weight;
 					output.hasWeight = variant.hasWeight;
+					output.spawnTime = variant.spawnTime;
+					output.direction = variant.direction;
+					output.hasDirection = variant.hasDirection;
 					output.attributes = variant.attributes;
+					const int variantSpawnTime = std::max(TFS_MIN_SPAWN_TIME, variant.spawnTime);
 					pugi::xml_node entryNode = areaNode.append_child(output.isNpc ? "npc" : "monster");
-					WriteCommonEntryAttributes(entryNode, area, output, spawnTime, SpawnFormat::Tfs);
+					WriteCommonEntryAttributes(entryNode, area, output, variantSpawnTime, SpawnFormat::Tfs);
 					if (output.hasWeight) {
 						entryNode.append_attribute("weight") = output.weight;
 					}
@@ -946,10 +951,13 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 			if (!ValidateEntry(area, entry, result.error)) {
 				return result;
 			}
-			auto writeOne = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, const SpawnAttributeMap& attributes) {
+			auto writeOne = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, int spawnTime, int direction, bool hasDirection, const SpawnAttributeMap& attributes) {
 				SpawnEntryData output = entry;
 				output.name = name;
 				output.isNpc = npc;
+				output.spawnTime = spawnTime;
+				output.direction = direction;
+				output.hasDirection = hasDirection;
 				pugi::xml_node entryNode = ensureArea(npc).append_child(npc ? "npc" : "monster");
 				WriteCommonEntryAttributes(entryNode, area, output, output.spawnTime, SpawnFormat::CanaryCrystal);
 				if (!npc && hasWeight) {
@@ -961,10 +969,10 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 				}
 			};
 			if (entry.alternatives.empty()) {
-				writeOne(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.attributes);
+				writeOne(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.spawnTime, entry.direction, entry.hasDirection, entry.attributes);
 			} else {
 				for (const SpawnVariantData& variant : entry.alternatives) {
-					writeOne(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.attributes);
+					writeOne(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.spawnTime, variant.direction, variant.hasDirection, variant.attributes);
 				}
 			}
 		}

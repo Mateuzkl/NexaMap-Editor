@@ -236,6 +236,64 @@ int main() {
 		check(loadedCanary.areas.front().entries[1].hasDirection && loadedCanary.areas.front().entries[1].direction == SOUTH, "Second entry explicit direction preserved");
 	}
 
+	// Test 3c: Canary/Crystal Monster and NPC at the same coordinate in separate sidecars
+	{
+		TemporaryDirectory temp;
+		const std::filesystem::path monsterFile = temp.path / "shared-monster.xml";
+		const std::filesystem::path npcFile = temp.path / "shared-npc.xml";
+
+		SpawnDocument doc;
+		doc.format = SpawnFormat::CanaryCrystal;
+
+		SpawnAreaData monsterArea;
+		monsterArea.centerX = 500;
+		monsterArea.centerY = 500;
+		monsterArea.centerZ = 7;
+		monsterArea.radius = 5;
+		monsterArea.kind = SpawnAreaKind::Monsters;
+
+		SpawnEntryData mEntry;
+		mEntry.name = "Dragon";
+		mEntry.isNpc = false;
+		mEntry.x = 501;
+		mEntry.y = 501;
+		mEntry.z = 7;
+		mEntry.spawnTime = 60;
+		mEntry.direction = NORTH;
+		mEntry.hasDirection = true;
+		monsterArea.entries.push_back(mEntry);
+		doc.areas.push_back(monsterArea);
+
+		SpawnAreaData npcArea;
+		npcArea.centerX = 500;
+		npcArea.centerY = 500;
+		npcArea.centerZ = 7;
+		npcArea.radius = 5;
+		npcArea.kind = SpawnAreaKind::Npcs;
+
+		SpawnEntryData nEntry;
+		nEntry.name = "Guide";
+		nEntry.isNpc = true;
+		nEntry.x = 501;
+		nEntry.y = 501;
+		nEntry.z = 7;
+		nEntry.spawnTime = 120;
+		nEntry.direction = SOUTH;
+		nEntry.hasDirection = true;
+		npcArea.entries.push_back(nEntry);
+		doc.areas.push_back(npcArea);
+
+		SpawnWriteResult saveResult = SpawnFormatIO::SaveCanaryCrystal(doc, monsterFile, npcFile);
+		check(saveResult.success, "SaveCanaryCrystal succeeds with monster and NPC at same coordinate");
+
+		SpawnDocument loaded;
+		std::string canaryError;
+		check(SpawnFormatIO::LoadCanaryCrystal(monsterFile, npcFile, loaded, canaryError), "LoadCanaryCrystal loads shared coordinates");
+		check(loaded.monsterCount() == 1, "Monster count preserved");
+		check(loaded.npcCount() == 1, "NPC count preserved");
+		check(loaded.entryCount() == 2, "Both monster and NPC entries preserved");
+	}
+
 	// Test 4: Pre-save validation data structure checks
 	{
 		SpawnValidationResult result;
