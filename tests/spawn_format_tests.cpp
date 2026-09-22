@@ -109,10 +109,73 @@ int main(int argc, char** argv) {
 	check(forwardKindsMerged && reverseKindsMerged && forwardKind == SpawnAlternativeKind::TfsChance && reverseKind == SpawnAlternativeKind::TfsChance, "collocated TFS chance semantics are input-order independent");
 	SpawnAlternativeKind incompatibleKind = SpawnAlternativeKind::None;
 	check(!MergeSpawnAlternativeKinds(SpawnAlternativeKind::CanaryWeight, SpawnAlternativeKind::TfsChance, incompatibleKind), "incompatible collocated alternative kinds are rejected");
+	SpawnAlternativeKind canaryMergeKind = SpawnAlternativeKind::None;
+	check(MergeSpawnAlternativeKinds(SpawnAlternativeKind::CanaryWeight, SpawnAlternativeKind::CanaryWeight, canaryMergeKind) && canaryMergeKind == SpawnAlternativeKind::CanaryWeight, "CanaryWeight merges with CanaryWeight");
+	canaryMergeKind = SpawnAlternativeKind::None;
+	check(MergeSpawnAlternativeKinds(SpawnAlternativeKind::None, SpawnAlternativeKind::CanaryWeight, canaryMergeKind) && canaryMergeKind == SpawnAlternativeKind::CanaryWeight, "None merges with incoming CanaryWeight");
+	canaryMergeKind = SpawnAlternativeKind::None;
+	check(MergeSpawnAlternativeKinds(SpawnAlternativeKind::CanaryWeight, SpawnAlternativeKind::None, canaryMergeKind) && canaryMergeKind == SpawnAlternativeKind::CanaryWeight, "existing CanaryWeight merges with incoming None");
+
+	check(AuthoritativeAlternativeKind(SpawnFormat::CanaryCrystal, SpawnAlternativeKind::None, true, 1) == SpawnAlternativeKind::CanaryWeight, "Canary with weight normalizes to CanaryWeight");
+	check(AuthoritativeAlternativeKind(SpawnFormat::CanaryCrystal, SpawnAlternativeKind::None, false, 2) == SpawnAlternativeKind::CanaryWeight, "Canary with >1 variants normalizes to CanaryWeight");
+	check(AuthoritativeAlternativeKind(SpawnFormat::CanaryCrystal, SpawnAlternativeKind::None, false, 1) == SpawnAlternativeKind::None, "Canary with 1 variant without weight normalizes to None");
+	check(AuthoritativeAlternativeKind(SpawnFormat::CanaryCrystal, SpawnAlternativeKind::CanaryWeight, false, 1) == SpawnAlternativeKind::CanaryWeight, "Canary with existing CanaryWeight is preserved");
+	check(AuthoritativeAlternativeKind(SpawnFormat::Tfs, SpawnAlternativeKind::TfsChance, false, 2) == SpawnAlternativeKind::TfsChance, "TFS TfsChance is preserved");
 
 	const std::string modernMonsters = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'><monster name='Rat' x='1' y='-1' z='7' spawntime='30' weight='2'/></monster></monsters>";
 	const std::string modernNpcs = "<npcs><npc centerx='110' centery='210' centerz='6' radius='1'><npc name='Guide' x='0' y='0' z='6' spawntime='60'/></npc></npcs>";
 	check(loadModern(modernMonsters, modernNpcs) && document.monsterCount() == 1 && document.npcCount() == 1 && document.areas.size() == 2, "Canary monster and NPC files load together");
+	check(document.areas.front().entries.front().alternativeKind == SpawnAlternativeKind::CanaryWeight, "Canary entry with weight attribute has CanaryWeight alternative kind");
+
+	const std::string collocatedModern = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'>"
+										 "<monster name='Demon' x='1' y='-1' z='7' spawntime='60' weight='10'/>"
+										 "<monster name='Dragon' x='1' y='-1' z='7' spawntime='60' weight='20' direction='0'/>"
+										 "</monster></monsters>";
+	check(loadModern(collocatedModern, {}) && document.monsterCount() == 2 && document.areas.front().entries.size() == 2, "collocated Canary monsters load independently");
+	check(document.areas.front().entries[0].alternativeKind == SpawnAlternativeKind::CanaryWeight && document.areas.front().entries[1].alternativeKind == SpawnAlternativeKind::CanaryWeight, "collocated Canary monsters retain CanaryWeight");
+	check(!document.areas.front().entries[0].hasDirection && document.areas.front().entries[1].hasDirection && document.areas.front().entries[1].direction == 0, "collocated Canary entries preserve implicit and explicit direction state");
+
+	// Case A: explicit direction then omitted direction round-trip
+	const std::string caseAMonsters = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'>"
+									  "<monster name='Demon' x='1' y='-1' z='7' spawntime='60' weight='10' direction='2'/>"
+									  "<monster name='Dragon' x='1' y='-1' z='7' spawntime='60' weight='20'/>"
+									  "</monster></monsters>";
+	check(loadModern(caseAMonsters, {}), "load Case A collocated monsters");
+	SpawnWriteResult caseAResult = SpawnFormatIO::SaveCanaryCrystal(document, temporary.path / "caseA-monster.xml", temporary.path / "caseA-npc.xml");
+	check(caseAResult.success && SpawnFormatIO::LoadCanaryCrystal(temporary.path / "caseA-monster.xml", temporary.path / "caseA-npc.xml", document, error, defaults), "save/reload Case A collocated monsters");
+	check(document.areas.front().entries[0].hasDirection && document.areas.front().entries[0].direction == 2, "Case A: first entry South direction preserved");
+	check(!document.areas.front().entries[1].hasDirection && document.areas.front().entries[1].direction == 0, "Case A: second entry omitted direction preserved as North default");
+
+	// Case B: omitted direction then explicit direction round-trip
+	const std::string caseBMonsters = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'>"
+									  "<monster name='Demon' x='1' y='-1' z='7' spawntime='60' weight='10'/>"
+									  "<monster name='Dragon' x='1' y='-1' z='7' spawntime='60' weight='20' direction='2'/>"
+									  "</monster></monsters>";
+	check(loadModern(caseBMonsters, {}), "load Case B collocated monsters");
+	SpawnWriteResult caseBResult = SpawnFormatIO::SaveCanaryCrystal(document, temporary.path / "caseB-monster.xml", temporary.path / "caseB-npc.xml");
+	check(caseBResult.success && SpawnFormatIO::LoadCanaryCrystal(temporary.path / "caseB-monster.xml", temporary.path / "caseB-npc.xml", document, error, defaults), "save/reload Case B collocated monsters");
+	check(!document.areas.front().entries[0].hasDirection && document.areas.front().entries[0].direction == 0, "Case B: first entry omitted direction preserved as North default");
+	check(document.areas.front().entries[1].hasDirection && document.areas.front().entries[1].direction == 2, "Case B: second entry South direction preserved");
+
+	// Case C: distinct explicit directions
+	const std::string caseCMonsters = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'>"
+									  "<monster name='Demon' x='1' y='-1' z='7' spawntime='60' weight='10' direction='1'/>"
+									  "<monster name='Dragon' x='1' y='-1' z='7' spawntime='60' weight='20' direction='3'/>"
+									  "</monster></monsters>";
+	check(loadModern(caseCMonsters, {}), "load Case C distinct explicit directions");
+	SpawnWriteResult caseCResult = SpawnFormatIO::SaveCanaryCrystal(document, temporary.path / "caseC-monster.xml", temporary.path / "caseC-npc.xml");
+	check(caseCResult.success && SpawnFormatIO::LoadCanaryCrystal(temporary.path / "caseC-monster.xml", temporary.path / "caseC-npc.xml", document, error, defaults), "save/reload Case C collocated monsters");
+	check(document.areas.front().entries[0].direction == 1 && document.areas.front().entries[1].direction == 3, "Case C: distinct explicit directions preserved");
+
+	// Case D: distinct spawntimes
+	const std::string caseDMonsters = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'>"
+									  "<monster name='Demon' x='1' y='-1' z='7' spawntime='30' weight='10'/>"
+									  "<monster name='Dragon' x='1' y='-1' z='7' spawntime='120' weight='20'/>"
+									  "</monster></monsters>";
+	check(loadModern(caseDMonsters, {}), "load Case D distinct spawntimes");
+	SpawnWriteResult caseDResult = SpawnFormatIO::SaveCanaryCrystal(document, temporary.path / "caseD-monster.xml", temporary.path / "caseD-npc.xml");
+	check(caseDResult.success && SpawnFormatIO::LoadCanaryCrystal(temporary.path / "caseD-monster.xml", temporary.path / "caseD-npc.xml", document, error, defaults), "save/reload Case D collocated monsters");
+	check(document.areas.front().entries[0].spawnTime == 30 && document.areas.front().entries[1].spawnTime == 120, "Case D: distinct spawntimes preserved");
 	check(loadModern(modernMonsters, {}) && document.monsterCount() == 1 && document.npcCount() == 0 && hasWarning(document, "NPC spawn file was not found"), "Canary monster-only load is nonfatal");
 	check(loadModern({}, modernNpcs) && document.monsterCount() == 0 && document.npcCount() == 1 && hasWarning(document, "monster spawn file was not found"), "Canary NPC-only load is nonfatal");
 	check(!document.areas.front().entries.front().hasDirection && document.areas.front().entries.front().direction == 0, "missing Canary NPC direction uses North server default");

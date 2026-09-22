@@ -119,7 +119,7 @@ namespace {
 			AppendWarning(warnings, file.string() + ": spawn area has a non-numeric radius and was skipped.");
 			return false;
 		}
-		area.attributes = ReadExtraAttributes(node, {"centerx", "centery", "centerz", "radius"});
+		area.attributes = ReadExtraAttributes(node, { "centerx", "centery", "centerz", "radius" });
 		if (area.centerX < 0 || area.centerX > 65535 || area.centerY < 0 || area.centerY > 65535 || area.centerZ < 0 || area.centerZ > 255) {
 			AppendWarning(warnings, file.string() + ": spawn center is outside the server coordinate range and was skipped.");
 			return false;
@@ -211,7 +211,8 @@ namespace {
 				AppendWarning(warnings, file.string() + ": creature '" + entry.name + "' has invalid weight '" + node.attribute("weight").value() + "'; default " + std::to_string(entry.weight) + " was used.");
 			}
 		}
-		entry.attributes = ReadExtraAttributes(node, {"name", "x", "y", "z", "spawntime", "direction", "weight"});
+		entry.alternativeKind = AuthoritativeAlternativeKind(format, entry.alternativeKind, entry.hasWeight, entry.alternatives.size());
+		entry.attributes = ReadExtraAttributes(node, { "name", "x", "y", "z", "spawntime", "direction", "weight" });
 	}
 
 	bool ParseModernFile(const std::filesystem::path& file, bool npcs, const SpawnLoadDefaults& defaults, SpawnDocument& document, std::string& error) {
@@ -302,7 +303,7 @@ namespace {
 				if (tag == "monsters") {
 					entry.name.clear();
 					entry.alternativeKind = SpawnAlternativeKind::TfsChance;
-					entry.attributes = ReadExtraAttributes(child, {"x", "y", "z", "spawntime", "direction"});
+					entry.attributes = ReadExtraAttributes(child, { "x", "y", "z", "spawntime", "direction" });
 					for (const pugi::xml_node& variantNode : child.children()) {
 						if (Lower(variantNode.name()) != "monster" || !variantNode.attribute("name")) {
 							continue;
@@ -311,7 +312,10 @@ namespace {
 						variant.name = variantNode.attribute("name").as_string();
 						variant.weight = variantNode.attribute("chance").as_uint(1);
 						variant.hasWeight = static_cast<bool>(variantNode.attribute("chance"));
-						variant.attributes = ReadExtraAttributes(variantNode, {"name", "chance"});
+						variant.spawnTime = entry.spawnTime;
+						variant.direction = entry.direction;
+						variant.hasDirection = entry.hasDirection;
+						variant.attributes = ReadExtraAttributes(variantNode, { "name", "chance" });
 						entry.alternatives.push_back(std::move(variant));
 					}
 					if (entry.alternatives.empty()) {
@@ -351,7 +355,7 @@ namespace {
 		node.append_attribute("centery") = area.centerY;
 		node.append_attribute("centerz") = area.centerZ;
 		node.append_attribute("radius") = area.radius;
-		AppendExtraAttributes(node, area.attributes, {"centerx", "centery", "centerz", "radius"});
+		AppendExtraAttributes(node, area.attributes, { "centerx", "centery", "centerz", "radius" });
 	}
 
 	bool ShouldWriteDirection(const SpawnEntryData& entry, SpawnFormat outputFormat) {
@@ -434,19 +438,19 @@ namespace {
 		std::vector<std::string> entries;
 		for (const SpawnAreaData& area : document.areas) {
 			for (const SpawnEntryData& entry : area.entries) {
-				const auto append = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight) {
+				const auto append = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, int spawnTime, int direction) {
 					std::ostringstream stream;
-					stream << (npc ? "npc" : "monster") << '|' << name << '|' << entry.x << '|' << entry.y << '|' << entry.z << '|' << entry.spawnTime << '|' << entry.direction;
+					stream << (npc ? "npc" : "monster") << '|' << name << '|' << entry.x << '|' << entry.y << '|' << entry.z << '|' << spawnTime << '|' << direction;
 					if (includeWeights && hasWeight) {
 						stream << '|' << weight;
 					}
 					entries.push_back(stream.str());
 				};
 				if (entry.alternatives.empty()) {
-					append(entry.name, entry.isNpc, entry.weight, entry.hasWeight);
+					append(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.spawnTime, entry.direction);
 				} else {
 					for (const SpawnVariantData& variant : entry.alternatives) {
-						append(variant.name, variant.isNpc, variant.weight, variant.hasWeight);
+						append(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.spawnTime, variant.direction);
 					}
 				}
 			}
@@ -565,9 +569,12 @@ size_t SpawnDocument::entryCount() const {
 
 const char* SpawnFormatIO::GetFormatName(SpawnFormat format) {
 	switch (format) {
-		case SpawnFormat::Tfs: return "TFS 1.8 (8.60)";
-		case SpawnFormat::CanaryCrystal: return "Canary/Crystal (11.x)";
-		default: return "Unknown";
+		case SpawnFormat::Tfs:
+			return "TFS 1.8 (8.60)";
+		case SpawnFormat::CanaryCrystal:
+			return "Canary/Crystal (11.x)";
+		default:
+			return "Unknown";
 	}
 }
 
@@ -635,10 +642,10 @@ SpawnDetectionResult SpawnFormatIO::Detect(const std::filesystem::path& director
 		std::filesystem::path npc;
 	};
 	const std::vector<ModernPair> modernPairs = {
-		{directory / (mapName + "-monster.xml"), directory / (mapName + "-npc.xml")},
-		{directory / "world-monster.xml", directory / "world-npc.xml"},
-		{directory / "monster.xml", directory / "npc.xml"},
-		{directory / "monsters.xml", directory / "npcs.xml"},
+		{ directory / (mapName + "-monster.xml"), directory / (mapName + "-npc.xml") },
+		{ directory / "world-monster.xml", directory / "world-npc.xml" },
+		{ directory / "monster.xml", directory / "npc.xml" },
+		{ directory / "monsters.xml", directory / "npcs.xml" },
 	};
 
 	const std::filesystem::path discoveredTfs = firstWithRoot(tfsCandidates, "spawns");
@@ -821,7 +828,7 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 				if (ShouldWriteDirection(entry, SpawnFormat::Tfs)) {
 					setNode.append_attribute("direction") = entry.direction;
 				}
-				AppendExtraAttributes(setNode, entry.attributes, {"x", "y", "z", "spawntime", "direction"});
+				AppendExtraAttributes(setNode, entry.attributes, { "x", "y", "z", "spawntime", "direction" });
 				std::vector<uint32_t> chances;
 				if (entry.alternativeKind != SpawnAlternativeKind::TfsChance && !NormalizeWeights(entry.alternatives, chances, result.error)) {
 					return result;
@@ -832,7 +839,7 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 					variantNode.append_attribute("name") = variant.name.c_str();
 					const uint32_t chance = chances.empty() ? variant.weight : chances[index];
 					variantNode.append_attribute("chance") = chance;
-					AppendExtraAttributes(variantNode, variant.attributes, {"name", "chance"});
+					AppendExtraAttributes(variantNode, variant.attributes, { "name", "chance" });
 				}
 				continue;
 			}
@@ -843,13 +850,17 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 					output.isNpc = variant.isNpc;
 					output.weight = variant.weight;
 					output.hasWeight = variant.hasWeight;
+					output.spawnTime = variant.spawnTime;
+					output.direction = variant.direction;
+					output.hasDirection = variant.hasDirection;
 					output.attributes = variant.attributes;
+					const int variantSpawnTime = std::max(TFS_MIN_SPAWN_TIME, variant.spawnTime);
 					pugi::xml_node entryNode = areaNode.append_child(output.isNpc ? "npc" : "monster");
-					WriteCommonEntryAttributes(entryNode, area, output, spawnTime, SpawnFormat::Tfs);
+					WriteCommonEntryAttributes(entryNode, area, output, variantSpawnTime, SpawnFormat::Tfs);
 					if (output.hasWeight) {
 						entryNode.append_attribute("weight") = output.weight;
 					}
-					AppendExtraAttributes(entryNode, output.attributes, {"name", "x", "y", "z", "spawntime", "direction", "weight"});
+					AppendExtraAttributes(entryNode, output.attributes, { "name", "x", "y", "z", "spawntime", "direction", "weight" });
 				}
 				continue;
 			}
@@ -858,7 +869,7 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 			if (entry.hasWeight) {
 				entryNode.append_attribute("weight") = entry.weight;
 			}
-			AppendExtraAttributes(entryNode, entry.attributes, {"name", "x", "y", "z", "spawntime", "direction", "weight"});
+			AppendExtraAttributes(entryNode, entry.attributes, { "name", "x", "y", "z", "spawntime", "direction", "weight" });
 		}
 	}
 	std::error_code ec;
@@ -889,20 +900,20 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 	// Content differs or file doesn't exist - proceed with transaction
 	FileSaveTransaction transaction;
 	const std::filesystem::path stagedFile = transaction.Stage(file);
-	
+
 	// Write the content (already has correct line endings from conversion above)
 	if (!WriteFileContent(stagedFile, newContent)) {
 		result.error = "Could not write " + file.string();
 		return result;
 	}
-	
+
 	// Validate the written file
 	std::string validationError;
 	if (!ValidateTfsDocument(document, stagedFile, validationError)) {
 		result.error = "Generated TFS " + validationError;
 		return result;
 	}
-	
+
 	if (!transaction.Commit(result.error)) {
 		return result;
 	}
@@ -912,14 +923,14 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 
 SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document, const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile) {
 	SpawnWriteResult result;
-	result.files = {monsterFile, npcFile};
+	result.files = { monsterFile, npcFile };
 	if (FileSaveTransaction::PathsReferToSameFile(monsterFile, npcFile)) {
 		result.error = "Monster and NPC output files must be different.";
 		return result;
 	}
 	pugi::xml_document monsterXml;
 	pugi::xml_document npcXml;
-	for (pugi::xml_document* xml : {&monsterXml, &npcXml}) {
+	for (pugi::xml_document* xml : { &monsterXml, &npcXml }) {
 		pugi::xml_node declaration = xml->append_child(pugi::node_declaration);
 		declaration.append_attribute("version") = "1.0";
 	}
@@ -940,25 +951,28 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 			if (!ValidateEntry(area, entry, result.error)) {
 				return result;
 			}
-			auto writeOne = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, const SpawnAttributeMap& attributes) {
+			auto writeOne = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, int spawnTime, int direction, bool hasDirection, const SpawnAttributeMap& attributes) {
 				SpawnEntryData output = entry;
 				output.name = name;
 				output.isNpc = npc;
+				output.spawnTime = spawnTime;
+				output.direction = direction;
+				output.hasDirection = hasDirection;
 				pugi::xml_node entryNode = ensureArea(npc).append_child(npc ? "npc" : "monster");
 				WriteCommonEntryAttributes(entryNode, area, output, output.spawnTime, SpawnFormat::CanaryCrystal);
 				if (!npc && hasWeight) {
 					entryNode.append_attribute("weight") = weight;
 				}
-				AppendExtraAttributes(entryNode, attributes, {"name", "x", "y", "z", "spawntime", "direction", "weight"});
+				AppendExtraAttributes(entryNode, attributes, { "name", "x", "y", "z", "spawntime", "direction", "weight" });
 				if (npc && attributes.contains("instanceId")) {
 					AppendWarning(result.warnings, "Crystal does not interpret TFS NPC instanceId for '" + name + "'; the attribute was preserved in XML.");
 				}
 			};
 			if (entry.alternatives.empty()) {
-				writeOne(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.attributes);
+				writeOne(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.spawnTime, entry.direction, entry.hasDirection, entry.attributes);
 			} else {
 				for (const SpawnVariantData& variant : entry.alternatives) {
-					writeOne(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.attributes);
+					writeOne(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.spawnTime, variant.direction, variant.hasDirection, variant.attributes);
 				}
 			}
 		}
@@ -999,11 +1013,11 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 
 	// Content differs or files don't exist - proceed with transaction
 	FileSaveTransaction transaction;
-	
+
 	// Stage and write only files that actually changed
 	std::filesystem::path stagedMonsterFile = monsterFile;
 	std::filesystem::path stagedNpcFile = npcFile;
-	
+
 	if (!monsterMatches) {
 		stagedMonsterFile = transaction.Stage(monsterFile);
 		if (!WriteFileContent(stagedMonsterFile, newMonsterContent)) {
@@ -1011,7 +1025,7 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 			return result;
 		}
 	}
-	
+
 	if (!npcMatches) {
 		stagedNpcFile = transaction.Stage(npcFile);
 		if (!WriteFileContent(stagedNpcFile, newNpcContent)) {
@@ -1026,7 +1040,7 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 		result.error = "Generated Canary/Crystal " + validationError;
 		return result;
 	}
-	
+
 	if (!transaction.Commit(result.error)) {
 		return result;
 	}

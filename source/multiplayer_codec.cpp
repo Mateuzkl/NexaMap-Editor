@@ -312,6 +312,9 @@ namespace Multiplayer {
 				out.u8(a.isNpc);
 				out.u32(a.weight);
 				out.u8(a.hasWeight);
+				out.u32(static_cast<uint32_t>(a.spawnTime));
+				out.u8(static_cast<uint8_t>(a.direction));
+				out.u8(a.hasDirection ? 1 : 0);
 				attributes(out, a.attributes);
 			}
 		}
@@ -397,6 +400,13 @@ namespace Multiplayer {
 				a.isNpc = in.boolean();
 				a.weight = in.u32();
 				a.hasWeight = in.boolean();
+				a.spawnTime = static_cast<int>(in.u32());
+				auto dir = in.u8();
+				if (dir > 3) {
+					throw Error("Invalid variant direction.");
+				}
+				a.direction = dir;
+				a.hasDirection = in.boolean();
 				a.attributes = attributes(in);
 				c.addSpawnAlternative(a);
 			}

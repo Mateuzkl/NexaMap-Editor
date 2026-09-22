@@ -1667,6 +1667,9 @@ IOMapOTBM::SpawnLoadStatus IOMapOTBM::loadSpawns(Map& map, const FileName& dir) 
 
 	std::vector<std::string> adapterWarnings;
 	if (!SpawnMapAdapter::Apply(map, document, adapterWarnings)) {
+		for (const std::string& message : adapterWarnings) {
+			warnings.push_back(wxstr("IOMapOTBM::loadSpawns: " + message));
+		}
 		warnings.push_back("IOMapOTBM::loadSpawns: Failed to apply spawn data to the map.");
 		return SpawnLoadStatus::Unavailable;
 	}

@@ -39,6 +39,16 @@ inline constexpr bool MergeSpawnAlternativeKinds(SpawnAlternativeKind current, S
 	return false;
 }
 
+inline constexpr SpawnAlternativeKind AuthoritativeAlternativeKind(SpawnFormat format, SpawnAlternativeKind kind, bool hasWeight, size_t variantCount) noexcept {
+	if (kind != SpawnAlternativeKind::None) {
+		return kind;
+	}
+	if (format == SpawnFormat::CanaryCrystal && (hasWeight || variantCount > 1)) {
+		return SpawnAlternativeKind::CanaryWeight;
+	}
+	return SpawnAlternativeKind::None;
+}
+
 using SpawnAttributeMap = std::map<std::string, std::string>;
 
 struct SpawnVariantData {
@@ -46,6 +56,9 @@ struct SpawnVariantData {
 	bool isNpc = false;
 	uint32_t weight = 1;
 	bool hasWeight = false;
+	int spawnTime = 60;
+	int direction = 0;
+	bool hasDirection = false;
 	SpawnAttributeMap attributes;
 };
 
