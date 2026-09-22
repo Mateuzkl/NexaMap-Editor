@@ -22,6 +22,8 @@ private:
 	wxTextCtrl* chat;
 	wxTextCtrl* input;
 	wxStaticText* diagnostics;
+	wxButton* hostBackupButton = nullptr;
+	wxButton* playerBackupButton = nullptr;
 	std::string displayedLog;
 	uint64_t selectedApproval() const;
 	uint32_t selectedPlayer() const;

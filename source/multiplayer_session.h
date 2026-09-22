@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <functional>
+#include <filesystem>
 #include <wx/window.h>
 
 class Editor;
@@ -38,7 +39,8 @@ public:
 		uint32_t maxPlayers = 8;
 		Multiplayer::Role defaultRole = Multiplayer::Role::Editor;
 		bool approvals = true;
-		uint32_t autosaveMinutes = 5;
+		uint32_t autosaveMinutes = 0;
+		uint32_t maxBackupSets = 10;
 	};
 	struct Participant {
 		uint32_t id = 0;
@@ -106,6 +108,11 @@ public:
 	void requestResync();
 	void showWindow();
 	void log(const std::string& message);
+	enum class BackupReason {
+		Automatic,
+		Manual
+	};
+	bool saveBackup(BackupReason reason = BackupReason::Automatic);
 	const auto& players() const {
 		return participants;
 	}
@@ -169,6 +176,7 @@ public:
 
 private:
 	struct Peer;
+	struct MapSidecarsGuard;
 	struct PropertyRequest {
 		wxWeakRef<wxWindow> owner;
 		uint64_t lock;
@@ -222,7 +230,7 @@ private:
 	void sendPlayers();
 	void sendLocks();
 	void refresh();
-	void saveBackup();
+	void pruneOldBackups(const std::filesystem::path& directory, const std::string& mapStem, uint32_t maxSets);
 	bool hasSensitiveChanges(const Multiplayer::Transaction& tx) const;
 	void finishMetadataEdit(const Multiplayer::Bytes& before, const std::map<uint64_t, Multiplayer::Bytes>& tiles, uint64_t base);
 
@@ -267,6 +275,9 @@ private:
 	bool processingTimer = false, peersChanged = false;
 	bool running = false, hosting = false, ready = false, applying = false, cursorDirty = false, needsRefresh = false, receivingSnapshot = false;
 	unsigned editDepth = 0;
+	std::optional<uint64_t> lastBackedUpRevision;
+	std::optional<uint64_t> lastBackedUpGeneration;
+	bool backupInProgress = false;
 	std::string connectionStatus = "Disconnected";
 	friend class MultiplayerWindow;
 };

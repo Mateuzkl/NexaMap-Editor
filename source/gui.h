@@ -324,6 +324,7 @@ public:
 	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false);
 	bool LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force = false);
 	bool LoadWorkspace(wxString& error, wxArrayString& warnings, bool force = false);
+	bool JoinMultiplayerSession(wxWindow* parent = nullptr);
 	bool IsCanaryCrystalAssetsLoaded() const {
 		return canary_crystal_assets_loaded;
 	}

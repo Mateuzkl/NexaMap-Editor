@@ -98,7 +98,14 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+install(DIRECTORY data DESTINATION .)
 if(WIN32)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${CMAKE_CURRENT_SOURCE_DIR}/data"
+		"$<TARGET_FILE_DIR:${PROJECT_NAME}>/data"
+		COMMENT "Copying data directory to build output directory"
+	)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE "_WIN32_WINNT=0x0601")
 	target_link_libraries(${PROJECT_NAME} bcrypt ws2_32)
 else()

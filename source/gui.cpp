@@ -28,6 +28,7 @@
 #include "autoborder_preview.h"
 #include "main_menubar.h"
 #include "multiplayer_session.h"
+#include "multiplayer_window.h"
 
 #include "editor.h"
 #include "editor_disposal.h"
@@ -2059,6 +2060,64 @@ void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
 		static_cast<void>(RunMapItemIdConverter(welcomeDialog, MapItemIdConverterLaunchContext::Welcome));
 	} else if (event.GetId() == WELCOME_DIALOG_SPAWN_CONVERTER) {
 		static_cast<void>(RunSpawnConverter(welcomeDialog));
+	} else if (event.GetId() == WELCOME_DIALOG_MULTIPLAYER_JOIN) {
+		JoinMultiplayerSession(welcomeDialog);
+	}
+}
+
+bool GUI::JoinMultiplayerSession(wxWindow* parent) {
+	if (closingApplication || MultiplayerSession::current()) {
+		return false;
+	}
+
+	wxWindow* dialogParent = parent ? parent : (welcomeDialog ? static_cast<wxWindow*>(welcomeDialog) : static_cast<wxWindow*>(root));
+	MultiplayerSession::Options options;
+	if (!MultiplayerWindow::configure(dialogParent, false, options) || MultiplayerSession::current() || closingApplication) {
+		return false;
+	}
+
+	// If joining from the startup / welcome screen, automatically validate and load workspace resources
+	if (welcomeDialog != nullptr) {
+		wxString error;
+		wxArrayString warnings;
+		if (!LoadWorkspace(error, warnings)) {
+			PopupDialog(dialogParent, "Workspace not ready", error, wxOK);
+			return false;
+		}
+		if (!warnings.empty()) {
+			ListDialog("Workspace warnings", warnings);
+		}
+	}
+
+	// Joining requires a clean empty map
+	Editor* editor = GetCurrentEditor();
+	if (!editor || editor->map.hasFile() || editor->map.getTileCount() > 0) {
+		if (!NewMap()) {
+			return false;
+		}
+		editor = GetCurrentEditor();
+	}
+	if (!editor || MultiplayerSession::current() || closingApplication) {
+		return false;
+	}
+
+	try {
+		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor);
+		std::string error;
+		if (!editor->multiplayer->join(options, error)) {
+			editor->multiplayer.reset();
+			PopupDialog("Multiplayer", wxstr(error), wxOK);
+			return false;
+		}
+		editor->multiplayer->showWindow();
+		UpdateMenus();
+		return true;
+	} catch (const std::exception& e) {
+		if (editor) {
+			editor->multiplayer.reset();
+		}
+		PopupDialog("Multiplayer", wxString::FromUTF8(e.what()), wxOK);
+		return false;
 	}
 }
 

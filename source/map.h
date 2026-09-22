@@ -81,6 +81,9 @@ public:
 	bool doChange();
 	// Clears any changes
 	bool clearChanges();
+	uint64_t getChangeGeneration() const {
+		return changeGeneration;
+	}
 
 	// Errors/warnings
 	bool hasWarnings() const {
@@ -172,6 +175,15 @@ public:
 	void setSpawnNpcFilename(const std::string& new_spawnfile) {
 		spawnNpcFile = new_spawnfile;
 	}
+	const std::string& getWaypointFilename() const {
+		return waypointfile;
+	}
+	void setWaypointFilename(const std::string& new_waypointfile) {
+		waypointfile = new_waypointfile;
+	}
+	void setFilename(const std::string& new_filename) {
+		filename = new_filename;
+	}
 	void setSpawnFormat(SpawnFormat format) {
 		spawnFormat = format;
 	}
@@ -246,6 +258,7 @@ public:
 protected:
 	bool has_changed; // If the map has changed
 	bool unnamed; // If the map has yet to receive a name
+	uint64_t changeGeneration = 0;
 
 	friend class IOMapOTBM;
 	friend class Editor;

@@ -335,8 +335,7 @@ void ClientVersion::saveVersions() {
 
 	for (auto i = client_versions.begin(); i != client_versions.end(); ++i) {
 		ClientVersion* version = i->second;
-		vers_obj.push_back({ { "id", version->getName() },
-							 { "path", nstr(version->getClientPath().GetFullPath()) } });
+		vers_obj.push_back({ { "id", version->getName() }, { "path", nstr(version->getClientPath().GetFullPath()) } });
 	}
 	g_settings.setString(Config::ASSETS_DATA_DIRS, vers_obj.dump());
 }
@@ -436,6 +435,11 @@ ClientVersion* ClientVersion::detectFromPath(const FileName& requestedPath, wxSt
 	uint32_t spritesSignature = 0;
 	if (!metadataFile.isOk() || !metadataFile.getU32(metadataSignature) || !spritesFile.isOk() || !spritesFile.getU32(spritesSignature)) {
 		error = "Could not read the DAT/SPR signatures from the selected client folder.";
+		return nullptr;
+	}
+
+	if (client_version_order.empty()) {
+		error = "NexaMap client profiles could not be loaded because clients.xml was not found. Please ensure the 'data' directory is located alongside NexaMap Editor.";
 		return nullptr;
 	}
 
