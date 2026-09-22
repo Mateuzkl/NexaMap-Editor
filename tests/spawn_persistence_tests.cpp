@@ -177,6 +177,65 @@ int main() {
 		check(loadedCanary.npcCount() == 1, "Canary/Crystal reloaded exactly 1 NPC");
 	}
 
+	// Test 3b: Canary/Crystal collocated weighted monsters round-trip
+	{
+		TemporaryDirectory temp;
+		const std::filesystem::path monsterFile = temp.path / "collocated-monster.xml";
+		const std::filesystem::path npcFile = temp.path / "collocated-npc.xml";
+
+		SpawnDocument doc;
+		doc.format = SpawnFormat::CanaryCrystal;
+
+		SpawnAreaData monsterArea;
+		monsterArea.centerX = 400;
+		monsterArea.centerY = 400;
+		monsterArea.centerZ = 7;
+		monsterArea.radius = 5;
+		monsterArea.kind = SpawnAreaKind::Monsters;
+
+		SpawnEntryData demon;
+		demon.name = "Demon";
+		demon.isNpc = false;
+		demon.x = 402;
+		demon.y = 402;
+		demon.z = 7;
+		demon.spawnTime = 60;
+		demon.weight = 10;
+		demon.hasWeight = true;
+		demon.alternativeKind = SpawnAlternativeKind::CanaryWeight;
+		monsterArea.entries.push_back(demon);
+
+		SpawnEntryData dragon;
+		dragon.name = "Dragon";
+		dragon.isNpc = false;
+		dragon.x = 402;
+		dragon.y = 402;
+		dragon.z = 7;
+		dragon.spawnTime = 60;
+		dragon.weight = 20;
+		dragon.hasWeight = true;
+		dragon.direction = SOUTH;
+		dragon.hasDirection = true;
+		dragon.alternativeKind = SpawnAlternativeKind::CanaryWeight;
+		monsterArea.entries.push_back(dragon);
+
+		doc.areas.push_back(monsterArea);
+
+		SpawnWriteResult saveResult = SpawnFormatIO::SaveCanaryCrystal(doc, monsterFile, npcFile);
+		check(saveResult.success, "SaveCanaryCrystal succeeds for collocated weighted monsters");
+
+		SpawnDocument loadedCanary;
+		std::string canaryError;
+		check(SpawnFormatIO::LoadCanaryCrystal(monsterFile, npcFile, loadedCanary, canaryError), "LoadCanaryCrystal reads collocated weighted entries");
+		check(loadedCanary.monsterCount() == 2, "Canary/Crystal reloaded exactly 2 collocated monsters");
+		check(loadedCanary.areas.front().entries.size() == 2, "Canary/Crystal preserves both entries at the same tile");
+		check(loadedCanary.areas.front().entries[0].weight == 10 && loadedCanary.areas.front().entries[0].hasWeight, "First monster weight preserved");
+		check(loadedCanary.areas.front().entries[1].weight == 20 && loadedCanary.areas.front().entries[1].hasWeight, "Second monster weight preserved");
+		check(loadedCanary.areas.front().entries[0].alternativeKind == SpawnAlternativeKind::CanaryWeight, "First entry has CanaryWeight");
+		check(loadedCanary.areas.front().entries[1].alternativeKind == SpawnAlternativeKind::CanaryWeight, "Second entry has CanaryWeight");
+		check(loadedCanary.areas.front().entries[1].hasDirection && loadedCanary.areas.front().entries[1].direction == SOUTH, "Second entry explicit direction preserved");
+	}
+
 	// Test 4: Pre-save validation data structure checks
 	{
 		SpawnValidationResult result;

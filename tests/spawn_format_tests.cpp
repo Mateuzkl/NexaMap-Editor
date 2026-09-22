@@ -109,10 +109,25 @@ int main(int argc, char** argv) {
 	check(forwardKindsMerged && reverseKindsMerged && forwardKind == SpawnAlternativeKind::TfsChance && reverseKind == SpawnAlternativeKind::TfsChance, "collocated TFS chance semantics are input-order independent");
 	SpawnAlternativeKind incompatibleKind = SpawnAlternativeKind::None;
 	check(!MergeSpawnAlternativeKinds(SpawnAlternativeKind::CanaryWeight, SpawnAlternativeKind::TfsChance, incompatibleKind), "incompatible collocated alternative kinds are rejected");
+	SpawnAlternativeKind canaryMergeKind = SpawnAlternativeKind::None;
+	check(MergeSpawnAlternativeKinds(SpawnAlternativeKind::CanaryWeight, SpawnAlternativeKind::CanaryWeight, canaryMergeKind) && canaryMergeKind == SpawnAlternativeKind::CanaryWeight, "CanaryWeight merges with CanaryWeight");
+	canaryMergeKind = SpawnAlternativeKind::None;
+	check(MergeSpawnAlternativeKinds(SpawnAlternativeKind::None, SpawnAlternativeKind::CanaryWeight, canaryMergeKind) && canaryMergeKind == SpawnAlternativeKind::CanaryWeight, "None merges with incoming CanaryWeight");
+	canaryMergeKind = SpawnAlternativeKind::None;
+	check(MergeSpawnAlternativeKinds(SpawnAlternativeKind::CanaryWeight, SpawnAlternativeKind::None, canaryMergeKind) && canaryMergeKind == SpawnAlternativeKind::CanaryWeight, "existing CanaryWeight merges with incoming None");
 
 	const std::string modernMonsters = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'><monster name='Rat' x='1' y='-1' z='7' spawntime='30' weight='2'/></monster></monsters>";
 	const std::string modernNpcs = "<npcs><npc centerx='110' centery='210' centerz='6' radius='1'><npc name='Guide' x='0' y='0' z='6' spawntime='60'/></npc></npcs>";
 	check(loadModern(modernMonsters, modernNpcs) && document.monsterCount() == 1 && document.npcCount() == 1 && document.areas.size() == 2, "Canary monster and NPC files load together");
+	check(document.areas.front().entries.front().alternativeKind == SpawnAlternativeKind::CanaryWeight, "Canary entry with weight attribute has CanaryWeight alternative kind");
+
+	const std::string collocatedModern = "<monsters><monster centerx='100' centery='200' centerz='7' radius='2'>"
+										 "<monster name='Demon' x='1' y='-1' z='7' spawntime='60' weight='10'/>"
+										 "<monster name='Dragon' x='1' y='-1' z='7' spawntime='60' weight='20' direction='0'/>"
+										 "</monster></monsters>";
+	check(loadModern(collocatedModern, {}) && document.monsterCount() == 2 && document.areas.front().entries.size() == 2, "collocated Canary monsters load independently");
+	check(document.areas.front().entries[0].alternativeKind == SpawnAlternativeKind::CanaryWeight && document.areas.front().entries[1].alternativeKind == SpawnAlternativeKind::CanaryWeight, "collocated Canary monsters retain CanaryWeight");
+	check(!document.areas.front().entries[0].hasDirection && document.areas.front().entries[1].hasDirection && document.areas.front().entries[1].direction == 0, "collocated Canary entries preserve implicit and explicit direction state");
 	check(loadModern(modernMonsters, {}) && document.monsterCount() == 1 && document.npcCount() == 0 && hasWarning(document, "NPC spawn file was not found"), "Canary monster-only load is nonfatal");
 	check(loadModern({}, modernNpcs) && document.monsterCount() == 0 && document.npcCount() == 1 && hasWarning(document, "monster spawn file was not found"), "Canary NPC-only load is nonfatal");
 	check(!document.areas.front().entries.front().hasDirection && document.areas.front().entries.front().direction == 0, "missing Canary NPC direction uses North server default");
