@@ -153,7 +153,7 @@ public:
 		m_what(error) { }
 	OTMLException(const OTMLNodePtr& node, const std::string& error);
 	OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line = -1);
-	~OTMLException() throw() override { };
+	~OTMLException() throw() override { }
 
 	const char* what() const throw() override {
 		return m_what.c_str();
