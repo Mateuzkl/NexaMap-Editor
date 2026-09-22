@@ -126,6 +126,8 @@ namespace {
 						recordConflict(FormatConflictWarning(position, incoming.center, "entry " + FormatEntryDetails(existing.name, existing.spawnTime, existing.direction, existing.hasDirection, existing.weight, existing.hasWeight), "entry " + FormatEntryDetails(incoming.name, incoming.spawnTime, incoming.direction, incoming.hasDirection, incoming.weight, incoming.hasWeight), "incompatible alternative kinds"));
 					} else {
 						existing.alternativeKind = AuthoritativeAlternativeKind(document.format, mergedKind, existing.hasWeight || incoming.hasWeight, 2);
+						existing.direction = incoming.direction;
+						existing.hasDirection = incoming.hasDirection;
 					}
 				}
 
@@ -226,6 +228,13 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 				creature->setAlternativeKind(AuthoritativeAlternativeKind(document.format, mergedKind, entry.hasWeight || creature->hasSpawnWeight(), creature->getSpawnAlternatives().size() + variants.size()));
 				for (const SpawnVariantData& variant : variants) {
 					creature->addSpawnAlternative(variant);
+				}
+				if (!variants.empty()) {
+					const SpawnVariantData& lastVariant = variants.back();
+					creature->setSpawnDirection(
+						static_cast<Direction>(std::clamp(lastVariant.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),
+						lastVariant.hasDirection
+					);
 				}
 				// Multiple weighted entries on one Canary/Crystal tile are valid.
 				// They were merged and preserved above, so this is not a loader error.
