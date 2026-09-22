@@ -128,6 +128,110 @@ int main() {
 		}
 	}
 
+	// Test 6: Empty block scalar (|)
+	{
+		std::string input = "description: |\n";
+		std::istringstream stream(input);
+		OTMLDocumentPtr doc = OTMLDocument::create();
+		OTMLParser parser(doc, stream);
+		parser.parse();
+		check(doc->hasChildAt("description"), "has child description (empty block scalar)");
+		if (doc->hasChildAt("description")) {
+			std::string val = doc->valueAt<std::string>("description");
+			check(val == "\n", "empty block scalar value is single newline");
+		}
+	}
+
+	// Test 7: Empty strip block scalar (|-)
+	{
+		std::string input = "description: |-\n";
+		std::istringstream stream(input);
+		OTMLDocumentPtr doc = OTMLDocument::create();
+		OTMLParser parser(doc, stream);
+		parser.parse();
+		check(doc->hasChildAt("description"), "has child description (empty strip block scalar)");
+		if (doc->hasChildAt("description")) {
+			std::string val = doc->valueAt<std::string>("description");
+			check(val.empty(), "empty strip block scalar value is empty");
+		}
+	}
+
+	// Test 8: Empty keep block scalar (|+)
+	{
+		std::string input = "description: |+\n";
+		std::istringstream stream(input);
+		OTMLDocumentPtr doc = OTMLDocument::create();
+		OTMLParser parser(doc, stream);
+		parser.parse();
+		check(doc->hasChildAt("description"), "has child description (empty keep block scalar)");
+		if (doc->hasChildAt("description")) {
+			std::string val = doc->valueAt<std::string>("description");
+			check(val == "\n", "empty keep block scalar without trailing newlines is newline");
+		}
+	}
+
+	// Test 9: Blank-only multiline body
+	{
+		std::string input = "description: |\n  \n  \n";
+		std::istringstream stream(input);
+		OTMLDocumentPtr doc = OTMLDocument::create();
+		OTMLParser parser(doc, stream);
+		parser.parse();
+		check(doc->hasChildAt("description"), "has child description (blank-only multiline body)");
+		if (doc->hasChildAt("description")) {
+			std::string val = doc->valueAt<std::string>("description");
+			check(val == "\n", "blank-only multiline body trimmed correctly with |");
+		}
+	}
+
+	// Test 10: Invalid root indentation with spaces throws OTMLException
+	{
+		std::string input = "  DatSpr:\n    extended: true\n";
+		std::istringstream stream(input);
+		OTMLDocumentPtr doc = OTMLDocument::create();
+		OTMLParser parser(doc, stream);
+		bool caught = false;
+		try {
+			parser.parse();
+		} catch (const OTMLException&) {
+			caught = true;
+		} catch (...) {
+		}
+		check(caught, "invalid root indentation with spaces throws OTMLException");
+	}
+
+	// Test 11: Invalid root indentation with tabs throws OTMLException
+	{
+		std::string input = "\tDatSpr:\n\t\textended: true\n";
+		std::istringstream stream(input);
+		OTMLDocumentPtr doc = OTMLDocument::create();
+		OTMLParser parser(doc, stream);
+		bool caught = false;
+		try {
+			parser.parse();
+		} catch (const OTMLException&) {
+			caught = true;
+		} catch (...) {
+		}
+		check(caught, "invalid root indentation with tabs throws OTMLException");
+	}
+
+	// Test 12: Invalid indentation jump throws OTMLException without crash
+	{
+		std::string input = "root:\n      child: value\n";
+		std::istringstream stream(input);
+		OTMLDocumentPtr doc = OTMLDocument::create();
+		OTMLParser parser(doc, stream);
+		bool caught = false;
+		try {
+			parser.parse();
+		} catch (const OTMLException&) {
+			caught = true;
+		} catch (...) {
+		}
+		check(caught, "invalid indentation jump throws OTMLException");
+	}
+
 	if (failures != 0) {
 		std::cerr << failures << " OTML test(s) failed.\n";
 		return 1;

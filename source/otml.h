@@ -771,9 +771,15 @@ inline void OTMLParser::parseLine(std::string line) {
 		return;
 	}
 	if (depth == currentDepth + 1) {
+		if (!previousNode) {
+			throw OTMLException(doc, "invalid indentation depth, no parent node is available", currentLine);
+		}
 		currentParent = previousNode;
 	} else if (depth < currentDepth) {
 		for (int i = 0; i < currentDepth - depth; ++i) {
+			if (!currentParent || !currentParent->parent()) {
+				throw OTMLException(doc, "invalid indentation depth, no parent node is available", currentLine);
+			}
 			currentParent = currentParent->parent();
 		}
 	} else if (depth != currentDepth) {
@@ -823,13 +829,12 @@ inline void OTMLParser::parseNode(const std::string& data) {
 			multiLineData += "\n";
 		} while (!in.eof());
 		if (value == "|" || value == "|-") {
-			int lastPos = multiLineData.length();
-			while (multiLineData[--lastPos] == '\n') {
-				multiLineData.erase(lastPos, 1);
+			while (!multiLineData.empty() && multiLineData.back() == '\n') {
+				multiLineData.pop_back();
 			}
 
 			if (value == "|") {
-				multiLineData.append("\n");
+				multiLineData.push_back('\n');
 			}
 		}
 		value = multiLineData;
@@ -856,6 +861,9 @@ inline void OTMLParser::parseNode(const std::string& data) {
 		}
 	}
 
+	if (!currentParent) {
+		throw OTMLException(doc, "cannot add node, no parent node is available", currentLine);
+	}
 	currentParent->addChild(node);
 	previousNode = node;
 }
