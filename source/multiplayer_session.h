@@ -276,6 +276,7 @@ private:
 	bool running = false, hosting = false, ready = false, applying = false, cursorDirty = false, needsRefresh = false, receivingSnapshot = false;
 	unsigned editDepth = 0;
 	std::optional<uint64_t> lastBackedUpRevision;
+	std::optional<uint64_t> lastBackedUpGeneration;
 	bool backupInProgress = false;
 	std::string connectionStatus = "Disconnected";
 	friend class MultiplayerWindow;

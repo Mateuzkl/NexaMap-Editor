@@ -81,6 +81,9 @@ public:
 	bool doChange();
 	// Clears any changes
 	bool clearChanges();
+	uint64_t getChangeGeneration() const {
+		return changeGeneration;
+	}
 
 	// Errors/warnings
 	bool hasWarnings() const {
@@ -255,6 +258,7 @@ public:
 protected:
 	bool has_changed; // If the map has changed
 	bool unnamed; // If the map has yet to receive a name
+	uint64_t changeGeneration = 0;
 
 	friend class IOMapOTBM;
 	friend class Editor;

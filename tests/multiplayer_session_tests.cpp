@@ -265,7 +265,7 @@ public:
 			check(opts.maxBackupSets == 10, "Options::maxBackupSets must default to 10");
 			std::cout << "PASS multiplayer backup Options defaults (0 min, 10 sets)\n";
 		}
-		// Scenario 8: Retention logic and safe isolation
+		// Scenario 8: Retention logic, remnant cleanup, and safe isolation
 		{
 			auto tempDir = std::filesystem::temp_directory_path() / ("nexamap_retention_test_" + std::to_string(Clock::now().time_since_epoch().count()));
 			std::filesystem::create_directories(tempDir);
@@ -280,6 +280,10 @@ public:
 				std::ofstream(tempDir / (base + "-zones.xml")) << "test";
 			}
 
+			// Create an incomplete remnant lacking .otbm (must be purged without consuming a retention slot)
+			auto remnantSpawn = tempDir / (stem + "-r1-999-spawn.xml");
+			std::ofstream(remnantSpawn) << "remnant";
+
 			// Create unrelated files in the same directory that MUST NOT be touched
 			auto unrelated1 = tempDir / "world.otbm";
 			auto unrelated2 = tempDir / "world-r1-notabackup.txt";
@@ -290,6 +294,9 @@ public:
 
 			Fixture f;
 			f.host().pruneOldBackups(tempDir, stem, 10);
+
+			// Incomplete remnant must be removed
+			check(!std::filesystem::exists(remnantSpawn), "Retention failed to purge incomplete remnant lacking .otbm");
 
 			// Unrelated files must still exist
 			check(std::filesystem::exists(unrelated1), "Retention deleted unrelated file world.otbm");
@@ -313,7 +320,7 @@ public:
 			}
 
 			std::filesystem::remove_all(tempDir);
-			std::cout << "PASS multiplayer backup retention and safe isolation\n";
+			std::cout << "PASS multiplayer backup retention, remnant cleanup, and safe isolation\n";
 		}
 		// Scenarios 2, 3, 4, 5, 6, 7, 9, 10: Full Session & Backup Lifecycle
 		{
@@ -346,14 +353,28 @@ public:
 			auto backupDir = tempDir / "multiplayer-backups";
 			check(std::filesystem::exists(backupDir), "multiplayer-backups dir was not created");
 
+			// Rapid manual backup within same revision creates unique collision-resistant file without overwriting
+			check(f.host().saveBackup(MultiplayerSession::BackupReason::Manual), "Second rapid manual backup failed");
+			size_t otbmCount = 0;
+			for (const auto& entry : std::filesystem::directory_iterator(backupDir)) {
+				if (entry.path().extension() == ".otbm") {
+					++otbmCount;
+				}
+			}
+			check(otbmCount == 2, "Second manual backup must not overwrite earlier backup set");
+
 			// Scenario 7: Verify sidecar paths are preserved exactly
 			check(f.hostEditor.map.getSpawnFilename() == "testworld-spawn.xml", "Spawn filename was corrupted by backup");
 			check(f.hostEditor.map.getHouseFilename() == "testworld-house.xml", "House filename was corrupted by backup");
 			check(!f.host().backupInProgress, "backupInProgress stuck at true");
 
-			// Scenario 4: Same revision afterward skips automatic backup
+			// Automatic backup skips when neither revision nor generation changed
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup should skip same revision and generation");
+
+			// Host mutation via doChange() advances generation and allows automatic backup
 			f.hostEditor.map.doChange();
-			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup should skip same revision");
+			check(f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup failed after host doChange mutation");
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup should skip when generation already backed up");
 
 			// Scenario 5: New accepted revision allows next automatic backup
 			const Position position(100, 100, 7);
@@ -370,6 +391,8 @@ public:
 			f.host().disconnect("Test finished");
 			check(!f.host().lastBackedUpRevision.has_value(), "lastBackedUpRevision leaked after disconnect");
 			check(!f.host().backupInProgress, "backupInProgress leaked after disconnect");
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Manual), "Disconnected host must not be allowed to backup");
+			check(hasMessage(f.host(), "Manual backup is only available to the host"), "Missing disconnected host rejection log");
 
 			std::filesystem::remove_all(tempDir);
 			std::cout << "PASS multiplayer manual and automatic backup control, deduplication, and session reset\n";

@@ -178,6 +178,7 @@ bool MultiplayerSession::host(const Options& opts, std::string& error) {
 		connectionStatus = "Hosting";
 		lastBackup = lastActivity = nowMs();
 		lastBackedUpRevision.reset();
+		lastBackedUpGeneration.reset();
 		backupInProgress = false;
 		timer.Start(50);
 		log("Host started on port " + std::to_string(options.port) + ".");
@@ -258,7 +259,11 @@ void MultiplayerSession::disconnect(const std::string& reason) {
 	pending.reset();
 	history.clear();
 	historyBytes = historyPosition = 0;
+	hosting = false;
+	running = false;
+	ready = false;
 	lastBackedUpRevision.reset();
+	lastBackedUpGeneration.reset();
 	backupInProgress = false;
 	lastBackup = 0;
 	if (activeSession == this) {
@@ -1707,9 +1712,11 @@ void MultiplayerSession::onTimer(wxTimerEvent&) {
 			sendPlayers();
 			sendLocks();
 		}
-		if (!editDepth && hosting && options.autosaveMinutes > 0 && now - lastBackup >= uint64_t(options.autosaveMinutes) * 60000) {
+		if (!editDepth && hosting && running && options.autosaveMinutes > 0 && now - lastBackup >= uint64_t(options.autosaveMinutes) * 60000) {
 			lastBackup = now;
-			if (editor.map.hasFile() && editor.map.hasChanged() && (!lastBackedUpRevision || *lastBackedUpRevision != revisions.current())) {
+			const bool revChanged = !lastBackedUpRevision || *lastBackedUpRevision != revisions.current();
+			const bool genChanged = !lastBackedUpGeneration || *lastBackedUpGeneration != editor.map.getChangeGeneration();
+			if (editor.map.hasFile() && editor.map.hasChanged() && (revChanged || genChanged)) {
 				saveBackup(BackupReason::Automatic);
 			}
 		}
@@ -2064,7 +2071,7 @@ bool MultiplayerSession::saveBackup(BackupReason reason) {
 	if (backupInProgress) {
 		return false;
 	}
-	if (!hosting) {
+	if (!hosting || !running) {
 		if (reason == BackupReason::Manual) {
 			log("Manual backup is only available to the host.");
 		}
@@ -2076,8 +2083,13 @@ bool MultiplayerSession::saveBackup(BackupReason reason) {
 		}
 		return false;
 	}
+
+	const uint64_t currentRev = revisions.current();
+	const uint64_t currentGen = editor.map.getChangeGeneration();
+	const bool revChanged = !lastBackedUpRevision || *lastBackedUpRevision != currentRev;
+	const bool genChanged = !lastBackedUpGeneration || *lastBackedUpGeneration != currentGen;
 	if (reason == BackupReason::Automatic) {
-		if (!editor.map.hasChanged() || (lastBackedUpRevision && *lastBackedUpRevision == revisions.current())) {
+		if (!editor.map.hasChanged() || (!revChanged && !genChanged)) {
 			return false;
 		}
 	}
@@ -2094,9 +2106,25 @@ bool MultiplayerSession::saveBackup(BackupReason reason) {
 			return false;
 		}
 
-		auto stamp = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-		auto base = path.stem().string() + "-r" + std::to_string(revisions.current()) + "-" + std::to_string(stamp);
+		auto stampMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		auto baseCandidate = path.stem().string() + "-r" + std::to_string(currentRev) + "-" + std::to_string(stampMs);
+		std::string base = baseCandidate;
+		uint32_t collisionIndex = 1;
+		std::error_code existsEc;
+		while (std::filesystem::exists(directory / (base + ".otbm"), existsEc)) {
+			base = baseCandidate + "_" + std::to_string(collisionIndex++);
+		}
 		auto backup = directory / (base + ".otbm");
+
+		auto cleanupPartialFiles = [&]() {
+			static constexpr std::string_view extensions[] = {
+				".otbm", "-spawn.xml", "-monster.xml", "-npc.xml", "-house.xml", "-waypoint.xml", "-zones.xml"
+			};
+			for (const auto ext : extensions) {
+				std::error_code rmEc;
+				std::filesystem::remove(directory / (base + std::string(ext)), rmEc);
+			}
+		};
 
 		// Backups have independent sidecars and do not change the open document's path.
 		MapSidecarsGuard sidecars(editor.map);
@@ -2117,23 +2145,35 @@ bool MultiplayerSession::saveBackup(BackupReason reason) {
 			IOMapOTBM writer(editor.map.getVersion());
 			saved = writer.saveMap(editor.map, wxstr(backup.string()));
 		} catch (const std::exception& e) {
+			cleanupPartialFiles();
 			log(std::string("Backup failed: ") + e.what());
 			return false;
 		} catch (...) {
+			cleanupPartialFiles();
 			log("Backup failed: unknown exception while writing map.");
 			return false;
 		}
 
-		if (saved) {
-			lastBackedUpRevision = revisions.current();
-			const std::string prefix = (reason == BackupReason::Manual) ? "Manual multiplayer backup saved: " : "Automatic multiplayer backup saved: ";
-			log(prefix + backup.string());
-			pruneOldBackups(directory, path.stem().string(), options.maxBackupSets);
-			return true;
-		} else {
+		if (!saved) {
+			cleanupPartialFiles();
 			log("Backup failed: map writer returned false.");
 			return false;
 		}
+
+		lastBackedUpRevision = currentRev;
+		lastBackedUpGeneration = currentGen;
+		const std::string prefix = (reason == BackupReason::Manual) ? "Manual multiplayer backup saved: " : "Automatic multiplayer backup saved: ";
+		log(prefix + backup.string());
+
+		// Retention cleanup is independent: errors during cleanup must not fail an already successful backup
+		try {
+			pruneOldBackups(directory, path.stem().string(), options.maxBackupSets);
+		} catch (const std::exception& e) {
+			log(std::string("Backup cleanup error: ") + e.what());
+		} catch (...) {
+			log("Backup cleanup encountered an unexpected error.");
+		}
+		return true;
 	} catch (const std::exception& e) {
 		log(std::string("Backup failed: ") + e.what());
 		return false;
@@ -2151,6 +2191,8 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 		std::string base;
 		uint64_t revision = 0;
 		uint64_t timestamp = 0;
+		uint32_t collisionIndex = 0;
+		bool hasOtbm = false;
 		std::vector<std::filesystem::path> files;
 	};
 
@@ -2200,7 +2242,22 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 		if (stampRes.ec != std::errc()) {
 			continue;
 		}
-		const std::string_view suffix = rest.substr(stampLen);
+		rest.remove_prefix(stampLen);
+
+		// Optional collision index: '_' followed by digits
+		uint32_t collisionIndex = 0;
+		size_t collisionPartLen = 0;
+		if (!rest.empty() && rest.front() == '_') {
+			size_t idxLen = 0;
+			while (1 + idxLen < rest.size() && rest[1 + idxLen] >= '0' && rest[1 + idxLen] <= '9') {
+				++idxLen;
+			}
+			if (idxLen > 0) {
+				std::from_chars(rest.data() + 1, rest.data() + 1 + idxLen, collisionIndex);
+				collisionPartLen = 1 + idxLen;
+				rest.remove_prefix(collisionPartLen);
+			}
+		}
 
 		// Suffix must strictly match one of the known sidecar/otbm extensions
 		static constexpr std::string_view validSuffixes[] = {
@@ -2214,7 +2271,7 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 		};
 		bool valid = false;
 		for (const auto& s : validSuffixes) {
-			if (suffix == s) {
+			if (rest == s) {
 				valid = true;
 				break;
 			}
@@ -2223,38 +2280,61 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 			continue;
 		}
 
-		const std::string base = filename.substr(0, prefix.size() + revLen + 1 + stampLen);
+		const std::string base = filename.substr(0, prefix.size() + revLen + 1 + stampLen + collisionPartLen);
 		auto& set = setsByBase[base];
 		set.base = base;
 		set.revision = rev;
 		set.timestamp = stamp;
+		set.collisionIndex = collisionIndex;
+		if (rest == ".otbm") {
+			set.hasOtbm = true;
+		}
 		set.files.push_back(entry.path());
 	}
 
-	if (setsByBase.size() <= maxSets) {
+	// Purge orphaned/incomplete remnants that lack an .otbm file (Issue 5)
+	std::vector<BackupSet> completeSets;
+	for (auto& [baseName, set] : setsByBase) {
+		if (!set.hasOtbm) {
+			for (const auto& f : set.files) {
+				std::error_code rmEc;
+				std::filesystem::remove(f, rmEc);
+			}
+			log("Backup cleanup: removed incomplete backup remnants for " + baseName);
+		} else {
+			completeSets.push_back(std::move(set));
+		}
+	}
+
+	if (completeSets.size() <= maxSets) {
 		return;
 	}
 
-	std::vector<BackupSet> sortedSets;
-	sortedSets.reserve(setsByBase.size());
-	for (auto& [k, v] : setsByBase) {
-		sortedSets.push_back(std::move(v));
-	}
-	std::sort(sortedSets.begin(), sortedSets.end(), [](const BackupSet& a, const BackupSet& b) {
+	std::sort(completeSets.begin(), completeSets.end(), [](const BackupSet& a, const BackupSet& b) {
 		if (a.timestamp != b.timestamp) {
 			return a.timestamp < b.timestamp;
+		}
+		if (a.collisionIndex != b.collisionIndex) {
+			return a.collisionIndex < b.collisionIndex;
 		}
 		return a.revision < b.revision;
 	});
 
-	const size_t toRemove = sortedSets.size() - maxSets;
+	const size_t toRemove = completeSets.size() - maxSets;
 	size_t removedCount = 0;
 	for (size_t i = 0; i < toRemove; ++i) {
-		for (const auto& f : sortedSets[i].files) {
+		bool allFilesRemoved = true;
+		for (const auto& f : completeSets[i].files) {
 			std::error_code rmEc;
-			std::filesystem::remove(f, rmEc);
+			const bool removed = std::filesystem::remove(f, rmEc);
+			if (rmEc || (!removed && std::filesystem::exists(f, rmEc))) {
+				allFilesRemoved = false;
+				log("Backup cleanup: failed to remove " + f.string() + (rmEc ? (": " + rmEc.message()) : ""));
+			}
 		}
-		++removedCount;
+		if (allFilesRemoved) {
+			++removedCount;
+		}
 	}
 
 	if (removedCount > 0) {
