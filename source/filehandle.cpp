@@ -68,7 +68,7 @@ std::string FileHandle::getErrorMessage() {
 
 FileReadHandle::FileReadHandle(const std::string& name) :
 	file_size(0) {
-#if defined __VISUALC__ && defined _UNICODE
+#ifdef _WIN32
 	file = _wfopen(string2wstring(name).c_str(), L"rb");
 #else
 	file = fopen(name.c_str(), "rb");
@@ -217,7 +217,7 @@ BinaryNode* MemoryNodeFileReadHandle::getRootNode() {
 
 DiskNodeFileReadHandle::DiskNodeFileReadHandle(const std::string& name, const std::vector<std::string>& acceptable_identifiers) :
 	file_size(0) {
-#if defined __VISUALC__ && defined _UNICODE
+#ifdef _WIN32
 	file = _wfopen(string2wstring(name).c_str(), L"rb");
 #else
 	file = fopen(name.c_str(), "rb");
@@ -487,7 +487,7 @@ void BinaryNode::load() {
 // node file binary write handle
 
 FileWriteHandle::FileWriteHandle(const std::string& name) {
-#if defined __VISUALC__ && defined _UNICODE
+#ifdef _WIN32
 	file = _wfopen(string2wstring(name).c_str(), L"wb");
 #else
 	file = fopen(name.c_str(), "wb");
@@ -556,7 +556,7 @@ bool FileWriteHandle::addRAW(const uint8_t* ptr, size_t sz) {
 // Disk based node file write handle
 
 DiskNodeFileWriteHandle::DiskNodeFileWriteHandle(const std::string& name, const std::string& identifier) {
-#if defined __VISUALC__ && defined _UNICODE
+#ifdef _WIN32
 	file = _wfopen(string2wstring(name).c_str(), L"wb");
 #else
 	file = fopen(name.c_str(), "wb");
@@ -584,9 +584,10 @@ DiskNodeFileWriteHandle::~DiskNodeFileWriteHandle() {
 void DiskNodeFileWriteHandle::close() {
 	if (file) {
 		renewCache();
-		fclose(file);
+		if (fclose(file) != 0) {
+			error_code = FILE_WRITE_ERROR;
+		}
 		file = nullptr;
-		error_code = FILE_NO_ERROR;
 	}
 }
 

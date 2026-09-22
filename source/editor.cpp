@@ -38,10 +38,31 @@
 #include "spawn_source_remap.h"
 
 #include <filesystem>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <optional>
+#include <utility>
+#include <vector>
 #include <wx/choicdlg.h>
 
 namespace {
+	int removeUtf8File(const std::string& path) {
+#ifdef _WIN32
+		return _wremove(string2wstring(path).c_str());
+#else
+		return std::remove(path.c_str());
+#endif
+	}
+
+	int renameUtf8File(const std::string& source, const std::string& destination) {
+#ifdef _WIN32
+		return _wrename(string2wstring(source).c_str(), string2wstring(destination).c_str());
+#else
+		return std::rename(source.c_str(), destination.c_str());
+#endif
+	}
+
 	MapStorageFormat ChooseMapStorageFormat(const OTBMFileMetadata& metadata, const MapFormatDetection& detection) {
 		wxArrayString choices;
 		choices.Add("TFS - Server IDs and one combined spawn XML");
@@ -201,7 +222,7 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPo
 	const bool keepLoadedClientVersion = clientVersionPolicy == EditorClientVersionPolicy::KeepLoaded;
 	MapStorageFormat storageFormat = g_gui.IsCanaryCrystalAssetsLoaded() ? MapStorageFormat::CanaryCrystal : MapStorageFormat::Tfs;
 	if (!keepLoadedClientVersion) {
-		const std::filesystem::path directory(nstr(fn.GetPath()));
+		const std::filesystem::path directory(std::filesystem::u8path(nstr(fn.GetPath())));
 		const SpawnDetectionResult spawnDetection = SpawnFormatIO::Detect(
 			directory,
 			metadata.spawnFile,
@@ -384,63 +405,75 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 	// Make temporary backups
 	// converter.Assign(wxstr(savefile));
 	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones;
+	std::vector<std::pair<std::string, std::string>> movedBackups;
+	const auto makeBackup = [&](const std::string& source, const std::string& backup) {
+		removeUtf8File(backup);
+		if (renameUtf8File(source, backup) == 0) {
+			movedBackups.emplace_back(source, backup);
+			return true;
+		}
+		const int moveError = errno;
+		wxString message = "Could not prepare a backup of " + wxstr(source) + ":\n" + wxString(std::strerror(moveError));
+		for (auto it = movedBackups.rbegin(); it != movedBackups.rend(); ++it) {
+			if (renameUtf8File(it->second, it->first) != 0) {
+				message += "\nCould not restore " + wxstr(it->first) + ". Backup remains at " + wxstr(it->second) + ".";
+			}
+		}
+		map.unnamed = originallyUnnamed;
+		map.spawnFilenamesExplicit = originalSpawnFilenamesExplicit;
+		g_gui.PopupDialog("Error", message, wxOK);
+		return false;
+	};
 
 	if (converter.GetExt() == "otgz") {
 		save_otgz = true;
 		if (converter.FileExists()) {
 			backup_otbm = map_path + nstr(converter.GetName()) + ".otgz~";
-			std::remove(backup_otbm.c_str());
-			std::rename(savefile.c_str(), backup_otbm.c_str());
+			if (!makeBackup(savefile, backup_otbm)) return false;
 		}
 	} else {
 		if (converter.FileExists()) {
 			backup_otbm = map_path + nstr(converter.GetName()) + ".otbm~";
-			std::remove(backup_otbm.c_str());
-			std::rename(savefile.c_str(), backup_otbm.c_str());
+			if (!makeBackup(savefile, backup_otbm)) return false;
 		}
 
 		converter.SetFullName(wxstr(map.housefile));
 		if (converter.FileExists()) {
 			backup_house = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_house.c_str());
-			std::rename((map_path + map.housefile).c_str(), backup_house.c_str());
+			if (!makeBackup(map_path + map.housefile, backup_house)) return false;
 		}
 
 		converter.SetFullName(wxstr(map.spawnfile));
 		if (converter.FileExists()) {
 			backup_spawn = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_spawn.c_str());
-			std::rename((map_path + map.spawnfile).c_str(), backup_spawn.c_str());
+			if (!makeBackup(map_path + map.spawnfile, backup_spawn)) return false;
 		}
 
 		if (!map.spawnNpcFile.empty()) {
 			converter.SetFullName(wxstr(map.spawnNpcFile));
 			if (converter.FileExists()) {
 				backup_spawn_npc = map_path + nstr(converter.GetName()) + ".xml~";
-				std::remove(backup_spawn_npc.c_str());
-				std::rename((map_path + map.spawnNpcFile).c_str(), backup_spawn_npc.c_str());
+				if (!makeBackup(map_path + map.spawnNpcFile, backup_spawn_npc)) return false;
 			}
 		}
 
 		converter.SetFullName(wxstr(map.waypointfile));
 		if (converter.FileExists()) {
 			backup_waypoint = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_waypoint.c_str());
-			std::rename((map_path + map.waypointfile).c_str(), backup_waypoint.c_str());
+			if (!makeBackup(map_path + map.waypointfile, backup_waypoint)) return false;
 		}
 
 		converter.SetFullName(wxstr(map.zonefile));
 		if (converter.FileExists()) {
 			backup_zones = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_zones.c_str());
-			std::rename((map_path + map.zonefile).c_str(), backup_zones.c_str());
+			if (!makeBackup(map_path + map.zonefile, backup_zones)) return false;
 		}
 	}
 
 	// Save the map
 	{
 		std::string n = nstr(g_gui.GetLocalDataDirectory()) + ".saving.txt";
-		std::ofstream f(n.c_str(), std::ios::trunc | std::ios::out);
+		std::ofstream f(std::filesystem::u8path(n), std::ios::trunc | std::ios::out);
 		f << backup_otbm << '\n'
 		  << backup_house << '\n'
 		  << backup_spawn << '\n'
@@ -488,47 +521,48 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			if (!backup_otbm.empty()) {
 				converter.SetFullName(wxstr(savefile));
 				std::string otbm_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_otbm.c_str(), std::string(otbm_filename + (save_otgz ? ".otgz" : ".otbm")).c_str());
+				renameUtf8File(backup_otbm, otbm_filename + (save_otgz ? ".otgz" : ".otbm"));
 			}
 
 			if (!backup_house.empty()) {
 				converter.SetFullName(wxstr(map.housefile));
 				std::string house_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_house.c_str(), std::string(house_filename + ".xml").c_str());
+				renameUtf8File(backup_house, house_filename + ".xml");
 			}
 
 			if (!backup_spawn.empty()) {
 				converter.SetFullName(wxstr(map.spawnfile));
 				std::string spawn_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_spawn.c_str(), std::string(spawn_filename + ".xml").c_str());
+				renameUtf8File(backup_spawn, spawn_filename + ".xml");
 			}
 
 			if (!backup_spawn_npc.empty()) {
 				converter.SetFullName(wxstr(map.spawnNpcFile));
 				std::string spawn_npc_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_spawn_npc.c_str(), std::string(spawn_npc_filename + ".xml").c_str());
+				renameUtf8File(backup_spawn_npc, spawn_npc_filename + ".xml");
 			}
 
 			if (!backup_waypoint.empty()) {
 				converter.SetFullName(wxstr(map.waypointfile));
 				std::string waypoint_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_waypoint.c_str(), std::string(waypoint_filename + ".xml").c_str());
+				renameUtf8File(backup_waypoint, waypoint_filename + ".xml");
 			}
 
 			if (!backup_zones.empty()) {
 				converter.SetFullName(wxstr(map.zonefile));
 				std::string zones_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_zones.c_str(), std::string(zones_filename + ".xml").c_str());
+				renameUtf8File(backup_zones, zones_filename + ".xml");
 			}
 
 			// Display the error
-			g_gui.PopupDialog("Error", "Could not save, unable to open target for writing.", wxOK);
+			const wxString reason = mapsaver.getError();
+			g_gui.PopupDialog("Error", "Could not save " + wxstr(savefile) + ".\n" + (reason.empty() ? wxString("Unable to open target for writing.") : reason), wxOK);
 		}
 
 		// Remove temporary save runfile
 		{
 			std::string n = nstr(g_gui.GetLocalDataDirectory()) + ".saving.txt";
-			std::remove(n.c_str());
+			removeUtf8File(n);
 		}
 
 		// If failure, don't run the rest of the function
@@ -560,46 +594,46 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		if (!backup_otbm.empty()) {
 			converter.SetFullName(wxstr(savefile));
 			std::string otbm_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_otbm.c_str(), std::string(otbm_filename + "." + date.str() + (save_otgz ? ".otgz" : ".otbm")).c_str());
+			renameUtf8File(backup_otbm, otbm_filename + "." + date.str() + (save_otgz ? ".otgz" : ".otbm"));
 		}
 
 		if (!backup_house.empty()) {
 			converter.SetFullName(wxstr(map.housefile));
 			std::string house_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_house.c_str(), std::string(house_filename + "." + date.str() + ".xml").c_str());
+			renameUtf8File(backup_house, house_filename + "." + date.str() + ".xml");
 		}
 
 		if (!backup_spawn.empty()) {
 			converter.SetFullName(wxstr(map.spawnfile));
 			std::string spawn_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_spawn.c_str(), std::string(spawn_filename + "." + date.str() + ".xml").c_str());
+			renameUtf8File(backup_spawn, spawn_filename + "." + date.str() + ".xml");
 		}
 
 		if (!backup_spawn_npc.empty()) {
 			converter.SetFullName(wxstr(map.spawnNpcFile));
 			std::string spawn_npc_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_spawn_npc.c_str(), std::string(spawn_npc_filename + "." + date.str() + ".xml").c_str());
+			renameUtf8File(backup_spawn_npc, spawn_npc_filename + "." + date.str() + ".xml");
 		}
 
 		if (!backup_waypoint.empty()) {
 			converter.SetFullName(wxstr(map.waypointfile));
 			std::string waypoint_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_waypoint.c_str(), std::string(waypoint_filename + "." + date.str() + ".xml").c_str());
+			renameUtf8File(backup_waypoint, waypoint_filename + "." + date.str() + ".xml");
 		}
 
 		if (!backup_zones.empty()) {
 			converter.SetFullName(wxstr(map.zonefile));
 			std::string zones_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_zones.c_str(), std::string(zones_filename + "." + date.str() + ".xml").c_str());
+			renameUtf8File(backup_zones, zones_filename + "." + date.str() + ".xml");
 		}
 	} else {
 		// Delete the temporary files
-		std::remove(backup_otbm.c_str());
-		std::remove(backup_house.c_str());
-		std::remove(backup_spawn.c_str());
-		std::remove(backup_spawn_npc.c_str());
-		std::remove(backup_waypoint.c_str());
-		std::remove(backup_zones.c_str());
+		removeUtf8File(backup_otbm);
+		removeUtf8File(backup_house);
+		removeUtf8File(backup_spawn);
+		removeUtf8File(backup_spawn_npc);
+		removeUtf8File(backup_waypoint);
+		removeUtf8File(backup_zones);
 	}
 
 	map.clearChanges();

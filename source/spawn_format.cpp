@@ -38,7 +38,11 @@ namespace {
 		if (filename.empty()) {
 			return {};
 		}
+#ifdef _WIN32
+		std::filesystem::path path(std::filesystem::u8path(filename));
+#else
 		std::filesystem::path path(filename);
+#endif
 		return path.is_absolute() ? path : directory / path;
 	}
 
@@ -48,7 +52,7 @@ namespace {
 			return {};
 		}
 		pugi::xml_document doc;
-		if (!doc.load_file(file.string().c_str())) {
+		if (!doc.load_file(file.c_str())) {
 			return {};
 		}
 		return Lower(doc.document_element().name());
@@ -220,7 +224,7 @@ namespace {
 			return true;
 		}
 		pugi::xml_document doc;
-		const pugi::xml_parse_result result = doc.load_file(file.string().c_str());
+		const pugi::xml_parse_result result = doc.load_file(file.c_str());
 		if (!result) {
 			error = XmlError(file, result);
 			return false;
@@ -267,7 +271,7 @@ namespace {
 
 	bool ParseTfsFile(const std::filesystem::path& file, const SpawnLoadDefaults& defaults, SpawnDocument& document, std::string& error) {
 		pugi::xml_document doc;
-		const pugi::xml_parse_result result = doc.load_file(file.string().c_str());
+		const pugi::xml_parse_result result = doc.load_file(file.c_str());
 		if (!result) {
 			error = XmlError(file, result);
 			return false;

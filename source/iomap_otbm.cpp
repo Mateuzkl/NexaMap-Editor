@@ -24,6 +24,7 @@
 #include <zlib.h>
 
 #include <cstring>
+#include <cerrno>
 #include <limits>
 #include <new>
 #include <optional>
@@ -55,6 +56,14 @@ typedef uint32_t flags_t;
 static const uint32_t LEGACY_TILESTATE_ZONE_BRUSH = 0x0040;
 
 namespace {
+	std::filesystem::path pathFromUtf8(const std::string& path) {
+#ifdef _WIN32
+		return std::filesystem::path(string2wstring(path));
+#else
+		return std::filesystem::path(path);
+#endif
+	}
+
 	bool useDragonSoulsItemCountEncoding() {
 		return g_settings.getBoolean(Config::DRAGON_SOULS_OTBM_COUNT_UINT16);
 	}
@@ -1605,7 +1614,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 }
 
 IOMapOTBM::SpawnLoadStatus IOMapOTBM::loadSpawns(Map& map, const FileName& dir) {
-	const std::filesystem::path directory(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
+	const std::filesystem::path directory = pathFromUtf8(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
 	SpawnDetectionResult detection = SpawnFormatIO::Detect(directory, map.spawnfile, map.spawnNpcFile, nstr(dir.GetName()));
 	if (detection.conflict) {
 		static std::optional<SpawnFormat> sessionConflictChoice;
@@ -1859,22 +1868,27 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 	if (!checkMemoryBudget("before serializing the OTBM")) {
 		return false;
 	}
-	const std::filesystem::path mapFile(nstr(identifier.GetFullPath()));
+	const std::string mapFile = nstr(identifier.GetFullPath());
 	DiskNodeFileWriteHandle file(
-		mapFile.string(),
+		mapFile,
 		(g_settings.getInteger(Config::SAVE_WITH_OTB_MAGIC_NUMBER) ? "OTBM" : std::string(4, '\0'))
 	);
 	if (!file.isOk()) {
-		error("Can not open file %s for writing", mapFile.string().c_str());
+		const int openError = errno;
+		error("%s", "Could not open OTBM for writing: " + wxstr(mapFile) + "\n" + wxString(std::strerror(openError)));
 		return false;
 	}
 	if (!saveMap(map, file) || !file.isOk()) {
 		if (errorstr.empty()) {
-			error("Could not write OTBM file %s", mapFile.string().c_str());
+			error("Could not write OTBM file %s", mapFile.c_str());
 		}
 		return false;
 	}
 	file.close();
+	if (file.error_code != FILE_NO_ERROR) {
+		error("Could not finish writing OTBM file %s: %s", mapFile.c_str(), file.getErrorMessage().c_str());
+		return false;
+	}
 	if (!checkMemoryBudget("after serializing the OTBM")) {
 		return false;
 	}
@@ -1899,11 +1913,13 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 
 	g_gui.SetLoadDone(99, "Saving houses...");
 	if (!saveHouses(map, identifier)) {
+		error("Could not save house XML: %s", map.housefile.c_str());
 		return false;
 	}
 
 	g_gui.SetLoadDone(99, "Saving zones...");
 	if (!saveZones(map, identifier)) {
+		error("Could not save zones XML: %s", map.zonefile.c_str());
 		return false;
 	}
 
@@ -2286,7 +2302,7 @@ bool IOMapOTBM::prependXmlDeclaration(pugi::xml_document& doc) {
 }
 
 bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
-	const std::filesystem::path directory(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
+	const std::filesystem::path directory = pathFromUtf8(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
 	const std::string mapName = nstr(dir.GetName());
 
 	// Run pre-save spawn validation diagnostics to detect orphaned or uncapturable creatures.
@@ -2305,14 +2321,14 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 		if (map.spawnNpcFile.empty()) {
 			map.spawnNpcFile = mapName + "-npc.xml";
 		}
-		result = SpawnFormatIO::SaveCanaryCrystal(document, directory / map.spawnfile, directory / map.spawnNpcFile);
+		result = SpawnFormatIO::SaveCanaryCrystal(document, directory / pathFromUtf8(map.spawnfile), directory / pathFromUtf8(map.spawnNpcFile));
 	} else {
 		map.spawnFormat = SpawnFormat::Tfs;
 		map.spawnNpcFile.clear();
 		if (map.spawnfile.empty()) {
 			map.spawnfile = mapName + "-spawn.xml";
 		}
-		result = SpawnFormatIO::SaveTfs(document, directory / map.spawnfile);
+		result = SpawnFormatIO::SaveTfs(document, directory / pathFromUtf8(map.spawnfile));
 	}
 
 	for (const std::string& message : result.warnings) {
@@ -2320,6 +2336,7 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	}
 	if (!result.success) {
 		warnings.push_back(wxstr("IOMapOTBM::saveSpawns: " + result.error));
+		error("Could not save spawn XML: %s", result.error.c_str());
 		return false;
 	}
 	return true;

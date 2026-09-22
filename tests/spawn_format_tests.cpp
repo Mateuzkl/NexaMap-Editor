@@ -184,6 +184,17 @@ int main(int argc, char** argv) {
 	check(!loadModern("<spawns/>", modernNpcs) && document.areas.empty() && error.find("expected root <monsters>") != std::string::npos, "wrong Canary root fails atomically");
 	check(!loadModern(modernMonsters, "<npcs><npc></npcs>") && document.areas.empty() && error.find(":1:") != std::string::npos, "malformed second Canary file leaves no partial document");
 
+	const std::filesystem::path unicodeDirectory = temporary.path / std::filesystem::path(u8"mapa-áé");
+	std::filesystem::create_directories(unicodeDirectory);
+	check(loadTfs("<spawns><spawn centerx='10' centery='20' centerz='3' radius='1'><monster name='Rat' x='0' y='0'/></spawn></spawns>"), "prepare Unicode path round-trip");
+	const std::filesystem::path unicodeTfs = unicodeDirectory / std::filesystem::path(u8"mundo-spawn.xml");
+	SpawnWriteResult unicodeWriteResult = SpawnFormatIO::SaveTfs(document, unicodeTfs);
+	check(unicodeWriteResult.success && SpawnFormatIO::LoadTfs(unicodeTfs, document, error, defaults) && document.monsterCount() == 1, "TFS spawn XML saves and reloads in a Unicode directory");
+	const std::filesystem::path unicodeMonster = unicodeDirectory / std::filesystem::path(u8"mundo-monster.xml");
+	const std::filesystem::path unicodeNpc = unicodeDirectory / std::filesystem::path(u8"mundo-npc.xml");
+	unicodeWriteResult = SpawnFormatIO::SaveCanaryCrystal(document, unicodeMonster, unicodeNpc);
+	check(unicodeWriteResult.success && SpawnFormatIO::LoadCanaryCrystal(unicodeMonster, unicodeNpc, document, error, defaults) && document.monsterCount() == 1, "Canary spawn XML saves and reloads in a Unicode directory");
+
 	check(loadTfs("<spawns><spawn centerx='10' centery='20' centerz='3' radius='1'><npc name='Guide' x='0' y='0' spawntime='30'/></spawn></spawns>"), "prepare TFS NPC direction conversion");
 	SpawnWriteResult writeResult = SpawnFormatIO::SaveCanaryCrystal(document, temporary.path / "direction-monster.xml", temporary.path / "direction-npc.xml");
 	check(writeResult.success && SpawnFormatIO::LoadCanaryCrystal(temporary.path / "direction-monster.xml", temporary.path / "direction-npc.xml", document, error, defaults) && document.areas.front().entries.front().hasDirection && document.areas.front().entries.front().direction == 2, "TFS South default becomes explicit in Canary XML");
