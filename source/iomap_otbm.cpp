@@ -1857,8 +1857,10 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 		return false;
 	}
 	const std::filesystem::path mapFile(nstr(identifier.GetFullPath()));
+	FileSaveTransaction transaction;
+	const std::filesystem::path stagedMapFile = transaction.Stage(mapFile);
 	DiskNodeFileWriteHandle file(
-		mapFile.string(),
+		stagedMapFile.string(),
 		(g_settings.getInteger(Config::SAVE_WITH_OTB_MAGIC_NUMBER) ? "OTBM" : std::string(4, '\0'))
 	);
 	if (!file.isOk()) {
@@ -1877,6 +1879,11 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 		return false;
 	}
 	if (!checkMemoryBudget("after serializing the OTBM")) {
+		return false;
+	}
+	std::string commitError;
+	if (!transaction.Commit(commitError)) {
+		error("Could not commit OTBM file %s: %s", mapFile.string().c_str(), commitError.c_str());
 		return false;
 	}
 

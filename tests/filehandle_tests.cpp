@@ -1,4 +1,5 @@
 #include "filehandle.h"
+#include "file_transaction.h"
 
 #include <chrono>
 #include <filesystem>
@@ -70,6 +71,38 @@ int main() {
 		check(handle.error_code == FILE_INVALID_IDENTIFIER, "close preserves a constructor error");
 	}
 	std::filesystem::remove(invalid, cleanupError);
+
+	const std::filesystem::path existingDestination = temporaryFile("-existing.otbm");
+	{
+		std::ofstream original(existingDestination, std::ios::binary);
+		original << "original";
+	}
+	std::filesystem::path abandonedStage;
+	{
+		FileSaveTransaction transaction;
+		abandonedStage = transaction.Stage(existingDestination);
+		std::ofstream partial(abandonedStage, std::ios::binary);
+		partial << "partial";
+	}
+	{
+		std::ifstream original(existingDestination, std::ios::binary);
+		std::string contents;
+		original >> contents;
+		check(contents == "original", "abandoned transaction preserves an existing destination");
+		check(!std::filesystem::exists(abandonedStage), "abandoned transaction removes its staged output");
+	}
+	std::filesystem::remove(existingDestination, cleanupError);
+
+	const std::filesystem::path newDestination = temporaryFile("-new.otbm");
+	std::filesystem::path newStage;
+	{
+		FileSaveTransaction transaction;
+		newStage = transaction.Stage(newDestination);
+		std::ofstream partial(newStage, std::ios::binary);
+		partial << "partial";
+	}
+	check(!std::filesystem::exists(newDestination), "abandoned transaction does not leave a new destination behind");
+	check(!std::filesystem::exists(newStage), "abandoned new-file transaction removes its staged output");
 
 	std::cout << "File Handle Tests: " << checks << " checks, " << failures << " failures.\n";
 	return failures == 0 ? 0 : 1;
