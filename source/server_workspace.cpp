@@ -15,6 +15,7 @@
 #include <regex>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace {
@@ -137,20 +138,49 @@ namespace {
 		return files;
 	}
 
-	std::optional<std::string> ReadLuaStringAssignment(const std::filesystem::path& file, const std::string& setting) {
-		std::ifstream stream(file);
-		if (!stream.is_open()) {
-			return std::nullopt;
+	struct ServerConfigSnapshot {
+		std::filesystem::path file;
+		std::optional<std::string> mapName;
+		std::optional<std::string> dataPackDirectory;
+	};
+
+	using ServerConfigCache = std::unordered_map<std::filesystem::path, ServerConfigSnapshot>;
+
+	const ServerConfigSnapshot& ReadServerConfig(const std::filesystem::path& root, ServerConfigCache& cache) {
+		const std::filesystem::path normalizedRoot = Normalize(root);
+		auto [iterator, inserted] = cache.try_emplace(normalizedRoot);
+		if (!inserted) {
+			return iterator->second;
 		}
-		const std::regex assignment("^\\s*" + setting + "\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']");
+
+		ServerConfigSnapshot& snapshot = iterator->second;
+		snapshot.file = normalizedRoot / "config.lua";
+		if (!IsServerWorkspaceFile(snapshot.file)) {
+			snapshot.file = normalizedRoot / "config.lua.dist";
+		}
+		if (!IsServerWorkspaceFile(snapshot.file)) {
+			snapshot.file.clear();
+			return snapshot;
+		}
+
+		std::ifstream stream(snapshot.file);
+		if (!stream.is_open()) {
+			snapshot.file.clear();
+			return snapshot;
+		}
+		const std::regex mapAssignment("^\\s*mapName\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']");
+		const std::regex dataPackAssignment("^\\s*dataPackDirectory\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']");
 		std::string line;
 		std::smatch match;
-		while (std::getline(stream, line)) {
-			if (std::regex_search(line, match, assignment) && match.size() == 2) {
-				return match[1].str();
+		while (std::getline(stream, line) && (!snapshot.mapName || !snapshot.dataPackDirectory)) {
+			if (!snapshot.mapName && std::regex_search(line, match, mapAssignment) && match.size() == 2) {
+				snapshot.mapName = match[1].str();
+			}
+			if (!snapshot.dataPackDirectory && std::regex_search(line, match, dataPackAssignment) && match.size() == 2) {
+				snapshot.dataPackDirectory = match[1].str();
 			}
 		}
-		return std::nullopt;
+		return snapshot;
 	}
 
 	bool IsSafeRelativePath(const std::filesystem::path& path) {
@@ -198,14 +228,15 @@ namespace {
 		int score = 0;
 	};
 
-	ProfileEvidence DetectProfileEvidence(const std::filesystem::path& root, const std::filesystem::path& mapPath = {}) {
+	ProfileEvidence DetectProfileEvidence(const std::filesystem::path& root, ServerConfigCache& configCache, const std::filesystem::path& mapPath = {}) {
 		const bool hasClassicItemsOtb = IsServerWorkspaceFile(root / "data/items/items.otb");
 		const bool hasAlternateItemsOtb = HasFile(root, { "data/items.otb", "items/items.otb", "items.otb" });
 		const bool hasItemsOtb = hasClassicItemsOtb || hasAlternateItemsOtb;
 		const bool hasClassicItemsXml = IsServerWorkspaceFile(root / "data/items/items.xml");
 		const bool hasAlternateItemsXml = HasFile(root, { "data/items.xml", "items/items.xml", "items.xml" });
 		const bool hasAppearances = HasFile(root, { "data/items/appearances.dat", "data/appearances.dat", "items/appearances.dat", "appearances.dat" });
-		const bool hasConfig = IsServerWorkspaceFile(root / "config.lua") || IsServerWorkspaceFile(root / "config.lua.dist");
+		const ServerConfigSnapshot& config = ReadServerConfig(root, configCache);
+		const bool hasConfig = !config.file.empty();
 		const bool hasMonsters = HasDirectory(root, { "data/monster", "data/monsters", "monster", "monsters" });
 		const bool hasNpcs = HasDirectory(root, { "data/npc", "data/npcs", "npc", "npcs" });
 		const bool mapInDataWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "data/world");
@@ -238,20 +269,13 @@ namespace {
 
 		int modernScore = hasAppearances ? 30 : 0;
 		ServerType modernType = ServerType::CanaryCrystal;
-		std::filesystem::path config = root / "config.lua";
-		if (!IsServerWorkspaceFile(config)) {
-			config = root / "config.lua.dist";
-		}
-		if (IsServerWorkspaceFile(config)) {
-			const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
-			if (configuredDataPack) {
-				const std::filesystem::path relativeDataPack(*configuredDataPack);
-				if (IsSafeRelativePath(relativeDataPack)) {
-					const std::filesystem::path configuredWorld = root / relativeDataPack / "world";
-					if (mapPath.empty() || IsPathWithin(mapPath, configuredWorld)) {
-						modernScore += 170;
-						modernType = ModernTypeFromName(ServerPathUtf8(relativeDataPack.filename()));
-					}
+		if (config.dataPackDirectory) {
+			const std::filesystem::path relativeDataPack(*config.dataPackDirectory);
+			if (IsSafeRelativePath(relativeDataPack)) {
+				const std::filesystem::path configuredWorld = root / relativeDataPack / "world";
+				if (mapPath.empty() || IsPathWithin(mapPath, configuredWorld)) {
+					modernScore += 170;
+					modernType = ModernTypeFromName(ServerPathUtf8(relativeDataPack.filename()));
 				}
 			}
 		}
@@ -299,12 +323,12 @@ namespace {
 		int score = 0;
 	};
 
-	DetectedMapContext DetectMapContext(const std::filesystem::path& mapPath, const std::filesystem::path& boundaryRoot) {
+	DetectedMapContext DetectMapContext(const std::filesystem::path& mapPath, const std::filesystem::path& boundaryRoot, ServerConfigCache& configCache) {
 		DetectedMapContext best { Normalize(boundaryRoot), ServerType::UnknownGeneric, 0 };
 		std::filesystem::path candidate = Normalize(mapPath).parent_path();
 		const std::filesystem::path boundary = Normalize(boundaryRoot);
 		while (!candidate.empty() && IsPathWithin(candidate, boundary)) {
-			const ProfileEvidence evidence = DetectProfileEvidence(candidate, mapPath);
+			const ProfileEvidence evidence = DetectProfileEvidence(candidate, configCache, mapPath);
 			if (evidence.score > best.score) {
 				best = { candidate, evidence.type, evidence.score };
 			}
@@ -331,19 +355,15 @@ namespace {
 		});
 	}
 
-	void DetectConfiguredMap(ServerWorkspace& workspace, const ServerDetectionOptions& options) {
-		std::filesystem::path config = workspace.rootPath / "config.lua";
-		if (!IsServerWorkspaceFile(config)) {
-			config = workspace.rootPath / "config.lua.dist";
-		}
-		if (!IsServerWorkspaceFile(config)) {
+	void DetectConfiguredMap(ServerWorkspace& workspace, const ServerDetectionOptions& options, ServerConfigCache& configCache) {
+		const ServerConfigSnapshot& config = ReadServerConfig(workspace.rootPath, configCache);
+		if (config.file.empty()) {
 			return;
 		}
 
-		TraceServerScan(options, "Reading mapName", config);
-		const std::optional<std::string> configuredMap = ReadLuaStringAssignment(config, "mapName");
-		TraceServerScan(options, "Reading dataPackDirectory", config);
-		const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
+		TraceServerScan(options, "Using server configuration", config.file);
+		const std::optional<std::string>& configuredMap = config.mapName;
+		const std::optional<std::string>& configuredDataPack = config.dataPackDirectory;
 		TraceServerScan(options, "Resolving configured map and data pack");
 		if (!configuredMap && !configuredDataPack) {
 			return;
@@ -594,6 +614,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 
 	result.validRoot = true;
 	ServerWorkspace& workspace = result.workspace;
+	ServerConfigCache configCache;
 	workspace.rootPath = root;
 	TraceServerScan(options, "Finding known item files", root);
 	const KnownItemFiles knownItems = FindKnownItems(root);
@@ -601,7 +622,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	workspace.itemsXmlPath = knownItems.xml;
 	workspace.appearancesPath = knownItems.appearances;
 	TraceServerScan(options, "Finding server configuration", root);
-	DetectConfiguredMap(workspace, options);
+	DetectConfiguredMap(workspace, options, configCache);
 	if (!workspace.activeDataDirectory.empty()) {
 		const KnownItemFiles activeItems = FindKnownItems(workspace.activeDataDirectory);
 		if (!activeItems.otb.empty()) {
@@ -698,9 +719,25 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	}
 	TraceServerScan(options, "Selecting primary map");
 	SelectFallbackPrimaryMap(workspace);
+	std::optional<DetectedMapContext> activeDataContext;
+	if (!workspace.activeDataDirectory.empty()) {
+		const ProfileEvidence evidence = DetectProfileEvidence(root, configCache);
+		activeDataContext = DetectedMapContext { root, evidence.type, evidence.score };
+	}
+	std::unordered_map<std::filesystem::path, DetectedMapContext> mapContexts;
 	for (DetectedMap& map : workspace.maps) {
 		TraceServerScan(options, "Detecting map server profile", map.path);
-		const DetectedMapContext context = DetectMapContext(map.path, root);
+		DetectedMapContext context;
+		if (activeDataContext && IsPathWithin(map.path, workspace.mapsDirectory)) {
+			context = *activeDataContext;
+		} else {
+			const std::filesystem::path mapDirectory = map.path.parent_path();
+			auto [iterator, inserted] = mapContexts.try_emplace(mapDirectory);
+			if (inserted) {
+				iterator->second = DetectMapContext(map.path, root, configCache);
+			}
+			context = iterator->second;
+		}
 		map.serverRootPath = context.root;
 		map.serverType = context.type;
 	}
@@ -726,7 +763,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	if (primaryMap != nullptr) {
 		workspace.serverType = primaryMap->serverType;
 	} else {
-		workspace.serverType = DetectProfileEvidence(root).type;
+		workspace.serverType = DetectProfileEvidence(root, configCache).type;
 	}
 	workspace.serverProfile = ServerTypeName(workspace.serverType);
 	workspace.itemIdMode = workspace.usesCanaryCrystalLoader()

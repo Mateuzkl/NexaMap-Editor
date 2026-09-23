@@ -169,12 +169,15 @@ namespace {
 		}
 
 		const uint64_t previousGeneration = g_workspace.getGeneration();
-		if (!g_workspace.rescanServer(error)) {
+		const ServerWorkspace& currentWorkspace = g_workspace.getServer();
+		const bool needsRescan = !currentWorkspace.hasRequiredResources() || currentWorkspace.trackedResourcesChanged();
+		if (needsRescan && !g_workspace.rescanServer(error)) {
 			if (error.empty()) {
 				error = "Server Workspace is configured, but neither items.otb nor appearances.dat was found.";
 			}
 			return false;
 		}
+		error.clear();
 		const ServerWorkspace& workspace = g_workspace.getServer();
 		if (expectedClientMode == WorkspaceClientMode::Classic && !workspace.hasItemsOtb()) {
 			error = "This classic DAT/SPR client requires items.otb in the selected Server Workspace. appearances.dat is supported by Canary/Crystal clients.";
@@ -459,13 +462,13 @@ void GUI::discoverDataDirectory(const wxString& existentFile) {
 	}
 }
 
-bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& warnings, bool force) {
+bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& warnings, bool force, bool workspaceAlreadyRefreshed) {
 	if (ClientVersion::get(version) == nullptr) {
 		error = wxString::Format("Unsupported client version! (%d)", version);
 		return false;
 	}
 	bool serverResourcesChanged = false;
-	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Classic)) {
+	if (!workspaceAlreadyRefreshed && !RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Classic)) {
 		return false;
 	}
 	force = force || serverResourcesChanged;
@@ -508,7 +511,7 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 	return true;
 }
 
-bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force) {
+bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force, bool workspaceAlreadyRefreshed) {
 	ClientVersion* compatibilityProfile = ClientVersion::getLatestVersion();
 	if (compatibilityProfile == nullptr) {
 		error = "No client compatibility profile is available for the Canary/Crystal Assets loader.";
@@ -519,7 +522,7 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		return false;
 	}
 	bool serverResourcesChanged = false;
-	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Appearances)) {
+	if (!workspaceAlreadyRefreshed && !RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Appearances)) {
 		return false;
 	}
 	force = force || serverResourcesChanged;
@@ -569,9 +572,9 @@ bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
 	force = force || serverResourcesChanged || generation != loaded_workspace_generation;
 	bool loaded = false;
 	if (g_workspace.getServer().usesCanaryCrystalLoader()) {
-		loaded = LoadCanaryCrystalAssets(error, warnings, force);
+		loaded = LoadCanaryCrystalAssets(error, warnings, force, true);
 	} else {
-		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force);
+		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force, true);
 	}
 	if (loaded) {
 		loaded_workspace_generation = generation;
@@ -903,7 +906,11 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	SetLoadIndeterminate("Validating package and catalog...");
 	wxLogMessage("Canary/Crystal: validating client package and catalog.");
 
-	if (!ClientAssets::load(error, warnings)) {
+	std::optional<ClientAssetsManifest> validatedManifest = g_workspace.takeValidatedClientAssetsManifest();
+	const bool assetsLoaded = validatedManifest
+		? ClientAssets::load(*validatedManifest, error, warnings)
+		: ClientAssets::load(error, warnings);
+	if (!assetsLoaded) {
 		DestroyLoadBar();
 		UnloadVersion();
 		return false;

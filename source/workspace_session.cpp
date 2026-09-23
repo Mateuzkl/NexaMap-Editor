@@ -98,6 +98,7 @@ void WorkspaceSession::swap(WorkspaceSession& other) noexcept {
 	swap(client, other.client);
 	swap(server, other.server);
 	swap(selectedDetectedMapPath, other.selectedDetectedMapPath);
+	swap(validatedClientAssetsManifest, other.validatedClientAssetsManifest);
 	swap(serverError, other.serverError);
 	swap(idModePreference, other.idModePreference);
 	swap(generation, other.generation);
@@ -111,42 +112,61 @@ void WorkspaceSession::setPersistenceEnabled(bool enabled) {
 bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist) {
 	error.clear();
 	warnings.clear();
-	WorkspaceClientSelection selection;
-	selection.rootPath = path;
 
 	const ClientAssetsValidationResult appearances = ClientAssetsManifestLoader::Validate(ToFilesystemPath(path));
 	if (appearances.valid) {
-		selection.mode = WorkspaceClientMode::Appearances;
-		selection.valid = true;
-		selection.versionName = wxstr(appearances.manifest.version);
-		selection.versionId = ClientVersion::getLatestVersion() ? ClientVersion::getLatestVersion()->getID() : CLIENT_VERSION_NONE;
-		for (const std::string& warning : appearances.manifest.warnings) {
-			warnings.push_back(wxstr(warning));
-		}
-		ClientAssets::setPath(path);
-		if (persist && persistenceEnabled) {
-			ClientAssets::saveConfiguredPath();
-		}
-	} else {
-		ClientVersion* version = ClientVersion::detectFromPath(FileName(path), error);
-		if (version == nullptr) {
-			client = std::move(selection);
-			++generation;
-			if (persist && persistenceEnabled) {
-				persistPaths();
-			}
-			return false;
-		}
-		selection.mode = WorkspaceClientMode::Classic;
-		selection.valid = true;
-		selection.versionName = wxstr(version->getName());
-		selection.versionId = version->getID();
-		if (persist && persistenceEnabled) {
-			g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, version->getID());
-			ClientVersion::saveVersions();
-		}
+		return configureValidatedAppearancesClient(path, appearances, warnings, persist);
 	}
 
+	validatedClientAssetsManifest.reset();
+	WorkspaceClientSelection selection;
+	selection.rootPath = path;
+	ClientVersion* version = ClientVersion::detectFromPath(FileName(path), error);
+	if (version == nullptr) {
+		client = std::move(selection);
+		++generation;
+		if (persist && persistenceEnabled) {
+			persistPaths();
+		}
+		return false;
+	}
+	selection.mode = WorkspaceClientMode::Classic;
+	selection.valid = true;
+	selection.versionName = wxstr(version->getName());
+	selection.versionId = version->getID();
+	if (persist && persistenceEnabled) {
+		g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, version->getID());
+		ClientVersion::saveVersions();
+	}
+	client = std::move(selection);
+	++generation;
+	if (persist && persistenceEnabled) {
+		persistPaths();
+		g_settings.save();
+	}
+	return true;
+}
+
+bool WorkspaceSession::configureValidatedAppearancesClient(
+	const wxString& path,
+	const ClientAssetsValidationResult& validation,
+	wxArrayString& warnings,
+	bool persist
+) {
+	WorkspaceClientSelection selection;
+	selection.rootPath = path;
+	selection.mode = WorkspaceClientMode::Appearances;
+	selection.valid = true;
+	selection.versionName = wxstr(validation.manifest.version);
+	selection.versionId = ClientVersion::getLatestVersion() ? ClientVersion::getLatestVersion()->getID() : CLIENT_VERSION_NONE;
+	for (const std::string& warning : validation.manifest.warnings) {
+		warnings.push_back(wxstr(warning));
+	}
+	validatedClientAssetsManifest = validation.manifest;
+	ClientAssets::setPath(path);
+	if (persist && persistenceEnabled) {
+		ClientAssets::saveConfiguredPath();
+	}
 	client = std::move(selection);
 	++generation;
 	if (persist && persistenceEnabled) {
@@ -254,7 +274,7 @@ bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& w
 			error = wxString("The saved Canary/Crystal client is no longer valid: ") + wxstr(validation.error);
 			return false;
 		}
-		return configureClient(savedPath, error, warnings, persist);
+		return configureValidatedAppearancesClient(savedPath, validation, warnings, persist);
 	}
 
 	// TFS and unknown/generic workspaces must never inherit the dedicated
@@ -361,6 +381,12 @@ std::vector<wxString> WorkspaceSession::getDetectedMaps() const {
 
 uint64_t WorkspaceSession::getGeneration() const {
 	return generation;
+}
+
+std::optional<ClientAssetsManifest> WorkspaceSession::takeValidatedClientAssetsManifest() {
+	std::optional<ClientAssetsManifest> manifest = std::move(validatedClientAssetsManifest);
+	validatedClientAssetsManifest.reset();
+	return manifest;
 }
 
 void WorkspaceSession::persistPaths() {

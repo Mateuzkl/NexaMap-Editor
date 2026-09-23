@@ -26,20 +26,16 @@ namespace {
 		return result;
 	}
 
-	bool IsPathInside(const std::filesystem::path& parent, const std::filesystem::path& child) {
+	bool IsPathInside(const std::filesystem::path& canonicalParent, const std::filesystem::path& child) {
 		std::error_code error;
-		const std::filesystem::path normalizedParent = std::filesystem::weakly_canonical(parent, error);
-		if (error) {
-			return false;
-		}
 		const std::filesystem::path normalizedChild = std::filesystem::weakly_canonical(child, error);
 		if (error) {
 			return false;
 		}
 
-		auto parentIt = normalizedParent.begin();
+		auto parentIt = canonicalParent.begin();
 		auto childIt = normalizedChild.begin();
-		for (; parentIt != normalizedParent.end(); ++parentIt, ++childIt) {
+		for (; parentIt != canonicalParent.end(); ++parentIt, ++childIt) {
 			if (childIt == normalizedChild.end() || *parentIt != *childIt) {
 				return false;
 			}
@@ -249,7 +245,10 @@ ClientAssetsValidationResult ClientAssetsManifestLoader::Validate(const std::fil
 		);
 	}
 	manifest.layout = detected->layout;
-	manifest.assetsDirectory = detected->assetsDirectory;
+	manifest.assetsDirectory = std::filesystem::weakly_canonical(detected->assetsDirectory, filesystemError);
+	if (filesystemError) {
+		return Failure("Could not resolve the Canary/Crystal assets directory.");
+	}
 	manifest.packageFile = detected->packageFile;
 	manifest.assetsIndexFile = detected->assetsIndexFile;
 	manifest.catalogFile = manifest.assetsDirectory / "catalog-content.json";
