@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "spawn_format.h"
+#include "profiling_perf.h"
 
 #include "creature.h"
 #include "map.h"
@@ -151,6 +152,7 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 }
 
 SpawnDocument SpawnMapAdapter::Capture(Map& map) {
+	NexaPerfScope perf("SpawnMapAdapter::Capture");
 	SpawnDocument document;
 	document.format = map.getSpawnFormat();
 	std::unordered_set<Creature*> captured;
@@ -258,6 +260,7 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 }
 
 SpawnValidationResult SpawnMapAdapter::Validate(Map& map) {
+	NexaPerfScope perf("SpawnMapAdapter::Validate");
 	SpawnValidationResult result;
 	std::unordered_set<Creature*> allCreatures;
 
@@ -277,7 +280,7 @@ SpawnValidationResult SpawnMapAdapter::Validate(Map& map) {
 		}
 
 		if (tile->spawn) {
-			if (std::find(map.spawns.begin(), map.spawns.end(), tile->getPosition()) == map.spawns.end()) {
+			if (map.spawns.find(tile->getPosition()) == map.spawns.end()) {
 				++result.unregisteredSpawns;
 				result.valid = false;
 				result.warnings.push_back("Tile at (" + std::to_string(tile->getX()) + "," + std::to_string(tile->getY()) + "," + std::to_string(tile->getZ()) + ") has a Spawn but is not in map spawn registry.");

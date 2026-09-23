@@ -321,8 +321,8 @@ public:
 	void UnloadVersion();
 	// Persists the per-version user creatures.xml (imported monsters/NPCs) without tearing down the version.
 	void SaveUserCreatures();
-	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false);
-	bool LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force = false);
+	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false, bool workspaceAlreadyRefreshed = false);
+	bool LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force = false, bool workspaceAlreadyRefreshed = false);
 	bool LoadWorkspace(wxString& error, wxArrayString& warnings, bool force = false);
 	bool JoinMultiplayerSession(wxWindow* parent = nullptr);
 	bool IsCanaryCrystalAssetsLoaded() const {

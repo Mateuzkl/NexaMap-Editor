@@ -5,6 +5,7 @@
 #ifndef NEXAMAP_WORKSPACE_SESSION_H_
 #define NEXAMAP_WORKSPACE_SESSION_H_
 
+#include "client_assets_manifest.h"
 #include "client_version.h"
 #include "server_workspace.h"
 
@@ -54,13 +55,21 @@ public:
 	[[nodiscard]] std::optional<DetectedMap> getDetectedMap(const wxString& path) const;
 	[[nodiscard]] std::vector<wxString> getDetectedMaps() const;
 	[[nodiscard]] uint64_t getGeneration() const;
+	std::optional<ClientAssetsManifest> takeValidatedClientAssetsManifest();
 
 private:
+	bool configureValidatedAppearancesClient(
+		const wxString& path,
+		const ClientAssetsValidationResult& validation,
+		wxArrayString& warnings,
+		bool persist
+	);
 	void persistPaths();
 
 	WorkspaceClientSelection client;
 	ServerWorkspace server;
 	std::filesystem::path selectedDetectedMapPath;
+	std::optional<ClientAssetsManifest> validatedClientAssetsManifest;
 	wxString serverError;
 	ItemIdModePreference idModePreference = ItemIdModePreference::Auto;
 	uint64_t generation = 0;

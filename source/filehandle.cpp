@@ -570,9 +570,16 @@ DiskNodeFileWriteHandle::DiskNodeFileWriteHandle(const std::string& name, const 
 		return;
 	}
 
-	fwrite(identifier.c_str(), 1, 4, file);
+	if (fwrite(identifier.c_str(), 1, 4, file) != 4 || ferror(file) != 0) {
+		error_code = FILE_WRITE_ERROR;
+		return;
+	}
 	if (!cache) {
 		cache = static_cast<uint8_t*>(malloc(cache_size + 1));
+		if (!cache) {
+			error_code = FILE_WRITE_ERROR;
+			return;
+		}
 	}
 	local_write_index = 0;
 }
@@ -584,20 +591,26 @@ DiskNodeFileWriteHandle::~DiskNodeFileWriteHandle() {
 void DiskNodeFileWriteHandle::close() {
 	if (file) {
 		renewCache();
-		fclose(file);
+		if (fclose(file) != 0 && error_code == FILE_NO_ERROR) {
+			error_code = FILE_WRITE_ERROR;
+		}
 		file = nullptr;
-		error_code = FILE_NO_ERROR;
 	}
 }
 
 void DiskNodeFileWriteHandle::renewCache() {
-	if (cache) {
-		fwrite(cache, local_write_index, 1, file);
-		if (ferror(file) != 0) {
+	if (cache && local_write_index > 0 && file) {
+		const size_t bytesWritten = fwrite(cache, 1, local_write_index, file);
+		if ((bytesWritten != local_write_index || ferror(file) != 0) && error_code == FILE_NO_ERROR) {
 			error_code = FILE_WRITE_ERROR;
 		}
 	} else {
-		cache = static_cast<uint8_t*>(malloc(cache_size + 1));
+		if (!cache) {
+			cache = static_cast<uint8_t*>(malloc(cache_size + 1));
+			if (!cache && error_code == FILE_NO_ERROR) {
+				error_code = FILE_WRITE_ERROR;
+			}
+		}
 	}
 	local_write_index = 0;
 }

@@ -50,12 +50,15 @@ bool ClientAssets::validatePath(const wxString& candidate, ClientAssetsManifest&
 }
 
 bool ClientAssets::load(wxString& error, wxArrayString& warnings) {
-	unload();
-
 	ClientAssetsManifest manifest;
 	if (!validatePath(path, manifest, error, warnings)) {
 		return false;
 	}
+	return load(manifest, error, warnings);
+}
+
+bool ClientAssets::load(const ClientAssetsManifest& manifest, wxString& error, wxArrayString& warnings) {
+	unload();
 	if (!g_spriteAppearances.loadCatalog(manifest, error, warnings)) {
 		wxLogError("Canary/Crystal Assets catalog failed: " + error);
 		return false;
