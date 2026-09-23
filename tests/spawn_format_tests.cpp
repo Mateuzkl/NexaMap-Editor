@@ -3,6 +3,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -216,6 +217,55 @@ int main(int argc, char** argv) {
 	writeFile(detectFamilies / "world-npc.xml", modernNpcs);
 	detection = SpawnFormatIO::Detect(detectFamilies, {}, {}, "sample");
 	check(detection.format == SpawnFormat::CanaryCrystal && detection.primaryFile.filename() == "sample-monster.xml" && detection.npcFile.filename() == "sample-npc.xml", "fallback never mixes Canary filename families");
+
+	const auto semanticDocument = [] {
+		SpawnDocument result;
+		result.format = SpawnFormat::CanaryCrystal;
+		SpawnAreaData area;
+		area.centerX = 100;
+		area.centerY = 100;
+		area.centerZ = 7;
+		area.radius = 5;
+		SpawnEntryData entry;
+		entry.name = "Demon";
+		entry.x = 101;
+		entry.y = 102;
+		entry.z = 7;
+		entry.spawnTime = 60;
+		entry.direction = 2;
+		entry.hasDirection = true;
+		entry.weight = 25;
+		entry.hasWeight = true;
+		area.entries.push_back(entry);
+		result.areas.push_back(area);
+		return result;
+	};
+	const auto checkSemanticMismatch = [&](const SpawnDocument& changed, std::string_view field) {
+		std::string difference;
+		const bool equal = SpawnFormatIO::SemanticallyEqual(semanticDocument(), changed, true, difference);
+		check(!equal && difference.find("Total semantic mismatches") != std::string::npos && difference.find(field) != std::string::npos && difference.find("expected 1 creature records, got 1") == std::string::npos, std::string("equal-count semantic diagnostic identifies ") + std::string(field));
+	};
+	for (const auto& [field, mutate] : std::vector<std::pair<std::string_view, std::function<void(SpawnEntryData&)>>> {
+			 { "name", [](SpawnEntryData& entry) { entry.name = "Dragon"; } },
+			 { "x", [](SpawnEntryData& entry) { ++entry.x; } },
+			 { "spawntime", [](SpawnEntryData& entry) { entry.spawnTime = 120; } },
+			 { "direction", [](SpawnEntryData& entry) { entry.direction = 0; } },
+			 { "weight", [](SpawnEntryData& entry) { entry.weight = 50; } },
+			 { "kind", [](SpawnEntryData& entry) { entry.isNpc = true; } },
+		 }) {
+		SpawnDocument changed = semanticDocument();
+		mutate(changed.areas.front().entries.front());
+		checkSemanticMismatch(changed, field);
+	}
+	SpawnDocument changedExplicitDirection = semanticDocument();
+	changedExplicitDirection.areas.front().entries.front().hasDirection = false;
+	checkSemanticMismatch(changedExplicitDirection, "explicit direction");
+	SpawnDocument duplicateExpected = semanticDocument();
+	duplicateExpected.areas.front().entries.push_back(duplicateExpected.areas.front().entries.front());
+	SpawnDocument duplicateGenerated = duplicateExpected;
+	duplicateGenerated.areas.front().entries.back().weight = 50;
+	std::string duplicateDifference;
+	check(!SpawnFormatIO::SemanticallyEqual(duplicateExpected, duplicateGenerated, true, duplicateDifference) && duplicateDifference.find("weight") != std::string::npos, "semantic comparison preserves and diagnoses duplicate records");
 
 	if (argc == 4) {
 		const auto started = std::chrono::steady_clock::now();

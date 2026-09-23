@@ -521,8 +521,13 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 				std::rename(backup_zones.c_str(), std::string(zones_filename + ".xml").c_str());
 			}
 
-			// Display the error
-			g_gui.PopupDialog("Error", "Could not save, unable to open target for writing.", wxOK);
+			// Display the actual failing save stage. OTBM serialization, spawn
+			// validation and sidecar commits all used to report the same misleading
+			// "unable to open target" message.
+			const wxString saveError = mapsaver.getError().empty()
+				? wxString("Could not save the map. No additional error details were reported.")
+				: mapsaver.getError();
+			g_gui.PopupDialog("Error", saveError, wxOK | wxICON_ERROR);
 		}
 
 		// Remove temporary save runfile

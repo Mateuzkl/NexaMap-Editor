@@ -35,6 +35,19 @@ namespace {
 		return "Spawn conflict at " + std::to_string(pos.x) + ":" + std::to_string(pos.y) + ":" + std::to_string(pos.z) + " (center " + std::to_string(center.x) + ":" + std::to_string(center.y) + ":" + std::to_string(center.z) + "): existing " + existingDesc + ", incoming " + incomingDesc + "; reason: " + reason + "; no spawn data was applied.";
 	}
 
+	SpawnVariantData CapturePrimaryRecord(const Creature& creature) {
+		SpawnVariantData primary;
+		primary.name = creature.getName();
+		primary.isNpc = creature.isNpc();
+		primary.weight = creature.getWeight();
+		primary.hasWeight = creature.hasSpawnWeight();
+		primary.spawnTime = creature.getSpawnTime();
+		primary.direction = creature.getDirection();
+		primary.hasDirection = creature.hasSpawnDirection();
+		primary.attributes = creature.getSpawnAttributes();
+		return primary;
+	}
+
 	bool HasValidSpawnIdentity(const SpawnEntryData& entry) {
 		if (!entry.name.empty()) {
 			return true;
@@ -211,14 +224,26 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 				creatureTile->creature->setSpawnTime(primary.spawnTime);
 				creatureTile->creature->setSpawnWeight(primary.weight, primary.hasWeight);
 				creatureTile->creature->setSpawnAttributes(primary.attributes);
+				creatureTile->creature->setSpawnPrimaryRecord(primary);
 				creatureTile->creature->setSpawnSource(center);
 				const SpawnAlternativeKind initialKind = AuthoritativeAlternativeKind(document.format, entry.alternativeKind, primary.hasWeight, variants.size());
 				creatureTile->creature->setAlternativeKind(initialKind);
 				for (size_t index = 1; index < variants.size(); ++index) {
 					creatureTile->creature->addSpawnAlternative(variants[index]);
 				}
+				if (document.format == SpawnFormat::CanaryCrystal && variants.size() > 1) {
+					const SpawnVariantData& effective = variants.back();
+					creatureTile->creature->setSpawnTime(effective.spawnTime);
+					creatureTile->creature->setSpawnDirection(
+						static_cast<Direction>(std::clamp(effective.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),
+						effective.hasDirection
+					);
+				}
 			} else {
 				Creature* creature = creatureTile->creature;
+				if (!creature->hasSpawnPrimaryRecord()) {
+					creature->setSpawnPrimaryRecord(CapturePrimaryRecord(*creature));
+				}
 				const SpawnAlternativeKind incomingKind = AuthoritativeAlternativeKind(document.format, entry.alternativeKind, entry.hasWeight, variants.size());
 				SpawnAlternativeKind mergedKind = SpawnAlternativeKind::None;
 				if (!MergeSpawnAlternativeKinds(creature->getAlternativeKind(), incomingKind, mergedKind)) {
@@ -231,6 +256,9 @@ bool SpawnMapAdapter::Apply(Map& map, const SpawnDocument& document, std::vector
 				}
 				if (!variants.empty()) {
 					const SpawnVariantData& lastVariant = variants.back();
+					if (document.format == SpawnFormat::CanaryCrystal) {
+						creature->setSpawnTime(lastVariant.spawnTime);
+					}
 					creature->setSpawnDirection(
 						static_cast<Direction>(std::clamp(lastVariant.direction, static_cast<int>(DIRECTION_FIRST), static_cast<int>(DIRECTION_LAST))),
 						lastVariant.hasDirection
@@ -286,15 +314,9 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 				entry.attributes = creature->getSpawnAttributes();
 				entry.alternativeKind = creature->getAlternativeKind();
 				if (!creature->getSpawnAlternatives().empty()) {
-					SpawnVariantData primary;
-					primary.name = entry.name;
-					primary.isNpc = entry.isNpc;
-					primary.weight = entry.weight;
-					primary.hasWeight = entry.hasWeight;
-					primary.spawnTime = entry.spawnTime;
-					primary.direction = entry.direction;
-					primary.hasDirection = entry.hasDirection;
-					primary.attributes = entry.attributes;
+					const SpawnVariantData primary = creature->hasSpawnPrimaryRecord()
+						? creature->getSpawnPrimaryRecord()
+						: CapturePrimaryRecord(*creature);
 					entry.alternatives.push_back(std::move(primary));
 					entry.alternatives.insert(entry.alternatives.end(), creature->getSpawnAlternatives().begin(), creature->getSpawnAlternatives().end());
 				}

@@ -434,23 +434,83 @@ namespace {
 		return true;
 	}
 
-	std::vector<std::string> CanonicalEntries(const SpawnDocument& document, bool includeWeights) {
-		std::vector<std::string> entries;
+	struct CanonicalSpawnRecord {
+		bool isNpc = false;
+		std::string name;
+		int x = 0;
+		int y = 0;
+		int z = 0;
+		int spawnTime = 0;
+		int direction = 0;
+		bool hasDirection = false;
+		uint32_t weight = 1;
+		bool hasWeight = false;
+
+		friend bool operator==(const CanonicalSpawnRecord&, const CanonicalSpawnRecord&) = default;
+		friend bool operator<(const CanonicalSpawnRecord& lhs, const CanonicalSpawnRecord& rhs) {
+			return std::tie(lhs.isNpc, lhs.name, lhs.x, lhs.y, lhs.z, lhs.spawnTime, lhs.direction, lhs.hasDirection, lhs.weight, lhs.hasWeight)
+				< std::tie(rhs.isNpc, rhs.name, rhs.x, rhs.y, rhs.z, rhs.spawnTime, rhs.direction, rhs.hasDirection, rhs.weight, rhs.hasWeight);
+		}
+	};
+
+	std::string FormatCanonicalRecord(const CanonicalSpawnRecord& record) {
+		std::ostringstream stream;
+		stream << (record.isNpc ? "npc" : "monster") << '|' << record.name << '|' << record.x << '|' << record.y << '|' << record.z << '|' << record.spawnTime << '|' << record.direction << '|' << (record.hasDirection ? "explicit" : "implicit") << '|' << record.weight << '|' << (record.hasWeight ? "explicit" : "default");
+		return stream.str();
+	}
+
+	std::string FormatChangedFields(const CanonicalSpawnRecord& expected, const CanonicalSpawnRecord& generated) {
+		std::vector<std::string> fields;
+		const auto changed = [&](const char* name, const auto& before, const auto& after) {
+			if (before != after) {
+				std::ostringstream field;
+				field << name << ": " << before << " -> " << after;
+				fields.push_back(field.str());
+			}
+		};
+		changed("kind", expected.isNpc ? "npc" : "monster", generated.isNpc ? "npc" : "monster");
+		changed("name", expected.name, generated.name);
+		changed("x", expected.x, generated.x);
+		changed("y", expected.y, generated.y);
+		changed("z", expected.z, generated.z);
+		changed("spawntime", expected.spawnTime, generated.spawnTime);
+		changed("direction", expected.direction, generated.direction);
+		changed("explicit direction", expected.hasDirection, generated.hasDirection);
+		changed("weight", expected.weight, generated.weight);
+		changed("explicit weight", expected.hasWeight, generated.hasWeight);
+		std::ostringstream result;
+		for (size_t index = 0; index < fields.size(); ++index) {
+			if (index != 0) {
+				result << ", ";
+			}
+			result << fields[index];
+		}
+		return result.str();
+	}
+
+	std::vector<CanonicalSpawnRecord> CanonicalEntries(const SpawnDocument& document, bool includeWeights) {
+		std::vector<CanonicalSpawnRecord> entries;
 		for (const SpawnAreaData& area : document.areas) {
 			for (const SpawnEntryData& entry : area.entries) {
-				const auto append = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, int spawnTime, int direction) {
-					std::ostringstream stream;
-					stream << (npc ? "npc" : "monster") << '|' << name << '|' << entry.x << '|' << entry.y << '|' << entry.z << '|' << spawnTime << '|' << direction;
-					if (includeWeights && hasWeight) {
-						stream << '|' << weight;
-					}
-					entries.push_back(stream.str());
+				const auto append = [&](const std::string& name, bool npc, uint32_t weight, bool hasWeight, int spawnTime, int direction, bool hasDirection) {
+					entries.push_back({
+						npc,
+						name,
+						entry.x,
+						entry.y,
+						entry.z,
+						spawnTime,
+						direction,
+						hasDirection,
+						includeWeights ? weight : 1,
+						includeWeights && hasWeight,
+					});
 				};
 				if (entry.alternatives.empty()) {
-					append(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.spawnTime, entry.direction);
+					append(entry.name, entry.isNpc, entry.weight, entry.hasWeight, entry.spawnTime, entry.direction, entry.hasDirection);
 				} else {
 					for (const SpawnVariantData& variant : entry.alternatives) {
-						append(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.spawnTime, variant.direction);
+						append(variant.name, variant.isNpc, variant.weight, variant.hasWeight, variant.spawnTime, variant.direction, variant.hasDirection);
 					}
 				}
 			}
@@ -496,6 +556,24 @@ namespace {
 		return true;
 	}
 
+	void NormalizeExpectedDirections(SpawnDocument& document, SpawnFormat outputFormat) {
+		for (SpawnAreaData& area : document.areas) {
+			for (SpawnEntryData& entry : area.entries) {
+				if (entry.alternatives.empty()) {
+					entry.hasDirection = ShouldWriteDirection(entry, outputFormat);
+					continue;
+				}
+				for (SpawnVariantData& variant : entry.alternatives) {
+					SpawnEntryData output = entry;
+					output.isNpc = variant.isNpc;
+					output.direction = variant.direction;
+					output.hasDirection = variant.hasDirection;
+					variant.hasDirection = ShouldWriteDirection(output, outputFormat);
+				}
+			}
+		}
+	}
+
 	// Helper function to validate TFS spawn document
 	bool ValidateTfsDocument(const SpawnDocument& original, const std::filesystem::path& file, std::string& error) {
 		SpawnDocument reloaded;
@@ -508,8 +586,12 @@ namespace {
 		for (SpawnAreaData& area : expected.areas) {
 			for (SpawnEntryData& entry : area.entries) {
 				entry.spawnTime = std::max(TFS_MIN_SPAWN_TIME, entry.spawnTime);
+				for (SpawnVariantData& variant : entry.alternatives) {
+					variant.spawnTime = std::max(TFS_MIN_SPAWN_TIME, variant.spawnTime);
+				}
 			}
 		}
+		NormalizeExpectedDirections(expected, SpawnFormat::Tfs);
 		std::string difference;
 		if (!SpawnFormatIO::SemanticallyEqual(expected, reloaded, false, difference)) {
 			error = "XML changed spawn data: " + difference;
@@ -526,8 +608,10 @@ namespace {
 			error = "XML failed validation: " + loadError;
 			return false;
 		}
+		SpawnDocument expected = original;
+		NormalizeExpectedDirections(expected, SpawnFormat::CanaryCrystal);
 		std::string difference;
-		if (!SpawnFormatIO::SemanticallyEqual(original, reloaded, original.format == SpawnFormat::CanaryCrystal, difference)) {
+		if (!SpawnFormatIO::SemanticallyEqual(expected, reloaded, original.format == SpawnFormat::CanaryCrystal, difference)) {
 			error = "XML changed spawn data: " + difference;
 			return false;
 		}
@@ -1049,11 +1133,43 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 }
 
 bool SpawnFormatIO::SemanticallyEqual(const SpawnDocument& lhs, const SpawnDocument& rhs, bool compareWeights, std::string& difference) {
-	const std::vector<std::string> left = CanonicalEntries(lhs, compareWeights);
-	const std::vector<std::string> right = CanonicalEntries(rhs, compareWeights);
+	const std::vector<CanonicalSpawnRecord> left = CanonicalEntries(lhs, compareWeights);
+	const std::vector<CanonicalSpawnRecord> right = CanonicalEntries(rhs, compareWeights);
 	if (left == right) {
+		difference.clear();
 		return true;
 	}
-	difference = "expected " + std::to_string(left.size()) + " creature records, got " + std::to_string(right.size()) + ".";
+
+	std::vector<CanonicalSpawnRecord> missing;
+	std::vector<CanonicalSpawnRecord> unexpected;
+	std::set_difference(left.begin(), left.end(), right.begin(), right.end(), std::back_inserter(missing));
+	std::set_difference(right.begin(), right.end(), left.begin(), left.end(), std::back_inserter(unexpected));
+
+	std::ostringstream report;
+	report << "Spawn round-trip mismatch.\n";
+	if (left.size() != right.size()) {
+		report << "Expected " << left.size() << " creature records, got " << right.size() << ".\n";
+	}
+	const size_t totalMismatches = std::max(missing.size(), unexpected.size());
+	report << "Total semantic mismatches: " << totalMismatches << ".";
+	constexpr size_t MAX_MISMATCH_SAMPLES = 10;
+	const size_t sampleCount = std::min(totalMismatches, MAX_MISMATCH_SAMPLES);
+	for (size_t index = 0; index < sampleCount; ++index) {
+		report << "\n\nMismatch " << (index + 1) << ":";
+		if (index < missing.size()) {
+			report << "\nExpected: " << FormatCanonicalRecord(missing[index]);
+		}
+		if (index < unexpected.size()) {
+			report << "\nGenerated/reloaded: " << FormatCanonicalRecord(unexpected[index]);
+		}
+		if (index < missing.size() && index < unexpected.size()) {
+			report << "\nChanged fields: " << FormatChangedFields(missing[index], unexpected[index]);
+		}
+	}
+	if (totalMismatches > sampleCount) {
+		report << "\n\n"
+			   << (totalMismatches - sampleCount) << " additional mismatch(es) omitted.";
+	}
+	difference = report.str();
 	return false;
 }

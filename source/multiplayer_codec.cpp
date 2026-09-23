@@ -250,7 +250,7 @@ namespace Multiplayer {
 	}
 	Bytes encodeTile(const Tile* tile) {
 		Writer out(MaxTile);
-		out.u8(1);
+		out.u8(2);
 		out.u32(tile ? tile->getMapFlags() : 0);
 		out.u32(tile ? tile->getHouseID() : 0);
 		const auto zoneCount = tile ? tile->zones.size() : 0;
@@ -303,6 +303,18 @@ namespace Multiplayer {
 			}
 			attributes(out, c.getSpawnAttributes());
 			out.u8(static_cast<uint8_t>(c.getAlternativeKind()));
+			out.u8(c.hasSpawnPrimaryRecord());
+			if (c.hasSpawnPrimaryRecord()) {
+				const SpawnVariantData& primary = c.getSpawnPrimaryRecord();
+				out.string(primary.name, 1024);
+				out.u8(primary.isNpc);
+				out.u32(primary.weight);
+				out.u8(primary.hasWeight);
+				out.u32(static_cast<uint32_t>(primary.spawnTime));
+				out.u8(static_cast<uint8_t>(primary.direction));
+				out.u8(primary.hasDirection ? 1 : 0);
+				attributes(out, primary.attributes);
+			}
 			if (c.getSpawnAlternatives().size() > 256) {
 				throw Error("Too many spawn alternatives.");
 			}
@@ -325,7 +337,8 @@ namespace Multiplayer {
 			throw Error("Invalid tile.");
 		}
 		Reader in(data);
-		if (in.u8() != 1) {
+		const uint8_t format = in.u8();
+		if (format != 1 && format != 2) {
 			throw Error("Unknown tile format.");
 		}
 		auto* loc = map.createTileL(tileX(key), tileY(key), tileZ(key));
@@ -390,6 +403,22 @@ namespace Multiplayer {
 				throw Error("Invalid spawn alternative kind.");
 			}
 			c.setAlternativeKind(static_cast<SpawnAlternativeKind>(kind));
+			if (format >= 2 && in.boolean()) {
+				SpawnVariantData primary;
+				primary.name = in.string(1024);
+				primary.isNpc = in.boolean();
+				primary.weight = in.u32();
+				primary.hasWeight = in.boolean();
+				primary.spawnTime = static_cast<int>(in.u32());
+				auto primaryDirection = in.u8();
+				if (primaryDirection > 3) {
+					throw Error("Invalid primary spawn direction.");
+				}
+				primary.direction = primaryDirection;
+				primary.hasDirection = in.boolean();
+				primary.attributes = attributes(in);
+				c.setSpawnPrimaryRecord(primary);
+			}
 			auto count = in.u16();
 			if (count > 256) {
 				throw Error("Too many spawn alternatives.");

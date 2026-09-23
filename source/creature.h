@@ -23,6 +23,7 @@
 #include "spawn_format.h"
 
 #include <algorithm>
+#include <optional>
 
 enum Direction {
 	NORTH = 0,
@@ -74,6 +75,10 @@ public:
 	}
 	void setSpawnTime(int spawntime_) {
 		this->spawntime = spawntime_;
+		if (spawn_primary_record) {
+			SpawnVariantData& effective = spawn_alternatives.empty() ? *spawn_primary_record : spawn_alternatives.back();
+			effective.spawnTime = spawntime_;
+		}
 	}
 
 	uint32_t getWeight() const {
@@ -97,10 +102,20 @@ public:
 	void setDirection(Direction direction_) {
 		this->direction = direction_;
 		spawn_direction_explicit = true;
+		if (spawn_primary_record) {
+			SpawnVariantData& effective = spawn_alternatives.empty() ? *spawn_primary_record : spawn_alternatives.back();
+			effective.direction = direction_;
+			effective.hasDirection = true;
+		}
 	}
 	void setSpawnDirection(Direction direction_, bool explicitDirection) {
 		direction = direction_;
 		spawn_direction_explicit = explicitDirection;
+		if (spawn_primary_record) {
+			SpawnVariantData& effective = spawn_alternatives.empty() ? *spawn_primary_record : spawn_alternatives.back();
+			effective.direction = direction_;
+			effective.hasDirection = explicitDirection;
+		}
 	}
 	bool hasSpawnDirection() const {
 		return spawn_direction_explicit;
@@ -124,6 +139,15 @@ public:
 	}
 	void addSpawnAlternative(const SpawnVariantData& alternative) {
 		spawn_alternatives.push_back(alternative);
+	}
+	void setSpawnPrimaryRecord(const SpawnVariantData& primary) {
+		spawn_primary_record = primary;
+	}
+	bool hasSpawnPrimaryRecord() const {
+		return spawn_primary_record.has_value();
+	}
+	const SpawnVariantData& getSpawnPrimaryRecord() const {
+		return *spawn_primary_record;
 	}
 	const std::vector<SpawnVariantData>& getSpawnAlternatives() const {
 		return spawn_alternatives;
@@ -154,6 +178,7 @@ protected:
 	Position spawn_source;
 	SpawnAttributeMap spawn_attributes;
 	SpawnAlternativeKind alternative_kind = SpawnAlternativeKind::None;
+	std::optional<SpawnVariantData> spawn_primary_record;
 	std::vector<SpawnVariantData> spawn_alternatives;
 };
 

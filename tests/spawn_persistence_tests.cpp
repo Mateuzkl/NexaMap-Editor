@@ -51,6 +51,28 @@ namespace {
 }
 
 int main() {
+	// Crystal keeps ordered XML records separately from the effective block state.
+	{
+		Creature creature("Demon");
+		SpawnVariantData first;
+		first.name = "Demon";
+		first.spawnTime = 60;
+		first.direction = SOUTH;
+		first.hasDirection = true;
+		creature.setSpawnPrimaryRecord(first);
+		SpawnVariantData last;
+		last.name = "Dragon";
+		last.spawnTime = 120;
+		last.direction = NORTH;
+		last.hasDirection = false;
+		creature.addSpawnAlternative(last);
+		creature.setSpawnTime(last.spawnTime);
+		creature.setSpawnDirection(static_cast<Direction>(last.direction), last.hasDirection);
+		check(creature.getSpawnTime() == 120 && creature.getDirection() == NORTH && !creature.hasSpawnDirection(), "Crystal effective spawn state follows the last collocated record");
+		check(creature.getSpawnPrimaryRecord().spawnTime == 60 && creature.getSpawnPrimaryRecord().direction == SOUTH && creature.getSpawnPrimaryRecord().hasDirection, "Crystal first collocated record remains unchanged");
+		check(creature.getSpawnAlternatives().back().spawnTime == 120 && creature.getSpawnAlternatives().back().direction == NORTH && !creature.getSpawnAlternatives().back().hasDirection, "Crystal last collocated record remains ordered and exact");
+	}
+
 	// Test 1: Spawn dependency capture and single creature remapping
 	{
 		SpawnDependencyMap deps;

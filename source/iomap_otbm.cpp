@@ -1894,16 +1894,21 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 
 	g_gui.SetLoadDone(99, "Saving spawns...");
 	if (!saveSpawns(map, identifier)) {
+		if (errorstr.empty()) {
+			errorstr = "Could not save the spawn XML files.";
+		}
 		return false;
 	}
 
 	g_gui.SetLoadDone(99, "Saving houses...");
 	if (!saveHouses(map, identifier)) {
+		errorstr = "Could not save the house XML file.";
 		return false;
 	}
 
 	g_gui.SetLoadDone(99, "Saving zones...");
 	if (!saveZones(map, identifier)) {
+		errorstr = "Could not save the zone XML file.";
 		return false;
 	}
 
@@ -2319,7 +2324,8 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 		warnings.push_back(wxstr(message));
 	}
 	if (!result.success) {
-		warnings.push_back(wxstr("IOMapOTBM::saveSpawns: " + result.error));
+		errorstr = "Could not save spawn XML: " + wxstr(result.error);
+		warnings.push_back("IOMapOTBM::saveSpawns: " + errorstr);
 		return false;
 	}
 	return true;

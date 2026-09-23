@@ -67,12 +67,13 @@ Creature* Creature::deepCopy() const {
 	copy->spawn_source = spawn_source;
 	copy->spawn_attributes = spawn_attributes;
 	copy->alternative_kind = alternative_kind;
+	copy->spawn_primary_record = spawn_primary_record;
 	copy->spawn_alternatives = spawn_alternatives;
 	return copy;
 }
 
 const Outfit& Creature::getLookType() const {
-	CreatureType const* type = g_creatures[type_name];
+	const CreatureType* type = g_creatures[type_name];
 	if (type) {
 		return type->outfit;
 	}
