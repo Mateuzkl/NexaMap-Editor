@@ -70,9 +70,18 @@ public:
 
 	void setSourceAttributes(SpawnAreaKind kind, const SpawnAttributeMap& attributes) {
 		switch (kind) {
-			case SpawnAreaKind::Monsters: monsterAttributes = attributes; hasMonsterSource = true; break;
-			case SpawnAreaKind::Npcs: npcAttributes = attributes; hasNpcSource = true; break;
-			case SpawnAreaKind::Mixed: mixedAttributes = attributes; hasMixedSource = true; break;
+			case SpawnAreaKind::Monsters:
+				monsterAttributes = attributes;
+				hasMonsterSource = true;
+				break;
+			case SpawnAreaKind::Npcs:
+				npcAttributes = attributes;
+				hasNpcSource = true;
+				break;
+			case SpawnAreaKind::Mixed:
+				mixedAttributes = attributes;
+				hasMixedSource = true;
+				break;
 		}
 	}
 	bool hasSourceKind(SpawnAreaKind kind) const {
