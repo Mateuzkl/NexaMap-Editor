@@ -1862,16 +1862,20 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 		(g_settings.getInteger(Config::SAVE_WITH_OTB_MAGIC_NUMBER) ? "OTBM" : std::string(4, '\0'))
 	);
 	if (!file.isOk()) {
-		error("Can not open file %s for writing", mapFile.string().c_str());
+		error("Cannot open OTBM file %s for writing: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
 		return false;
 	}
 	if (!saveMap(map, file) || !file.isOk()) {
 		if (errorstr.empty()) {
-			error("Could not write OTBM file %s", mapFile.string().c_str());
+			error("Could not serialize OTBM file %s: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
 		}
 		return false;
 	}
 	file.close();
+	if (file.error_code != FILE_NO_ERROR) {
+		error("Could not finalize OTBM file %s: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
+		return false;
+	}
 	if (!checkMemoryBudget("after serializing the OTBM")) {
 		return false;
 	}
@@ -1880,28 +1884,48 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 }
 
 bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
+	NexaPerfScope perfTotal("save total");
+	errorstr.clear();
+	auto failStage = [&](const wxString& stage, const wxString& fallback) {
+		const wxString reason = errorstr.empty() ? fallback : errorstr;
+		errorstr = "Stage: " + stage + "\nReason: " + reason;
+		return false;
+	};
+
 	if (map.zonefile.empty()) {
 		map.zonefile = nstr(identifier.GetName()) + "-zones.xml";
 	}
 
 	// Write OTBM file using saveMapData
-	if (!saveMapData(map, identifier)) {
-		return false;
+	{
+		NexaPerfScope perf("saveMapData");
+		if (!saveMapData(map, identifier)) {
+			return failStage("saveMapData", "The OTBM file could not be written.");
+		}
 	}
 
 	g_gui.SetLoadDone(99, "Saving spawns...");
-	if (!saveSpawns(map, identifier)) {
-		return false;
+	{
+		NexaPerfScope perf("saveSpawns");
+		if (!saveSpawns(map, identifier)) {
+			return failStage("saveSpawns", "The spawn XML file could not be written.");
+		}
 	}
 
 	g_gui.SetLoadDone(99, "Saving houses...");
-	if (!saveHouses(map, identifier)) {
-		return false;
+	{
+		NexaPerfScope perf("saveHouses");
+		if (!saveHouses(map, identifier)) {
+			return failStage("saveHouses", "The house XML file could not be written.");
+		}
 	}
 
 	g_gui.SetLoadDone(99, "Saving zones...");
-	if (!saveZones(map, identifier)) {
-		return false;
+	{
+		NexaPerfScope perf("saveZones");
+		if (!saveZones(map, identifier)) {
+			return failStage("saveZones", "The zone XML file could not be written.");
+		}
 	}
 
 	return true;
@@ -2220,31 +2244,35 @@ static bool fileMatchesXmlContent(const wxString& filepath, const std::string& c
 	return contentMatchesIgnoringLineEndings(existingContent, content);
 }
 
-static bool writeContentToFile(const wxString& filepath, const std::string& content) {
+static bool writeContentToFile(const wxString& filepath, const std::string& content, std::string& error) {
+	error.clear();
 	FileSaveTransaction transaction;
 	const std::filesystem::path destination(filepath.ToStdWstring());
 	const std::filesystem::path staged = transaction.Stage(destination);
 
 	wxFile file(wxString(staged.wstring()), wxFile::write);
 	if (!file.IsOpened()) {
+		error = "Could not open staged file for writing: " + staged.string();
 		return false;
 	}
 
 	if (!content.empty()) {
 		const auto bytesWritten = file.Write(content.data(), content.size());
 		if (static_cast<size_t>(bytesWritten) != content.size()) {
+			error = "Short write while saving staged file: " + staged.string();
 			return false;
 		}
 	}
 	if (!file.Close()) {
+		error = "Could not flush and close staged file: " + staged.string();
 		return false;
 	}
 
-	std::string error;
 	return transaction.Commit(error);
 }
 
-static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath) {
+static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath, std::string& error) {
+	error.clear();
 	std::ostringstream stream;
 	doc.save(stream, "\t", pugi::format_default, pugi::encoding_utf8);
 	const std::string content = stream.str();
@@ -2255,21 +2283,26 @@ static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& 
 
 	const wxString backupPath = filepath + "~";
 	if (!wxFileExists(filepath) && fileMatchesXmlContent(backupPath, content)) {
-		return wxRenameFile(backupPath, filepath, false);
+		if (wxRenameFile(backupPath, filepath, false)) {
+			return true;
+		}
+		error = "Could not restore unchanged XML backup to " + nstr(filepath);
+		return false;
 	}
 
-	return writeContentToFile(filepath, content);
+	return writeContentToFile(filepath, content, error);
 }
 
 template <typename FillFn>
-static bool saveSidecarXml(const FileName& dir, const std::string& filename, FillFn fill) {
+static bool saveSidecarXml(const FileName& dir, const std::string& filename, std::string& error, FillFn fill) {
 	wxString filepath = dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
 	filepath += wxString(filename.c_str(), wxConvUTF8);
 
 	pugi::xml_document doc;
 	if (fill(doc)) {
-		return saveXmlFileIfChanged(doc, filepath);
+		return saveXmlFileIfChanged(doc, filepath, error);
 	}
+	error = "Could not build XML document for " + nstr(filepath);
 	return false;
 }
 
@@ -2286,12 +2319,8 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	const std::filesystem::path directory(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
 	const std::string mapName = nstr(dir.GetName());
 
-	// Run pre-save spawn validation diagnostics to detect orphaned or uncapturable creatures.
-	const SpawnValidationResult validation = SpawnMapAdapter::Validate(map);
-	for (const std::string& warn : validation.warnings) {
-		warnings.push_back(wxstr(warn));
-	}
-
+	// Keep full-map validation out of the save hot path. Capture already walks
+	// every registered spawn needed to produce the sidecar and must run once.
 	const SpawnDocument document = SpawnMapAdapter::Capture(map);
 	SpawnWriteResult result;
 
@@ -2317,15 +2346,21 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	}
 	if (!result.success) {
 		warnings.push_back(wxstr("IOMapOTBM::saveSpawns: " + result.error));
+		error("%s", wxstr(result.error));
 		return false;
 	}
 	return true;
 }
 
 bool IOMapOTBM::saveHouses(Map& map, const FileName& dir) {
-	return saveSidecarXml(dir, map.housefile, [&](pugi::xml_document& doc) {
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, map.housefile, saveError, [&](pugi::xml_document& doc) {
 		return saveHouses(map, doc);
 	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
 }
 
 bool IOMapOTBM::saveHouses(Map& map, pugi::xml_document& doc) {
@@ -2364,9 +2399,14 @@ bool IOMapOTBM::saveHouses(Map& map, pugi::xml_document& doc) {
 }
 
 bool IOMapOTBM::saveWaypoints(Map& map, const FileName& dir) {
-	return saveSidecarXml(dir, map.waypointfile, [&](pugi::xml_document& doc) {
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, map.waypointfile, saveError, [&](pugi::xml_document& doc) {
 		return saveWaypoints(map, doc);
 	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
 }
 
 bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
@@ -2413,9 +2453,14 @@ bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 		return true;
 	}
 
-	return saveSidecarXml(dir, map.zonefile, [&](pugi::xml_document& doc) {
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, map.zonefile, saveError, [&](pugi::xml_document& doc) {
 		return saveZones(map, doc);
 	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
 }
 
 bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {

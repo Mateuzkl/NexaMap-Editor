@@ -139,7 +139,10 @@ public:
 	void erase(SpawnPositionList::iterator iter) {
 		spawns.erase(iter);
 	}
-	SpawnPositionList::iterator find(Position& pos) {
+	SpawnPositionList::iterator find(const Position& pos) {
+		return spawns.find(pos);
+	}
+	SpawnPositionList::const_iterator find(const Position& pos) const {
 		return spawns.find(pos);
 	}
 

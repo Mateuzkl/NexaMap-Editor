@@ -485,6 +485,20 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME spawn_format_tests COMMAND spawn_format_tests)
 
+	add_executable(filehandle_tests
+		tests/filehandle_tests.cpp
+		source/filehandle.cpp
+	)
+	target_include_directories(filehandle_tests PRIVATE source)
+	target_link_libraries(filehandle_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt)
+	set_target_properties(filehandle_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/filehandle_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/filehandle_tests"
+	)
+	add_test(NAME filehandle_tests COMMAND filehandle_tests)
+
 	add_executable(creature_cache_tests
 		tests/creature_cache_tests.cpp
 		source/creature_cache.cpp
