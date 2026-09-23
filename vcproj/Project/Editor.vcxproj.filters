@@ -209,6 +209,9 @@
     <ClInclude Include="..\..\source\items.h">
       <Filter>managers</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\server_items_xml_id_space.h">
+      <Filter>managers</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\item_attributes.h">
       <Filter>objects</Filter>
     </ClInclude>

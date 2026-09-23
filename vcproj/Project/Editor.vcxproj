@@ -544,6 +544,7 @@
     <ClInclude Include="..\..\source\editor.h" />
     <ClCompile Include="..\..\source\editor.cpp" />
     <ClInclude Include="..\..\source\items.h" />
+    <ClInclude Include="..\..\source\server_items_xml_id_space.h" />
     <ClCompile Include="..\..\source\items.cpp" />
     <ClInclude Include="..\..\source\item_id_codec.h" />
     <ClCompile Include="..\..\source\item_id_codec.cpp" />

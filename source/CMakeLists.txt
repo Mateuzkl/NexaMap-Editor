@@ -150,6 +150,7 @@ ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/session_id.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
+${CMAKE_CURRENT_LIST_DIR}/server_items_xml_id_space.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.h

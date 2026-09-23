@@ -915,8 +915,21 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	const ServerWorkspace& workspace = g_workspace.getServer();
 	if (workspace.hasItemsXml()) {
 		const wxString serverItemsXml = WorkspacePath(workspace.itemsXmlPath);
-		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, true)) {
+		ServerItemsXmlLoadReport itemMetadataReport;
+		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, ServerItemsXmlIdSpace::AutoDetect, &itemMetadataReport)) {
 			warnings.push_back("Couldn't enrich Canary/Crystal items from the server items.xml: " + supplementalError);
+		} else {
+			wxLogMessage(
+				"Canary/Crystal server items.xml ID mode: %s; direct coverage: %zu/%zu; mapped coverage: %zu/%zu; native teleport definitions applied: %zu; skipped definitions: %zu; ambiguous mappings: %zu.",
+				wxString::FromUTF8(ServerItemsXmlIdSpaceName(itemMetadataReport.selectedIdSpace)),
+				itemMetadataReport.directCoverage,
+				itemMetadataReport.sourceDefinitions,
+				itemMetadataReport.mappedCoverage,
+				itemMetadataReport.sourceDefinitions,
+				itemMetadataReport.nativeTeleportsApplied,
+				itemMetadataReport.skippedDefinitions,
+				itemMetadataReport.ambiguousMappings
+			);
 		}
 	} else {
 		warnings.push_back("Server items.xml was not found. Canary/Crystal item properties are limited to appearances.dat metadata.");

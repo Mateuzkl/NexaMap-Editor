@@ -20,6 +20,7 @@
 
 #include "filehandle.h"
 #include "brush_enums.h"
+#include "server_items_xml_id_space.h"
 
 class Brush;
 class GroundBrush;
@@ -436,6 +437,7 @@ public:
 	bool loadFromOtb(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadFromAppearances(const rme::protobuf::appearances::Appearances& appearances, wxString& error, wxArrayString& warnings);
 	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds = false);
+	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings, ServerItemsXmlIdSpace idSpace, ServerItemsXmlLoadReport* report = nullptr);
 	bool loadItemFromGameXml(pugi::xml_node itemNode, int id, bool serverIdsToClientIds = false);
 	bool loadMetaItem(pugi::xml_node node);
 

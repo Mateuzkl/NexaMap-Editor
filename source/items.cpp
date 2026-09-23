@@ -970,7 +970,7 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id, bool ser
 			}
 
 			std::string typeValue = attribute.as_string();
-			to_lower_str(key);
+			to_lower_str(typeValue);
 			if (typeValue == "depot") {
 				it.type = ITEM_TYPE_DEPOT;
 			} else if (typeValue == "mailbox") {
@@ -1075,6 +1075,16 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id, bool ser
 }
 
 bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds) {
+	return loadFromGameXml(
+		identifier,
+		error,
+		warnings,
+		serverIdsToClientIds ? ServerItemsXmlIdSpace::ServerIdMapped : ServerItemsXmlIdSpace::NativeAppearanceId,
+		nullptr
+	);
+}
+
+bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, wxArrayString& warnings, ServerItemsXmlIdSpace idSpace, ServerItemsXmlLoadReport* outputReport) {
 	pugi::xml_document doc;
 	pugi::xml_parse_result result = doc.load_file(identifier.GetFullPath().mb_str());
 	if (!result) {
@@ -1087,6 +1097,46 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 		error = "items.xml \"" + identifier.GetFullPath() + "\" has no <items> root node.";
 		return false;
 	}
+
+	ServerItemsXmlLoadReport report;
+	for (pugi::xml_node itemNode = node.first_child(); itemNode; itemNode = itemNode.next_sibling()) {
+		if (as_lower_str(itemNode.name()) != "item") {
+			continue;
+		}
+		uint16_t fromId = 0;
+		uint16_t toId = 0;
+		if (const pugi::xml_attribute attribute = itemNode.attribute("id")) {
+			fromId = toId = attribute.as_ushort();
+		} else {
+			fromId = itemNode.attribute("fromid").as_ushort();
+			toId = itemNode.attribute("toid").as_ushort();
+		}
+		if (fromId == 0 || toId == 0) {
+			error = "Could not read item id from item node.";
+			return false;
+		}
+		if (fromId > toId) {
+			++report.skippedDefinitions;
+			warnings.push_back(wxString::Format("Skipped reversed items.xml range %u..%u.", fromId, toId));
+			continue;
+		}
+		for (uint32_t sourceId = fromId; sourceId <= toId; ++sourceId) {
+			++report.sourceDefinitions;
+			if (typeExists(static_cast<uint16_t>(sourceId))) {
+				++report.directCoverage;
+			}
+			const ItemIdMapping::Result mapping = ItemIdMapping::serverToClient(static_cast<uint16_t>(sourceId));
+			if (mapping.found && typeExists(mapping.converted)) {
+				++report.mappedCoverage;
+			}
+		}
+	}
+	report.selectedIdSpace = idSpace == ServerItemsXmlIdSpace::AutoDetect
+		? SelectServerItemsXmlIdSpace(report.directCoverage, report.mappedCoverage)
+		: idSpace;
+	const bool serverIdsToClientIds = report.selectedIdSpace == ServerItemsXmlIdSpace::ServerIdMapped;
+	constexpr size_t MAX_SKIPPED_TELEPORT_WARNINGS = 20;
+	size_t skippedTeleportWarnings = 0;
 
 	for (pugi::xml_node itemNode = node.first_child(); itemNode; itemNode = itemNode.next_sibling()) {
 		if (as_lower_str(itemNode.name()) != "item") {
@@ -1106,20 +1156,52 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 			error = "Could not read item id from item node.";
 			return false;
 		}
+		if (fromId > toId) {
+			continue;
+		}
+
+		bool teleportDefinition = false;
+		for (pugi::xml_node attributeNode = itemNode.first_child(); attributeNode; attributeNode = attributeNode.next_sibling()) {
+			std::string key = attributeNode.attribute("key").as_string();
+			std::string value = attributeNode.attribute("value").as_string();
+			to_lower_str(key);
+			to_lower_str(value);
+			if (key == "type" && value == "teleport") {
+				teleportDefinition = true;
+				break;
+			}
+		}
 
 		for (uint32_t sourceId = fromId; sourceId <= toId; ++sourceId) {
 			const ItemIdMapping::Result mapping = ItemIdMapping::serverToClient(static_cast<uint16_t>(sourceId));
 			const uint16_t id = serverIdsToClientIds ? mapping.converted : static_cast<uint16_t>(sourceId);
+			if (serverIdsToClientIds && mapping.ambiguous) {
+				++report.ambiguousMappings;
+			}
 			if (serverIdsToClientIds && !mapping.found) {
+				++report.skippedDefinitions;
 				continue;
 			}
 			if (!typeExists(id)) {
+				++report.skippedDefinitions;
+				if (teleportDefinition && skippedTeleportWarnings < MAX_SKIPPED_TELEPORT_WARNINGS) {
+					const std::string mapped = mapping.found ? std::to_string(mapping.converted) : "unmapped";
+					warnings.push_back(wxString::Format("Native teleport definition %u could not be associated with a loaded appearance (direct ID %u, mapped ID ", sourceId, sourceId) + wxstr(mapped) + ").");
+					++skippedTeleportWarnings;
+				}
 				continue;
 			}
+			const bool wasTeleport = getItemType(id).isTeleport();
 			if (!loadItemFromGameXml(itemNode, id, serverIdsToClientIds)) {
 				return false;
 			}
+			if (teleportDefinition && !wasTeleport && getItemType(id).isTeleport()) {
+				++report.nativeTeleportsApplied;
+			}
 		}
+	}
+	if (outputReport) {
+		*outputReport = report;
 	}
 	return true;
 }

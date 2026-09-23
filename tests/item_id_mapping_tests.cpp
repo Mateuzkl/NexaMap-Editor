@@ -1,4 +1,5 @@
 #include "item_id_mapping.h"
+#include "server_items_xml_id_space.h"
 
 #include <algorithm>
 #include <array>
@@ -47,6 +48,12 @@ int main() {
 
 	const auto unknownForward = ItemIdMapping::serverToClient(65535);
 	check(!unknownForward.found && unknownForward.converted == 65535 && unknownForward.candidates.empty(), "unknown forward ID remains unchanged");
+
+	const auto nativeCrystalTeleport = ItemIdMapping::serverToClient(36973);
+	check(nativeCrystalTeleport.found && nativeCrystalTeleport.converted == 34317, "legacy mapping would move native Crystal appearance ID 36973 to 34317");
+	check(SelectServerItemsXmlIdSpace(50000, 48000) == ServerItemsXmlIdSpace::NativeAppearanceId, "direct appearance coverage selects native modern items.xml IDs");
+	check(SelectServerItemsXmlIdSpace(12000, 50000) == ServerItemsXmlIdSpace::ServerIdMapped, "higher mapped coverage preserves legacy ServerID items.xml workflows");
+	check(SelectServerItemsXmlIdSpace(50000, 50000) == ServerItemsXmlIdSpace::NativeAppearanceId, "ambiguous equal coverage safely prefers native appearance IDs");
 
 	const auto reverseUnique = ItemIdMapping::clientToServer(21477);
 	check(reverseUnique.found && reverseUnique.converted == 598 && !reverseUnique.ambiguous && reverseUnique.candidates.size() == 1 && reverseUnique.candidates.front() == 598, "unique reverse mapping");
@@ -132,6 +139,6 @@ int main() {
 		std::cerr << failures << " item ID mapping test(s) failed.\n";
 		return 1;
 	}
-	std::cout << "14 item ID mapping tests passed.\n";
+	std::cout << "18 item ID mapping tests passed.\n";
 	return 0;
 }
