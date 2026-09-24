@@ -44,6 +44,7 @@
 #include "tile.h"
 #include "item.h"
 #include "complexitem.h"
+#include "otbm_item_attribute_parser.h"
 #include "town.h"
 #include "wall_brush.h"
 
@@ -84,122 +85,9 @@ namespace {
 		}
 	}
 
-	struct SpecialItemAttributeHints {
-		bool hasTeleportDestination = false;
-		bool hasHouseDoorId = false;
-		bool hasDepotId = false;
-	};
-
-	bool skipAttributeMapValue(BinaryNode* stream) {
-		uint8_t type = ItemAttribute::NONE;
-		if (!stream->getU8(type)) {
-			return false;
-		}
-		switch (static_cast<ItemAttribute::Type>(type)) {
-			case ItemAttribute::STRING: {
-				uint32_t length = 0;
-				return stream->getU32(length) && stream->skip(length);
-			}
-			case ItemAttribute::INTEGER:
-			case ItemAttribute::FLOAT:
-				return stream->skip(4);
-			case ItemAttribute::DOUBLE:
-				return stream->skip(8);
-			case ItemAttribute::BOOLEAN:
-				return stream->skip(1);
-			case ItemAttribute::NONE:
-				return true;
-			default:
-				return false;
-		}
-	}
-
-	bool skipAttributeMap(BinaryNode* stream) {
-		uint16_t count = 0;
-		if (!stream->getU16(count)) {
-			return false;
-		}
-		for (uint16_t index = 0; index < count; ++index) {
-			std::string key;
-			if (!stream->getString(key) || !skipAttributeMapValue(stream)) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	SpecialItemAttributeHints inspectSpecialItemAttributes(BinaryNode* stream, const MapVersion& version, const ItemType& itemType) {
-		SpecialItemAttributeHints hints;
-		const size_t originalOffset = stream->tell();
-
-		// OTBM 1 stores the subtype immediately after the ID instead of as an
-		// attribute. Newer formats, including 8.60, start attributes here.
-		if (version.otbm == MAP_OTBM_1 && (itemType.stackable || itemType.isSplash() || itemType.isFluidContainer())) {
-			stream->skip(persistedItemCountSize());
-		}
-
-		uint8_t rawAttribute = 0;
-		while (stream->getU8(rawAttribute)) {
-			const auto attribute = static_cast<OTBM_ItemAttribute>(rawAttribute);
-			bool valid = true;
-			switch (attribute) {
-				case OTBM_ATTR_TELE_DEST:
-					hints.hasTeleportDestination = true;
-					valid = stream->skip(5);
-					break;
-				case OTBM_ATTR_HOUSEDOORID:
-					hints.hasHouseDoorId = true;
-					valid = stream->skip(1);
-					break;
-				case OTBM_ATTR_DEPOT_ID:
-					hints.hasDepotId = true;
-					valid = stream->skip(2);
-					break;
-				case OTBM_ATTR_COUNT:
-					valid = stream->skip(persistedItemCountSize());
-					break;
-				case OTBM_ATTR_RUNE_CHARGES:
-				case OTBM_ATTR_DECAYING_STATE:
-				case OTBM_ATTR_TIER:
-					valid = stream->skip(1);
-					break;
-				case OTBM_ATTR_ACTION_ID:
-				case OTBM_ATTR_UNIQUE_ID:
-				case OTBM_ATTR_CHARGES:
-					valid = stream->skip(2);
-					break;
-				case OTBM_ATTR_DURATION:
-				case OTBM_ATTR_WRITTENDATE:
-				case OTBM_ATTR_SLEEPERGUID:
-				case OTBM_ATTR_SLEEPSTART:
-					valid = stream->skip(4);
-					break;
-				case OTBM_ATTR_TEXT:
-				case OTBM_ATTR_DESC:
-				case OTBM_ATTR_WRITTENBY: {
-					// This pass only looks for the attributes that decide the item's
-					// dynamic type, so the text is skipped rather than materialised.
-					uint16_t length = 0;
-					valid = stream->getU16(length) && stream->skip(length);
-					break;
-				}
-				case OTBM_ATTR_PODIUMOUTFIT:
-					valid = stream->skip(15);
-					break;
-				case OTBM_ATTR_ATTRIBUTE_MAP:
-					valid = skipAttributeMap(stream);
-					break;
-				default:
-					valid = false;
-					break;
-			}
-			if (!valid) {
-				break;
-			}
-		}
-
-		stream->seek(originalOffset);
-		return hints;
+	OTBMItemAttributeParser::SpecialItemAttributeHints inspectSpecialItemAttributes(BinaryNode* stream, const MapVersion& version, const ItemType& itemType) {
+		const bool hasOtbm1Subtype = version.otbm == MAP_OTBM_1 && (itemType.stackable || itemType.isSplash() || itemType.isFluidContainer());
+		return OTBMItemAttributeParser::inspect(stream, version.otbm >= MAP_OTBM_5, hasOtbm1Subtype, persistedItemCountSize());
 	}
 }
 
@@ -242,18 +130,17 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 		*itemType = &iType;
 	}
 
-	// When conversion is active (inspectSpecialAttributes == true), do not exclude
-	// ordinary classifications (ground, border, bottom) from special attribute inspection.
-	// Converted items carrying authoritative teleport destination, house door ID, or
-	// depot ID must instantiate their corresponding dynamic derived types (Teleport, Door, Depot).
+	// Inspect ordinary classifications too when full item attributes are available.
+	// In Canary/Crystal, inspect even an existing special metadata classification:
+	// the persisted OTBM evidence is authoritative if the two disagree. Preserve
+	// the legacy TFS selection rule unchanged.
 	const bool canHaveSpecialAttributes = inspectSpecialAttributes
-		&& !iType.isTeleport()
-		&& !iType.isDoor()
-		&& !iType.isDepot();
+		&& (maphandle.version.otbm >= MAP_OTBM_5
+			|| (!iType.isTeleport() && !iType.isDoor() && !iType.isDepot()));
 
-	const SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
+	const OTBMItemAttributeParser::SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
 		? inspectSpecialItemAttributes(stream, maphandle.version, iType)
-		: SpecialItemAttributeHints {};
+		: OTBMItemAttributeParser::SpecialItemAttributeHints {};
 
 	uint16_t _count = 0;
 
@@ -264,8 +151,8 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 			}
 		}
 	}
-	// Converted IDs can point at a plain ItemType in the active items.otb. The
-	// persisted OTBM attributes are authoritative: retain the dynamic type so a
+	// Metadata can point at a plain or different ItemType. Persisted Canary/Crystal
+	// OTBM attributes are authoritative: retain the dynamic type so a
 	// reopen/save cycle cannot discard Destination, House Door ID, or the
 	// Depot/Town association.
 	if (specialAttributes.hasTeleportDestination) {
@@ -281,6 +168,31 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 }
 
 bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute attr, BinaryNode* stream) {
+	const uint8_t rawAttribute = static_cast<uint8_t>(attr);
+	if (maphandle.version.otbm >= MAP_OTBM_5) {
+		if (rawAttribute == OTBMItemAttributeParser::CANARY_TIER) {
+			uint8_t tier = 0;
+			if (!stream->getU8(tier)) {
+				return false;
+			}
+			setTier(static_cast<uint16_t>(tier));
+			return true;
+		}
+
+		// OTBM 5/6 uses the current Canary/Crystal attribute layout. These
+		// fields either do not have an editable NexaMap representation or use
+		// an ID/size that conflicts with the legacy TFS layout. Consume them
+		// with the modern schema so later authoritative type attributes remain
+		// aligned and visible.
+		const bool isCanaryOnlyOrConflicting = rawAttribute == OTBMItemAttributeParser::STORE
+			|| rawAttribute == OTBMItemAttributeParser::WRITTEN_DATE
+			|| (rawAttribute >= OTBMItemAttributeParser::CONTAINER_ITEMS && rawAttribute <= OTBMItemAttributeParser::OBTAIN_CONTAINER);
+		if (isCanaryOnlyOrConflicting) {
+			OTBMItemAttributeParser::SpecialItemAttributeHints ignoredHints;
+			return OTBMItemAttributeParser::skipCanaryAttribute(stream, rawAttribute, persistedItemCountSize(), ignoredHints);
+		}
+	}
+
 	switch (attr) {
 		case OTBM_ATTR_COUNT: {
 			uint16_t subtype;
@@ -456,7 +368,7 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 
 		uint16_t tier = getTier();
 		if (tier > 0) {
-			stream.addU8(OTBM_ATTR_TIER);
+			stream.addU8(maphandle.version.otbm >= MAP_OTBM_5 ? OTBMItemAttributeParser::CANARY_TIER : OTBM_ATTR_TIER);
 			stream.addU8(static_cast<uint8_t>(tier));
 		}
 	}
@@ -658,7 +570,7 @@ bool Container::serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHand
 // Podium
 
 bool Podium::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute attribute, BinaryNode* stream) {
-	if (OTBM_ATTR_PODIUMOUTFIT == attribute) {
+	if (maphandle.version.otbm < MAP_OTBM_5 && OTBM_ATTR_PODIUMOUTFIT == attribute) {
 		uint8_t flags;
 		uint8_t direction;
 
@@ -715,6 +627,12 @@ bool Podium::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute a
 
 void Podium::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHandle& stream) const {
 	Item::serializeItemAttributes_OTBM(maphandle, stream);
+	if (maphandle.version.otbm >= MAP_OTBM_5) {
+		// Canary/Crystal reserves attribute 40 for tier. Its podium state is
+		// represented by custom attributes, so writing the legacy 15-byte
+		// payload here would corrupt every following attribute in the item.
+		return;
+	}
 
 	uint8_t flags = PODIUM_SHOW_OUTFIT * static_cast<uint8_t>(showOutfit) + PODIUM_SHOW_MOUNT * static_cast<uint8_t>(showMount) + PODIUM_SHOW_PLATFORM * static_cast<uint8_t>(showPlatform);
 

@@ -499,6 +499,18 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME filehandle_tests COMMAND filehandle_tests)
 
+	add_executable(otbm_item_attribute_parser_tests
+		tests/otbm_item_attribute_parser_tests.cpp
+	)
+	target_include_directories(otbm_item_attribute_parser_tests PRIVATE source)
+	set_target_properties(otbm_item_attribute_parser_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/otbm_item_attribute_parser_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/otbm_item_attribute_parser_tests"
+	)
+	add_test(NAME otbm_item_attribute_parser_tests COMMAND otbm_item_attribute_parser_tests)
+
 	add_executable(creature_cache_tests
 		tests/creature_cache_tests.cpp
 		source/creature_cache.cpp
