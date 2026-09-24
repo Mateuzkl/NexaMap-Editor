@@ -40,10 +40,15 @@ public:
 	void OnGridValueChanged(wxGridEvent&);
 
 	void Update() override;
+	bool TransferDataFromWindow() override;
 
 protected:
 	// Simple pane
 	wxWindow* createGeneralPanel(wxWindow* parent);
+	void saveGeneralPanel();
+	wxSpinCtrl* teleport_x_field = nullptr;
+	wxSpinCtrl* teleport_y_field = nullptr;
+	wxSpinCtrl* teleport_z_field = nullptr;
 
 	// Container pane
 	std::vector<ContainerItemButton*> container_items;

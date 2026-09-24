@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Hidden native controls and synthetic map definitions. Never loads user data.
 #include "main.h"
+#include "action.h"
 #include "editor.h"
 #include "editor_resource_session.h"
 #include "copybuffer.h"
 #include "cross_client_clipboard.h"
 #include "complexitem.h"
+#include "filehandle.h"
 #include "graphics.h"
 #include "gui.h"
+#include "gui_ids.h"
+#include "iomap_otbm.h"
 #include "map_window.h"
 #include "map_display.h"
 #include "map_drawer.h"
 #include "map_diagnostics_scanner.h"
+#include "properties_window.h"
 #include "ingame_preview/ingame_preview_window.h"
 #include "ingame_preview/playtest_map.h"
 #include "ingame_preview/playtest_weather.h"
@@ -19,10 +24,26 @@
 #include <wx/evtloop.h>
 #include <wx/weakref.h>
 #include <atomic>
+#include <filesystem>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <vector>
 
 namespace {
+	class ItemRoundTripFormat final : public IOMap {
+	public:
+		explicit ItemRoundTripFormat(MapVersionID version) {
+			this->version = { version, CLIENT_VERSION_1100 };
+		}
+		bool loadMap(Map&, const FileName&) override {
+			return false;
+		}
+		bool saveMap(Map&, const FileName&) override {
+			return false;
+		}
+	};
+
 	class TrackingItem final : public Item {
 	public:
 		explicit TrackingItem(std::atomic<int>& destructions) :
@@ -63,6 +84,211 @@ class PlaytestIntegrationTests {
 		tile->addItem(Item::Create(100));
 		map.setTile(at, tile);
 		return tile;
+	}
+	static std::unique_ptr<Item> roundTripItem(const Item& source, MapVersionID version) {
+		ItemRoundTripFormat format(version);
+		MemoryNodeFileWriteHandle writer;
+		check(source.serializeItemNode_OTBM(format, writer) && writer.error_code == FILE_NO_ERROR, "Serialize OTBM item node");
+		std::vector<uint8_t> bytes(writer.getData(), writer.getData() + writer.getSize());
+		MemoryNodeFileReadHandle reader(bytes.data(), bytes.size());
+		BinaryNode* root = reader.getRootNode();
+		uint8_t nodeType = 0;
+		check(root && root->getU8(nodeType) && nodeType == OTBM_ITEM, "Read serialized OTBM item node");
+		std::unique_ptr<Item> loaded(Item::Create_OTBM(format, root, nullptr, true));
+		check(loaded && loaded->unserializeItemNode_OTBM(format, root), "Round-trip OTBM item attributes");
+		return loaded;
+	}
+	static Teleport* findTeleport(Tile* tile) {
+		if (!tile) {
+			return nullptr;
+		}
+		if (auto* teleport = dynamic_cast<Teleport*>(tile->ground)) {
+			return teleport;
+		}
+		for (Item* item : tile->items) {
+			if (auto* teleport = dynamic_cast<Teleport*>(item)) {
+				return teleport;
+			}
+		}
+		return nullptr;
+	}
+	static void teleportPersistence() {
+		g_settings.setDefaults();
+		g_settings.setInteger(Config::USE_AUTOMAGIC, 0);
+		g_settings.setInteger(Config::BORDERIZE_PASTE, 0);
+		g_settings.setInteger(Config::BORDERIZE_DRAG, 0);
+		g_settings.setInteger(Config::MERGE_PASTE, 1);
+
+		Definitions definitions;
+		definitions.add(100).group = ITEM_GROUP_GROUND;
+		constexpr uint16_t CanaryTeleportId = 36973;
+		constexpr uint16_t CrystalTeleportId = 25050;
+		constexpr uint16_t ExistingFallbackId = 36975;
+		constexpr uint16_t TfsTeleportId = 1387;
+		constexpr uint16_t DoorId = 36976;
+		constexpr uint16_t DepotId = 36977;
+		constexpr uint16_t BedId = 36978;
+		constexpr uint16_t GenericId = 36979;
+		for (uint16_t id : { CanaryTeleportId, CrystalTeleportId, ExistingFallbackId, TfsTeleportId, DoorId, DepotId, BedId, GenericId }) {
+			definitions.add(id);
+		}
+		g_items.MajorVersion = 4;
+		g_items.MinorVersion = 4;
+
+		pugi::xml_document metadata;
+		const auto parsed = metadata.load_string(
+			"<items>"
+			"<item id='36973'><attribute key='type' value='teleport'/></item>"
+			"<item id='25050'><attribute key='primarytype' value='teleporters'/><attribute key='type' value='teleport'/></item>"
+			"<item id='1387'><attribute key='type' value='teleport'/></item>"
+			"<item id='36976'><attribute key='type' value='door'/></item>"
+			"<item id='36977'><attribute key='type' value='depot'/></item>"
+			"<item id='36978'><attribute key='type' value='bed'/></item>"
+			"</items>"
+		);
+		check(static_cast<bool>(parsed), "Parse ClientID-native item metadata fixture");
+		for (pugi::xml_node node = metadata.child("items").first_child(); node; node = node.next_sibling()) {
+			const uint16_t clientId = node.attribute("id").as_ushort();
+			check(g_items.loadItemFromGameXml(node, clientId, false), "Apply logical metadata to the same ClientID ItemType");
+		}
+
+		check(g_items[CanaryTeleportId].isTeleport() && g_items[CrystalTeleportId].isTeleport(), "Canary and Crystal metadata classify ClientIDs as teleports");
+		std::unique_ptr<Item> canaryNew(Item::Create(CanaryTeleportId));
+		std::unique_ptr<Item> crystalNew(Item::Create(CrystalTeleportId));
+		auto* canaryTeleport = dynamic_cast<Teleport*>(canaryNew.get());
+		auto* crystalTeleport = dynamic_cast<Teleport*>(crystalNew.get());
+		check(canaryTeleport && crystalTeleport, "New Canary and Crystal items are Teleport objects before TELE_DEST exists");
+		check(canaryTeleport->getDestination() == Position() && crystalTeleport->getDestination() == Position(), "New teleports expose an initially empty destination");
+
+		canaryTeleport->setDestination({ 1500, 1600, 7 });
+		canaryNew = roundTripItem(*canaryTeleport, MAP_OTBM_5);
+		canaryTeleport = dynamic_cast<Teleport*>(canaryNew.get());
+		check(canaryTeleport && canaryTeleport->getDestination() == Position(1500, 1600, 7), "New Canary teleport persists X/Y/Z");
+		canaryTeleport->setDestination({ 2000, 1600, 7 });
+		canaryNew = roundTripItem(*canaryTeleport, MAP_OTBM_5);
+		canaryTeleport = dynamic_cast<Teleport*>(canaryNew.get());
+		check(canaryTeleport && canaryTeleport->getDestination() == Position(2000, 1600, 7), "Changing only teleport X persists");
+		canaryTeleport->setDestination({ 2000, 2001, 7 });
+		canaryNew = roundTripItem(*canaryTeleport, MAP_OTBM_5);
+		canaryTeleport = dynamic_cast<Teleport*>(canaryNew.get());
+		check(canaryTeleport && canaryTeleport->getDestination() == Position(2000, 2001, 7), "Changing only teleport Y persists");
+		canaryTeleport->setDestination({ 2000, 2001, 6 });
+		canaryNew = roundTripItem(*canaryTeleport, MAP_OTBM_5);
+		canaryTeleport = dynamic_cast<Teleport*>(canaryNew.get());
+		check(canaryTeleport && canaryTeleport->getDestination() == Position(2000, 2001, 6), "Changing only teleport Z persists");
+
+		Teleport fallbackSource(ExistingFallbackId);
+		fallbackSource.setDestination({ 1000, 1001, 7 });
+		auto fallbackLoaded = roundTripItem(fallbackSource, MAP_OTBM_5);
+		auto* fallbackTeleport = dynamic_cast<Teleport*>(fallbackLoaded.get());
+		check(!g_items[ExistingFallbackId].isTeleport() && fallbackTeleport && fallbackTeleport->getDestination() == Position(1000, 1001, 7), "Existing Canary/Crystal TELE_DEST upgrades incomplete metadata to Teleport");
+
+		crystalTeleport->setDestination({ 1700, 1701, 5 });
+		crystalNew = roundTripItem(*crystalTeleport, MAP_OTBM_5);
+		crystalTeleport = dynamic_cast<Teleport*>(crystalNew.get());
+		check(crystalTeleport && crystalTeleport->getDestination() == Position(1700, 1701, 5), "Crystal teleport round-trip preserves destination");
+
+		{
+			Map propertiesMap;
+			propertiesMap.convert({ MAP_OTBM_5, CLIENT_VERSION_1100 });
+			propertiesMap.setWidth(65000);
+			propertiesMap.setHeight(65000);
+			wxFrame propertiesParent(nullptr, wxID_ANY, "Hidden teleport properties validation");
+			PropertiesWindow properties(&propertiesParent, &propertiesMap, nullptr, crystalTeleport);
+			auto* destinationX = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_X), wxSpinCtrl);
+			auto* destinationY = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_Y), wxSpinCtrl);
+			auto* destinationZ = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_Z), wxSpinCtrl);
+			check(destinationX && destinationY && destinationZ, "Tabbed Properties window exposes teleport Destination X/Y/Z");
+			check(destinationX->GetValue() == 1700 && destinationY->GetValue() == 1701 && destinationZ->GetValue() == 5, "Properties window loads the existing teleport destination");
+			destinationX->SetValue(1800);
+			destinationY->SetValue(1801);
+			destinationZ->SetValue(6);
+			check(properties.TransferDataFromWindow(), "Properties window accepts the edited teleport destination");
+			check(crystalTeleport->getDestination() == Position(1800, 1801, 6), "Properties window saves Destination X/Y/Z to the Teleport object");
+		}
+		crystalNew = roundTripItem(*crystalTeleport, MAP_OTBM_5);
+		crystalTeleport = dynamic_cast<Teleport*>(crystalNew.get());
+		check(crystalTeleport && crystalTeleport->getDestination() == Position(1800, 1801, 6), "Properties-edited destination survives OTBM save/reopen");
+
+		std::unique_ptr<Item> tfs(Item::Create(TfsTeleportId));
+		auto* tfsTeleport = dynamic_cast<Teleport*>(tfs.get());
+		check(tfsTeleport != nullptr, "Legacy TFS metadata still creates Teleport");
+		tfsTeleport->setDestination({ 320, 321, 7 });
+		tfs = roundTripItem(*tfsTeleport, MAP_OTBM_4);
+		tfsTeleport = dynamic_cast<Teleport*>(tfs.get());
+		check(tfsTeleport && tfsTeleport->getDestination() == Position(320, 321, 7), "Legacy TFS TELE_DEST round-trip is unchanged");
+
+		std::unique_ptr<Item> door(Item::Create(DoorId));
+		std::unique_ptr<Item> depot(Item::Create(DepotId));
+		std::unique_ptr<Item> bed(Item::Create(BedId));
+		std::unique_ptr<Item> generic(Item::Create(GenericId));
+		check(dynamic_cast<Door*>(door.get()) != nullptr, "Door metadata remains Door");
+		check(dynamic_cast<Depot*>(depot.get()) != nullptr, "Depot metadata remains Depot");
+		check(g_items[BedId].isBed() && dynamic_cast<Teleport*>(bed.get()) == nullptr, "Bed metadata remains Bed without becoming Teleport");
+		check(dynamic_cast<Teleport*>(generic.get()) == nullptr && dynamic_cast<Door*>(generic.get()) == nullptr && dynamic_cast<Depot*>(generic.get()) == nullptr, "Generic item without special evidence stays generic");
+
+		std::unique_ptr<Item> copied(canaryTeleport->deepCopy());
+		auto* copiedTeleport = dynamic_cast<Teleport*>(copied.get());
+		check(copiedTeleport && copiedTeleport->getDestination() == canaryTeleport->getDestination(), "Teleport deep copy preserves dynamic type and destination");
+
+		CopyBuffer copyBuffer;
+		Editor pasteEditor(copyBuffer, nullptr);
+		auto* sourceTile = ground(pasteEditor.map, { 100, 100, 7 });
+		auto* sourceTeleport = dynamic_cast<Teleport*>(Item::Create(CanaryTeleportId));
+		sourceTeleport->setDestination({ 1500, 1600, 7 });
+		sourceTeleport->select();
+		sourceTile->addItem(sourceTeleport);
+		sourceTile->update();
+		pasteEditor.selection.addInternal(sourceTile);
+		copyBuffer.copy(pasteEditor, 7);
+		copyBuffer.paste(pasteEditor, { 200, 200, 7 });
+		Teleport* pastedTeleport = findTeleport(pasteEditor.map.getTile({ 200, 200, 7 }));
+		check(pastedTeleport && pastedTeleport->getDestination() == Position(1500, 1600, 7), "Copy/paste preserves teleport destination");
+		check(pasteEditor.actionQueue->undo(), "Undo teleport paste");
+		check(findTeleport(pasteEditor.map.getTile({ 200, 200, 7 })) == nullptr, "Undo removes pasted teleport");
+		check(pasteEditor.actionQueue->redo(), "Redo teleport paste");
+		pastedTeleport = findTeleport(pasteEditor.map.getTile({ 200, 200, 7 }));
+		check(pastedTeleport && pastedTeleport->getDestination() == Position(1500, 1600, 7), "Redo restores teleport destination");
+
+		CopyBuffer moveBuffer;
+		Editor moveEditor(moveBuffer, nullptr);
+		auto* moveTile = ground(moveEditor.map, { 300, 300, 7 });
+		auto* movingTeleport = dynamic_cast<Teleport*>(Item::Create(CrystalTeleportId));
+		movingTeleport->setDestination({ 1700, 1701, 5 });
+		movingTeleport->select();
+		moveTile->addItem(movingTeleport);
+		moveTile->update();
+		moveEditor.selection.addInternal(moveTile);
+		moveEditor.moveSelection({ -1, 0, 0 });
+		Teleport* movedTeleport = findTeleport(moveEditor.map.getTile({ 301, 300, 7 }));
+		check(movedTeleport && movedTeleport->getDestination() == Position(1700, 1701, 5), "Move preserves teleport destination");
+		check(moveEditor.actionQueue->undo(), "Undo teleport move");
+		check(findTeleport(moveEditor.map.getTile({ 300, 300, 7 })) != nullptr, "Undo restores moved teleport");
+		check(moveEditor.actionQueue->redo(), "Redo teleport move");
+		movedTeleport = findTeleport(moveEditor.map.getTile({ 301, 300, 7 }));
+		check(movedTeleport && movedTeleport->getDestination() == Position(1700, 1701, 5), "Redo preserves moved teleport destination");
+
+		Map sourceMap;
+		sourceMap.convert({ MAP_OTBM_5, CLIENT_VERSION_1100 });
+		sourceMap.setStorageFormat(MapStorageFormat::CanaryCrystal);
+		sourceMap.setItemIdSpace(ItemIdSpace::Client);
+		auto* persistedTile = ground(sourceMap, { 400, 400, 7 });
+		auto* persistedTeleport = dynamic_cast<Teleport*>(Item::Create(CanaryTeleportId));
+		persistedTeleport->setDestination({ 2000, 2001, 6 });
+		persistedTile->addItem(persistedTeleport);
+		const std::filesystem::path mapPath = std::filesystem::temp_directory_path() / ("nexamap-teleport-" + std::to_string(sourceMap.getSessionId()) + ".otbm");
+		std::error_code removeError;
+		std::filesystem::remove(mapPath, removeError);
+		IOMapOTBM saver(sourceMap.getVersion());
+		check(saver.saveMapData(sourceMap, FileName(wxstr(mapPath.string()))), "Save Canary/Crystal OTBM teleport map");
+		Map reopenedMap;
+		IOMapOTBM loader({ MAP_OTBM_5, CLIENT_VERSION_1100 });
+		check(loader.loadMapData(reopenedMap, FileName(wxstr(mapPath.string()))), "Reopen Canary/Crystal OTBM teleport map");
+		Teleport* reopenedTeleport = findTeleport(reopenedMap.getTile({ 400, 400, 7 }));
+		check(reopenedTeleport && reopenedTeleport->getDestination() == Position(2000, 2001, 6), "Full save/close/reopen preserves teleport class and destination");
+		std::filesystem::remove(mapPath, removeError);
+
+		std::cout << "PASS Canary/Crystal teleport metadata, fallback, UI type, copy/move/undo/redo and OTBM round-trip\n";
 	}
 	static void mapAdapter() {
 		Definitions definitions;
@@ -410,6 +636,7 @@ public:
 		std::cout << "PASS diagnostics reset releases results and iterator state\n";
 	}
 	static void run() {
+		teleportPersistence();
 		mapAdapter();
 		clipboardSessionLifetime();
 		sharedTabOwnership();

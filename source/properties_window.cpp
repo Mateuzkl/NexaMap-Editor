@@ -22,6 +22,7 @@
 #include "gui_ids.h"
 #include "complexitem.h"
 #include "container_properties_window.h"
+#include "map.h"
 
 BEGIN_EVENT_TABLE(PropertiesWindow, wxDialog)
 EVT_BUTTON(wxID_OK, PropertiesWindow::OnClickOK)
@@ -64,7 +65,7 @@ PropertiesWindow::~PropertiesWindow() {
 }
 
 void PropertiesWindow::Update() {
-	Container const* container = dynamic_cast<Container*>(edit_item);
+	const Container* container = dynamic_cast<Container*>(edit_item);
 	if (container) {
 		for (uint32_t i = 0; i < container->getVolume(); ++i) {
 			container_items[i]->setItem(container->getItem(i));
@@ -89,19 +90,43 @@ wxWindow* PropertiesWindow::createGeneralPanel(wxWindow* parent) {
 	auto* unique_id_field = newd wxSpinCtrl(panel, wxID_ANY, i2ws(edit_item->getUniqueID()), wxDefaultPosition, wxSize(-1, 20), wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getUniqueID());
 	gridsizer->Add(unique_id_field, wxSizerFlags(1).Expand());
 
+	if (auto* teleport = dynamic_cast<Teleport*>(edit_item)) {
+		gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "Destination"));
+
+		auto* destinationSizer = newd wxBoxSizer(wxHORIZONTAL);
+		const int maxX = edit_map ? edit_map->getWidth() : 0xFFFF;
+		const int maxY = edit_map ? edit_map->getHeight() : 0xFFFF;
+		teleport_x_field = newd wxSpinCtrl(panel, ITEM_PROPERTIES_TELEPORT_X, i2ws(teleport->getX()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, maxX, teleport->getX());
+		teleport_y_field = newd wxSpinCtrl(panel, ITEM_PROPERTIES_TELEPORT_Y, i2ws(teleport->getY()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, maxY, teleport->getY());
+		teleport_z_field = newd wxSpinCtrl(panel, ITEM_PROPERTIES_TELEPORT_Z, i2ws(teleport->getZ()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, MAP_MAX_LAYER, teleport->getZ());
+		teleport_x_field->SetToolTip("Destination X");
+		teleport_y_field->SetToolTip("Destination Y");
+		teleport_z_field->SetToolTip("Destination Z");
+		destinationSizer->Add(teleport_x_field, wxSizerFlags(3).Expand());
+		destinationSizer->Add(teleport_y_field, wxSizerFlags(3).Expand().Border(wxLEFT, 5));
+		destinationSizer->Add(teleport_z_field, wxSizerFlags(2).Expand().Border(wxLEFT, 5));
+		gridsizer->Add(destinationSizer, wxSizerFlags(1).Expand());
+	}
+
 	panel->SetSizerAndFit(gridsizer);
 
 	return panel;
 }
 
+void PropertiesWindow::saveGeneralPanel() {
+	if (auto* teleport = dynamic_cast<Teleport*>(edit_item); teleport && teleport_x_field && teleport_y_field && teleport_z_field) {
+		teleport->setDestination(Position(teleport_x_field->GetValue(), teleport_y_field->GetValue(), teleport_z_field->GetValue()));
+	}
+}
+
 wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
-	auto const* container = static_cast<const Container*>(edit_item);
+	const auto* container = static_cast<const Container*>(edit_item);
 	auto* panel = newd wxPanel(parent, ITEM_PROPERTIES_CONTAINER_TAB);
 	wxSizer* topSizer = newd wxBoxSizer(wxVERTICAL);
 
 	wxSizer* gridSizer = newd wxGridSizer(6, 5, 5);
 
-	bool const use_large_sprites = g_settings.getBoolean(Config::USE_LARGE_CONTAINER_ICONS);
+	const bool use_large_sprites = g_settings.getBoolean(Config::USE_LARGE_CONTAINER_ICONS);
 	for (uint32_t i = 0; i < container->getVolume(); ++i) {
 		Item* item = container->getItem(i);
 		auto* containerItemButton = newd ContainerItemButton(panel, use_large_sprites, i, edit_map, item);
@@ -130,7 +155,7 @@ wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
 	attributesGrid = newd wxGrid(panel, ITEM_PROPERTIES_ADVANCED_TAB, wxDefaultPosition, wxSize(-1, 160));
 	topSizer->Add(attributesGrid, wxSizerFlags(1).Expand());
 
-	wxFont const time_font(*wxSWISS_FONT);
+	const wxFont time_font(*wxSWISS_FONT);
 	attributesGrid->SetDefaultCellFont(time_font);
 	attributesGrid->CreateGrid(0, 3);
 	attributesGrid->DisableDragRowSize();
@@ -215,7 +240,7 @@ void PropertiesWindow::SetGridValue(wxGrid* grid, int rowIndex, const std::strin
 }
 
 void PropertiesWindow::OnNotebookPageChanged(wxNotebookEvent& evt) {
-	wxWindow const* page = notebook->GetCurrentPage();
+	const wxWindow* page = notebook->GetCurrentPage();
 
 	// TODO: Save
 
@@ -237,7 +262,7 @@ void PropertiesWindow::saveAttributesPanel() {
 	edit_item->clearAllAttributes();
 	for (int32_t rowIndex = 0; rowIndex < attributesGrid->GetNumberRows(); ++rowIndex) {
 		ItemAttribute attr;
-		wxString const type = attributesGrid->GetCellValue(rowIndex, 1);
+		const wxString type = attributesGrid->GetCellValue(rowIndex, 1);
 		if (type == "String") {
 			attr.set(nstr(attributesGrid->GetCellValue(rowIndex, 2)));
 		} else if (type == "Float") {
@@ -261,7 +286,7 @@ void PropertiesWindow::saveAttributesPanel() {
 
 void PropertiesWindow::OnGridValueChanged(wxGridEvent& event) {
 	if (event.GetCol() == 1) {
-		wxString const newType = attributesGrid->GetCellValue(event.GetRow(), 1);
+		const wxString newType = attributesGrid->GetCellValue(event.GetRow(), 1);
 		if (newType == event.GetString()) {
 			return;
 		}
@@ -281,13 +306,21 @@ void PropertiesWindow::OnGridValueChanged(wxGridEvent& event) {
 }
 
 void PropertiesWindow::OnClickOK(wxCommandEvent&) {
-	saveAttributesPanel();
+	if (!TransferDataFromWindow()) {
+		return;
+	}
 	EndModal(1);
+}
+
+bool PropertiesWindow::TransferDataFromWindow() {
+	saveGeneralPanel();
+	saveAttributesPanel();
+	return true;
 }
 
 void PropertiesWindow::OnClickAddAttribute(wxCommandEvent&) {
 	attributesGrid->AppendRows(1);
-	ItemAttribute const attr(0);
+	const ItemAttribute attr(0);
 	SetGridValue(attributesGrid, attributesGrid->GetNumberRows() - 1, "", attr);
 }
 
@@ -297,7 +330,7 @@ void PropertiesWindow::OnClickRemoveAttribute(wxCommandEvent&) {
 		return;
 	}
 
-	int const rowIndex = rowIndexes[0];
+	const int rowIndex = rowIndexes[0];
 	attributesGrid->DeleteRows(rowIndex, 1);
 }
 

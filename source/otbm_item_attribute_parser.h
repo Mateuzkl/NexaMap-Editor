@@ -59,6 +59,8 @@ namespace OTBMItemAttributeParser {
 		bool hasTeleportDestination = false;
 		bool hasHouseDoorId = false;
 		bool hasDepotId = false;
+		bool malformed = false;
+		uint8_t malformedAttribute = 0;
 	};
 
 	template <typename Reader>
@@ -274,6 +276,8 @@ namespace OTBMItemAttributeParser {
 				? skipCanaryAttribute(stream, attribute, persistedCountSize, hints)
 				: skipLegacyAttribute(stream, attribute, persistedCountSize, hints);
 			if (!valid) {
+				hints.malformed = true;
+				hints.malformedAttribute = attribute;
 				break;
 			}
 		}

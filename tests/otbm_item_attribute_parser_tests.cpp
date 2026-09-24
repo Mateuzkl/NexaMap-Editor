@@ -179,7 +179,35 @@ namespace {
 		ByteReader reader(std::move(bytes));
 		const auto hints = inspect(&reader, true, false, 1);
 		check(!hints.hasTeleportDestination, "malformed custom map cannot desynchronise into a false teleport hint");
+		check(hints.malformed && hints.malformedAttribute == CUSTOM, "malformed Canary attribute is reported with its attribute ID");
 		check(reader.tell() == 0, "failed inspection also restores the original node offset");
+	}
+
+	void testModernAttributeAfterTeleportIsConsumed() {
+		using namespace OTBMItemAttributeParser;
+		std::vector<uint8_t> bytes;
+		appendFixedAttribute(bytes, TELEPORT_DESTINATION, 5);
+		appendCanaryCustomMap(bytes, CUSTOM);
+		appendFixedAttribute(bytes, OWNER, 4);
+
+		ByteReader reader(std::move(bytes));
+		const auto hints = inspect(&reader, true, false, 1);
+		check(hints.hasTeleportDestination, "Canary scanner retains teleport evidence when modern attributes follow it");
+		check(!hints.malformed, "valid modern attributes after teleport destination are not reported as malformed");
+		check(reader.tell() == 0, "post-teleport inspection restores the original node offset");
+	}
+
+	void testUnrelatedItemsHaveNoSpecialHints() {
+		using namespace OTBMItemAttributeParser;
+		std::vector<uint8_t> bytes;
+		appendFixedAttribute(bytes, ACTION_ID, 2);
+		appendStringAttribute(bytes, TEXT, "ordinary item");
+		appendFixedAttribute(bytes, CANARY_TIER, 1);
+
+		ByteReader reader(std::move(bytes));
+		const auto hints = inspect(&reader, true, false, 1);
+		check(!hints.hasTeleportDestination && !hints.hasHouseDoorId && !hints.hasDepotId, "ordinary Canary attributes do not invent a special item type");
+		check(!hints.malformed, "ordinary Canary attributes form a complete valid scan");
 	}
 }
 
@@ -187,6 +215,8 @@ int main() {
 	testCanaryModernAttributesStayAligned();
 	testLegacyTfsLayoutIsUnchanged();
 	testInvalidModernPayloadStopsSafely();
+	testModernAttributeAfterTeleportIsConsumed();
+	testUnrelatedItemsHaveNoSpecialHints();
 
 	std::cout << "OTBM Item Attribute Parser Tests: " << checks << " checks, " << failures << " failures.\n";
 	return failures == 0 ? 0 : 1;

@@ -141,6 +141,13 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 	const OTBMItemAttributeParser::SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
 		? inspectSpecialItemAttributes(stream, maphandle.version, iType)
 		: OTBMItemAttributeParser::SpecialItemAttributeHints {};
+	if (specialAttributes.malformed) {
+		wxLogWarning(
+			"OTBM item %u contains a truncated or unsupported attribute %u while detecting its logical type.",
+			static_cast<unsigned int>(_id),
+			static_cast<unsigned int>(specialAttributes.malformedAttribute)
+		);
+	}
 
 	uint16_t _count = 0;
 
@@ -155,13 +162,13 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 	// OTBM attributes are authoritative: retain the dynamic type so a
 	// reopen/save cycle cannot discard Destination, House Door ID, or the
 	// Depot/Town association.
-	if (specialAttributes.hasTeleportDestination) {
+	if (!specialAttributes.malformed && specialAttributes.hasTeleportDestination) {
 		return newd Teleport(_id);
 	}
-	if (specialAttributes.hasHouseDoorId) {
+	if (!specialAttributes.malformed && specialAttributes.hasHouseDoorId) {
 		return newd Door(_id);
 	}
-	if (specialAttributes.hasDepotId) {
+	if (!specialAttributes.malformed && specialAttributes.hasDepotId) {
 		return newd Depot(_id);
 	}
 	return Item::Create(_id, _count);
