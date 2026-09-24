@@ -138,6 +138,7 @@ namespace {
 		appendStringAttribute(bytes, STORE_INBOX_CATEGORY, "store");
 		appendFixedAttribute(bytes, OWNER, 4);
 		appendFixedAttribute(bytes, OBTAIN_CONTAINER, 4);
+		appendFixedAttribute(bytes, MANTRA, 4);
 		appendFixedAttribute(bytes, TELEPORT_DESTINATION, 5);
 		appendFixedAttribute(bytes, HOUSE_DOOR_ID, 1);
 		appendFixedAttribute(bytes, DEPOT_ID, 2);

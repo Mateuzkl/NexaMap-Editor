@@ -2210,6 +2210,9 @@ bool GUI::CanPaste() const {
 }
 
 void GUI::CaptureCrossClientCopy(CopyBuffer& source) {
+	if (!root) {
+		return;
+	}
 	if (!crossClientClipboard) {
 		crossClientClipboard = std::make_unique<CrossClientClipboard>();
 	}
@@ -2350,7 +2353,9 @@ void GUI::ChangeFloor(int new_floor) {
 }
 
 void GUI::SetStatusText(const wxString& text) {
-	g_gui.root->SetStatusText(text, 0);
+	if (g_gui.root) {
+		g_gui.root->SetStatusText(text, 0);
+	}
 }
 
 void GUI::SetTitle(wxString title) {

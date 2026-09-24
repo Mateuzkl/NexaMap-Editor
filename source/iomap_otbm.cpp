@@ -23,6 +23,7 @@
 
 #include <zlib.h>
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <new>
@@ -88,6 +89,92 @@ namespace {
 	OTBMItemAttributeParser::SpecialItemAttributeHints inspectSpecialItemAttributes(BinaryNode* stream, const MapVersion& version, const ItemType& itemType) {
 		const bool hasOtbm1Subtype = version.otbm == MAP_OTBM_1 && (itemType.stackable || itemType.isSplash() || itemType.isFluidContainer());
 		return OTBMItemAttributeParser::inspect(stream, version.otbm >= MAP_OTBM_5, hasOtbm1Subtype, persistedItemCountSize());
+	}
+
+	using CanaryCustomEntries = std::vector<std::pair<std::string, std::string>>;
+
+	template <typename T>
+	bool readPayloadValue(const std::string& payload, size_t& offset, T& value) {
+		if (offset + sizeof(T) > payload.size()) {
+			return false;
+		}
+		std::memcpy(&value, payload.data() + offset, sizeof(T));
+		offset += sizeof(T);
+		return true;
+	}
+
+	bool parseCanaryCustomPayload(const std::string& payload, CanaryCustomEntries& entries) {
+		size_t offset = 0;
+		uint64_t count = 0;
+		if (!readPayloadValue(payload, offset, count) || count > 1'000'000) {
+			return false;
+		}
+		for (uint64_t index = 0; index < count; ++index) {
+			uint16_t keyLength = 0;
+			if (!readPayloadValue(payload, offset, keyLength) || offset + keyLength > payload.size()) {
+				return false;
+			}
+			std::string key(payload.data() + offset, keyLength);
+			offset += keyLength;
+			const size_t encodedStart = offset;
+			uint8_t type = 0;
+			if (!readPayloadValue(payload, offset, type)) {
+				return false;
+			}
+			size_t valueSize = 0;
+			if (type == 1) {
+				uint16_t stringLength = 0;
+				if (!readPayloadValue(payload, offset, stringLength)) {
+					return false;
+				}
+				valueSize = stringLength;
+			} else if (type == 2 || type == 3) {
+				valueSize = 8;
+			} else if (type == 4) {
+				valueSize = 1;
+			} else {
+				return false;
+			}
+			if (offset + valueSize > payload.size()) {
+				return false;
+			}
+			offset += valueSize;
+			entries.emplace_back(std::move(key), payload.substr(encodedStart, offset - encodedStart));
+		}
+		return offset == payload.size();
+	}
+
+	bool customInteger(const std::string& encoded, int64_t& value) {
+		if (encoded.size() == 9 && static_cast<uint8_t>(encoded[0]) == 2) {
+			std::memcpy(&value, encoded.data() + 1, sizeof(value));
+			return true;
+		}
+		if (encoded.size() == 2 && static_cast<uint8_t>(encoded[0]) == 4) {
+			value = encoded[1] != 0;
+			return true;
+		}
+		return false;
+	}
+
+	std::string encodeCustomInteger(int64_t value) {
+		std::string encoded(1 + sizeof(value), '\0');
+		encoded[0] = 2;
+		std::memcpy(encoded.data() + 1, &value, sizeof(value));
+		return encoded;
+	}
+
+	void setCustomEntry(CanaryCustomEntries& entries, const std::string& key, int64_t value) {
+		for (auto& entry : entries) {
+			if (entry.first == key) {
+				entry.second = encodeCustomInteger(value);
+				return;
+			}
+		}
+		entries.emplace_back(key, encodeCustomInteger(value));
+	}
+
+	void eraseCustomEntry(CanaryCustomEntries& entries, const std::string& key) {
+		entries.erase(std::remove_if(entries.begin(), entries.end(), [&](const auto& entry) { return entry.first == key; }), entries.end());
 	}
 }
 
@@ -193,10 +280,13 @@ bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute att
 		// aligned and visible.
 		const bool isCanaryOnlyOrConflicting = rawAttribute == OTBMItemAttributeParser::STORE
 			|| rawAttribute == OTBMItemAttributeParser::WRITTEN_DATE
-			|| (rawAttribute >= OTBMItemAttributeParser::CONTAINER_ITEMS && rawAttribute <= OTBMItemAttributeParser::OBTAIN_CONTAINER);
+			|| rawAttribute == OTBMItemAttributeParser::WRITTEN_BY
+			|| (rawAttribute > OTBMItemAttributeParser::CONTAINER_ITEMS && rawAttribute <= OTBMItemAttributeParser::MANTRA);
 		if (isCanaryOnlyOrConflicting) {
-			OTBMItemAttributeParser::SpecialItemAttributeHints ignoredHints;
-			return OTBMItemAttributeParser::skipCanaryAttribute(stream, rawAttribute, persistedItemCountSize(), ignoredHints);
+			return preserveModernAttribute(stream, rawAttribute);
+		}
+		if (rawAttribute == OTBMItemAttributeParser::CONTAINER_ITEMS) {
+			return false;
 		}
 	}
 
@@ -304,6 +394,31 @@ bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute att
 	return true;
 }
 
+bool Item::preserveModernAttribute(BinaryNode* stream, uint8_t attribute) {
+	const size_t payloadStart = stream->tell();
+	OTBMItemAttributeParser::SpecialItemAttributeHints ignoredHints;
+	if (!OTBMItemAttributeParser::skipCanaryAttribute(stream, attribute, persistedItemCountSize(), ignoredHints)) {
+		return false;
+	}
+	const size_t payloadEnd = stream->tell();
+	if (!stream->seek(payloadStart)) {
+		return false;
+	}
+	std::string payload;
+	if (!stream->getRAW(payload, payloadEnd - payloadStart) || !stream->seek(payloadEnd)) {
+		return false;
+	}
+	preservedModernAttributes.push_back({ attribute, std::move(payload) });
+	return true;
+}
+
+void Item::serializePreservedModernAttributes(NodeFileWriteHandle& stream) const {
+	for (const auto& attribute : preservedModernAttributes) {
+		stream.addU8(attribute.id);
+		stream.addRAW(attribute.payload);
+	}
+}
+
 bool Item::unserializeAttributes_OTBM(const IOMap& maphandle, BinaryNode* stream) {
 	uint8_t attribute;
 	while (stream->getU8(attribute)) {
@@ -338,7 +453,7 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 		stream.addU8(getSubtype());
 	}
 
-	if (maphandle.version.otbm == MAP_OTBM_4 || maphandle.version.otbm > MAP_OTBM_5) {
+	if (maphandle.version.otbm == MAP_OTBM_4) {
 		if (attributes && !attributes->empty()) {
 			stream.addU8(OTBM_ATTR_ATTRIBUTE_MAP);
 			serializeAttributeMap(maphandle, stream);
@@ -378,6 +493,9 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 			stream.addU8(maphandle.version.otbm >= MAP_OTBM_5 ? OTBMItemAttributeParser::CANARY_TIER : OTBM_ATTR_TIER);
 			stream.addU8(static_cast<uint8_t>(tier));
 		}
+	}
+	if (maphandle.version.otbm >= MAP_OTBM_5) {
+		serializePreservedModernAttributes(stream);
 	}
 }
 
@@ -577,6 +695,13 @@ bool Container::serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHand
 // Podium
 
 bool Podium::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute attribute, BinaryNode* stream) {
+	if (maphandle.version.otbm >= MAP_OTBM_5 && static_cast<uint8_t>(attribute) == OTBMItemAttributeParser::CUSTOM) {
+		if (!Item::readItemAttribute_OTBM(maphandle, attribute, stream)) {
+			return false;
+		}
+		applyModernCustomAttributes(preservedModernAttributes.back().payload);
+		return true;
+	}
 	if (maphandle.version.otbm < MAP_OTBM_5 && OTBM_ATTR_PODIUMOUTFIT == attribute) {
 		uint8_t flags;
 		uint8_t direction;
@@ -629,6 +754,117 @@ bool Podium::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute a
 		return false;
 	} else {
 		return Item::readItemAttribute_OTBM(maphandle, attribute, stream);
+	}
+}
+
+void Podium::applyModernCustomAttributes(const std::string& payload) {
+	CanaryCustomEntries entries;
+	if (!parseCanaryCustomPayload(payload, entries)) {
+		return;
+	}
+	bool hasPodiumField = false;
+	bool hasOutfit = false;
+	bool hasMount = false;
+	for (const auto& [key, encoded] : entries) {
+		int64_t value = 0;
+		if (!customInteger(encoded, value)) {
+			continue;
+		}
+		if (key == "PodiumVisible") {
+			showPlatform = value != 0;
+			hasPodiumField = true;
+		} else if (key == "LookDirection") {
+			direction = static_cast<uint8_t>(value);
+			hasPodiumField = true;
+		} else if (key == "LookType") {
+			outfit.lookType = static_cast<int>(value);
+			hasOutfit = hasPodiumField = true;
+		} else if (key == "LookHead") {
+			outfit.lookHead = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookBody") {
+			outfit.lookBody = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookLegs") {
+			outfit.lookLegs = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookFeet") {
+			outfit.lookFeet = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookAddons") {
+			outfit.lookAddon = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMount") {
+			outfit.lookMount = static_cast<int>(value);
+			hasMount = hasPodiumField = true;
+		} else if (key == "LookMountHead") {
+			outfit.lookMountHead = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMountBody") {
+			outfit.lookMountBody = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMountLegs") {
+			outfit.lookMountLegs = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMountFeet") {
+			outfit.lookMountFeet = static_cast<int>(value);
+			hasPodiumField = true;
+		}
+	}
+	if (hasPodiumField) {
+		showOutfit = hasOutfit;
+		showMount = hasMount;
+	}
+}
+
+void Podium::serializePreservedModernAttributes(NodeFileWriteHandle& stream) const {
+	CanaryCustomEntries entries;
+	for (const auto& attribute : preservedModernAttributes) {
+		if (attribute.id == OTBMItemAttributeParser::CUSTOM) {
+			CanaryCustomEntries block;
+			if (parseCanaryCustomPayload(attribute.payload, block)) {
+				for (auto& entry : block) {
+					eraseCustomEntry(entries, entry.first);
+					entries.push_back(std::move(entry));
+				}
+			}
+		} else {
+			stream.addU8(attribute.id);
+			stream.addRAW(attribute.payload);
+		}
+	}
+
+	const char* outfitKeys[] = { "LookType", "LookHead", "LookBody", "LookLegs", "LookFeet", "LookAddons" };
+	const char* mountKeys[] = { "LookMount", "LookMountHead", "LookMountBody", "LookMountLegs", "LookMountFeet" };
+	for (const char* key : outfitKeys) {
+		eraseCustomEntry(entries, key);
+	}
+	for (const char* key : mountKeys) {
+		eraseCustomEntry(entries, key);
+	}
+	setCustomEntry(entries, "PodiumVisible", showPlatform ? 1 : 0);
+	setCustomEntry(entries, "LookDirection", direction);
+	if (showOutfit) {
+		setCustomEntry(entries, "LookType", outfit.lookType);
+		setCustomEntry(entries, "LookHead", outfit.lookHead);
+		setCustomEntry(entries, "LookBody", outfit.lookBody);
+		setCustomEntry(entries, "LookLegs", outfit.lookLegs);
+		setCustomEntry(entries, "LookFeet", outfit.lookFeet);
+		setCustomEntry(entries, "LookAddons", outfit.lookAddon);
+	}
+	if (showMount) {
+		setCustomEntry(entries, "LookMount", outfit.lookMount);
+		setCustomEntry(entries, "LookMountHead", outfit.lookMountHead);
+		setCustomEntry(entries, "LookMountBody", outfit.lookMountBody);
+		setCustomEntry(entries, "LookMountLegs", outfit.lookMountLegs);
+		setCustomEntry(entries, "LookMountFeet", outfit.lookMountFeet);
+	}
+
+	stream.addU8(OTBMItemAttributeParser::CUSTOM);
+	stream.addU64(entries.size());
+	for (const auto& [key, encoded] : entries) {
+		stream.addString(key);
+		stream.addRAW(encoded);
 	}
 }
 

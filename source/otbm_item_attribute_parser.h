@@ -49,6 +49,7 @@ namespace OTBMItemAttributeParser {
 		STORE_INBOX_CATEGORY = 42,
 		OWNER = 43,
 		OBTAIN_CONTAINER = 44,
+		MANTRA = 45,
 
 		LEGACY_PODIUM_OUTFIT = 40,
 		LEGACY_TIER = 41,
@@ -232,6 +233,7 @@ namespace OTBMItemAttributeParser {
 			case QUICK_LOOT_CONTAINER:
 			case OWNER:
 			case OBTAIN_CONTAINER:
+			case MANTRA:
 				return stream->skip(4);
 			case WRITTEN_DATE:
 				return stream->skip(8);

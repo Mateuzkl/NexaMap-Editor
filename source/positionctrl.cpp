@@ -59,7 +59,5 @@ bool PositionCtrl::Enable(bool enable) {
 }
 
 void PositionCtrl::OnClipboardText(wxClipboardTextEvent& evt) {
-	if (!clipboardPositionToFields(x_field, y_field, z_field)) {
-		evt.Skip();
-	}
+	clipboardPositionToFields(x_field, y_field, z_field);
 }

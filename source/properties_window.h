@@ -25,6 +25,7 @@
 class ContainerItemButton;
 class ContainerItemPopupMenu;
 class ItemAttribute;
+class NumberTextCtrl;
 
 class PropertiesWindow : public ObjectPropertiesWindowBase {
 public:
@@ -36,19 +37,25 @@ public:
 	void OnClickAddAttribute(wxCommandEvent&);
 	void OnClickRemoveAttribute(wxCommandEvent&);
 
-	void OnNotebookPageChanged(wxNotebookEvent&);
 	void OnGridValueChanged(wxGridEvent&);
+	void OnTeleportPositionPaste(wxClipboardTextEvent&);
 
 	void Update() override;
 	bool TransferDataFromWindow() override;
+	static bool IsTextLengthValid(const wxString& value, uint32_t maximumLength);
 
 protected:
 	// Simple pane
 	wxWindow* createGeneralPanel(wxWindow* parent);
 	void saveGeneralPanel();
-	wxSpinCtrl* teleport_x_field = nullptr;
-	wxSpinCtrl* teleport_y_field = nullptr;
-	wxSpinCtrl* teleport_z_field = nullptr;
+	bool validateGeneralPanel() const;
+	wxSpinCtrl* action_id_field = nullptr;
+	wxSpinCtrl* unique_id_field = nullptr;
+	wxTextCtrl* text_field = nullptr;
+	wxTextCtrl* description_field = nullptr;
+	NumberTextCtrl* teleport_x_field = nullptr;
+	NumberTextCtrl* teleport_y_field = nullptr;
+	NumberTextCtrl* teleport_z_field = nullptr;
 
 	// Container pane
 	std::vector<ContainerItemButton*> container_items;
@@ -62,7 +69,6 @@ protected:
 
 protected:
 	wxNotebook* notebook;
-	wxWindow* currentPanel;
 
 	DECLARE_EVENT_TABLE()
 };

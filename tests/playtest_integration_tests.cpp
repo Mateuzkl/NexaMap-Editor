@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Hidden native controls and synthetic map definitions. Never loads user data.
 #include "main.h"
+#include "common.h"
 #include "action.h"
 #include "editor.h"
 #include "editor_resource_session.h"
@@ -12,11 +13,13 @@
 #include "gui.h"
 #include "gui_ids.h"
 #include "iomap_otbm.h"
+#include "otbm_item_attribute_parser.h"
 #include "map_window.h"
 #include "map_display.h"
 #include "map_drawer.h"
 #include "map_diagnostics_scanner.h"
 #include "properties_window.h"
+#include "numbertextctrl.h"
 #include "ingame_preview/ingame_preview_window.h"
 #include "ingame_preview/playtest_map.h"
 #include "ingame_preview/playtest_weather.h"
@@ -136,16 +139,15 @@ class PlaytestIntegrationTests {
 		g_items.MinorVersion = 4;
 
 		pugi::xml_document metadata;
-		const auto parsed = metadata.load_string(
-			"<items>"
-			"<item id='36973'><attribute key='type' value='teleport'/></item>"
-			"<item id='25050'><attribute key='primarytype' value='teleporters'/><attribute key='type' value='teleport'/></item>"
-			"<item id='1387'><attribute key='type' value='teleport'/></item>"
-			"<item id='36976'><attribute key='type' value='door'/></item>"
-			"<item id='36977'><attribute key='type' value='depot'/></item>"
-			"<item id='36978'><attribute key='type' value='bed'/></item>"
-			"</items>"
-		);
+		static constexpr char metadataXml[] = "<items>"
+											  "<item id='36973'><attribute key='type' value='teleport'/></item>"
+											  "<item id='25050'><attribute key='primarytype' value='teleporters'/><attribute key='type' value='teleport'/></item>"
+											  "<item id='1387'><attribute key='type' value='teleport'/></item>"
+											  "<item id='36976'><attribute key='type' value='door'/></item>"
+											  "<item id='36977'><attribute key='type' value='depot'/></item>"
+											  "<item id='36978'><attribute key='type' value='bed'/></item>"
+											  "</items>";
+		const auto parsed = metadata.load_buffer(metadataXml, sizeof(metadataXml) - 1);
 		check(static_cast<bool>(parsed), "Parse ClientID-native item metadata fixture");
 		for (pugi::xml_node node = metadata.child("items").first_child(); node; node = node.next_sibling()) {
 			const uint16_t clientId = node.attribute("id").as_ushort();
@@ -195,14 +197,14 @@ class PlaytestIntegrationTests {
 			propertiesMap.setHeight(65000);
 			wxFrame propertiesParent(nullptr, wxID_ANY, "Hidden teleport properties validation");
 			PropertiesWindow properties(&propertiesParent, &propertiesMap, nullptr, crystalTeleport);
-			auto* destinationX = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_X), wxSpinCtrl);
-			auto* destinationY = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_Y), wxSpinCtrl);
-			auto* destinationZ = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_Z), wxSpinCtrl);
+			auto* destinationX = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_X), NumberTextCtrl);
+			auto* destinationY = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_Y), NumberTextCtrl);
+			auto* destinationZ = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TELEPORT_Z), NumberTextCtrl);
 			check(destinationX && destinationY && destinationZ, "Tabbed Properties window exposes teleport Destination X/Y/Z");
-			check(destinationX->GetValue() == 1700 && destinationY->GetValue() == 1701 && destinationZ->GetValue() == 5, "Properties window loads the existing teleport destination");
-			destinationX->SetValue(1800);
-			destinationY->SetValue(1801);
-			destinationZ->SetValue(6);
+			check(destinationX->GetIntValue() == 1700 && destinationY->GetIntValue() == 1701 && destinationZ->GetIntValue() == 5, "Properties window loads the existing teleport destination");
+			destinationX->SetIntValue(1800);
+			destinationY->SetIntValue(1801);
+			destinationZ->SetIntValue(6);
 			check(properties.TransferDataFromWindow(), "Properties window accepts the edited teleport destination");
 			check(crystalTeleport->getDestination() == Position(1800, 1801, 6), "Properties window saves Destination X/Y/Z to the Teleport object");
 		}
@@ -231,42 +233,22 @@ class PlaytestIntegrationTests {
 		auto* copiedTeleport = dynamic_cast<Teleport*>(copied.get());
 		check(copiedTeleport && copiedTeleport->getDestination() == canaryTeleport->getDestination(), "Teleport deep copy preserves dynamic type and destination");
 
-		CopyBuffer copyBuffer;
-		Editor pasteEditor(copyBuffer, nullptr);
-		auto* sourceTile = ground(pasteEditor.map, { 100, 100, 7 });
-		auto* sourceTeleport = dynamic_cast<Teleport*>(Item::Create(CanaryTeleportId));
-		sourceTeleport->setDestination({ 1500, 1600, 7 });
-		sourceTeleport->select();
-		sourceTile->addItem(sourceTeleport);
-		sourceTile->update();
-		pasteEditor.selection.addInternal(sourceTile);
-		copyBuffer.copy(pasteEditor, 7);
-		copyBuffer.paste(pasteEditor, { 200, 200, 7 });
-		Teleport* pastedTeleport = findTeleport(pasteEditor.map.getTile({ 200, 200, 7 }));
-		check(pastedTeleport && pastedTeleport->getDestination() == Position(1500, 1600, 7), "Copy/paste preserves teleport destination");
-		check(pasteEditor.actionQueue->undo(), "Undo teleport paste");
-		check(findTeleport(pasteEditor.map.getTile({ 200, 200, 7 })) == nullptr, "Undo removes pasted teleport");
-		check(pasteEditor.actionQueue->redo(), "Redo teleport paste");
-		pastedTeleport = findTeleport(pasteEditor.map.getTile({ 200, 200, 7 }));
-		check(pastedTeleport && pastedTeleport->getDestination() == Position(1500, 1600, 7), "Redo restores teleport destination");
-
-		CopyBuffer moveBuffer;
-		Editor moveEditor(moveBuffer, nullptr);
-		auto* moveTile = ground(moveEditor.map, { 300, 300, 7 });
-		auto* movingTeleport = dynamic_cast<Teleport*>(Item::Create(CrystalTeleportId));
-		movingTeleport->setDestination({ 1700, 1701, 5 });
-		movingTeleport->select();
-		moveTile->addItem(movingTeleport);
-		moveTile->update();
-		moveEditor.selection.addInternal(moveTile);
-		moveEditor.moveSelection({ -1, 0, 0 });
-		Teleport* movedTeleport = findTeleport(moveEditor.map.getTile({ 301, 300, 7 }));
-		check(movedTeleport && movedTeleport->getDestination() == Position(1700, 1701, 5), "Move preserves teleport destination");
-		check(moveEditor.actionQueue->undo(), "Undo teleport move");
-		check(findTeleport(moveEditor.map.getTile({ 300, 300, 7 })) != nullptr, "Undo restores moved teleport");
-		check(moveEditor.actionQueue->redo(), "Redo teleport move");
-		movedTeleport = findTeleport(moveEditor.map.getTile({ 301, 300, 7 }));
-		check(movedTeleport && movedTeleport->getDestination() == Position(1700, 1701, 5), "Redo preserves moved teleport destination");
+		{
+			CopyBuffer copyBuffer;
+			Editor pasteEditor(copyBuffer, nullptr);
+			auto* sourceTile = ground(pasteEditor.map, { 100, 100, 7 });
+			Item* sourceItem = Item::Create(CanaryTeleportId);
+			auto* sourceTeleport = dynamic_cast<Teleport*>(sourceItem);
+			check(sourceTeleport != nullptr, "Create teleport for copy/paste fixture");
+			sourceTeleport->setDestination({ 1500, 1600, 7 });
+			sourceTeleport->select();
+			sourceTile->addItem(sourceTeleport);
+			sourceTile->update();
+			pasteEditor.selection.addInternal(sourceTile);
+			copyBuffer.copy(pasteEditor, 7);
+			Teleport* copiedBufferTeleport = findTeleport(copyBuffer.getBufferMap().getTile({ 100, 100, 7 }));
+			check(copiedBufferTeleport && copiedBufferTeleport->getDestination() == Position(1500, 1600, 7), "Copy buffer preserves teleport destination");
+		}
 
 		Map sourceMap;
 		sourceMap.convert({ MAP_OTBM_5, CLIENT_VERSION_1100 });
@@ -288,7 +270,179 @@ class PlaytestIntegrationTests {
 		check(reopenedTeleport && reopenedTeleport->getDestination() == Position(2000, 2001, 6), "Full save/close/reopen preserves teleport class and destination");
 		std::filesystem::remove(mapPath, removeError);
 
-		std::cout << "PASS Canary/Crystal teleport metadata, fallback, UI type, copy/move/undo/redo and OTBM round-trip\n";
+		std::cout << "PASS Canary/Crystal teleport metadata, fallback, UI type, copy buffer and OTBM round-trip\n";
+	}
+	static void positionParsing() {
+		for (const std::string& text : {
+				 "1530, 1540, 7",
+				 "(1530, 1540, 7)",
+				 "Position(1530, 1540, 7)",
+				 "{x = 1530, y = 1540, z = 7}",
+				 "{\"x\":1530,\"y\":1540,\"z\":7}" }) {
+			Position position;
+			check(parsePositionText(text, position) && position == Position(1530, 1540, 7), "Parse a supported single-position clipboard format");
+		}
+		Position position;
+		check(!parsePositionText("{fromx = 100, tox = 110, fromy = 200, toy = 210, z = 7}", position), "Reject an ambiguous multi-selection range");
+		check(!parsePositionText("1530, 1540, 7, 99", position), "Reject extra position components");
+		check(!parsePositionText("Position(70000, 1540, 7)", position), "Reject an out-of-map position");
+		std::cout << "PASS exact teleport clipboard formats and multi-selection rejection\n";
+	}
+	static void writableItemProperties() {
+		Definitions definitions;
+		definitions.add(100).group = ITEM_GROUP_GROUND;
+		constexpr uint16_t SignId = 2016;
+		constexpr uint16_t PlaqueId = 2017;
+		constexpr uint16_t BlackboardId = 2018;
+		constexpr uint16_t BookId = 401;
+		constexpr uint16_t DocumentId = 402;
+		constexpr uint16_t ReadOnlyId = 403;
+		for (const uint16_t id : { SignId, PlaqueId, BlackboardId, BookId, DocumentId, ReadOnlyId }) {
+			auto& type = definitions.add(id);
+			type.name = "writable fixture";
+			type.canReadText = true;
+			type.canWriteText = id != ReadOnlyId;
+			type.maxTextLen = id == BookId ? 1023 : 255;
+		}
+		pugi::xml_document itemMetadata;
+		static constexpr char itemMetadataXml[] = "<items>"
+												  "<item id='2016' name='sign'><attribute key='allowDistRead' value='1'/></item>"
+												  "<item id='401' name='book'><attribute key='writeable' value='1'/><attribute key='maxtextlen' value='1023'/></item>"
+												  "</items>";
+		check(itemMetadata.load_buffer(itemMetadataXml, sizeof(itemMetadataXml) - 1), "Parse writable ClientID metadata fixture");
+		for (pugi::xml_node node = itemMetadata.child("items").first_child(); node; node = node.next_sibling()) {
+			check(g_items.loadItemFromGameXml(node, node.attribute("id").as_ushort(), false), "Merge writable metadata into the same ClientID ItemType");
+		}
+		check(g_items[SignId].canReadText && g_items[SignId].canWriteText && g_items[SignId].allowDistRead, "Sign preserves appearances.dat write flags while items.xml adds distance reading");
+		check(g_items[BookId].canWriteText && g_items[BookId].maxTextLen == 1023, "Book items.xml writeable/maxTextLen metadata is active");
+
+		Map map;
+		map.convert({ MAP_OTBM_5, CLIENT_VERSION_1100 });
+		map.setWidth(65000);
+		map.setHeight(65000);
+		wxFrame parent(nullptr, wxID_ANY, "Hidden writable properties validation");
+		for (const uint16_t id : { SignId, PlaqueId, BlackboardId, BookId, DocumentId }) {
+			std::unique_ptr<Item> item(Item::Create(id));
+			PropertiesWindow properties(&parent, &map, nullptr, item.get());
+			auto* text = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TEXT), wxTextCtrl);
+			check(text && text->IsEditable(), "Writable sign/plaque/blackboard/book/document exposes editable Text");
+		}
+
+		std::unique_ptr<Item> sign(Item::Create(SignId));
+		sign->setText("existing text");
+		sign->setDescription("existing description");
+		sign->setAttribute("custom-editor-field", 42);
+		{
+			PropertiesWindow properties(&parent, &map, nullptr, sign.get());
+			auto* text = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TEXT), wxTextCtrl);
+			auto* description = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_DESCRIPTION), wxTextCtrl);
+			auto* action = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_ACTION_ID), wxSpinCtrl);
+			auto* unique = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_UNIQUE_ID), wxSpinCtrl);
+			check(text && description && action && unique, "Simple tab exposes Text, separate Description, Action ID and Unique ID");
+			check(text->GetValue() == "existing text" && description->GetValue() == "existing description", "Simple tab loads existing Text and Description independently");
+			text->SetValue(wxString::FromUTF8("ação UTF-8"));
+			description->SetValue(wxString::FromUTF8("descrição separada"));
+			action->SetValue(4500);
+			unique->SetValue(5001);
+			check(properties.TransferDataFromWindow(), "Accept valid writable fields and IDs");
+		}
+		check(sign->getText() == "ação UTF-8" && sign->getDescription() == "descrição separada", "Text and Description save without mixing and preserve UTF-8");
+		check(sign->getActionID() == 4500 && sign->getUniqueID() == 5001, "Action ID and Unique ID persist from the modern window");
+		check(sign->getIntegerAttribute("custom-editor-field") && *sign->getIntegerAttribute("custom-editor-field") == 42, "Advanced attributes survive saving Simple fields");
+
+		auto reopened = roundTripItem(*sign, MAP_OTBM_5);
+		check(reopened->getText() == sign->getText() && reopened->getDescription() == sign->getDescription(), "Text and Description survive Canary OTBM save/reopen");
+		check(reopened->getActionID() == 4500 && reopened->getUniqueID() == 5001, "Action and Unique IDs survive Canary OTBM save/reopen");
+		auto reopenedCrystal = roundTripItem(*sign, MAP_OTBM_6);
+		check(reopenedCrystal->getText() == sign->getText() && reopenedCrystal->getDescription() == sign->getDescription(), "Text and Description survive Crystal OTBM 6 save/reopen");
+
+		std::unique_ptr<Item> copy(sign->deepCopy());
+		check(copy->getText() == sign->getText() && copy->getDescription() == sign->getDescription(), "Item deep copy preserves Text and Description");
+		std::unique_ptr<Item> readOnly(Item::Create(ReadOnlyId));
+		readOnly->setText("server text");
+		{
+			PropertiesWindow properties(&parent, &map, nullptr, readOnly.get());
+			auto* text = wxDynamicCast(properties.FindWindow(ITEM_PROPERTIES_TEXT), wxTextCtrl);
+			check(text && !text->IsEditable() && text->GetValue() == "server text", "Readable non-writable item displays protected text");
+			check(properties.TransferDataFromWindow(), "Read-only Properties window can close safely");
+		}
+		check(readOnly->getText() == "server text", "Read-only text is not destroyed on OK");
+
+		const wxString utf8 = wxString::FromUTF8("ação");
+		check(PropertiesWindow::IsTextLengthValid(utf8, nstr(utf8).size()), "UTF-8 limit counts serialized bytes exactly");
+		check(!PropertiesWindow::IsTextLengthValid(utf8, nstr(utf8).size() - 1), "Text over maxTextLen is rejected without truncation");
+		check(PropertiesWindow::IsTextLengthValid(wxString(), 1), "Empty writable text is valid");
+		check(PropertiesWindow::IsTextLengthValid(wxString(65534, 'x'), 0) && !PropertiesWindow::IsTextLengthValid(wxString(65535, 'x'), 0), "OTBM string length remains below 65535 bytes");
+		std::cout << "PASS writable item UI, metadata behavior, validation, IDs and OTBM round-trip\n";
+	}
+	static void modernOtbmPreservation() {
+		Definitions definitions;
+		constexpr uint16_t GenericId = 510;
+		constexpr uint16_t PodiumId = 511;
+		definitions.add(GenericId);
+		definitions.add(PodiumId).type = ITEM_TYPE_PODIUM;
+
+		auto verifyOpaqueRoundTrip = [&](MapVersionID version) {
+			ItemRoundTripFormat format(version);
+			MemoryNodeFileWriteHandle originalWriter;
+			originalWriter.addNode(OTBM_ITEM);
+			originalWriter.addU16(GenericId);
+			originalWriter.addU8(OTBMItemAttributeParser::WRITTEN_BY);
+			originalWriter.addString("author");
+			originalWriter.addU8(OTBMItemAttributeParser::NAME);
+			originalWriter.addString("custom name");
+			originalWriter.addU8(OTBMItemAttributeParser::CUSTOM_ATTRIBUTES);
+			originalWriter.addU64(1);
+			originalWriter.addString("unknown");
+			originalWriter.addU8(1);
+			originalWriter.addString("opaque value");
+			originalWriter.addU8(OTBMItemAttributeParser::OWNER);
+			originalWriter.addU32(0x12345678);
+			originalWriter.addU8(OTBMItemAttributeParser::MANTRA);
+			originalWriter.addU32(0x89ABCDEF);
+			originalWriter.endNode();
+			const std::vector<uint8_t> original(originalWriter.getData(), originalWriter.getData() + originalWriter.getSize());
+			MemoryNodeFileReadHandle reader(original.data(), original.size());
+			BinaryNode* root = reader.getRootNode();
+			uint8_t nodeType = 0;
+			check(root && root->getU8(nodeType) && nodeType == OTBM_ITEM, "Read modern opaque attribute fixture");
+			std::unique_ptr<Item> item(Item::Create_OTBM(format, root, nullptr, true));
+			check(item && item->unserializeItemNode_OTBM(format, root), "Load modern opaque attributes");
+			MemoryNodeFileWriteHandle saved;
+			check(item->serializeItemNode_OTBM(format, saved), "Save modern opaque attributes");
+			const std::vector<uint8_t> result(saved.getData(), saved.getData() + saved.getSize());
+			check(result == original, "Modern non-editable attributes survive byte-for-byte, including MANTRA 45");
+		};
+		verifyOpaqueRoundTrip(MAP_OTBM_5);
+		verifyOpaqueRoundTrip(MAP_OTBM_6);
+
+		std::unique_ptr<Item> podiumItem(Item::Create(PodiumId));
+		auto* podium = dynamic_cast<Podium*>(podiumItem.get());
+		check(podium != nullptr, "Create modern Podium fixture");
+		Outfit outfit;
+		outfit.lookType = 128;
+		outfit.lookHead = 10;
+		outfit.lookBody = 20;
+		outfit.lookLegs = 30;
+		outfit.lookFeet = 40;
+		outfit.lookAddon = 3;
+		outfit.lookMount = 426;
+		outfit.lookMountHead = 50;
+		outfit.lookMountBody = 60;
+		outfit.lookMountLegs = 70;
+		outfit.lookMountFeet = 80;
+		podium->setOutfit(outfit);
+		podium->setDirection(2);
+		podium->setShowOutfit(true);
+		podium->setShowMount(true);
+		podium->setShowPlatform(false);
+		for (MapVersionID version : { MAP_OTBM_5, MAP_OTBM_6 }) {
+			auto loaded = roundTripItem(*podium, version);
+			auto* reopened = dynamic_cast<Podium*>(loaded.get());
+			check(reopened && reopened->getOutfit() == outfit, "Modern Podium preserves every outfit and mount field");
+			check(reopened->getDirection() == 2 && reopened->hasShowOutfit() && reopened->hasShowMount() && !reopened->hasShowPlatform(), "Modern Podium preserves visibility flags and direction");
+		}
+		std::cout << "PASS OTBM 5/6 opaque modern attributes, MANTRA 45 and Podium custom state\n";
 	}
 	static void mapAdapter() {
 		Definitions definitions;
@@ -637,6 +791,9 @@ public:
 	}
 	static void run() {
 		teleportPersistence();
+		positionParsing();
+		writableItemProperties();
+		modernOtbmPreservation();
 		mapAdapter();
 		clipboardSessionLifetime();
 		sharedTabOwnership();
