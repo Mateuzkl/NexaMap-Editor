@@ -23,6 +23,7 @@
 
 #include <zlib.h>
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <new>
@@ -44,6 +45,7 @@
 #include "tile.h"
 #include "item.h"
 #include "complexitem.h"
+#include "otbm_item_attribute_parser.h"
 #include "town.h"
 #include "wall_brush.h"
 
@@ -84,122 +86,95 @@ namespace {
 		}
 	}
 
-	struct SpecialItemAttributeHints {
-		bool hasTeleportDestination = false;
-		bool hasHouseDoorId = false;
-		bool hasDepotId = false;
-	};
-
-	bool skipAttributeMapValue(BinaryNode* stream) {
-		uint8_t type = ItemAttribute::NONE;
-		if (!stream->getU8(type)) {
-			return false;
-		}
-		switch (static_cast<ItemAttribute::Type>(type)) {
-			case ItemAttribute::STRING: {
-				uint32_t length = 0;
-				return stream->getU32(length) && stream->skip(length);
-			}
-			case ItemAttribute::INTEGER:
-			case ItemAttribute::FLOAT:
-				return stream->skip(4);
-			case ItemAttribute::DOUBLE:
-				return stream->skip(8);
-			case ItemAttribute::BOOLEAN:
-				return stream->skip(1);
-			case ItemAttribute::NONE:
-				return true;
-			default:
-				return false;
-		}
+	OTBMItemAttributeParser::SpecialItemAttributeHints inspectSpecialItemAttributes(BinaryNode* stream, const MapVersion& version, const ItemType& itemType) {
+		const bool hasOtbm1Subtype = version.otbm == MAP_OTBM_1 && (itemType.stackable || itemType.isSplash() || itemType.isFluidContainer());
+		return OTBMItemAttributeParser::inspect(stream, version.otbm >= MAP_OTBM_5, hasOtbm1Subtype, persistedItemCountSize());
 	}
 
-	bool skipAttributeMap(BinaryNode* stream) {
-		uint16_t count = 0;
-		if (!stream->getU16(count)) {
+	using CanaryCustomEntries = std::vector<std::pair<std::string, std::string>>;
+
+	template <typename T>
+	bool readPayloadValue(const std::string& payload, size_t& offset, T& value) {
+		if (offset + sizeof(T) > payload.size()) {
 			return false;
 		}
-		for (uint16_t index = 0; index < count; ++index) {
-			std::string key;
-			if (!stream->getString(key) || !skipAttributeMapValue(stream)) {
-				return false;
-			}
-		}
+		std::memcpy(&value, payload.data() + offset, sizeof(T));
+		offset += sizeof(T);
 		return true;
 	}
 
-	SpecialItemAttributeHints inspectSpecialItemAttributes(BinaryNode* stream, const MapVersion& version, const ItemType& itemType) {
-		SpecialItemAttributeHints hints;
-		const size_t originalOffset = stream->tell();
-
-		// OTBM 1 stores the subtype immediately after the ID instead of as an
-		// attribute. Newer formats, including 8.60, start attributes here.
-		if (version.otbm == MAP_OTBM_1 && (itemType.stackable || itemType.isSplash() || itemType.isFluidContainer())) {
-			stream->skip(persistedItemCountSize());
+	bool parseCanaryCustomPayload(const std::string& payload, CanaryCustomEntries& entries) {
+		size_t offset = 0;
+		uint64_t count = 0;
+		if (!readPayloadValue(payload, offset, count) || count > 1'000'000) {
+			return false;
 		}
-
-		uint8_t rawAttribute = 0;
-		while (stream->getU8(rawAttribute)) {
-			const auto attribute = static_cast<OTBM_ItemAttribute>(rawAttribute);
-			bool valid = true;
-			switch (attribute) {
-				case OTBM_ATTR_TELE_DEST:
-					hints.hasTeleportDestination = true;
-					valid = stream->skip(5);
-					break;
-				case OTBM_ATTR_HOUSEDOORID:
-					hints.hasHouseDoorId = true;
-					valid = stream->skip(1);
-					break;
-				case OTBM_ATTR_DEPOT_ID:
-					hints.hasDepotId = true;
-					valid = stream->skip(2);
-					break;
-				case OTBM_ATTR_COUNT:
-					valid = stream->skip(persistedItemCountSize());
-					break;
-				case OTBM_ATTR_RUNE_CHARGES:
-				case OTBM_ATTR_DECAYING_STATE:
-				case OTBM_ATTR_TIER:
-					valid = stream->skip(1);
-					break;
-				case OTBM_ATTR_ACTION_ID:
-				case OTBM_ATTR_UNIQUE_ID:
-				case OTBM_ATTR_CHARGES:
-					valid = stream->skip(2);
-					break;
-				case OTBM_ATTR_DURATION:
-				case OTBM_ATTR_WRITTENDATE:
-				case OTBM_ATTR_SLEEPERGUID:
-				case OTBM_ATTR_SLEEPSTART:
-					valid = stream->skip(4);
-					break;
-				case OTBM_ATTR_TEXT:
-				case OTBM_ATTR_DESC:
-				case OTBM_ATTR_WRITTENBY: {
-					// This pass only looks for the attributes that decide the item's
-					// dynamic type, so the text is skipped rather than materialised.
-					uint16_t length = 0;
-					valid = stream->getU16(length) && stream->skip(length);
-					break;
+		for (uint64_t index = 0; index < count; ++index) {
+			uint16_t keyLength = 0;
+			if (!readPayloadValue(payload, offset, keyLength) || offset + keyLength > payload.size()) {
+				return false;
+			}
+			std::string key(payload.data() + offset, keyLength);
+			offset += keyLength;
+			const size_t encodedStart = offset;
+			uint8_t type = 0;
+			if (!readPayloadValue(payload, offset, type)) {
+				return false;
+			}
+			size_t valueSize = 0;
+			if (type == 1) {
+				uint16_t stringLength = 0;
+				if (!readPayloadValue(payload, offset, stringLength)) {
+					return false;
 				}
-				case OTBM_ATTR_PODIUMOUTFIT:
-					valid = stream->skip(15);
-					break;
-				case OTBM_ATTR_ATTRIBUTE_MAP:
-					valid = skipAttributeMap(stream);
-					break;
-				default:
-					valid = false;
-					break;
+				valueSize = stringLength;
+			} else if (type == 2 || type == 3) {
+				valueSize = 8;
+			} else if (type == 4) {
+				valueSize = 1;
+			} else {
+				return false;
 			}
-			if (!valid) {
-				break;
+			if (offset + valueSize > payload.size()) {
+				return false;
+			}
+			offset += valueSize;
+			entries.emplace_back(std::move(key), payload.substr(encodedStart, offset - encodedStart));
+		}
+		return offset == payload.size();
+	}
+
+	bool customInteger(const std::string& encoded, int64_t& value) {
+		if (encoded.size() == 9 && static_cast<uint8_t>(encoded[0]) == 2) {
+			std::memcpy(&value, encoded.data() + 1, sizeof(value));
+			return true;
+		}
+		if (encoded.size() == 2 && static_cast<uint8_t>(encoded[0]) == 4) {
+			value = encoded[1] != 0;
+			return true;
+		}
+		return false;
+	}
+
+	std::string encodeCustomInteger(int64_t value) {
+		std::string encoded(1 + sizeof(value), '\0');
+		encoded[0] = 2;
+		std::memcpy(encoded.data() + 1, &value, sizeof(value));
+		return encoded;
+	}
+
+	void setCustomEntry(CanaryCustomEntries& entries, const std::string& key, int64_t value) {
+		for (auto& entry : entries) {
+			if (entry.first == key) {
+				entry.second = encodeCustomInteger(value);
+				return;
 			}
 		}
+		entries.emplace_back(key, encodeCustomInteger(value));
+	}
 
-		stream->seek(originalOffset);
-		return hints;
+	void eraseCustomEntry(CanaryCustomEntries& entries, const std::string& key) {
+		entries.erase(std::remove_if(entries.begin(), entries.end(), [&](const auto& entry) { return entry.first == key; }), entries.end());
 	}
 }
 
@@ -242,18 +217,24 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 		*itemType = &iType;
 	}
 
-	// When conversion is active (inspectSpecialAttributes == true), do not exclude
-	// ordinary classifications (ground, border, bottom) from special attribute inspection.
-	// Converted items carrying authoritative teleport destination, house door ID, or
-	// depot ID must instantiate their corresponding dynamic derived types (Teleport, Door, Depot).
+	// Inspect ordinary classifications too when full item attributes are available.
+	// In Canary/Crystal, inspect even an existing special metadata classification:
+	// the persisted OTBM evidence is authoritative if the two disagree. Preserve
+	// the legacy TFS selection rule unchanged.
 	const bool canHaveSpecialAttributes = inspectSpecialAttributes
-		&& !iType.isTeleport()
-		&& !iType.isDoor()
-		&& !iType.isDepot();
+		&& (maphandle.version.otbm >= MAP_OTBM_5
+			|| (!iType.isTeleport() && !iType.isDoor() && !iType.isDepot()));
 
-	const SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
+	const OTBMItemAttributeParser::SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
 		? inspectSpecialItemAttributes(stream, maphandle.version, iType)
-		: SpecialItemAttributeHints {};
+		: OTBMItemAttributeParser::SpecialItemAttributeHints {};
+	if (specialAttributes.malformed) {
+		wxLogWarning(
+			"OTBM item %u contains a truncated or unsupported attribute %u while detecting its logical type.",
+			static_cast<unsigned int>(_id),
+			static_cast<unsigned int>(specialAttributes.malformedAttribute)
+		);
+	}
 
 	uint16_t _count = 0;
 
@@ -264,23 +245,51 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 			}
 		}
 	}
-	// Converted IDs can point at a plain ItemType in the active items.otb. The
-	// persisted OTBM attributes are authoritative: retain the dynamic type so a
+	// Metadata can point at a plain or different ItemType. Persisted Canary/Crystal
+	// OTBM attributes are authoritative: retain the dynamic type so a
 	// reopen/save cycle cannot discard Destination, House Door ID, or the
 	// Depot/Town association.
-	if (specialAttributes.hasTeleportDestination) {
+	if (!specialAttributes.malformed && specialAttributes.hasTeleportDestination) {
 		return newd Teleport(_id);
 	}
-	if (specialAttributes.hasHouseDoorId) {
+	if (!specialAttributes.malformed && specialAttributes.hasHouseDoorId) {
 		return newd Door(_id);
 	}
-	if (specialAttributes.hasDepotId) {
+	if (!specialAttributes.malformed && specialAttributes.hasDepotId) {
 		return newd Depot(_id);
 	}
 	return Item::Create(_id, _count);
 }
 
 bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute attr, BinaryNode* stream) {
+	const uint8_t rawAttribute = static_cast<uint8_t>(attr);
+	if (maphandle.version.otbm >= MAP_OTBM_5) {
+		if (rawAttribute == OTBMItemAttributeParser::CANARY_TIER) {
+			uint8_t tier = 0;
+			if (!stream->getU8(tier)) {
+				return false;
+			}
+			setTier(static_cast<uint16_t>(tier));
+			return true;
+		}
+
+		// OTBM 5/6 uses the current Canary/Crystal attribute layout. These
+		// fields either do not have an editable NexaMap representation or use
+		// an ID/size that conflicts with the legacy TFS layout. Consume them
+		// with the modern schema so later authoritative type attributes remain
+		// aligned and visible.
+		const bool isCanaryOnlyOrConflicting = rawAttribute == OTBMItemAttributeParser::STORE
+			|| rawAttribute == OTBMItemAttributeParser::WRITTEN_DATE
+			|| rawAttribute == OTBMItemAttributeParser::WRITTEN_BY
+			|| (rawAttribute > OTBMItemAttributeParser::CONTAINER_ITEMS && rawAttribute <= OTBMItemAttributeParser::MANTRA);
+		if (isCanaryOnlyOrConflicting) {
+			return preserveModernAttribute(stream, rawAttribute);
+		}
+		if (rawAttribute == OTBMItemAttributeParser::CONTAINER_ITEMS) {
+			return false;
+		}
+	}
+
 	switch (attr) {
 		case OTBM_ATTR_COUNT: {
 			uint16_t subtype;
@@ -385,6 +394,31 @@ bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute att
 	return true;
 }
 
+bool Item::preserveModernAttribute(BinaryNode* stream, uint8_t attribute) {
+	const size_t payloadStart = stream->tell();
+	OTBMItemAttributeParser::SpecialItemAttributeHints ignoredHints;
+	if (!OTBMItemAttributeParser::skipCanaryAttribute(stream, attribute, persistedItemCountSize(), ignoredHints)) {
+		return false;
+	}
+	const size_t payloadEnd = stream->tell();
+	if (!stream->seek(payloadStart)) {
+		return false;
+	}
+	std::string payload;
+	if (!stream->getRAW(payload, payloadEnd - payloadStart) || !stream->seek(payloadEnd)) {
+		return false;
+	}
+	preservedModernAttributes.push_back({ attribute, std::move(payload) });
+	return true;
+}
+
+void Item::serializePreservedModernAttributes(NodeFileWriteHandle& stream) const {
+	for (const auto& attribute : preservedModernAttributes) {
+		stream.addU8(attribute.id);
+		stream.addRAW(attribute.payload);
+	}
+}
+
 bool Item::unserializeAttributes_OTBM(const IOMap& maphandle, BinaryNode* stream) {
 	uint8_t attribute;
 	while (stream->getU8(attribute)) {
@@ -419,7 +453,7 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 		stream.addU8(getSubtype());
 	}
 
-	if (maphandle.version.otbm == MAP_OTBM_4 || maphandle.version.otbm > MAP_OTBM_5) {
+	if (maphandle.version.otbm == MAP_OTBM_4) {
 		if (attributes && !attributes->empty()) {
 			stream.addU8(OTBM_ATTR_ATTRIBUTE_MAP);
 			serializeAttributeMap(maphandle, stream);
@@ -456,9 +490,12 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 
 		uint16_t tier = getTier();
 		if (tier > 0) {
-			stream.addU8(OTBM_ATTR_TIER);
+			stream.addU8(maphandle.version.otbm >= MAP_OTBM_5 ? OTBMItemAttributeParser::CANARY_TIER : OTBM_ATTR_TIER);
 			stream.addU8(static_cast<uint8_t>(tier));
 		}
+	}
+	if (maphandle.version.otbm >= MAP_OTBM_5) {
+		serializePreservedModernAttributes(stream);
 	}
 }
 
@@ -658,7 +695,14 @@ bool Container::serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHand
 // Podium
 
 bool Podium::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute attribute, BinaryNode* stream) {
-	if (OTBM_ATTR_PODIUMOUTFIT == attribute) {
+	if (maphandle.version.otbm >= MAP_OTBM_5 && static_cast<uint8_t>(attribute) == OTBMItemAttributeParser::CUSTOM) {
+		if (!Item::readItemAttribute_OTBM(maphandle, attribute, stream)) {
+			return false;
+		}
+		applyModernCustomAttributes(preservedModernAttributes.back().payload);
+		return true;
+	}
+	if (maphandle.version.otbm < MAP_OTBM_5 && OTBM_ATTR_PODIUMOUTFIT == attribute) {
 		uint8_t flags;
 		uint8_t direction;
 
@@ -713,8 +757,125 @@ bool Podium::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute a
 	}
 }
 
+void Podium::applyModernCustomAttributes(const std::string& payload) {
+	CanaryCustomEntries entries;
+	if (!parseCanaryCustomPayload(payload, entries)) {
+		return;
+	}
+	bool hasPodiumField = false;
+	bool hasOutfit = false;
+	bool hasMount = false;
+	for (const auto& [key, encoded] : entries) {
+		int64_t value = 0;
+		if (!customInteger(encoded, value)) {
+			continue;
+		}
+		if (key == "PodiumVisible") {
+			showPlatform = value != 0;
+			hasPodiumField = true;
+		} else if (key == "LookDirection") {
+			direction = static_cast<uint8_t>(value);
+			hasPodiumField = true;
+		} else if (key == "LookType") {
+			outfit.lookType = static_cast<int>(value);
+			hasOutfit = hasPodiumField = true;
+		} else if (key == "LookHead") {
+			outfit.lookHead = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookBody") {
+			outfit.lookBody = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookLegs") {
+			outfit.lookLegs = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookFeet") {
+			outfit.lookFeet = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookAddons") {
+			outfit.lookAddon = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMount") {
+			outfit.lookMount = static_cast<int>(value);
+			hasMount = hasPodiumField = true;
+		} else if (key == "LookMountHead") {
+			outfit.lookMountHead = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMountBody") {
+			outfit.lookMountBody = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMountLegs") {
+			outfit.lookMountLegs = static_cast<int>(value);
+			hasPodiumField = true;
+		} else if (key == "LookMountFeet") {
+			outfit.lookMountFeet = static_cast<int>(value);
+			hasPodiumField = true;
+		}
+	}
+	if (hasPodiumField) {
+		showOutfit = hasOutfit;
+		showMount = hasMount;
+	}
+}
+
+void Podium::serializePreservedModernAttributes(NodeFileWriteHandle& stream) const {
+	CanaryCustomEntries entries;
+	for (const auto& attribute : preservedModernAttributes) {
+		if (attribute.id == OTBMItemAttributeParser::CUSTOM) {
+			CanaryCustomEntries block;
+			if (parseCanaryCustomPayload(attribute.payload, block)) {
+				for (auto& entry : block) {
+					eraseCustomEntry(entries, entry.first);
+					entries.push_back(std::move(entry));
+				}
+			}
+		} else {
+			stream.addU8(attribute.id);
+			stream.addRAW(attribute.payload);
+		}
+	}
+
+	const char* outfitKeys[] = { "LookType", "LookHead", "LookBody", "LookLegs", "LookFeet", "LookAddons" };
+	const char* mountKeys[] = { "LookMount", "LookMountHead", "LookMountBody", "LookMountLegs", "LookMountFeet" };
+	for (const char* key : outfitKeys) {
+		eraseCustomEntry(entries, key);
+	}
+	for (const char* key : mountKeys) {
+		eraseCustomEntry(entries, key);
+	}
+	setCustomEntry(entries, "PodiumVisible", showPlatform ? 1 : 0);
+	setCustomEntry(entries, "LookDirection", direction);
+	if (showOutfit) {
+		setCustomEntry(entries, "LookType", outfit.lookType);
+		setCustomEntry(entries, "LookHead", outfit.lookHead);
+		setCustomEntry(entries, "LookBody", outfit.lookBody);
+		setCustomEntry(entries, "LookLegs", outfit.lookLegs);
+		setCustomEntry(entries, "LookFeet", outfit.lookFeet);
+		setCustomEntry(entries, "LookAddons", outfit.lookAddon);
+	}
+	if (showMount) {
+		setCustomEntry(entries, "LookMount", outfit.lookMount);
+		setCustomEntry(entries, "LookMountHead", outfit.lookMountHead);
+		setCustomEntry(entries, "LookMountBody", outfit.lookMountBody);
+		setCustomEntry(entries, "LookMountLegs", outfit.lookMountLegs);
+		setCustomEntry(entries, "LookMountFeet", outfit.lookMountFeet);
+	}
+
+	stream.addU8(OTBMItemAttributeParser::CUSTOM);
+	stream.addU64(entries.size());
+	for (const auto& [key, encoded] : entries) {
+		stream.addString(key);
+		stream.addRAW(encoded);
+	}
+}
+
 void Podium::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHandle& stream) const {
 	Item::serializeItemAttributes_OTBM(maphandle, stream);
+	if (maphandle.version.otbm >= MAP_OTBM_5) {
+		// Canary/Crystal reserves attribute 40 for tier. Its podium state is
+		// represented by custom attributes, so writing the legacy 15-byte
+		// payload here would corrupt every following attribute in the item.
+		return;
+	}
 
 	uint8_t flags = PODIUM_SHOW_OUTFIT * static_cast<uint8_t>(showOutfit) + PODIUM_SHOW_MOUNT * static_cast<uint8_t>(showMount) + PODIUM_SHOW_PLATFORM * static_cast<uint8_t>(showPlatform);
 

@@ -188,6 +188,8 @@ public:
 	bool readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute attr, BinaryNode* node) override;
 
 protected:
+	void serializePreservedModernAttributes(NodeFileWriteHandle& stream) const override;
+	void applyModernCustomAttributes(const std::string& payload);
 	Outfit outfit;
 	uint8_t direction;
 	bool showOutfit = true;

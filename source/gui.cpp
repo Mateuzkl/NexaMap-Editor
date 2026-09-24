@@ -922,7 +922,10 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	const ServerWorkspace& workspace = g_workspace.getServer();
 	if (workspace.hasItemsXml()) {
 		const wxString serverItemsXml = WorkspacePath(workspace.itemsXmlPath);
-		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, true)) {
+		// Canary/Crystal items.xml is ClientID-native, just like appearances.dat
+		// and OTBM 5/6. Converting these IDs through the legacy ServerID mapping
+		// attaches logical types (notably teleport) to the wrong appearance.
+		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, false)) {
 			warnings.push_back("Couldn't enrich Canary/Crystal items from the server items.xml: " + supplementalError);
 		}
 	} else {
@@ -2207,6 +2210,9 @@ bool GUI::CanPaste() const {
 }
 
 void GUI::CaptureCrossClientCopy(CopyBuffer& source) {
+	if (!root) {
+		return;
+	}
 	if (!crossClientClipboard) {
 		crossClientClipboard = std::make_unique<CrossClientClipboard>();
 	}
@@ -2347,7 +2353,9 @@ void GUI::ChangeFloor(int new_floor) {
 }
 
 void GUI::SetStatusText(const wxString& text) {
-	g_gui.root->SetStatusText(text, 0);
+	if (g_gui.root) {
+		g_gui.root->SetStatusText(text, 0);
+	}
 }
 
 void GUI::SetTitle(wxString title) {
