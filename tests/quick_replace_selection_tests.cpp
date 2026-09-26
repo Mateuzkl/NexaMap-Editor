@@ -233,6 +233,37 @@ namespace {
 		std::cout << "PASS automatic neighboring borders with atomic undo/redo\n";
 	}
 
+	void RemoveSelectedCategoryIsAtomic() {
+		Definitions definitions;
+		definitions.Add(100, "Floor and stacked fixture").group = ITEM_GROUP_GROUND;
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		const Position firstPosition(150, 150, 7);
+		const Position secondPosition(151, 150, 7);
+		Tile* first = AddTile(editor.map, firstPosition, 100);
+		Tile* second = AddTile(editor.map, secondPosition, 100);
+		first->items.push_back(Item::Create(100));
+		second->items.push_back(Item::Create(100));
+
+		ReplacementRule rule;
+		rule.sourceServerId = ServerItemId(100);
+		rule.targets.push_back(ReplacementTarget::ForTrash(100));
+		ReplaceExecutionOptions options;
+		options.dryRun = false;
+		options.includeContainerContents = false;
+		options.matchFilter = [](const Tile& tile, const Item& item) { return ClassifyPlacedItem(tile, item) == QuickReplaceCategory::Item; };
+		const ReplaceExecutionResult result = ReplaceEngine::Run(editor, { first, second }, { rule }, options);
+		QuickReplaceCheck(result.committed && result.deletions == 2 && result.changedTiles == 2, "Quick Remove did not remove every matching selected item");
+		QuickReplaceCheck(editor.map.getTile(firstPosition)->ground && editor.map.getTile(secondPosition)->ground, "Quick Remove deleted a same-ID item from the wrong category");
+		QuickReplaceCheck(!HasItem(*editor.map.getTile(firstPosition), 100) && !HasItem(*editor.map.getTile(secondPosition), 100), "Quick Remove left a matching visible item behind");
+		QuickReplaceCheck(editor.actionQueue->undo(), "Quick Remove undo failed");
+		QuickReplaceCheck(HasItem(*editor.map.getTile(firstPosition), 100) && HasItem(*editor.map.getTile(secondPosition), 100), "One undo did not restore all removed items");
+		QuickReplaceCheck(editor.actionQueue->redo(), "Quick Remove redo failed");
+		QuickReplaceCheck(!HasItem(*editor.map.getTile(firstPosition), 100) && !HasItem(*editor.map.getTile(secondPosition), 100), "One redo did not remove all matching items again");
+		std::cout << "PASS category-aware removal with atomic undo/redo\n";
+	}
+
 	void CompleteDoodadBrushIsAtomic() {
 		Definitions definitions;
 		definitions.Add(100, "Floor").group = ITEM_GROUP_GROUND;
@@ -333,6 +364,7 @@ void RunQuickReplaceSelectionTests() {
 	CandidateCollection();
 	ExactSelectionVisibleOnlyAndUndo();
 	AutomaticBordersAreAtomic();
+	RemoveSelectedCategoryIsAtomic();
 	CompleteDoodadBrushIsAtomic();
 	BulkUndoAndInvalidTargetSafety();
 }

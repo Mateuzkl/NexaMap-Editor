@@ -314,8 +314,13 @@ QuickReplaceSelectionDialog::QuickReplaceSelectionDialog(MapCanvas* parent, Edit
 	previews->Add(CreatePreviewCard(replacementParent, "AFTER", afterSprite_, afterDetails_), 1, wxEXPAND);
 	replacementBox->Add(previews, 1, wxEXPAND | wxALL, FromDIP(6));
 
+	auto* targetButtons = newd wxBoxSizer(wxHORIZONTAL);
 	chooseButton_ = newd wxButton(replacementParent, wxID_ANY, "Choose Replacement...");
-	replacementBox->Add(chooseButton_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+	removeButton_ = newd wxButton(replacementParent, wxID_ANY, "Remove Selected Item");
+	removeButton_->SetToolTip("Remove every matching occurrence of the selected item and category from the captured area.");
+	targetButtons->Add(chooseButton_, 0, wxRIGHT, FromDIP(6));
+	targetButtons->Add(removeButton_, 0);
+	replacementBox->Add(targetButtons, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 	sameCategoryCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Keep same item category");
 	sameCategoryCheck_->SetValue(true);
 	replacementBox->Add(sameCategoryCheck_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
@@ -344,6 +349,7 @@ QuickReplaceSelectionDialog::QuickReplaceSelectionDialog(MapCanvas* parent, Edit
 
 	sourceList_->Bind(wxEVT_LISTBOX, &QuickReplaceSelectionDialog::OnSourceSelected, this);
 	chooseButton_->Bind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnChooseReplacement, this);
+	removeButton_->Bind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnChooseRemoval, this);
 	sameCategoryCheck_->Bind(wxEVT_CHECKBOX, &QuickReplaceSelectionDialog::OnSameCategoryChanged, this);
 	replaceButton_->Bind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnReplace, this);
 	closeButton_->Bind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnClose, this);
@@ -354,6 +360,7 @@ QuickReplaceSelectionDialog::QuickReplaceSelectionDialog(MapCanvas* parent, Edit
 QuickReplaceSelectionDialog::~QuickReplaceSelectionDialog() {
 	sourceList_->Unbind(wxEVT_LISTBOX, &QuickReplaceSelectionDialog::OnSourceSelected, this);
 	chooseButton_->Unbind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnChooseReplacement, this);
+	removeButton_->Unbind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnChooseRemoval, this);
 	sameCategoryCheck_->Unbind(wxEVT_CHECKBOX, &QuickReplaceSelectionDialog::OnSameCategoryChanged, this);
 	replaceButton_->Unbind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnReplace, this);
 	closeButton_->Unbind(wxEVT_BUTTON, &QuickReplaceSelectionDialog::OnClose, this);
@@ -414,8 +421,11 @@ void QuickReplaceSelectionDialog::SelectCandidate(size_t index) {
 void QuickReplaceSelectionDialog::ClearTarget() {
 	targetId_ = 0;
 	targetDoodadBrush_ = nullptr;
+	removeTarget_ = false;
 	afterSprite_->SetSprite(0);
 	afterDetails_->SetLabel("No replacement selected");
+	sameCategoryCheck_->Enable(true);
+	replaceButton_->SetLabel("Replace");
 	UpdateReplaceState();
 }
 
@@ -425,6 +435,7 @@ void QuickReplaceSelectionDialog::UpdateSourcePreview() {
 		beforeSprite_->SetSprite(0);
 		beforeDetails_->SetLabel("No source item selected");
 		chooseButton_->Enable(false);
+		removeButton_->Enable(false);
 		autoBorderCheck_->Enable(false);
 		UpdateReplaceState();
 		return;
@@ -433,12 +444,32 @@ void QuickReplaceSelectionDialog::UpdateSourcePreview() {
 	beforeDetails_->SetLabel(CandidateDetails(*candidate));
 	beforeDetails_->Wrap(FromDIP(190));
 	chooseButton_->Enable(true);
+	removeButton_->Enable(true);
 	autoBorderCheck_->Enable(candidate->category == QuickReplaceCategory::Ground);
 	Layout();
 	UpdateReplaceState();
 }
 
 void QuickReplaceSelectionDialog::UpdateTargetPreview() {
+	if (removeTarget_) {
+		const QuickReplaceCandidate* source = CurrentCandidate();
+		afterSprite_->SetSprite(0);
+		afterDetails_->SetLabel(
+			source ? wxString::Format(
+						 "Remove selected item\n%s\n%zu occurrence%s",
+						 QuickReplaceCategoryName(source->category),
+						 source->count,
+						 source->count == 1 ? "" : "s"
+					 )
+				   : wxString("Remove selected item")
+		);
+		afterDetails_->Wrap(FromDIP(190));
+		sameCategoryCheck_->Enable(false);
+		replaceButton_->SetLabel("Remove");
+		Layout();
+		UpdateReplaceState();
+		return;
+	}
 	if (targetId_ == 0) {
 		ClearTarget();
 		return;
@@ -461,8 +492,9 @@ void QuickReplaceSelectionDialog::UpdateReplaceState() {
 	const QuickReplaceCandidate* source = CurrentCandidate();
 	const bool categoryMatches = source && source->category == targetCategory_;
 	Brush* sourceBrush = source ? g_items.getItemType(source->mapItemId).doodad_brush : nullptr;
-	const bool replacementDiffers = targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != source->mapItemId;
-	const bool enabled = source && targetId_ != 0 && replacementDiffers && (!sameCategoryCheck_->GetValue() || categoryMatches) && !ResolveSelectedTiles().empty();
+	const bool replacementDiffers = removeTarget_ || (targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != source->mapItemId);
+	const bool hasTarget = removeTarget_ || targetId_ != 0;
+	const bool enabled = source && hasTarget && replacementDiffers && (removeTarget_ || !sameCategoryCheck_->GetValue() || categoryMatches) && !ResolveSelectedTiles().empty();
 	replaceButton_->Enable(enabled);
 }
 
@@ -512,8 +544,22 @@ void QuickReplaceSelectionDialog::OnChooseReplacement(wxCommandEvent& WXUNUSED(e
 	targetId_ = selectedId;
 	targetCategory_ = selectedCategory;
 	targetDoodadBrush_ = selectedDoodadBrush;
+	removeTarget_ = false;
+	sameCategoryCheck_->Enable(true);
+	replaceButton_->SetLabel("Replace");
 	UpdateTargetPreview();
 	SetStatus(wxEmptyString);
+}
+
+void QuickReplaceSelectionDialog::OnChooseRemoval(wxCommandEvent& WXUNUSED(event)) {
+	if (!CurrentCandidate()) {
+		return;
+	}
+	targetId_ = 0;
+	targetDoodadBrush_ = nullptr;
+	removeTarget_ = true;
+	UpdateTargetPreview();
+	SetStatus("Removal selected. Click Remove to apply it to the captured area.");
 }
 
 void QuickReplaceSelectionDialog::OnSameCategoryChanged(wxCommandEvent& WXUNUSED(event)) {
@@ -523,15 +569,16 @@ void QuickReplaceSelectionDialog::OnSameCategoryChanged(wxCommandEvent& WXUNUSED
 void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 	const QuickReplaceCandidate* source = CurrentCandidate();
 	Brush* sourceBrush = source ? g_items.getItemType(source->mapItemId).doodad_brush : nullptr;
-	const bool replacementDiffers = targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != sourceKey_.mapItemId;
-	if (!source || source->mapItemId != sourceKey_.mapItemId || source->category != sourceKey_.category || targetId_ == 0 || !replacementDiffers) {
+	const bool replacementDiffers = removeTarget_ || (targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != sourceKey_.mapItemId);
+	const bool hasTarget = removeTarget_ || targetId_ != 0;
+	if (!source || source->mapItemId != sourceKey_.mapItemId || source->category != sourceKey_.category || !hasTarget || !replacementDiffers) {
 		return;
 	}
-	if (sameCategoryCheck_->GetValue() && source->category != targetCategory_) {
+	if (!removeTarget_ && sameCategoryCheck_->GetValue() && source->category != targetCategory_) {
 		SetStatus("Choose a replacement item from the same category.", true);
 		return;
 	}
-	if (!sameCategoryCheck_->GetValue() && source->category != targetCategory_) {
+	if (!removeTarget_ && !sameCategoryCheck_->GetValue() && source->category != targetCategory_) {
 		const int answer = wxMessageBox(
 			wxString::Format(
 				"Replace %s ID %u with %s ID %u?\n\nThis changes the item category and may alter specialized item state.",
@@ -554,7 +601,7 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 	if (currentIndex != wxNOT_FOUND && candidates_.size() > 1) {
 		for (size_t offset = 1; offset < candidates_.size(); ++offset) {
 			const QuickReplaceCandidate& candidate = candidates_[(static_cast<size_t>(currentIndex) + offset) % candidates_.size()];
-			if (candidate.mapItemId != targetId_) {
+			if (removeTarget_ || candidate.mapItemId != targetId_) {
 				nextSource = QuickReplaceCandidateKey { candidate.mapItemId, candidate.category };
 				break;
 			}
@@ -563,12 +610,12 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 
 	ReplacementRule rule;
 	rule.sourceServerId = ServerItemId(sourceKey_.mapItemId);
-	rule.targets.push_back(ReplacementTarget::ForItem(ServerItemId(targetId_), 100));
+	rule.targets.push_back(removeTarget_ ? ReplacementTarget::ForTrash(100) : ReplacementTarget::ForItem(ServerItemId(targetId_), 100));
 	ReplaceExecutionOptions options;
 	options.dryRun = false;
 	options.includeContainerContents = false;
-	options.rebuildGroundBorders = autoBorderCheck_->GetValue() && source->category == QuickReplaceCategory::Ground && targetCategory_ == QuickReplaceCategory::Ground;
-	options.doodadReplacementBrush = targetDoodadBrush_;
+	options.rebuildGroundBorders = autoBorderCheck_->GetValue() && source->category == QuickReplaceCategory::Ground && (removeTarget_ || targetCategory_ == QuickReplaceCategory::Ground);
+	options.doodadReplacementBrush = removeTarget_ ? nullptr : targetDoodadBrush_;
 	if (targetDoodadBrush_) {
 		if (targetDoodadBrush_->hasCompositeObjects(options.doodadVariation)) {
 			options.doodadComposite = &targetDoodadBrush_->getComposite(options.doodadVariation);
@@ -611,7 +658,7 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 
 	g_gui.InvalidateAutoborderPreview();
 	canvas_.RefreshViewport();
-	wxString summary = wxString::Format("Replaced %zu item%s on %zu tile%s.", result.replacements, result.replacements == 1 ? "" : "s", result.changedTiles, result.changedTiles == 1 ? "" : "s");
+	wxString summary = removeTarget_ ? wxString::Format("Removed %zu item%s from %zu tile%s.", result.deletions, result.deletions == 1 ? "" : "s", result.changedTiles, result.changedTiles == 1 ? "" : "s") : wxString::Format("Replaced %zu item%s on %zu tile%s.", result.replacements, result.replacements == 1 ? "" : "s", result.changedTiles, result.changedTiles == 1 ? "" : "s");
 	if (result.doodadPlacements != 0) {
 		summary << wxString::Format(" Applied %zu complete Doodad brush%s across %zu tile%s.", result.doodadPlacements, result.doodadPlacements == 1 ? "" : "es", result.doodadTilesChanged, result.doodadTilesChanged == 1 ? "" : "s");
 	}

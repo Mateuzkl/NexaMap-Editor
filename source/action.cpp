@@ -25,6 +25,8 @@
 #include "house_paste_transaction.h"
 #include "multiplayer_session.h"
 
+#include <limits>
+
 namespace {
 	struct HouseRegistryChange {
 		HouseSnapshot snapshot;
@@ -910,7 +912,8 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 		current++;
 	}
 
-	const size_t max_undo_memory = static_cast<size_t>(std::max(0, g_settings.getInteger(Config::UNDO_MEM_SIZE))) * 1024ULL * 1024ULL;
+	const uint64_t configured_undo_memory = static_cast<uint64_t>(std::max(0, g_settings.getInteger(Config::UNDO_MEM_SIZE))) * 1024ULL * 1024ULL;
+	const size_t max_undo_memory = static_cast<size_t>(std::min<uint64_t>(configured_undo_memory, std::numeric_limits<size_t>::max()));
 	while (memory_size > max_undo_memory && !actions.empty()) {
 		memory_size -= actions.front()->memsize();
 		delete actions.front();

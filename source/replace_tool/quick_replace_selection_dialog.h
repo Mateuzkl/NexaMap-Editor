@@ -40,6 +40,7 @@ private:
 
 	void OnSourceSelected(wxCommandEvent& event);
 	void OnChooseReplacement(wxCommandEvent& event);
+	void OnChooseRemoval(wxCommandEvent& event);
 	void OnSameCategoryChanged(wxCommandEvent& event);
 	void OnReplace(wxCommandEvent& event);
 	void OnClose(wxCommandEvent& event);
@@ -52,6 +53,7 @@ private:
 	uint16_t targetId_ = 0;
 	QuickReplaceCategory targetCategory_ = QuickReplaceCategory::Item;
 	DoodadBrush* targetDoodadBrush_ = nullptr;
+	bool removeTarget_ = false;
 
 	QuickReplaceCandidateList* sourceList_ = nullptr;
 	wxStaticText* scopeLabel_ = nullptr;
@@ -60,6 +62,7 @@ private:
 	DCButton* afterSprite_ = nullptr;
 	wxStaticText* afterDetails_ = nullptr;
 	wxButton* chooseButton_ = nullptr;
+	wxButton* removeButton_ = nullptr;
 	wxCheckBox* sameCategoryCheck_ = nullptr;
 	wxCheckBox* autoBorderCheck_ = nullptr;
 	wxButton* replaceButton_ = nullptr;
