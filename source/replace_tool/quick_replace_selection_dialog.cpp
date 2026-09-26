@@ -456,11 +456,11 @@ void QuickReplaceSelectionDialog::UpdateTargetPreview() {
 		afterSprite_->SetSprite(0);
 		afterDetails_->SetLabel(
 			source ? wxString::Format(
-						 "Remove selected item\n%s\n%zu occurrence%s",
-						 QuickReplaceCategoryName(source->category),
-						 source->count,
-						 source->count == 1 ? "" : "s"
-					 )
+				"Remove selected item\n%s\n%zu occurrence%s",
+				QuickReplaceCategoryName(source->category),
+				source->count,
+				source->count == 1 ? "" : "s"
+			)
 				   : wxString("Remove selected item")
 		);
 		afterDetails_->Wrap(FromDIP(190));
