@@ -132,6 +132,8 @@ ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/remove_unreachable_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_model.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_execution_plan.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_item_grid_panel.h
@@ -306,6 +308,8 @@ ${CMAKE_CURRENT_LIST_DIR}/raw_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/remove_unreachable_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_model.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_execution_plan.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_item_grid_panel.cpp

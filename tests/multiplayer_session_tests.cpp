@@ -427,6 +427,7 @@ void RunPlaytestIntegrationTests();
 void RunCollectionsPaletteTests();
 void RunRendererLifecycleTests();
 void RunResourceSessionTabTests();
+void RunQuickReplaceSelectionTests();
 
 int RunMultiplayerSessionTests(int argc, char** argv) {
 	const bool startupValidation = argc > 1 && std::string(argv[1]) == "--startup-validation";
@@ -434,6 +435,7 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 	const bool collectionsValidation = argc > 1 && std::string(argv[1]) == "--collections-validation";
 	const bool rendererLifecycle = argc > 1 && std::string(argv[1]) == "--renderer-lifecycle-validation";
 	const bool resourceSessionTabs = argc > 1 && std::string(argv[1]) == "--resource-session-tab-validation";
+	const bool quickReplaceSelection = argc > 1 && std::string(argv[1]) == "--quick-replace-selection-validation";
 	if (!wxEntryStart(argc, argv)) {
 		return 1;
 	}
@@ -448,7 +450,9 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 		wxEventLoop loop;
 		wxEventLoopActivator activate(&loop);
 		try {
-			if (resourceSessionTabs) {
+			if (quickReplaceSelection) {
+				RunQuickReplaceSelectionTests();
+			} else if (resourceSessionTabs) {
 				RunResourceSessionTabTests();
 			} else if (rendererLifecycle) {
 				RunRendererLifecycleTests();

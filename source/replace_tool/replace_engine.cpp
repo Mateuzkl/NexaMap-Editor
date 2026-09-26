@@ -32,6 +32,7 @@ namespace {
 		PlannedAction action = PlannedAction::None;
 		uint16_t targetServerId = 0;
 		std::vector<PlannedItem> contents;
+		bool contentsPlanned = false;
 		bool changed = false;
 	};
 
@@ -44,9 +45,10 @@ namespace {
 
 	class ExecutionState {
 	public:
-		ExecutionState(const RuleLookup& rules, uint32_t seed, ReplaceExecutionResult& result) :
+		ExecutionState(const RuleLookup& rules, uint32_t seed, bool includeContainerContents, ReplaceExecutionResult& result) :
 			rules(rules),
 			random(seed),
+			includeContainerContents(includeContainerContents),
 			result(result) { }
 
 		PlannedItem PlanItem(Item* item) {
@@ -74,10 +76,13 @@ namespace {
 				}
 			}
 
-			if (auto* container = dynamic_cast<Container*>(item)) {
-				plan.contents = PlanItems(container->getVector());
-				for (const PlannedItem& child : plan.contents) {
-					plan.changed = plan.changed || child.changed;
+			if (includeContainerContents) {
+				if (auto* container = dynamic_cast<Container*>(item)) {
+					plan.contentsPlanned = true;
+					plan.contents = PlanItems(container->getVector());
+					for (const PlannedItem& child : plan.contents) {
+						plan.changed = plan.changed || child.changed;
+					}
 				}
 			}
 			return plan;
@@ -97,8 +102,10 @@ namespace {
 				return;
 			}
 
-			if (auto* container = dynamic_cast<Container*>(item)) {
-				ApplyItems(container->getVector(), plan.contents);
+			if (plan.contentsPlanned) {
+				if (auto* container = dynamic_cast<Container*>(item)) {
+					ApplyItems(container->getVector(), plan.contents);
+				}
 			}
 
 			if (plan.action == PlannedAction::Delete) {
@@ -155,6 +162,7 @@ namespace {
 		const RuleLookup& rules;
 		std::mt19937 random;
 		std::uniform_int_distribution<uint32_t> distribution { 1, 100 };
+		bool includeContainerContents;
 		ReplaceExecutionResult& result;
 	};
 
@@ -186,7 +194,7 @@ ReplaceExecutionResult ReplaceEngine::Run(Editor& editor, const std::vector<Tile
 
 	result.randomSeed = ResolveSeed(options.randomSeed);
 	const RuleLookup lookup = BuildRuleLookup(rules);
-	ExecutionState state(lookup, result.randomSeed, result);
+	ExecutionState state(lookup, result.randomSeed, options.includeContainerContents, result);
 	std::unique_ptr<Action> action;
 	if (!options.dryRun) {
 		action.reset(editor.actionQueue->createAction(ACTION_REPLACE_ITEMS));

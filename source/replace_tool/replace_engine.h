@@ -17,6 +17,7 @@ class Tile;
 struct ReplaceExecutionOptions {
 	bool dryRun = true;
 	uint32_t randomSeed = 0;
+	bool includeContainerContents = true;
 };
 
 struct ReplaceExecutionResult {
