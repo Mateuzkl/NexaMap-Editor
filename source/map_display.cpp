@@ -56,6 +56,7 @@
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
+#include "replace_tool/quick_replace_selection_dialog.h"
 
 namespace {
 	bool PopupContextIsCurrent(Editor& editor) {
@@ -194,6 +195,7 @@ EVT_MENU(MAP_POPUP_MENU_COPY, MapCanvas::OnCopy)
 EVT_MENU(MAP_POPUP_MENU_COPY_POSITION, MapCanvas::OnCopyPosition)
 EVT_MENU(MAP_POPUP_MENU_PASTE, MapCanvas::OnPaste)
 EVT_MENU(MAP_POPUP_MENU_DELETE, MapCanvas::OnDelete)
+EVT_MENU(MAP_POPUP_MENU_QUICK_REPLACE_SELECTION, MapCanvas::OnQuickReplaceSelection)
 //----
 EVT_MENU(MAP_POPUP_MENU_COPY_SERVER_ID, MapCanvas::OnCopyServerId)
 EVT_MENU(MAP_POPUP_MENU_COPY_CLIENT_ID, MapCanvas::OnCopyClientId)
@@ -2297,6 +2299,26 @@ void MapCanvas::OnDelete(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.RefreshView();
 }
 
+void MapCanvas::OnQuickReplaceSelection(wxCommandEvent& WXUNUSED(event)) {
+	if (IsBeingDeleted() || !PopupCanEdit(editor) || editor.selection.size() == 0) {
+		return;
+	}
+
+	PositionVector selectedPositions;
+	selectedPositions.reserve(editor.selection.size());
+	for (Tile* tile : editor.selection.getTiles()) {
+		if (tile) {
+			selectedPositions.push_back(tile->getPosition());
+		}
+	}
+	if (selectedPositions.empty()) {
+		return;
+	}
+
+	QuickReplaceSelectionDialog dialog(this, editor, std::move(selectedPositions));
+	dialog.ShowModal();
+}
+
 std::string MapCanvas::getPositionString(const Position& position) const {
 	std::ostringstream clip;
 	switch (g_settings.getInteger(Config::COPY_POSITION_FORMAT)) {
@@ -2943,6 +2965,14 @@ void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 
 	wxMenuItem* deleteItem = Append(MAP_POPUP_MENU_DELETE, "&Delete\tDEL", "Removes all seleceted items");
 	deleteItem->Enable(anything_selected);
+	if (anything_selected) {
+		AppendSeparator();
+		Append(
+			MAP_POPUP_MENU_QUICK_REPLACE_SELECTION,
+			"Quick Replace Items...",
+			"Automatically replace visible items found in the selected area"
+		);
+	}
 	if (cursorTile && !FavoriteResources::ActiveContext().empty()) {
 		auto favoritesMenu = std::make_unique<wxMenu>();
 		const auto appendItem = [&](Item* item, const wxString& position) {

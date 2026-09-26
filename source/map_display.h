@@ -80,6 +80,7 @@ public:
 	void OnBrowseTile(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);
 	void OnDelete(wxCommandEvent& event);
+	void OnQuickReplaceSelection(wxCommandEvent& event);
 	// ----
 	void OnGotoDestination(wxCommandEvent& event);
 	void OnCopyDestination(wxCommandEvent& event);

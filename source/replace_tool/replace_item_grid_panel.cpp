@@ -117,7 +117,7 @@ void ReplaceItemGridPanel::OnPaint(wxPaintEvent&) {
 		const wxString label = wxControl::Ellipsize(wxString::FromUTF8(item.name), dc, wxELLIPSIZE_END, textWidth, wxELLIPSIZE_FLAGS_NONE);
 		dc.DrawText(label, textX, cell.y + 9);
 		dc.SetTextForeground(selected ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::TextSubtle));
-		dc.DrawText(wxString::Format("SID %u  CID %u", item.serverId.value, item.clientId), textX, cell.y + 30);
+		dc.DrawText(runtimeIdLabels ? wxString::Format("ID %u  Sprite %u", item.serverId.value, item.clientId) : wxString::Format("SID %u  CID %u", item.serverId.value, item.clientId), textX, cell.y + 30);
 	}
 }
 
