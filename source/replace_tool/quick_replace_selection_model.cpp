@@ -16,6 +16,12 @@ namespace {
 	int CategoryOrder(QuickReplaceCategory category) {
 		return static_cast<int>(category);
 	}
+
+	struct CandidateKeyHash {
+		size_t operator()(const QuickReplaceCandidateKey& key) const noexcept {
+			return (static_cast<size_t>(key.mapItemId) << 8U) ^ static_cast<size_t>(key.category);
+		}
+	};
 }
 
 QuickReplaceCategory ClassifyPlacedItem(const Tile& tile, const Item& item) {
@@ -91,24 +97,22 @@ const char* QuickReplaceCategoryName(QuickReplaceCategory category) {
 }
 
 std::vector<QuickReplaceCandidate> CollectQuickReplaceCandidates(const std::vector<Tile*>& tiles) {
-	std::unordered_map<uint16_t, QuickReplaceCandidate> candidatesById;
-	const auto add = [&candidatesById](const Tile& tile, const Item* item) {
+	std::unordered_map<QuickReplaceCandidateKey, QuickReplaceCandidate, CandidateKeyHash> candidatesByKey;
+	const auto add = [&candidatesByKey](const Tile& tile, const Item* item) {
 		if (!item || item->getID() == 0 || item->isMetaItem()) {
 			return;
 		}
 		const uint16_t id = item->getID();
-		auto [iterator, inserted] = candidatesById.try_emplace(id);
+		const QuickReplaceCategory category = ClassifyPlacedItem(tile, *item);
+		const QuickReplaceCandidateKey key { id, category };
+		auto [iterator, inserted] = candidatesByKey.try_emplace(key);
 		QuickReplaceCandidate& candidate = iterator->second;
 		if (inserted) {
 			const ItemType& type = g_items.getItemType(id);
 			candidate.mapItemId = id;
 			candidate.spriteClientId = type.clientID;
-			candidate.category = ClassifyPlacedItem(tile, *item);
+			candidate.category = category;
 			candidate.name = type.name.empty() ? "Unnamed item" : type.name;
-		}
-		const QuickReplaceCategory occurrenceCategory = ClassifyPlacedItem(tile, *item);
-		if (CategoryOrder(occurrenceCategory) < CategoryOrder(candidate.category)) {
-			candidate.category = occurrenceCategory;
 		}
 		++candidate.count;
 	};
@@ -124,8 +128,8 @@ std::vector<QuickReplaceCandidate> CollectQuickReplaceCandidates(const std::vect
 	}
 
 	std::vector<QuickReplaceCandidate> candidates;
-	candidates.reserve(candidatesById.size());
-	for (auto& entry : candidatesById) {
+	candidates.reserve(candidatesByKey.size());
+	for (auto& entry : candidatesByKey) {
 		candidates.push_back(std::move(entry.second));
 	}
 	std::sort(candidates.begin(), candidates.end(), [](const QuickReplaceCandidate& left, const QuickReplaceCandidate& right) {

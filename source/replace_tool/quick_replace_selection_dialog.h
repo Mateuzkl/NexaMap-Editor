@@ -11,6 +11,7 @@
 #include <wx/dialog.h>
 
 class DCButton;
+class DoodadBrush;
 class Editor;
 class MapCanvas;
 class QuickReplaceCandidateList;
@@ -49,6 +50,7 @@ private:
 	uint16_t sourceId_ = 0;
 	uint16_t targetId_ = 0;
 	QuickReplaceCategory targetCategory_ = QuickReplaceCategory::Item;
+	DoodadBrush* targetDoodadBrush_ = nullptr;
 
 	QuickReplaceCandidateList* sourceList_ = nullptr;
 	wxStaticText* scopeLabel_ = nullptr;
@@ -58,6 +60,7 @@ private:
 	wxStaticText* afterDetails_ = nullptr;
 	wxButton* chooseButton_ = nullptr;
 	wxCheckBox* sameCategoryCheck_ = nullptr;
+	wxCheckBox* autoBorderCheck_ = nullptr;
 	wxButton* replaceButton_ = nullptr;
 	wxButton* closeButton_ = nullptr;
 	wxStaticText* statusLabel_ = nullptr;

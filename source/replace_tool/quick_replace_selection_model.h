@@ -25,6 +25,13 @@ enum class QuickReplaceCategory : uint8_t {
 	Item,
 };
 
+struct QuickReplaceCandidateKey {
+	uint16_t mapItemId = 0;
+	QuickReplaceCategory category = QuickReplaceCategory::Item;
+
+	bool operator==(const QuickReplaceCandidateKey&) const = default;
+};
+
 struct QuickReplaceCandidate {
 	uint16_t mapItemId = 0;
 	uint16_t spriteClientId = 0;

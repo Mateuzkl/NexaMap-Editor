@@ -9,7 +9,9 @@
 #include "replace_item_grid_panel.h"
 #include "replace_library_catalog.h"
 
+#include "../brush.h"
 #include "../dcbutton.h"
+#include "../doodad_brush.h"
 #include "../editor.h"
 #include "../graphics.h"
 #include "../gui.h"
@@ -23,6 +25,8 @@
 #include <cctype>
 #include <limits>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <wx/button.h>
 #include <wx/checkbox.h>
 #include <wx/msgdlg.h>
@@ -103,8 +107,16 @@ public:
 
 		grid_ = newd ReplaceItemGridPanel(this, [this](const ReplaceLibraryItem& item) {
 			resultId_ = item.serverId.value;
+			resultDoodadBrush_ = nullptr;
+			if (const auto found = doodadBrushes_.find(item.key); found != doodadBrushes_.end()) {
+				resultDoodadBrush_ = found->second;
+			} else if (resultId_ != 0) {
+				Brush* brush = g_items.getItemType(resultId_).doodad_brush;
+				resultDoodadBrush_ = brush && brush->isDoodad() ? brush->asDoodad() : nullptr;
+			}
 			chooseButton_->Enable(resultId_ != 0);
 		});
+		grid_->SetRuntimeIdLabels(true);
 		grid_->SetMinSize(FromDIP(wxSize(620, 400)));
 		root->Add(grid_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
 
@@ -123,12 +135,14 @@ public:
 		const size_t storedMaximum = g_items.items.size() > 0 ? g_items.items.size() - 1 : 0;
 		const size_t maximumId = std::min<size_t>(std::max<size_t>(g_items.getMaxID(), storedMaximum), std::numeric_limits<uint16_t>::max());
 		allItems_.reserve(maximumId);
+		std::unordered_map<uint16_t, ReplaceLibraryItem> itemsByClientId;
+		std::unordered_map<DoodadBrush*, ReplaceLibraryItem> firstItemByDoodad;
 		for (size_t id = 1; id <= maximumId; ++id) {
 			if (!g_items.typeExists(static_cast<int>(id))) {
 				continue;
 			}
 			const ItemType& type = g_items.getItemType(static_cast<int>(id));
-			if (type.id == 0 || type.clientID == 0 || type.isMetaItem() || type.raw_brush == nullptr || (categoryOnly_ && ClassifyItemType(type) != sourceCategory_)) {
+			if (type.id == 0 || type.clientID == 0 || type.isMetaItem()) {
 				continue;
 			}
 			ReplaceLibraryItem item;
@@ -136,7 +150,47 @@ public:
 			item.serverId = ServerItemId(type.id);
 			item.clientId = type.clientID;
 			item.name = type.name.empty() ? "Unnamed item" : type.name;
-			allItems_.push_back(std::move(item));
+			itemsByClientId.try_emplace(item.clientId, item);
+			if (type.doodad_brush && type.doodad_brush->isDoodad()) {
+				firstItemByDoodad.try_emplace(type.doodad_brush->asDoodad(), item);
+			}
+			if (type.raw_brush != nullptr && (!categoryOnly_ || ClassifyItemType(type) == sourceCategory_)) {
+				allItems_.push_back(item);
+			}
+		}
+
+		if (categoryOnly_ && sourceCategory_ == QuickReplaceCategory::Doodad) {
+			allItems_.clear();
+			std::unordered_set<DoodadBrush*> visited;
+			uint32_t choiceKey = 1;
+			auto addDoodad = [&](DoodadBrush* brush) {
+				if (!brush || !visited.insert(brush).second) {
+					return;
+				}
+				auto representative = firstItemByDoodad.find(brush);
+				if (representative == firstItemByDoodad.end()) {
+					return;
+				}
+				ReplaceLibraryItem choice = representative->second;
+				if (const auto look = itemsByClientId.find(static_cast<uint16_t>(brush->getLookID())); look != itemsByClientId.end()) {
+					choice = look->second;
+				}
+				choice.key = choiceKey++;
+				choice.clientId = static_cast<uint16_t>(brush->getLookID());
+				if (!brush->getName().empty()) {
+					choice.name = brush->getName();
+				}
+				doodadBrushes_.emplace(choice.key, brush);
+				allItems_.push_back(std::move(choice));
+			};
+			for (const auto& [name, brush] : g_brushes.getMap()) {
+				if (brush && brush->isDoodad()) {
+					addDoodad(brush->asDoodad());
+				}
+			}
+			for (const auto& [brush, item] : firstItemByDoodad) {
+				addDoodad(brush);
+			}
 		}
 		std::sort(allItems_.begin(), allItems_.end(), [](const ReplaceLibraryItem& left, const ReplaceLibraryItem& right) {
 			if (left.name != right.name) {
@@ -158,6 +212,10 @@ public:
 		return resultId_;
 	}
 
+	DoodadBrush* GetResultDoodadBrush() const {
+		return resultDoodadBrush_;
+	}
+
 private:
 	void ApplyFilter() {
 		const std::string query = search_->GetValue().Lower().ToStdString();
@@ -177,6 +235,7 @@ private:
 			}
 		}
 		resultId_ = 0;
+		resultDoodadBrush_ = nullptr;
 		chooseButton_->Enable(false);
 		grid_->SetItems(std::move(matches));
 	}
@@ -196,15 +255,18 @@ private:
 	ReplaceItemGridPanel* grid_ = nullptr;
 	wxButton* chooseButton_ = nullptr;
 	std::vector<ReplaceLibraryItem> allItems_;
+	std::unordered_map<uint32_t, DoodadBrush*> doodadBrushes_;
 	uint16_t resultId_ = 0;
+	DoodadBrush* resultDoodadBrush_ = nullptr;
 };
 
 namespace {
 	wxStaticBoxSizer* CreatePreviewCard(wxWindow* parent, const wxString& title, DCButton*& sprite, wxStaticText*& details) {
 		auto* card = newd wxStaticBoxSizer(wxVERTICAL, parent, title);
 		card->SetMinSize(parent->FromDIP(wxSize(220, 320)));
-		sprite = newd DCButton(parent, wxID_ANY, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_64x64, 0);
-		details = newd wxStaticText(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+		wxWindow* cardParent = card->GetStaticBox();
+		sprite = newd DCButton(cardParent, wxID_ANY, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_64x64, 0);
+		details = newd wxStaticText(cardParent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
 		details->SetMinSize(parent->FromDIP(wxSize(190, 100)));
 		card->Add(sprite, 0, wxALIGN_CENTER | wxTOP | wxLEFT | wxRIGHT, parent->FromDIP(10));
 		card->Add(details, 0, wxEXPAND | wxALL, parent->FromDIP(8));
@@ -234,29 +296,34 @@ QuickReplaceSelectionDialog::QuickReplaceSelectionDialog(MapCanvas* parent, Edit
 
 	auto* content = newd wxBoxSizer(wxHORIZONTAL);
 	auto* foundBox = newd wxStaticBoxSizer(wxVERTICAL, this, "ITEMS FOUND IN SELECTION");
-	sourceList_ = newd QuickReplaceCandidateList(this, candidates_);
+	sourceList_ = newd QuickReplaceCandidateList(foundBox->GetStaticBox(), candidates_);
 	sourceList_->SetMinSize(FromDIP(wxSize(380, 380)));
 	foundBox->Add(sourceList_, 1, wxEXPAND | wxALL, FromDIP(6));
 	content->Add(foundBox, 1, wxEXPAND | wxRIGHT, FromDIP(8));
 
 	auto* replacementBox = newd wxStaticBoxSizer(wxVERTICAL, this, "REPLACEMENT");
+	wxWindow* replacementParent = replacementBox->GetStaticBox();
 	auto* previews = newd wxBoxSizer(wxHORIZONTAL);
-	previews->Add(CreatePreviewCard(this, "BEFORE", beforeSprite_, beforeDetails_), 1, wxEXPAND);
-	auto* arrow = newd wxStaticText(this, wxID_ANY, wxString::FromUTF8("\xE2\x86\x92"));
+	previews->Add(CreatePreviewCard(replacementParent, "BEFORE", beforeSprite_, beforeDetails_), 1, wxEXPAND);
+	auto* arrow = newd wxStaticText(replacementParent, wxID_ANY, wxString::FromUTF8("\xE2\x86\x92"));
 	wxFont arrowFont = arrow->GetFont();
 	arrowFont.SetPointSize(22);
 	arrowFont.SetWeight(wxFONTWEIGHT_BOLD);
 	arrow->SetFont(arrowFont);
 	previews->Add(arrow, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT, FromDIP(8));
-	previews->Add(CreatePreviewCard(this, "AFTER", afterSprite_, afterDetails_), 1, wxEXPAND);
+	previews->Add(CreatePreviewCard(replacementParent, "AFTER", afterSprite_, afterDetails_), 1, wxEXPAND);
 	replacementBox->Add(previews, 1, wxEXPAND | wxALL, FromDIP(6));
 
-	chooseButton_ = newd wxButton(this, wxID_ANY, "Choose Replacement...");
+	chooseButton_ = newd wxButton(replacementParent, wxID_ANY, "Choose Replacement...");
 	replacementBox->Add(chooseButton_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
-	sameCategoryCheck_ = newd wxCheckBox(this, wxID_ANY, "Keep same item category");
+	sameCategoryCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Keep same item category");
 	sameCategoryCheck_->SetValue(true);
 	replacementBox->Add(sameCategoryCheck_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
-	replaceButton_ = newd wxButton(this, wxID_ANY, "Replace");
+	autoBorderCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Rebuild surrounding borders automatically");
+	autoBorderCheck_->SetValue(true);
+	autoBorderCheck_->SetToolTip("For floor replacement, recalculate the correct borders on the changed tiles and their immediate neighbors.");
+	replacementBox->Add(autoBorderCheck_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+	replaceButton_ = newd wxButton(replacementParent, wxID_ANY, "Replace");
 	replaceButton_->SetDefault();
 	replacementBox->Add(replaceButton_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
 	content->Add(replacementBox, 1, wxEXPAND);
@@ -349,6 +416,7 @@ void QuickReplaceSelectionDialog::SelectCandidate(size_t index) {
 
 void QuickReplaceSelectionDialog::ClearTarget() {
 	targetId_ = 0;
+	targetDoodadBrush_ = nullptr;
 	afterSprite_->SetSprite(0);
 	afterDetails_->SetLabel("No replacement selected");
 	UpdateReplaceState();
@@ -360,6 +428,7 @@ void QuickReplaceSelectionDialog::UpdateSourcePreview() {
 		beforeSprite_->SetSprite(0);
 		beforeDetails_->SetLabel("No source item selected");
 		chooseButton_->Enable(false);
+		autoBorderCheck_->Enable(false);
 		UpdateReplaceState();
 		return;
 	}
@@ -367,6 +436,7 @@ void QuickReplaceSelectionDialog::UpdateSourcePreview() {
 	beforeDetails_->SetLabel(CandidateDetails(*candidate));
 	beforeDetails_->Wrap(FromDIP(190));
 	chooseButton_->Enable(true);
+	autoBorderCheck_->Enable(candidate->category == QuickReplaceCategory::Ground);
 	Layout();
 	UpdateReplaceState();
 }
@@ -377,10 +447,13 @@ void QuickReplaceSelectionDialog::UpdateTargetPreview() {
 		return;
 	}
 	const ItemType& type = g_items.getItemType(targetId_);
-	afterSprite_->SetSprite(type.clientID);
+	afterSprite_->SetSprite(targetDoodadBrush_ ? static_cast<uint16_t>(targetDoodadBrush_->getLookID()) : type.clientID);
 	wxString details = wxString::Format("ID %u\n", targetId_);
-	details << wxString::FromUTF8(type.name.empty() ? "Unnamed item" : type.name) << "\n";
+	details << wxString::FromUTF8(targetDoodadBrush_ && !targetDoodadBrush_->getName().empty() ? targetDoodadBrush_->getName() : (type.name.empty() ? "Unnamed item" : type.name)) << "\n";
 	details << wxString::FromUTF8(QuickReplaceCategoryName(targetCategory_));
+	if (targetDoodadBrush_) {
+		details << "\nComplete palette brush";
+	}
 	afterDetails_->SetLabel(details);
 	afterDetails_->Wrap(FromDIP(190));
 	Layout();
@@ -390,7 +463,9 @@ void QuickReplaceSelectionDialog::UpdateTargetPreview() {
 void QuickReplaceSelectionDialog::UpdateReplaceState() {
 	const QuickReplaceCandidate* source = CurrentCandidate();
 	const bool categoryMatches = source && source->category == targetCategory_;
-	const bool enabled = source && targetId_ != 0 && targetId_ != source->mapItemId && (!sameCategoryCheck_->GetValue() || categoryMatches) && !ResolveSelectedTiles().empty();
+	Brush* sourceBrush = source ? g_items.getItemType(source->mapItemId).doodad_brush : nullptr;
+	const bool replacementDiffers = targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != source->mapItemId;
+	const bool enabled = source && targetId_ != 0 && replacementDiffers && (!sameCategoryCheck_->GetValue() || categoryMatches) && !ResolveSelectedTiles().empty();
 	replaceButton_->Enable(enabled);
 }
 
@@ -422,7 +497,8 @@ void QuickReplaceSelectionDialog::OnChooseReplacement(wxCommandEvent& WXUNUSED(e
 		SetStatus("The selected replacement item is not available in the current item database.", true);
 		return;
 	}
-	const QuickReplaceCategory selectedCategory = ClassifyItemType(selectedType);
+	DoodadBrush* selectedDoodadBrush = dialog.GetResultDoodadBrush();
+	const QuickReplaceCategory selectedCategory = selectedDoodadBrush ? QuickReplaceCategory::Doodad : ClassifyItemType(selectedType);
 	if (sameCategoryCheck_->GetValue() && selectedCategory != source->category) {
 		wxMessageBox(
 			wxString::Format(
@@ -438,6 +514,7 @@ void QuickReplaceSelectionDialog::OnChooseReplacement(wxCommandEvent& WXUNUSED(e
 	}
 	targetId_ = selectedId;
 	targetCategory_ = selectedCategory;
+	targetDoodadBrush_ = selectedDoodadBrush;
 	UpdateTargetPreview();
 	SetStatus(wxEmptyString);
 }
@@ -448,7 +525,9 @@ void QuickReplaceSelectionDialog::OnSameCategoryChanged(wxCommandEvent& WXUNUSED
 
 void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 	const QuickReplaceCandidate* source = CurrentCandidate();
-	if (!source || source->mapItemId != sourceId_ || targetId_ == 0 || targetId_ == sourceId_) {
+	Brush* sourceBrush = source ? g_items.getItemType(source->mapItemId).doodad_brush : nullptr;
+	const bool replacementDiffers = targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != sourceId_;
+	if (!source || source->mapItemId != sourceId_ || targetId_ == 0 || !replacementDiffers) {
 		return;
 	}
 	if (sameCategoryCheck_->GetValue() && source->category != targetCategory_) {
@@ -491,6 +570,12 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 	ReplaceExecutionOptions options;
 	options.dryRun = false;
 	options.includeContainerContents = false;
+	options.rebuildGroundBorders = autoBorderCheck_->GetValue() && source->category == QuickReplaceCategory::Ground && targetCategory_ == QuickReplaceCategory::Ground;
+	options.doodadReplacementBrush = targetDoodadBrush_;
+	const QuickReplaceCategory sourceCategory = source->category;
+	options.matchFilter = [sourceCategory](const Tile& tile, const Item& item) {
+		return ClassifyPlacedItem(tile, item) == sourceCategory;
+	};
 	const ReplaceExecutionResult result = ReplaceEngine::Run(editor_, ResolveSelectedTiles(), { rule }, options);
 	if (!result.validation.isValid()) {
 		SetStatus("The replacement rule is invalid.", true);
@@ -504,7 +589,13 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 
 	g_gui.InvalidateAutoborderPreview();
 	canvas_.RefreshViewport();
-	const wxString summary = wxString::Format("Replaced %zu item%s on %zu tile%s.", result.replacements, result.replacements == 1 ? "" : "s", result.changedTiles, result.changedTiles == 1 ? "" : "s");
+	wxString summary = wxString::Format("Replaced %zu item%s on %zu tile%s.", result.replacements, result.replacements == 1 ? "" : "s", result.changedTiles, result.changedTiles == 1 ? "" : "s");
+	if (result.doodadPlacements != 0) {
+		summary << wxString::Format(" Applied %zu complete Doodad brush%s across %zu tile%s.", result.doodadPlacements, result.doodadPlacements == 1 ? "" : "es", result.doodadTilesChanged, result.doodadTilesChanged == 1 ? "" : "s");
+	}
+	if (result.bordersRebuilt != 0) {
+		summary << wxString::Format(" Rebuilt borders on %zu nearby tile%s.", result.bordersRebuilt, result.bordersRebuilt == 1 ? "" : "s");
+	}
 	RefreshCandidates(nextSourceId);
 	SetStatus(summary);
 }

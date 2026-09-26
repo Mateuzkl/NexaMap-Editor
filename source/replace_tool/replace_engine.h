@@ -9,15 +9,22 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
+class DoodadBrush;
 class Editor;
+class Item;
 class Tile;
 
 struct ReplaceExecutionOptions {
 	bool dryRun = true;
 	uint32_t randomSeed = 0;
 	bool includeContainerContents = true;
+	bool rebuildGroundBorders = false;
+	DoodadBrush* doodadReplacementBrush = nullptr;
+	int doodadVariation = 0;
+	std::function<bool(const Tile&, const Item&)> matchFilter;
 };
 
 struct ReplaceExecutionResult {
@@ -30,6 +37,9 @@ struct ReplaceExecutionResult {
 	size_t deletions = 0;
 	size_t unchangedByProbability = 0;
 	size_t changedTiles = 0;
+	size_t doodadPlacements = 0;
+	size_t doodadTilesChanged = 0;
+	size_t bordersRebuilt = 0;
 	bool committed = false;
 
 	[[nodiscard]] size_t ChangedItems() const {
