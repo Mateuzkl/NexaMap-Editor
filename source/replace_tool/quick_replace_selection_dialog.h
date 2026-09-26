@@ -8,6 +8,7 @@
 #include "../position.h"
 #include "quick_replace_selection_model.h"
 
+#include <optional>
 #include <wx/dialog.h>
 
 class DCButton;
@@ -29,7 +30,7 @@ public:
 private:
 	[[nodiscard]] std::vector<Tile*> ResolveSelectedTiles() const;
 	[[nodiscard]] const QuickReplaceCandidate* CurrentCandidate() const;
-	void RefreshCandidates(uint16_t preferredSourceId = 0);
+	void RefreshCandidates(std::optional<QuickReplaceCandidateKey> preferredSource = std::nullopt);
 	void SelectCandidate(size_t index);
 	void ClearTarget();
 	void UpdateSourcePreview();
@@ -47,7 +48,7 @@ private:
 	Editor& editor_;
 	PositionVector selectedPositions_;
 	std::vector<QuickReplaceCandidate> candidates_;
-	uint16_t sourceId_ = 0;
+	QuickReplaceCandidateKey sourceKey_;
 	uint16_t targetId_ = 0;
 	QuickReplaceCategory targetCategory_ = QuickReplaceCategory::Item;
 	DoodadBrush* targetDoodadBrush_ = nullptr;

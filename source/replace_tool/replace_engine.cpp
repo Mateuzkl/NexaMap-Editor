@@ -265,6 +265,10 @@ ReplaceExecutionResult ReplaceEngine::Run(Editor& editor, const std::vector<Tile
 	}
 	std::set<Position> changedGroundPositions;
 	std::set<Position> doodadAnchors;
+	const CompositeTileList* doodadComposite = options.doodadComposite;
+	if (options.doodadReplacementBrush && !doodadComposite && options.doodadReplacementBrush->hasCompositeObjects(options.doodadVariation)) {
+		doodadComposite = &options.doodadReplacementBrush->getComposite(options.doodadVariation);
+	}
 
 	for (Tile* sourceTile : tiles) {
 		if (!sourceTile) {
@@ -300,6 +304,27 @@ ReplaceExecutionResult ReplaceEngine::Run(Editor& editor, const std::vector<Tile
 				workingTile->items.insert(workingTile->items.end(), promotedGroundContents.begin(), promotedGroundContents.end());
 				action->addChange(new Change(workingTile));
 			}
+		}
+	}
+
+	if (options.doodadReplacementBrush && options.enforceDoodadSelectionScope && !options.allowDoodadOutsideScope && !doodadAnchors.empty()) {
+		const std::set<Position> allowedPositions(options.doodadAllowedPositions.begin(), options.doodadAllowedPositions.end());
+		std::set<Position> outsidePositions;
+		for (const Position& anchor : doodadAnchors) {
+			if (doodadComposite && !doodadComposite->empty()) {
+				for (const auto& [relativePosition, items] : *doodadComposite) {
+					const Position destination = anchor + relativePosition;
+					if (destination.isValid() && !allowedPositions.contains(destination)) {
+						outsidePositions.insert(destination);
+					}
+				}
+			} else if (!allowedPositions.contains(anchor)) {
+				outsidePositions.insert(anchor);
+			}
+		}
+		result.doodadOutsideScopeTiles = outsidePositions.size();
+		if (!outsidePositions.empty()) {
+			return result;
 		}
 	}
 
@@ -340,9 +365,8 @@ ReplaceExecutionResult ReplaceEngine::Run(Editor& editor, const std::vector<Tile
 		};
 
 		for (const Position& anchor : doodadAnchors) {
-			const CompositeTileList& composite = options.doodadReplacementBrush->getComposite(options.doodadVariation);
-			if (!composite.empty()) {
-				for (const auto& [relativePosition, items] : composite) {
+			if (doodadComposite && !doodadComposite->empty()) {
+				for (const auto& [relativePosition, items] : *doodadComposite) {
 					const Position destination = anchor + relativePosition;
 					if (!destination.isValid()) {
 						continue;

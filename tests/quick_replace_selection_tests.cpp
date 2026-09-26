@@ -106,6 +106,8 @@ namespace {
 		const auto item100 = std::find_if(candidates.begin(), candidates.end(), [](const QuickReplaceCandidate& candidate) { return candidate.mapItemId == 100 && candidate.category == QuickReplaceCategory::Item; });
 		QuickReplaceCheck(ground100 != candidates.end() && ground100->count == 2, "Ground ID/category candidate mismatch");
 		QuickReplaceCheck(item100 != candidates.end() && item100->count == 1, "Stacked same-ID item must be a separate candidate");
+		const std::optional<size_t> preferredItem = FindQuickReplaceCandidateIndex(candidates, { 100, QuickReplaceCategory::Item });
+		QuickReplaceCheck(preferredItem && candidates[*preferredItem].category == QuickReplaceCategory::Item, "Category-aware auto-next confused same-ID candidates");
 		QuickReplaceCheck(byId.at(102).category == QuickReplaceCategory::Ground && byId.at(102).count == 1, "Second ground ID missing");
 		QuickReplaceCheck(byId.at(621).category == QuickReplaceCategory::Border && byId.at(621).count == 3, "Border count/category mismatch");
 		QuickReplaceCheck(byId.at(6894).category == QuickReplaceCategory::Wall && byId.at(6894).count == 4, "Wall count/category mismatch");
@@ -155,6 +157,9 @@ namespace {
 		auto* replacedChest = dynamic_cast<Container*>(editor.map.getTile(selectedLeft)->items.front());
 		QuickReplaceCheck(replacedChest && replacedChest->getItemCount() == 20 && replacedChest->getItem(0)->getID() == 100, "Quick Replace changed nested container contents");
 		QuickReplaceCheck(HasItem(*editor.map.getTile(selectedLeft), 100), "Quick Replace changed an occurrence outside the selected category");
+		const auto remainingCandidates = CollectQuickReplaceCandidates({ editor.map.getTile(selectedLeft), editor.map.getTile(selectedRight) });
+		QuickReplaceCheck(!FindQuickReplaceCandidateIndex(remainingCandidates, { 100, QuickReplaceCategory::Ground }), "Removed Ground candidate remained after replacement");
+		QuickReplaceCheck(FindQuickReplaceCandidateIndex(remainingCandidates, { 100, QuickReplaceCategory::Item }).has_value(), "Auto-next lost the remaining same-ID Item candidate");
 		QuickReplaceCheck(editor.actionQueue->canUndo() && editor.actionQueue->getUndoType() == ACTION_REPLACE_ITEMS, "Quick Replace did not create one undo action");
 		QuickReplaceCheck(editor.actionQueue->undo(), "Quick Replace undo failed");
 		QuickReplaceCheck(editor.map.getTile(selectedLeft)->ground->getID() == 100 && editor.map.getTile(selectedRight)->ground->getID() == 100, "Undo did not restore all selected ground items");
@@ -187,6 +192,23 @@ namespace {
 		definitions.Add(102, "Stone floor").group = ITEM_GROUP_GROUND;
 		definitions.Add(300, "Old border").isBorder = true;
 
+		CopyBuffer strictCopyBuffer;
+		Editor strictEditor(strictCopyBuffer, nullptr);
+		const Position strictChanged(90, 90, 7);
+		const Position strictAdjacent(91, 90, 7);
+		Tile* strictSource = AddTile(strictEditor.map, strictChanged, 100);
+		AddTile(strictEditor.map, strictAdjacent, 100)->addItem(Item::Create(300));
+
+		ReplacementRule rule;
+		rule.sourceServerId = ServerItemId(100);
+		rule.targets.push_back(ReplacementTarget::ForItem(ServerItemId(102), 100));
+		ReplaceExecutionOptions strictOptions;
+		strictOptions.dryRun = false;
+		strictOptions.includeContainerContents = false;
+		const ReplaceExecutionResult strictResult = ReplaceEngine::Run(strictEditor, { strictSource }, { rule }, strictOptions);
+		QuickReplaceCheck(strictResult.committed && strictEditor.map.getTile(strictChanged)->ground->getID() == 102, "Strict-scope floor replacement failed");
+		QuickReplaceCheck(HasItem(*strictEditor.map.getTile(strictAdjacent), 300), "Border rebuild OFF changed an adjacent unselected tile");
+
 		CopyBuffer copyBuffer;
 		Editor editor(copyBuffer, nullptr);
 		const Position changed(100, 100, 7);
@@ -196,9 +218,6 @@ namespace {
 		AddTile(editor.map, adjacent, 100)->addItem(Item::Create(300));
 		AddTile(editor.map, distant, 100)->addItem(Item::Create(300));
 
-		ReplacementRule rule;
-		rule.sourceServerId = ServerItemId(100);
-		rule.targets.push_back(ReplacementTarget::ForItem(ServerItemId(102), 100));
 		ReplaceExecutionOptions options;
 		options.dryRun = false;
 		options.includeContainerContents = false;
@@ -245,6 +264,14 @@ namespace {
 		options.dryRun = false;
 		options.includeContainerContents = false;
 		options.doodadReplacementBrush = &statue;
+		options.doodadComposite = &statue.getComposite(0);
+		options.doodadAllowedPositions = { anchor };
+		options.enforceDoodadSelectionScope = true;
+		const ReplaceExecutionResult declined = ReplaceEngine::Run(editor, { source }, { rule }, options);
+		QuickReplaceCheck(!declined.committed && declined.doodadOutsideScopeTiles == 1, "Outside-selection Doodad did not request confirmation");
+		QuickReplaceCheck(HasItem(*editor.map.getTile(anchor), 500) && !HasItem(*editor.map.getTile(secondPart), 601), "Default-No Doodad preflight changed the map");
+
+		options.allowDoodadOutsideScope = true;
 		const ReplaceExecutionResult result = ReplaceEngine::Run(editor, { source }, { rule }, options);
 		QuickReplaceCheck(result.committed && result.doodadPlacements == 1 && result.doodadTilesChanged == 2, "Complete Doodad brush was not applied");
 		QuickReplaceCheck(!HasItem(*editor.map.getTile(anchor), 500) && HasItem(*editor.map.getTile(anchor), 600) && HasItem(*editor.map.getTile(secondPart), 601), "Doodad composite pieces were not assembled");
@@ -252,6 +279,16 @@ namespace {
 		QuickReplaceCheck(HasItem(*editor.map.getTile(anchor), 500) && !HasItem(*editor.map.getTile(anchor), 600) && !HasItem(*editor.map.getTile(secondPart), 601), "One undo did not restore the replaced Doodad");
 		QuickReplaceCheck(editor.actionQueue->redo(), "Complete Doodad redo failed");
 		QuickReplaceCheck(!HasItem(*editor.map.getTile(anchor), 500) && HasItem(*editor.map.getTile(anchor), 600) && HasItem(*editor.map.getTile(secondPart), 601), "One redo did not restore the complete Doodad");
+
+		CopyBuffer insideCopyBuffer;
+		Editor insideEditor(insideCopyBuffer, nullptr);
+		Tile* insideSource = AddTile(insideEditor.map, anchor, 100);
+		insideSource->addItem(Item::Create(500));
+		AddTile(insideEditor.map, secondPart, 100);
+		options.allowDoodadOutsideScope = false;
+		options.doodadAllowedPositions = { anchor, secondPart };
+		const ReplaceExecutionResult inside = ReplaceEngine::Run(insideEditor, { insideSource }, { rule }, options);
+		QuickReplaceCheck(inside.committed && inside.doodadOutsideScopeTiles == 0, "Fully selected Doodad incorrectly required outside-scope confirmation");
 		std::cout << "PASS complete Doodad brush placement with atomic undo/redo\n";
 	}
 

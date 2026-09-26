@@ -5,6 +5,7 @@
 #ifndef RME_REPLACE_TOOL_REPLACE_ENGINE_H_
 #define RME_REPLACE_TOOL_REPLACE_ENGINE_H_
 
+#include "../doodad_brush.h"
 #include "replace_rule.h"
 
 #include <cstddef>
@@ -12,7 +13,6 @@
 #include <functional>
 #include <vector>
 
-class DoodadBrush;
 class Editor;
 class Item;
 class Tile;
@@ -24,6 +24,10 @@ struct ReplaceExecutionOptions {
 	bool rebuildGroundBorders = false;
 	DoodadBrush* doodadReplacementBrush = nullptr;
 	int doodadVariation = 0;
+	const CompositeTileList* doodadComposite = nullptr;
+	PositionVector doodadAllowedPositions;
+	bool enforceDoodadSelectionScope = false;
+	bool allowDoodadOutsideScope = false;
 	std::function<bool(const Tile&, const Item&)> matchFilter;
 };
 
@@ -39,6 +43,7 @@ struct ReplaceExecutionResult {
 	size_t changedTiles = 0;
 	size_t doodadPlacements = 0;
 	size_t doodadTilesChanged = 0;
+	size_t doodadOutsideScopeTiles = 0;
 	size_t bordersRebuilt = 0;
 	bool committed = false;
 

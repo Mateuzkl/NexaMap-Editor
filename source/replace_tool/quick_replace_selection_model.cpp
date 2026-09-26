@@ -145,3 +145,13 @@ std::vector<QuickReplaceCandidate> CollectQuickReplaceCandidates(const std::vect
 	});
 	return candidates;
 }
+
+std::optional<size_t> FindQuickReplaceCandidateIndex(const std::vector<QuickReplaceCandidate>& candidates, const QuickReplaceCandidateKey& key) {
+	const auto found = std::find_if(candidates.begin(), candidates.end(), [&key](const QuickReplaceCandidate& candidate) {
+		return candidate.mapItemId == key.mapItemId && candidate.category == key.category;
+	});
+	if (found == candidates.end()) {
+		return std::nullopt;
+	}
+	return static_cast<size_t>(std::distance(candidates.begin(), found));
+}

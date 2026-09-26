@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,5 +45,6 @@ struct QuickReplaceCandidate {
 [[nodiscard]] QuickReplaceCategory ClassifyItemType(const ItemType& type);
 [[nodiscard]] const char* QuickReplaceCategoryName(QuickReplaceCategory category);
 [[nodiscard]] std::vector<QuickReplaceCandidate> CollectQuickReplaceCandidates(const std::vector<Tile*>& tiles);
+[[nodiscard]] std::optional<size_t> FindQuickReplaceCandidateIndex(const std::vector<QuickReplaceCandidate>& candidates, const QuickReplaceCandidateKey& key);
 
 #endif

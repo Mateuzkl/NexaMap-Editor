@@ -319,9 +319,9 @@ QuickReplaceSelectionDialog::QuickReplaceSelectionDialog(MapCanvas* parent, Edit
 	sameCategoryCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Keep same item category");
 	sameCategoryCheck_->SetValue(true);
 	replacementBox->Add(sameCategoryCheck_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
-	autoBorderCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Rebuild surrounding borders automatically");
-	autoBorderCheck_->SetValue(true);
-	autoBorderCheck_->SetToolTip("For floor replacement, recalculate the correct borders on the changed tiles and their immediate neighbors.");
+	autoBorderCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Rebuild surrounding floor borders");
+	autoBorderCheck_->SetValue(false);
+	autoBorderCheck_->SetToolTip("May modify adjacent tiles outside the selected area. All changes remain part of the same Undo/Redo operation.");
 	replacementBox->Add(autoBorderCheck_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 	replaceButton_ = newd wxButton(replacementParent, wxID_ANY, "Replace");
 	replaceButton_->SetDefault();
@@ -378,13 +378,13 @@ const QuickReplaceCandidate* QuickReplaceSelectionDialog::CurrentCandidate() con
 	return &candidates_[selection];
 }
 
-void QuickReplaceSelectionDialog::RefreshCandidates(uint16_t preferredSourceId) {
+void QuickReplaceSelectionDialog::RefreshCandidates(std::optional<QuickReplaceCandidateKey> preferredSource) {
 	candidates_ = CollectQuickReplaceCandidates(ResolveSelectedTiles());
 	sourceList_->ResetItems();
 	scopeLabel_->SetLabel(wxString::Format("Selected area: %zu tile%s   |   %zu unique visible item ID%s", selectedPositions_.size(), selectedPositions_.size() == 1 ? "" : "s", candidates_.size(), candidates_.size() == 1 ? "" : "s"));
 
 	if (candidates_.empty()) {
-		sourceId_ = 0;
+		sourceKey_ = {};
 		sourceList_->SetSelection(wxNOT_FOUND);
 		UpdateSourcePreview();
 		ClearTarget();
@@ -393,12 +393,9 @@ void QuickReplaceSelectionDialog::RefreshCandidates(uint16_t preferredSourceId) 
 	}
 
 	size_t selection = 0;
-	if (preferredSourceId != 0) {
-		const auto found = std::find_if(candidates_.begin(), candidates_.end(), [preferredSourceId](const QuickReplaceCandidate& candidate) {
-			return candidate.mapItemId == preferredSourceId;
-		});
-		if (found != candidates_.end()) {
-			selection = static_cast<size_t>(std::distance(candidates_.begin(), found));
+	if (preferredSource) {
+		if (const std::optional<size_t> found = FindQuickReplaceCandidateIndex(candidates_, *preferredSource)) {
+			selection = *found;
 		}
 	}
 	SelectCandidate(selection);
@@ -409,7 +406,7 @@ void QuickReplaceSelectionDialog::SelectCandidate(size_t index) {
 		return;
 	}
 	sourceList_->SetSelection(static_cast<int>(index));
-	sourceId_ = candidates_[index].mapItemId;
+	sourceKey_ = { candidates_[index].mapItemId, candidates_[index].category };
 	UpdateSourcePreview();
 	ClearTarget();
 }
@@ -476,7 +473,7 @@ void QuickReplaceSelectionDialog::SetStatus(const wxString& message, bool error)
 
 void QuickReplaceSelectionDialog::OnSourceSelected(wxCommandEvent& WXUNUSED(event)) {
 	const QuickReplaceCandidate* candidate = CurrentCandidate();
-	sourceId_ = candidate ? candidate->mapItemId : 0;
+	sourceKey_ = candidate ? QuickReplaceCandidateKey { candidate->mapItemId, candidate->category } : QuickReplaceCandidateKey {};
 	UpdateSourcePreview();
 	ClearTarget();
 	SetStatus(wxEmptyString);
@@ -526,8 +523,8 @@ void QuickReplaceSelectionDialog::OnSameCategoryChanged(wxCommandEvent& WXUNUSED
 void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 	const QuickReplaceCandidate* source = CurrentCandidate();
 	Brush* sourceBrush = source ? g_items.getItemType(source->mapItemId).doodad_brush : nullptr;
-	const bool replacementDiffers = targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != sourceId_;
-	if (!source || source->mapItemId != sourceId_ || targetId_ == 0 || !replacementDiffers) {
+	const bool replacementDiffers = targetDoodadBrush_ ? sourceBrush != targetDoodadBrush_ : source && targetId_ != sourceKey_.mapItemId;
+	if (!source || source->mapItemId != sourceKey_.mapItemId || source->category != sourceKey_.category || targetId_ == 0 || !replacementDiffers) {
 		return;
 	}
 	if (sameCategoryCheck_->GetValue() && source->category != targetCategory_) {
@@ -539,7 +536,7 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 			wxString::Format(
 				"Replace %s ID %u with %s ID %u?\n\nThis changes the item category and may alter specialized item state.",
 				QuickReplaceCategoryName(source->category),
-				sourceId_,
+				sourceKey_.mapItemId,
 				QuickReplaceCategoryName(targetCategory_),
 				targetId_
 			),
@@ -552,38 +549,63 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 		}
 	}
 
-	uint16_t nextSourceId = 0;
+	std::optional<QuickReplaceCandidateKey> nextSource;
 	const int currentIndex = sourceList_->GetSelection();
 	if (currentIndex != wxNOT_FOUND && candidates_.size() > 1) {
 		for (size_t offset = 1; offset < candidates_.size(); ++offset) {
 			const QuickReplaceCandidate& candidate = candidates_[(static_cast<size_t>(currentIndex) + offset) % candidates_.size()];
 			if (candidate.mapItemId != targetId_) {
-				nextSourceId = candidate.mapItemId;
+				nextSource = QuickReplaceCandidateKey { candidate.mapItemId, candidate.category };
 				break;
 			}
 		}
 	}
 
 	ReplacementRule rule;
-	rule.sourceServerId = ServerItemId(sourceId_);
+	rule.sourceServerId = ServerItemId(sourceKey_.mapItemId);
 	rule.targets.push_back(ReplacementTarget::ForItem(ServerItemId(targetId_), 100));
 	ReplaceExecutionOptions options;
 	options.dryRun = false;
 	options.includeContainerContents = false;
 	options.rebuildGroundBorders = autoBorderCheck_->GetValue() && source->category == QuickReplaceCategory::Ground && targetCategory_ == QuickReplaceCategory::Ground;
 	options.doodadReplacementBrush = targetDoodadBrush_;
+	if (targetDoodadBrush_) {
+		if (targetDoodadBrush_->hasCompositeObjects(options.doodadVariation)) {
+			options.doodadComposite = &targetDoodadBrush_->getComposite(options.doodadVariation);
+		}
+		options.doodadAllowedPositions = selectedPositions_;
+		options.enforceDoodadSelectionScope = true;
+	}
 	const QuickReplaceCategory sourceCategory = source->category;
 	options.matchFilter = [sourceCategory](const Tile& tile, const Item& item) {
 		return ClassifyPlacedItem(tile, item) == sourceCategory;
 	};
-	const ReplaceExecutionResult result = ReplaceEngine::Run(editor_, ResolveSelectedTiles(), { rule }, options);
+	ReplaceExecutionResult result = ReplaceEngine::Run(editor_, ResolveSelectedTiles(), { rule }, options);
 	if (!result.validation.isValid()) {
 		SetStatus("The replacement rule is invalid.", true);
 		return;
 	}
+	if (result.doodadOutsideScopeTiles != 0) {
+		const int answer = wxMessageBox(
+			wxString::Format(
+				"This Doodad extends outside the selected area and will modify %zu neighboring tile%s.\n\nContinue?",
+				result.doodadOutsideScopeTiles,
+				result.doodadOutsideScopeTiles == 1 ? "" : "s"
+			),
+			"Doodad Extends Outside Selection",
+			wxYES_NO | wxNO_DEFAULT | wxICON_WARNING,
+			this
+		);
+		if (answer != wxYES) {
+			SetStatus("Doodad replacement canceled; the selected area was not changed.");
+			return;
+		}
+		options.allowDoodadOutsideScope = true;
+		result = ReplaceEngine::Run(editor_, ResolveSelectedTiles(), { rule }, options);
+	}
 	if (!result.committed) {
 		SetStatus("No matching visible items were found in the captured selection.", true);
-		RefreshCandidates(sourceId_);
+		RefreshCandidates(sourceKey_);
 		return;
 	}
 
@@ -596,7 +618,7 @@ void QuickReplaceSelectionDialog::OnReplace(wxCommandEvent& WXUNUSED(event)) {
 	if (result.bordersRebuilt != 0) {
 		summary << wxString::Format(" Rebuilt borders on %zu nearby tile%s.", result.bordersRebuilt, result.bordersRebuilt == 1 ? "" : "s");
 	}
-	RefreshCandidates(nextSourceId);
+	RefreshCandidates(nextSource);
 	SetStatus(summary);
 }
 
