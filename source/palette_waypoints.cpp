@@ -535,7 +535,6 @@ void WaypointPalettePanel::OnTreeRightClick(wxTreeEvent& event) {
 
 void WaypointPalettePanel::OnTreeBeginDrag(wxTreeEvent& event) {
 	drag_item_ = wxTreeItemId();
-	suppress_tree_expansion_events_ = true;
 	if (!map) {
 		return;
 	}
@@ -557,6 +556,7 @@ void WaypointPalettePanel::OnTreeBeginDrag(wxTreeEvent& event) {
 	}
 
 	drag_item_ = item;
+	suppress_tree_expansion_events_ = true;
 	event.Allow();
 }
 
@@ -591,19 +591,23 @@ void WaypointPalettePanel::OnTreeEndDrag(wxTreeEvent& event) {
 	}
 
 	const std::string selectedName = sourceData->name;
-	if (sourceData->kind == TreeItemKind::Category) {
-		markCategoryExpanded(sourceData->name);
+	const TreeItemKind sourceKind = sourceData->kind;
+	if (sourceKind == TreeItemKind::Category) {
+		markCategoryExpanded(selectedName);
 	}
 	refreshWaypointTree();
-	if (sourceData->kind == TreeItemKind::Waypoint) {
+	if (sourceKind == TreeItemKind::Waypoint) {
 		if (Waypoint* wp = map->waypoints.getWaypoint(selectedName)) {
 			markCategoryExpanded(wp->category);
 			SelectWaypoint(wp);
 		}
-	} else if (const wxTreeItemId item = findCategoryItem(selectedName); item.IsOk()) {
-		markCategoryExpanded(selectedName);
-		waypoint_tree->SelectItem(item);
-		waypoint_tree->EnsureVisible(item);
+	} else if (sourceKind == TreeItemKind::Category) {
+		const wxTreeItemId item = findCategoryItem(selectedName);
+		if (item.IsOk()) {
+			markCategoryExpanded(selectedName);
+			waypoint_tree->SelectItem(item);
+			waypoint_tree->EnsureVisible(item);
+		}
 	}
 	CallAfter([this]() { suppress_tree_expansion_events_ = false; });
 }
