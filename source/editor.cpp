@@ -1720,8 +1720,14 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 		addBatch(batch, 2);
 	} else if (brush->isWaypoint()) {
 		WaypointBrush* waypoint_brush = brush->asWaypoint();
-		if (!waypoint_brush->canDraw(&map, offset)) {
+		if (waypoint_brush->getWaypoint().empty()) {
 			return;
+		}
+
+		if (!waypoint_brush->canDraw(&map, offset)) {
+			if (!map.getTile(offset)) {
+				map.setTile(offset, map.allocator(map.createTileL(offset)));
+			}
 		}
 
 		Waypoint* waypoint = map.waypoints.getWaypoint(waypoint_brush->getWaypoint());

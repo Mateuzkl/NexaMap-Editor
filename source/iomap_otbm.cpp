@@ -1161,6 +1161,9 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 		// warning("Failed to load waypoints.");
 		map.waypointfile = nstr(filename.GetName()) + "-waypoint.xml";
 	}
+	if (!loadWaypointGroups(map, filename)) {
+		warning("Failed to load waypoint groups.");
+	}
 	return true;
 }
 
@@ -1788,6 +1791,52 @@ bool IOMapOTBM::loadWaypoints(Map& map, pugi::xml_document& doc) {
 	return true;
 };
 
+namespace {
+std::string waypointGroupsFilename(const FileName& dir) {
+	return nstr(dir.GetName()) + "-waypoint-groups.xml";
+}
+} // namespace
+
+bool IOMapOTBM::loadWaypointGroups(Map& map, const FileName& dir) {
+	const std::string fn = (const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8)) + waypointGroupsFilename(dir);
+	if (!wxFileExists(wxstr(fn))) {
+		return true;
+	}
+
+	pugi::xml_document doc;
+	const pugi::xml_parse_result result = doc.load_file(fn.c_str());
+	if (!result) {
+		return false;
+	}
+
+	pugi::xml_node root = doc.child("waypointgroups");
+	if (!root) {
+		return true;
+	}
+
+	map.waypoints.clearGroups();
+	for (pugi::xml_node node = root.first_child(); node; node = node.next_sibling()) {
+		const std::string nodeName = as_lower_str(node.name());
+		if (nodeName == "category") {
+			const std::string name = node.attribute("name").as_string();
+			map.waypoints.addCategory(name);
+		} else if (nodeName == "waypoint") {
+			const std::string name = node.attribute("name").as_string();
+			const std::string category = node.attribute("category").as_string();
+			if (Waypoint* wp = map.waypoints.getWaypoint(name)) {
+				wp->category = category;
+				if (category.empty()) {
+					map.waypoints.uncategorized_order.push_back(wp->name);
+				} else {
+					map.waypoints.addCategory(category);
+					map.waypoints.category_waypoint_order[category].push_back(wp->name);
+				}
+			}
+		}
+	}
+	return true;
+}
+
 bool IOMapOTBM::loadZones(Map& map, const FileName& dir) {
 	if (map.zonefile.empty()) {
 		return true;
@@ -1933,6 +1982,11 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 		if (!saveZones(map, identifier)) {
 			return failStage("saveZones", "The zone XML file could not be written.");
 		}
+	}
+
+	g_gui.SetLoadDone(99, "Saving waypoint groups...");
+	if (!saveWaypointGroups(map, identifier)) {
+		return false;
 	}
 
 	return true;
@@ -2438,6 +2492,45 @@ bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
 		houseNode.append_attribute("townid") = house->townid;
 	}
 	return true;
+}
+
+bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
+	if (!map.waypoints.hasGroups()) {
+		const std::string fn = (const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8)) + waypointGroupsFilename(dir);
+		wxRemoveFile(wxstr(fn));
+		return true;
+	}
+
+	return saveSidecarXml(dir, waypointGroupsFilename(dir), [&](pugi::xml_document& doc) {
+		if (!prependXmlDeclaration(doc)) {
+			return false;
+		}
+
+		pugi::xml_node root = doc.append_child("waypointgroups");
+		map.waypoints.syncWaypointOrders();
+		for (const auto& category : map.waypoints.categories) {
+			pugi::xml_node categoryNode = root.append_child("category");
+			categoryNode.append_attribute("name") = category.c_str();
+			const auto found = map.waypoints.category_waypoint_order.find(category);
+			if (found != map.waypoints.category_waypoint_order.end()) {
+				for (const auto& waypointName : found->second) {
+					if (Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
+						pugi::xml_node waypointNode = root.append_child("waypoint");
+						waypointNode.append_attribute("name") = waypoint->name.c_str();
+						waypointNode.append_attribute("category") = category.c_str();
+					}
+				}
+			}
+		}
+		for (const auto& waypointName : map.waypoints.uncategorized_order) {
+			if (Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
+				pugi::xml_node waypointNode = root.append_child("waypoint");
+				waypointNode.append_attribute("name") = waypoint->name.c_str();
+				waypointNode.append_attribute("category") = "";
+			}
+		}
+		return true;
+	});
 }
 
 bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {

@@ -20,10 +20,14 @@
 
 #include "position.h"
 
+#include <map>
+#include <vector>
+
 class Waypoint {
 public:
 	std::string name;
 	Position pos;
+	std::string category;
 };
 
 typedef std::map<std::string, Waypoint*> WaypointMap;
@@ -45,7 +49,26 @@ public:
 	Waypoint* getWaypoint(const TileLocation* location);
 	void removeWaypoint(std::string name);
 
+	void clearGroups();
+	void addCategory(const std::string& name);
+	void removeCategory(const std::string& name);
+	bool renameCategory(const std::string& oldName, const std::string& newName);
+	void setWaypointCategory(const std::string& waypointName, const std::string& category);
+	bool hasGroups() const;
+	void syncWaypointOrders();
+	void registerWaypointOrder(const Waypoint* wp);
+	void unregisterWaypointOrder(const std::string& name);
+	void renameInOrders(const std::string& oldName, const std::string& newName);
+	bool moveCategoryRelative(const std::string& category, const std::string& anchorCategory, bool insertBefore);
+	bool moveWaypointRelative(const std::string& waypoint, const std::string& anchorWaypoint, bool insertBefore);
+	bool moveWaypointIntoCategory(const std::string& waypoint, const std::string& category, bool atEnd);
+	bool nudgeCategory(const std::string& category, bool moveUp);
+	std::vector<std::string> orderedWaypointsInCategory(const std::string& category) const;
+
 	WaypointMap waypoints;
+	std::vector<std::string> categories;
+	std::vector<std::string> uncategorized_order;
+	std::map<std::string, std::vector<std::string>> category_waypoint_order;
 
 	WaypointMap::iterator begin() {
 		return waypoints.begin();

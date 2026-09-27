@@ -190,6 +190,7 @@ protected:
 	bool loadHouses(Map& map, pugi::xml_document& doc);
 	bool loadWaypoints(Map& map, const FileName& dir);
 	bool loadWaypoints(Map& map, pugi::xml_document& doc);
+	bool loadWaypointGroups(Map& map, const FileName& dir);
 	bool loadZones(Map& map, const FileName& dir);
 	bool loadZones(Map& map, pugi::xml_document& doc);
 
@@ -199,6 +200,7 @@ protected:
 	bool saveHouses(Map& map, pugi::xml_document& doc);
 	bool saveWaypoints(Map& map, const FileName& dir);
 	bool saveWaypoints(Map& map, pugi::xml_document& doc);
+	bool saveWaypointGroups(Map& map, const FileName& dir);
 	bool saveZones(Map& map, const FileName& dir);
 
 private:

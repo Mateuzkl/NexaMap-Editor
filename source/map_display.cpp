@@ -53,6 +53,8 @@
 #include "creature_brush.h"
 #include "ground_brush.h"
 #include "waypoint_brush.h"
+#include "waypoints.h"
+#include "palette_window.h"
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
@@ -221,6 +223,8 @@ EVT_MENU(MAP_POPUP_MENU_SELECT_TABLE_BRUSH, MapCanvas::OnSelectTableBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, MapCanvas::OnSelectCreatureBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_SPAWN_BRUSH, MapCanvas::OnSelectSpawnBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_HOUSE_BRUSH, MapCanvas::OnSelectHouseBrush)
+EVT_MENU(MAP_POPUP_MENU_WAYPOINT_RENAME, MapCanvas::OnWaypointRename)
+EVT_MENU(MAP_POPUP_MENU_WAYPOINT_DELETE, MapCanvas::OnWaypointDelete)
 EVT_MENU(MAP_POPUP_MENU_MOVE_TO_TILESET, MapCanvas::OnSelectMoveTo)
 // ----
 EVT_MENU(MAP_POPUP_MENU_PROPERTIES, MapCanvas::OnProperties)
@@ -247,6 +251,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool in
 	drawing(false),
 	dragging_draw(false),
 	replace_dragging(false),
+	dragging_waypoint(false),
 
 	screenshot_buffer(nullptr),
 
@@ -901,6 +906,16 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 			UpdateAutoborderPreview(event.AltDown());
 
 			g_gui.RefreshView();
+		} else if (dragging_waypoint) {
+			Brush* brush = g_gui.GetCurrentBrush();
+			if (brush && brush->isWaypoint()) {
+				const Position pos(mouse_map_x, mouse_map_y, floor);
+				if (pos != waypoint_drag_last_pos) {
+					editor.draw(pos, event.AltDown());
+					waypoint_drag_last_pos = pos;
+				}
+			}
+			g_gui.RefreshView();
 		} else if (dragging_draw) {
 			g_gui.RefreshView();
 		} else if (map_update && brush) {
@@ -1321,7 +1336,29 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event) {
 					}
 				} else if (brush->oneSizeFitsAll()) {
 					if (brush->isHouseExit() || brush->isWaypoint()) {
-						editor.draw(Position(mouse_map_x, mouse_map_y, floor), event.AltDown());
+						const Position pos(mouse_map_x, mouse_map_y, floor);
+						if (brush->isWaypoint()) {
+							Waypoint* selected = editor.map.waypoints.getWaypoint(g_gui.waypoint_brush->getWaypoint());
+							Waypoint* atClick = getWaypointAt(mouse_map_x, mouse_map_y, floor);
+
+							if (atClick && (!selected || atClick != selected)) {
+								g_gui.waypoint_brush->setWaypoint(atClick);
+								g_gui.SelectBrushInternal(g_gui.waypoint_brush);
+								if (PaletteWindow* palette = g_gui.GetPalette()) {
+									palette->SelectWaypoint(atClick);
+								}
+								if (atClick->pos == pos) {
+									beginWaypointDrag(pos);
+								}
+							} else if (selected) {
+								if (selected->pos != pos) {
+									editor.draw(pos, event.AltDown());
+								}
+								beginWaypointDrag(pos);
+							}
+						} else {
+							editor.draw(pos, event.AltDown());
+						}
 					} else {
 						PositionVector tilestodraw;
 						tilestodraw.push_back(Position(mouse_map_x, mouse_map_y, floor));
@@ -1639,6 +1676,7 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 			}
 		}
 		editor.actionQueue->resetTimer();
+		endWaypointDrag();
 		drawing = false;
 		dragging_draw = false;
 		replace_dragging = false;
@@ -1683,6 +1721,19 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event) {
 
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
+
+	if (Brush* brush = g_gui.GetCurrentBrush(); g_gui.IsDrawingMode() && brush && brush->isWaypoint()) {
+		if (Waypoint* wp = getWaypointAt(mouse_map_x, mouse_map_y, floor)) {
+			g_gui.waypoint_brush->setWaypoint(wp);
+			g_gui.SelectBrushInternal(g_gui.waypoint_brush);
+			if (PaletteWindow* palette = g_gui.GetPalette()) {
+				palette->SelectWaypoint(wp);
+			}
+			showWaypointContextMenu(wp->name);
+			return;
+		}
+	}
+
 	Tile* tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
 
 	if (g_gui.IsDrawingMode()) {
@@ -1739,9 +1790,81 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event) {
 	g_gui.RefreshView();
 }
 
+Waypoint* MapCanvas::getWaypointAt(int map_x, int map_y, int map_z) const {
+	Tile* tile = editor.map.getTile(map_x, map_y, map_z);
+	if (!tile || tile->getLocation()->getWaypointCount() <= 0) {
+		return nullptr;
+	}
+	return editor.map.waypoints.getWaypoint(tile->getLocation());
+}
+
+void MapCanvas::beginWaypointDrag(const Position& pos) {
+	dragging_waypoint = true;
+	waypoint_drag_last_pos = pos;
+	if (!HasCapture()) {
+		CaptureMouse();
+	}
+}
+
+void MapCanvas::endWaypointDrag() {
+	dragging_waypoint = false;
+	if (HasCapture()) {
+		ReleaseMouse();
+	}
+}
+
+void MapCanvas::showWaypointContextMenu(const std::string& waypointName) {
+	context_waypoint_name_ = waypointName;
+	skip_properties_release_ = true;
+	wxMenu menu;
+	menu.Append(MAP_POPUP_MENU_WAYPOINT_RENAME, "Rename");
+	menu.Append(MAP_POPUP_MENU_WAYPOINT_DELETE, "Delete");
+	PopupMenu(&menu);
+	if (context_waypoint_name_ == waypointName) {
+		context_waypoint_name_.clear();
+	}
+}
+
+void MapCanvas::OnWaypointRename(wxCommandEvent& WXUNUSED(event)) {
+	if (context_waypoint_name_.empty()) {
+		return;
+	}
+	const std::string oldName = context_waypoint_name_;
+	context_waypoint_name_.clear();
+	Waypoint* wp = editor.map.waypoints.getWaypoint(oldName);
+	if (!wp) {
+		return;
+	}
+	const wxString newName = wxGetTextFromUser("Waypoint name", "Rename waypoint", wxstr(wp->name), this);
+	if (newName.empty()) {
+		return;
+	}
+	if (PaletteWindow* palette = g_gui.GetPalette()) {
+		palette->RenameWaypointFromMap(oldName, nstr(newName));
+	}
+	g_gui.RefreshView();
+}
+
+void MapCanvas::OnWaypointDelete(wxCommandEvent& WXUNUSED(event)) {
+	if (context_waypoint_name_.empty()) {
+		return;
+	}
+	const std::string name = context_waypoint_name_;
+	context_waypoint_name_.clear();
+	if (PaletteWindow* palette = g_gui.GetPalette()) {
+		palette->DeleteWaypointFromMap(name);
+	}
+	g_gui.RefreshView();
+}
+
 void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event) {
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
+
+	if (skip_properties_release_) {
+		skip_properties_release_ = false;
+		return;
+	}
 
 	if (g_gui.IsDrawingMode()) {
 		g_gui.SetSelectionMode();
@@ -2875,6 +2998,7 @@ void MapCanvas::ChangeFloor(int new_floor) {
 void MapCanvas::EnterDrawingMode() {
 	dragging = false;
 	boundbox_selection = false;
+	endWaypointDrag();
 	EndPasting();
 	Refresh();
 }
@@ -2882,6 +3006,7 @@ void MapCanvas::EnterDrawingMode() {
 void MapCanvas::EnterSelectionMode() {
 	drawing = false;
 	dragging_draw = false;
+	endWaypointDrag();
 	replace_dragging = false;
 	editor.replace_brush = nullptr;
 	Refresh();
@@ -2914,6 +3039,7 @@ void MapCanvas::Reset() {
 	screendragging = false;
 	drawing = false;
 	dragging_draw = false;
+	endWaypointDrag();
 
 	replace_dragging = false;
 	editor.replace_brush = nullptr;

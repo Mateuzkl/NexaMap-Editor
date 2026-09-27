@@ -408,6 +408,12 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 		return true;
 	}
 
+	if (whatbrush->isWaypoint() && waypoint_palette) {
+		waypoint_palette->SelectBrush(whatbrush);
+		SelectPage(TILESET_WAYPOINT);
+		return true;
+	}
+
 	switch (primary) {
 		case TILESET_FAVORITES:
 			if (favorites_palette && favorites_palette->SelectBrush(whatbrush)) {
@@ -631,6 +637,35 @@ void PaletteWindow::OnUpdate(Map* map) {
 	if (saved_terrain_palette) {
 		saved_terrain_palette->OnUpdate();
 	}
+}
+
+void PaletteWindow::SelectWaypoint(Waypoint* wp) {
+	if (waypoint_palette) {
+		waypoint_palette->SelectWaypoint(wp);
+	}
+}
+
+bool PaletteWindow::RenameWaypointFromMap(const std::string& oldName, const std::string& newName) {
+	if (!waypoint_palette) {
+		return false;
+	}
+	const bool renamed = waypoint_palette->RenameWaypoint(oldName, newName);
+	if (renamed) {
+		waypoint_palette->refreshWaypointTree();
+	}
+	return renamed;
+}
+
+bool PaletteWindow::DeleteWaypointFromMap(const std::string& name) {
+	if (!waypoint_palette) {
+		return false;
+	}
+	const bool deleted = waypoint_palette->DeleteWaypoint(name);
+	if (deleted) {
+		waypoint_palette->refreshWaypointTree();
+		g_gui.RefreshView();
+	}
+	return deleted;
 }
 
 void PaletteWindow::OnKey(wxKeyEvent& event) {

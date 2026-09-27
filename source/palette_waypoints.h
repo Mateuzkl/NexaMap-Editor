@@ -18,7 +18,10 @@
 #ifndef RME_PALETTE_WAYPOINTS_H_
 #define RME_PALETTE_WAYPOINTS_H_
 
-#include <wx/listctrl.h>
+#include <set>
+#include <unordered_map>
+
+#include <wx/treectrl.h>
 
 #include "waypoints.h"
 #include "palette_common.h"
@@ -31,27 +34,72 @@ public:
 	wxString GetName() const override;
 	PaletteType GetType() const override;
 
-	// Returns the currently selected brush (first brush if panel is not loaded)
 	Brush* GetSelectedBrush() const override;
-	// Select the brush in the parameter, this only changes the look of the panel
 	bool SelectBrush(const Brush* whatbrush) override;
 
-	// Called sometimes?
 	void OnUpdate() override;
 
+	void SelectWaypoint(Waypoint* wp);
+	bool RenameWaypoint(const std::string& oldName, const std::string& newName);
+	bool DeleteWaypoint(const std::string& name);
+	void refreshWaypointTree();
+
 public:
-	// wxWidgets event handling
-	void OnClickWaypoint(wxListEvent& event);
-	void OnEditWaypointLabel(wxListEvent& event);
+	void OnTreeSelectionChanged(wxTreeEvent& event);
+	void OnTreeItemActivated(wxTreeEvent& event);
+	void OnTreeBeginLabelEdit(wxTreeEvent& event);
+	void OnTreeEndLabelEdit(wxTreeEvent& event);
+	void OnTreeRightClick(wxTreeEvent& event);
+	void OnTreeBeginDrag(wxTreeEvent& event);
+	void OnTreeEndDrag(wxTreeEvent& event);
+	void OnTreeItemExpanded(wxTreeEvent& event);
+	void OnTreeItemCollapsed(wxTreeEvent& event);
+	void OnMenuRename(wxCommandEvent& event);
+	void OnMenuDelete(wxCommandEvent& event);
+	void OnClickAddCategory(wxCommandEvent& event);
 	void OnClickAddWaypoint(wxCommandEvent& event);
 	void OnClickRemoveWaypoint(wxCommandEvent& event);
 
 	void SetMap(Map* map);
 
 protected:
-	wxListCtrl* waypoint_list;
+	enum class TreeItemKind {
+		Category,
+		Waypoint,
+	};
+
+	class WaypointTreeItemData : public wxTreeItemData {
+	public:
+		TreeItemKind kind;
+		std::string name;
+
+		WaypointTreeItemData(TreeItemKind itemKind, std::string itemName) :
+			kind(itemKind),
+			name(std::move(itemName)) { }
+	};
+
+	void rebuildTree();
+	wxTreeItemId resolveCategoryDropTarget(wxTreeItemId item) const;
+	bool computeInsertBefore(int hitFlags, const std::string& sourceKey, const std::string& targetKey, bool categoryDrop) const;
+	void markCategoryExpanded(const std::string& category);
+	void rememberExpandedCategoriesFromTree();
+	void activateWaypoint(Waypoint* wp);
+	std::string getTargetCategory() const;
+	WaypointTreeItemData* getSelectedItemData() const;
+	wxTreeItemId findWaypointItem(const std::string& name) const;
+	wxTreeItemId findCategoryItem(const std::string& name) const;
+	bool applyTreeDrop(const wxTreeItemId& source, const wxTreeItemId& target, int hitFlags);
+	void OnRefreshTimer(wxTimerEvent& event);
+
+	wxTreeCtrl* waypoint_tree;
+	wxTreeItemId drag_item_;
+	wxButton* add_category_button;
 	wxButton* add_waypoint_button;
 	wxButton* remove_waypoint_button;
+	std::set<std::string> collapsed_categories_;
+	std::unordered_map<std::string, wxTreeItemId> waypoint_items_;
+	bool editing_new_waypoint_ = false;
+	bool suppress_tree_expansion_events_ = false;
 
 	DECLARE_EVENT_TABLE()
 };
