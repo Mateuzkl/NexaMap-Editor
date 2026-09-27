@@ -2501,7 +2501,8 @@ bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
 		return true;
 	}
 
-	return saveSidecarXml(dir, waypointGroupsFilename(dir), [&](pugi::xml_document& doc) {
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, waypointGroupsFilename(dir), saveError, [&](pugi::xml_document& doc) {
 		if (!prependXmlDeclaration(doc)) {
 			return false;
 		}
@@ -2531,6 +2532,10 @@ bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
 		}
 		return true;
 	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
 }
 
 bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
