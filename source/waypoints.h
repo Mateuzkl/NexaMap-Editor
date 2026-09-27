@@ -21,6 +21,7 @@
 #include "position.h"
 
 #include <map>
+#include <set>
 #include <vector>
 
 class Waypoint {
@@ -46,6 +47,7 @@ public:
 
 	void addWaypoint(Waypoint* wp);
 	Waypoint* getWaypoint(std::string name);
+	const Waypoint* getWaypoint(std::string name) const;
 	Waypoint* getWaypoint(const TileLocation* location);
 	void removeWaypoint(std::string name);
 
@@ -64,8 +66,17 @@ public:
 	bool moveWaypointIntoCategory(const std::string& waypoint, const std::string& category, bool atEnd);
 	bool nudgeCategory(const std::string& category, bool moveUp);
 	std::vector<std::string> orderedWaypointsInCategory(const std::string& category) const;
+	void notifyWaypointPositionChanged(Waypoint* wp, const Position& oldPos);
+	bool applyOrderingFromMetadata(
+		const std::vector<std::string>& categoryOrder,
+		const std::vector<std::string>& uncategorizedOrder,
+		const std::map<std::string, std::vector<std::string>>& categoryOrders,
+		const std::map<std::string, std::string>& waypointCategoryByName
+	);
+	bool validateInvariants(std::string* error = nullptr) const;
 
 	WaypointMap waypoints;
+	std::map<Position, Waypoint*> waypoint_by_position;
 	std::vector<std::string> categories;
 	std::vector<std::string> uncategorized_order;
 	std::map<std::string, std::vector<std::string>> category_waypoint_order;
@@ -82,6 +93,10 @@ public:
 	WaypointMap::const_iterator end() const {
 		return waypoints.end();
 	}
+
+private:
+	void removeWaypointFromPositionIndex(Waypoint* wp);
+	void indexWaypointPosition(Waypoint* wp);
 };
 
 #endif

@@ -89,6 +89,11 @@ protected:
 	wxTreeItemId findWaypointItem(const std::string& name) const;
 	wxTreeItemId findCategoryItem(const std::string& name) const;
 	bool applyTreeDrop(const wxTreeItemId& source, const wxTreeItemId& target, int hitFlags);
+	bool applyTreeDropInternal(const wxTreeItemId& source, const wxTreeItemId& target, int hitFlags);
+	bool renameWaypointInternal(const std::string& oldName, const std::string& newName);
+	bool deleteWaypointInternal(const std::string& name);
+	bool deleteCategoryInternal(const std::string& name);
+	static void markMapMetadataChanged(Map* map);
 	void OnRefreshTimer(wxTimerEvent& event);
 
 	wxTreeCtrl* waypoint_tree;

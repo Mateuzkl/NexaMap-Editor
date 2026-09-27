@@ -142,6 +142,7 @@ public:
 		return editor;
 	}
 	static MultiplayerSession* current();
+	static bool canEditMapMetadata(Map* map);
 	static bool permitsResourceSession(const std::shared_ptr<EditorResourceSession>& resources);
 
 	// Dialogs that edit registries outside ActionQueue use the same transaction path.

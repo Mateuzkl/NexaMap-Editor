@@ -2497,7 +2497,9 @@ bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
 bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
 	if (!map.waypoints.hasGroups()) {
 		const std::string fn = (const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8)) + waypointGroupsFilename(dir);
-		wxRemoveFile(wxstr(fn));
+		if (wxFileExists(wxstr(fn)) && !wxRemoveFile(wxstr(fn))) {
+			warnings.push_back("Could not remove stale waypoint group sidecar: " + fn);
+		}
 		return true;
 	}
 

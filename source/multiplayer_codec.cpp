@@ -156,20 +156,68 @@ namespace Multiplayer {
 			Position temple;
 		};
 		struct Metadata {
+			uint8_t format_version = 1;
 			std::vector<TownData> towns;
 			std::vector<HouseSnapshot> houses;
 			std::map<std::string, Position> waypoints;
+			std::map<std::string, std::string> waypoint_category;
+			std::vector<std::string> waypoint_categories;
+			std::vector<std::string> uncategorized_order;
+			std::map<std::string, std::vector<std::string>> category_waypoint_order;
 			std::map<std::string, uint32_t> zones;
 		};
+		void readWaypointGroups(Reader& in, Metadata& data, const std::set<std::string>& waypointKeys) {
+			auto catCount = in.u32();
+			if (catCount > MaxEntities) {
+				throw Error("Invalid waypoint category count.");
+			}
+			std::set<std::string> categoryNames;
+			while (catCount--) {
+				const auto category = in.string(1024);
+				if (category.empty() || !categoryNames.insert(category).second) {
+					throw Error("Duplicate/invalid waypoint category.");
+				}
+				data.waypoint_categories.push_back(category);
+			}
+			auto uncatCount = in.u32();
+			if (uncatCount > MaxEntities) {
+				throw Error("Invalid uncategorized waypoint count.");
+			}
+			while (uncatCount--) {
+				const auto name = in.string(1024);
+				if (name.empty() || !waypointKeys.contains(as_lower_str(name))) {
+					throw Error("Invalid uncategorized waypoint reference.");
+				}
+				data.uncategorized_order.push_back(name);
+			}
+			for (const auto& category : data.waypoint_categories) {
+				auto orderCount = in.u32();
+				if (orderCount > MaxEntities) {
+					throw Error("Invalid category waypoint count.");
+				}
+				std::vector<std::string> order;
+				std::set<std::string> seenInCategory;
+				while (orderCount--) {
+					const auto name = in.string(1024);
+					if (name.empty() || !waypointKeys.contains(as_lower_str(name)) || !seenInCategory.insert(as_lower_str(name)).second) {
+						throw Error("Invalid category waypoint reference.");
+					}
+					order.push_back(name);
+				}
+				data.category_waypoint_order[category] = std::move(order);
+			}
+		}
 		Metadata readMetadata(std::span<const uint8_t> bytes) {
 			if (bytes.size() > MaxMetadata) {
 				throw Error("Metadata size limit exceeded.");
 			}
 			Reader in(bytes);
-			if (in.u8() != 1) {
+			const uint8_t formatVersion = in.u8();
+			if (formatVersion != 1 && formatVersion != 2) {
 				throw Error("Unknown metadata format.");
 			}
 			Metadata data;
+			data.format_version = formatVersion;
 			std::set<uint32_t> townIds, houseIds, zoneIds;
 			auto count = in.u32();
 			if (count > MaxEntities || count > in.remaining() / 16) {
@@ -209,11 +257,44 @@ namespace Multiplayer {
 			if (count > MaxEntities || count > in.remaining() / 12) {
 				throw Error("Invalid waypoint count.");
 			}
+			std::set<std::string> waypointKeys;
 			while (count--) {
 				auto name = in.string(1024);
 				auto pos = position(in);
 				if (name.empty() || !data.waypoints.emplace(name, pos).second) {
 					throw Error("Duplicate waypoint.");
+				}
+				waypointKeys.insert(as_lower_str(name));
+				if (formatVersion >= 2) {
+					const auto category = in.string(1024);
+					data.waypoint_category[name] = category;
+				}
+			}
+			if (formatVersion >= 2) {
+				readWaypointGroups(in, data, waypointKeys);
+				const std::set<std::string> categoryNames(data.waypoint_categories.begin(), data.waypoint_categories.end());
+				std::set<std::string> ordered;
+				for (const auto& name : data.uncategorized_order) {
+					if (!ordered.insert(as_lower_str(name)).second) {
+						throw Error("Duplicate waypoint ordering.");
+					}
+				}
+				for (const auto& [category, order] : data.category_waypoint_order) {
+					(void)category;
+					for (const auto& name : order) {
+						if (!ordered.insert(as_lower_str(name)).second) {
+							throw Error("Duplicate waypoint ordering.");
+						}
+					}
+				}
+				for (const auto& [name, category] : data.waypoint_category) {
+					(void)name;
+					if (!category.empty() && !categoryNames.contains(category)) {
+						throw Error("Unknown waypoint category reference.");
+					}
+				}
+				if (ordered.size() != waypointKeys.size()) {
+					throw Error("Incomplete waypoint ordering.");
 				}
 			}
 			count = in.u32();
@@ -410,7 +491,7 @@ namespace Multiplayer {
 	}
 	Bytes encodeMetadata(Map& map) {
 		Writer out(MaxMetadata);
-		out.u8(1);
+		out.u8(2);
 		out.u32(map.towns.count());
 		for (const auto& [id, town] : map.towns) {
 			out.u32(id);
@@ -430,10 +511,28 @@ namespace Multiplayer {
 			out.u8(h.guildhall);
 			position(out, h.exit);
 		}
+		map.waypoints.syncWaypointOrders();
 		out.u32(static_cast<uint32_t>(map.waypoints.waypoints.size()));
 		for (const auto& [name, wp] : map.waypoints) {
-			out.string(name, 1024);
+			out.string(wp->name, 1024);
 			position(out, wp->pos);
+			out.string(wp->category, 1024);
+		}
+		out.u32(static_cast<uint32_t>(map.waypoints.categories.size()));
+		for (const auto& category : map.waypoints.categories) {
+			out.string(category, 1024);
+		}
+		out.u32(static_cast<uint32_t>(map.waypoints.uncategorized_order.size()));
+		for (const auto& waypointName : map.waypoints.uncategorized_order) {
+			out.string(waypointName, 1024);
+		}
+		for (const auto& category : map.waypoints.categories) {
+			const auto found = map.waypoints.category_waypoint_order.find(category);
+			const auto& order = found != map.waypoints.category_waypoint_order.end() ? found->second : std::vector<std::string> {};
+			out.u32(static_cast<uint32_t>(order.size()));
+			for (const auto& waypointName : order) {
+				out.string(waypointName, 1024);
+			}
 		}
 		out.u32(static_cast<uint32_t>(map.zones.size()));
 		for (const auto& [name, id] : map.zones) {
@@ -489,8 +588,9 @@ namespace Multiplayer {
 		}
 		for (const auto& [name, pos] : data.waypoints) {
 			waypoints.insert(name);
+			const std::string category = data.format_version >= 2 && data.waypoint_category.count(name) != 0 ? data.waypoint_category.at(name) : std::string();
 			auto* wp = map.waypoints.getWaypoint(name);
-			if (wp && wp->pos == pos) {
+			if (wp && wp->pos == pos && (data.format_version < 2 || wp->category == category)) {
 				continue;
 			}
 			if (wp) {
@@ -499,6 +599,11 @@ namespace Multiplayer {
 			wp = new Waypoint;
 			wp->name = name;
 			wp->pos = pos;
+			if (data.format_version >= 2) {
+				if (const auto found = data.waypoint_category.find(name); found != data.waypoint_category.end()) {
+					wp->category = found->second;
+				}
+			}
 			map.waypoints.addWaypoint(wp);
 		}
 		for (auto it = map.waypoints.begin(); it != map.waypoints.end();) {
@@ -507,6 +612,18 @@ namespace Multiplayer {
 			if (!waypoints.contains(name)) {
 				map.waypoints.removeWaypoint(name);
 			}
+		}
+		if (data.format_version >= 2) {
+			if (!map.waypoints.applyOrderingFromMetadata(
+					data.waypoint_categories,
+					data.uncategorized_order,
+					data.category_waypoint_order,
+					data.waypoint_category)) {
+				throw Error("Invalid waypoint group metadata.");
+			}
+		} else {
+			map.waypoints.clearGroups();
+			map.waypoints.syncWaypointOrders();
 		}
 		// Replace the small registry; tile memberships are carried by tile changes.
 		std::vector<std::string> oldZones;

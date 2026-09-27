@@ -150,6 +150,16 @@ uint32_t Change::memsize() const {
 			mem += sizeof(ZoneRenameChange) + change->from.capacity() + change->to.capacity();
 			break;
 		}
+		case CHANGE_MOVE_HOUSE_EXIT:
+			ASSERT(data);
+			mem += sizeof(std::pair<uint32_t, Position>);
+			break;
+		case CHANGE_MOVE_WAYPOINT: {
+			ASSERT(data);
+			const auto* pair = reinterpret_cast<std::pair<std::string, Position>*>(data);
+			mem += sizeof(std::pair<std::string, Position>) + pair->first.capacity();
+			break;
+		}
 		case CHANGE_HOUSE_REGISTRY: {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<HouseRegistryChange*>(data);
@@ -422,9 +432,9 @@ bool Action::commit() {
 						newtile->increaseWaypointCount();
 					}
 
-					// Update shit
 					Position oldpos = wp->pos;
 					wp->pos = p->second;
+					editor.map.waypoints.notifyWaypointPositionChanged(wp, oldpos);
 					p->second = oldpos;
 				}
 				break;
@@ -553,9 +563,9 @@ bool Action::undo() {
 						newtile->increaseWaypointCount();
 					}
 
-					// Update shit
 					Position oldpos = wp->pos;
 					wp->pos = p->second;
+					editor.map.waypoints.notifyWaypointPositionChanged(wp, oldpos);
 					p->second = oldpos;
 				}
 				break;

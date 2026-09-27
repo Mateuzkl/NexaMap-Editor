@@ -383,7 +383,7 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 
 	// Make temporary backups
 	// converter.Assign(wxstr(savefile));
-	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones;
+	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones, backup_waypoint_groups;
 
 	if (converter.GetExt() == "otgz") {
 		save_otgz = true;
@@ -435,6 +435,14 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::remove(backup_zones.c_str());
 			std::rename((map_path + map.zonefile).c_str(), backup_zones.c_str());
 		}
+
+		converter.Assign(wxstr(savefile));
+		const std::string groupsSidecar = map_path + nstr(converter.GetName()) + "-waypoint-groups.xml";
+		if (wxFileExists(wxstr(groupsSidecar))) {
+			backup_waypoint_groups = groupsSidecar + "~";
+			std::remove(backup_waypoint_groups.c_str());
+			std::rename(groupsSidecar.c_str(), backup_waypoint_groups.c_str());
+		}
 	}
 
 	// Save the map
@@ -446,7 +454,8 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		  << backup_spawn << '\n'
 		  << backup_spawn_npc << '\n'
 		  << backup_waypoint << '\n'
-		  << backup_zones << '\n';
+		  << backup_zones << '\n'
+		  << backup_waypoint_groups << '\n';
 	}
 
 	{
@@ -1724,12 +1733,6 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 			return;
 		}
 
-		if (!waypoint_brush->canDraw(&map, offset)) {
-			if (!map.getTile(offset)) {
-				map.setTile(offset, map.allocator(map.createTileL(offset)));
-			}
-		}
-
 		Waypoint* waypoint = map.waypoints.getWaypoint(waypoint_brush->getWaypoint());
 		if (!waypoint || waypoint->pos == offset) {
 			return;
@@ -1737,6 +1740,10 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 
 		BatchAction* batch = actionQueue->createBatch(ACTION_DRAW);
 		Action* action = actionQueue->createAction(batch);
+		if (!waypoint_brush->canDraw(&map, offset) && !map.getTile(offset)) {
+			Tile* new_tile = map.allocator(map.createTileL(offset));
+			action->addChange(newd Change(new_tile));
+		}
 		action->addChange(Change::Create(waypoint, offset));
 		batch->addAndCommitAction(action);
 		addBatch(batch, 2);
