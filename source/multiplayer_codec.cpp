@@ -618,7 +618,8 @@ namespace Multiplayer {
 					data.waypoint_categories,
 					data.uncategorized_order,
 					data.category_waypoint_order,
-					data.waypoint_category)) {
+					data.waypoint_category
+				)) {
 				throw Error("Invalid waypoint group metadata.");
 			}
 		} else {

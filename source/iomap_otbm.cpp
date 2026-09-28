@@ -1792,9 +1792,9 @@ bool IOMapOTBM::loadWaypoints(Map& map, pugi::xml_document& doc) {
 };
 
 namespace {
-std::string waypointGroupsFilename(const FileName& dir) {
-	return nstr(dir.GetName()) + "-waypoint-groups.xml";
-}
+	std::string waypointGroupsFilename(const FileName& dir) {
+		return nstr(dir.GetName()) + "-waypoint-groups.xml";
+	}
 } // namespace
 
 bool IOMapOTBM::loadWaypointGroups(Map& map, const FileName& dir) {

@@ -29,11 +29,11 @@
 #include "multiplayer_session.h"
 
 namespace {
-constexpr const char* kUncategorizedLabel = "Uncategorized";
+	constexpr const char* kUncategorizedLabel = "Uncategorized";
 
-wxString categoryTreeLabel(const std::string& name) {
-	return wxString::FromUTF8(name);
-}
+	wxString categoryTreeLabel(const std::string& name) {
+		return wxString::FromUTF8(name);
+	}
 } // namespace
 
 void WaypointPalettePanel::markMapMetadataChanged(Map* map) {

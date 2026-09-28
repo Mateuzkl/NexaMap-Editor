@@ -24,19 +24,19 @@
 #include "map.h"
 
 namespace {
-void removeFromVector(std::vector<std::string>& values, const std::string& name) {
-	values.erase(std::remove(values.begin(), values.end(), name), values.end());
-}
-
-bool vectorHasDuplicate(const std::vector<std::string>& values) {
-	std::set<std::string> seen;
-	for (const auto& value : values) {
-		if (!seen.insert(as_lower_str(value)).second) {
-			return true;
-		}
+	void removeFromVector(std::vector<std::string>& values, const std::string& name) {
+		values.erase(std::remove(values.begin(), values.end(), name), values.end());
 	}
-	return false;
-}
+
+	bool vectorHasDuplicate(const std::vector<std::string>& values) {
+		std::set<std::string> seen;
+		for (const auto& value : values) {
+			if (!seen.insert(as_lower_str(value)).second) {
+				return true;
+			}
+		}
+		return false;
+	}
 } // namespace
 
 void Waypoints::removeWaypointFromPositionIndex(Waypoint* wp) {
