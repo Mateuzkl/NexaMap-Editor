@@ -44,7 +44,7 @@ namespace mcp {
 										 { "protocolVersion", "2025-06-18" },
 										 { "capabilities", { { "tools", { { "listChanged", false } } } } },
 										 { "serverInfo", { { "name", "nexamap-editor" }, { "version", NEXAMAP_VERSION_STRING } } },
-										 { "instructions", "Inspect workspace_info and selection_get first. NexaMap resolves IDs and brushes from the active resource session. Map writes remain disabled until the user enables them in the MCP panel." },
+										 { "instructions", "Inspect workspace_info, map_info and selection_get first. For blank maps use explicit coordinates. Browse tilesets and brushes, edit directly with brush_apply/tile_edit, then render and validate. NexaMap resolves IDs and brushes from the active resource session. Map writes remain disabled until the user enables them in the MCP panel." },
 									 });
 			}
 			if (method == "ping") {

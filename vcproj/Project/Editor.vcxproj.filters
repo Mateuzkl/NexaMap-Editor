@@ -751,6 +751,39 @@
     <ClCompile Include="..\..\source\mcp\mcp_server.cpp">
       <Filter>common</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tool_utils.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_brush.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_edit.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_editor.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_entities.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_import_export.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_map.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_render.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_region.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_search.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_validate.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\mcp\mcp_tools_orientation.cpp">
       <Filter>common</Filter>
     </ClCompile>

@@ -44,6 +44,8 @@ public:
 
 	// In-editor implantation
 	void copy(Editor& editor, int floor);
+	// Capture complete mapped tiles in an explicit rectangle without depending on UI selection.
+	void copyRegion(Editor& editor, const Position& from, const Position& to);
 	void cut(Editor& editor, int floor);
 	void paste(Editor& editor, const Position& toPosition);
 	bool canPaste() const;

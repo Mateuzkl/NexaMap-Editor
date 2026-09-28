@@ -190,7 +190,7 @@ namespace mcp {
 
 			registry.add({
 				"selection_get",
-				"Return the exact current tile selection and its bounds. Generation requires a non-empty selection.",
+				"Return the exact current tile selection and its bounds. Empty selection is valid when tools receive an explicit region.",
 				EmptySchema(),
 				false,
 				[](const Json&) {
@@ -211,7 +211,7 @@ namespace mcp {
 							{ "truncated", context.editor.selection.size() > MaximumPositions },
 						};
 						if (context.editor.selection.size() == 0) {
-							result["message"] = "Select an area in NexaMap before generating.";
+							result["message"] = "Selection is empty; use explicit from/to or origin/width/height coordinates.";
 						} else {
 							const Position minimum = context.editor.selection.minPosition();
 							const Position maximum = context.editor.selection.maxPosition();
@@ -409,17 +409,23 @@ namespace mcp {
 
 			registry.add({
 				"generation_guide",
-				"Return the safe semantic workflow for AI generation in the selected area.",
+				"Return the direct AI-driven MCP workflow for selected or explicit map regions.",
 				EmptySchema(),
 				false,
 				[](const Json&) {
 					return StructuredResult({
-						{ "workflow", Json::array({ "workspace_info", "map_info", "editor_state", "selection_get", "brush_search", "generator_plan", "generator_preview", "generator_apply", "border_check", "path_check", "map_validate", "map_render_region" }) },
-						{ "rules", Json::array({ "Use semantic brushes and loaded resources; never guess raw IDs.", "Preview must not mutate the map.", "Apply only after explicit user approval and as one undoable operation.", "Stay inside the exact selected area unless expansion is explicitly allowed.", "Preserve teleports, houses, spawns, creatures, waypoints, action IDs and unique IDs by default." }) },
-						{ "status", "Foundation tools are available; typed generator plan/preview/apply tools are introduced in the generator phase." },
+						{ "workflow", Json::array({ "workspace_info", "map_info", "editor_state", "selection_get", "map_read_region", "map_search", "tileset_list", "brush_search", "brush_info", "brush_preview", "terrain_pairing", "brush_apply", "tile_edit", "house_manage", "town_manage", "waypoint_manage", "zone_manage", "spawn_manage", "region_replace_items", "region_copy", "region_paste", "region_transform", "map_render_region", "client_view_scan", "border_check", "path_check", "floor_transitions", "teleport_graph", "map_validate", "map_render_region" }) },
+						{ "rules", Json::array({ "Use semantic brushes and loaded resources; never guess raw IDs.", "Use brush_apply for terrain so real autoborders and brush composition remain intact.", "Use explicit coordinates when selection is empty.", "Stay inside the exact selected area unless allowExpansion is explicitly true.", "Preserve teleports, houses, spawns, creatures, waypoints, action IDs and unique IDs by default.", "Render and validate after writing, then fix detected problems." }) },
+						{ "status", "Direct MCP map inspection, brush/tile/region editing, entity management, rendering, validation, bitmap painting and explicit map creation/import/export are available. generator_open is only an optional native UI helper and is not part of this workflow." },
 					});
 				},
 			});
+
+			const Tool itemInfoTool = *registry.find("item_info");
+			const Tool itemSearchTool = *registry.find("item_search");
+			registry.add({ "appearance_get", "Inspect an item through the active appearances-aware identity layer.", itemInfoTool.inputSchema, false, itemInfoTool.handler });
+			registry.add({ "appearance_search", "Search the active loaded item/appearance database without reparsing assets.", itemSearchTool.inputSchema, false, itemSearchTool.handler });
+			registry.add({ "dat_item_info", "Inspect an item through the active classic DAT/OTB-aware identity layer.", itemInfoTool.inputSchema, false, itemInfoTool.handler });
 		});
 	}
 }

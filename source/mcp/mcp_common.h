@@ -18,6 +18,7 @@ namespace mcp {
 	[[nodiscard]] bool IsAllowedOrigin(const std::string& origin);
 	[[nodiscard]] Json TextResult(const std::string& text);
 	[[nodiscard]] Json StructuredResult(Json value);
+	[[nodiscard]] Json ImageResult(const std::string& mimeType, const std::string& base64Data, Json metadata = Json::object());
 	[[nodiscard]] Json ErrorResult(const std::string& message);
 }
 

@@ -473,7 +473,18 @@
     <ClInclude Include="..\..\source\mcp\mcp_protocol.h" />
     <ClInclude Include="..\..\source\mcp\mcp_registry.h" />
     <ClInclude Include="..\..\source\mcp\mcp_server.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tool_utils.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_brush.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_edit.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_editor.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_entities.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_import_export.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_map.h" />
     <ClInclude Include="..\..\source\mcp\mcp_tools_orientation.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_render.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_region.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_search.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_validate.h" />
     <ClInclude Include="..\..\source\mcp\mcp_window.h" />
     <ClCompile Include="..\..\source\mcp\mcp_common.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -500,6 +511,50 @@
       <IncludeInUnityFile>false</IncludeInUnityFile>
     </ClCompile>
     <ClCompile Include="..\..\source\mcp\mcp_server.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tool_utils.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_brush.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_edit.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_editor.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_entities.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_import_export.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_map.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_render.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_region.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_search.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_validate.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <IncludeInUnityFile>false</IncludeInUnityFile>
     </ClCompile>

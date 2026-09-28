@@ -106,7 +106,18 @@ ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tool_utils.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_brush.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_edit.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_editor.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_validate.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.h
 ${CMAKE_CURRENT_LIST_DIR}/viewport_metrics.h
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
@@ -239,7 +250,18 @@ ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tool_utils.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_edit.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_editor.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_validate.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor.cpp
@@ -430,7 +452,18 @@ ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tool_utils.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_edit.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_editor.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_validate.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.cpp
 PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 

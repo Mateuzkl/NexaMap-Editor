@@ -47,6 +47,17 @@ namespace mcp {
 		return result;
 	}
 
+	Json ImageResult(const std::string& mimeType, const std::string& base64Data, Json metadata) {
+		Json result {
+			{ "content", Json::array({
+							 { { "type", "text" }, { "text", metadata.dump(2) } },
+							 { { "type", "image" }, { "mimeType", mimeType }, { "data", base64Data } },
+						 }) },
+			{ "structuredContent", std::move(metadata) },
+		};
+		return result;
+	}
+
 	Json ErrorResult(const std::string& message) {
 		Json result = TextResult(message);
 		result["isError"] = true;

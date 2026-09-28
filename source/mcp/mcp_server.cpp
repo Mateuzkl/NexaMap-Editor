@@ -12,7 +12,17 @@
 #include "mcp_server.h"
 
 #include "mcp_common.h"
+#include "mcp_tools_brush.h"
+#include "mcp_tools_edit.h"
+#include "mcp_tools_editor.h"
+#include "mcp_tools_entities.h"
+#include "mcp_tools_import_export.h"
+#include "mcp_tools_map.h"
 #include "mcp_tools_orientation.h"
+#include "mcp_tools_render.h"
+#include "mcp_tools_region.h"
+#include "mcp_tools_search.h"
+#include "mcp_tools_validate.h"
 
 #include <algorithm>
 #include <array>
@@ -102,6 +112,16 @@ namespace mcp {
 
 	Server::Server() {
 		RegisterOrientationTools();
+		RegisterMapTools();
+		RegisterBrushTools();
+		RegisterEditTools();
+		RegisterEditorTools();
+		RegisterEntityTools();
+		RegisterImportExportTools();
+		RegisterRenderTools();
+		RegisterRegionTools();
+		RegisterSearchTools();
+		RegisterValidationTools();
 	}
 
 	Server::~Server() {
