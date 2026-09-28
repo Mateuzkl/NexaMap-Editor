@@ -352,13 +352,18 @@ namespace mcp {
 		Json output;
 		bool hasOutput = false;
 		if (input.is_array()) {
-			output = Json::array();
-			for (const Json& entry : input) {
-				if (const std::optional<Json> response = protocol_.handle(entry)) {
-					output.push_back(*response);
+			if (input.empty()) {
+				output = *protocol_.handle(input);
+				hasOutput = true;
+			} else {
+				output = Json::array();
+				for (const Json& entry : input) {
+					if (const std::optional<Json> response = protocol_.handle(entry)) {
+						output.push_back(*response);
+					}
 				}
+				hasOutput = !output.empty();
 			}
-			hasOutput = !output.empty();
 		} else if (const std::optional<Json> response = protocol_.handle(input)) {
 			output = *response;
 			hasOutput = true;

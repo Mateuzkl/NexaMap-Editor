@@ -24,6 +24,8 @@ namespace mcp {
 					{ "type", "object" },
 					{ "properties", {
 										{ "action", { { "type", "string" }, { "enum", Json::array({ "undo", "redo", "refresh" }) } } },
+										{ "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } },
+										{ "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } },
 									} },
 					{ "required", Json::array({ "action" }) },
 					{ "additionalProperties", false },
@@ -34,11 +36,13 @@ namespace mcp {
 						throw Error("action must be a string");
 					}
 					const std::string action = arguments["action"].get<std::string>();
-					return StructuredResult(OnGui([action](const EditorContext& context) {
+					return StructuredResult(OnGui([arguments, action](const EditorContext& context) {
 						bool success = true;
 						if (action == "undo") {
+							VerifyWritableContext(context, arguments);
 							success = context.editor.actionQueue->undo();
 						} else if (action == "redo") {
+							VerifyWritableContext(context, arguments);
 							success = context.editor.actionQueue->redo();
 						} else if (action == "refresh") {
 							g_gui.RefreshView();
@@ -62,6 +66,8 @@ namespace mcp {
 										{ "operation", { { "type", "string" }, { "enum", Json::array({ "select-region", "clear", "borderize", "randomize", "delete" }) } } },
 										{ "region", { { "type", "object" } } },
 										{ "confirm", { { "type", "boolean" }, { "default", false } } },
+										{ "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } },
+										{ "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } },
 									} },
 					{ "required", Json::array({ "operation" }) },
 					{ "additionalProperties", false },
@@ -82,7 +88,7 @@ namespace mcp {
 					if (operation == "delete" && !arguments.value("confirm", false)) {
 						throw Error("delete requires confirm=true");
 					}
-					return StructuredResult(OnGui([operation, region](const EditorContext& context) {
+					return StructuredResult(OnGui([arguments, operation, region](const EditorContext& context) {
 						if (operation == "select-region") {
 							context.editor.selection.start();
 							context.editor.selection.clear();
@@ -100,10 +106,13 @@ namespace mcp {
 							context.editor.selection.clear();
 							context.editor.selection.finish();
 						} else if (operation == "borderize") {
+							VerifyWritableContext(context, arguments);
 							context.editor.borderizeSelection();
 						} else if (operation == "randomize") {
+							VerifyWritableContext(context, arguments);
 							context.editor.randomizeSelection();
 						} else if (operation == "delete") {
+							VerifyWritableContext(context, arguments);
 							context.editor.destroySelection();
 						} else {
 							throw Error("unsupported selection operation");

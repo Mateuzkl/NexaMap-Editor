@@ -17,6 +17,89 @@ namespace mcp {
 		Json RpcResult(const Json& id, Json value) {
 			return { { "jsonrpc", "2.0" }, { "id", id }, { "result", std::move(value) } };
 		}
+
+		bool MatchesType(const Json& value, const std::string& type) {
+			if (type == "object") return value.is_object();
+			if (type == "array") return value.is_array();
+			if (type == "string") return value.is_string();
+			if (type == "integer") return value.is_number_integer() || value.is_number_unsigned();
+			if (type == "number") return value.is_number();
+			if (type == "boolean") return value.is_boolean();
+			if (type == "null") return value.is_null();
+			return true;
+		}
+
+		void ValidateSchema(const Json& value, const Json& schema, const std::string& path) {
+			if (!schema.is_object()) {
+				return;
+			}
+			if (schema.contains("type") && schema["type"].is_string()) {
+				const std::string type = schema["type"].get<std::string>();
+				if (!MatchesType(value, type)) {
+					throw Error(path + " must be " + type);
+				}
+			}
+			if (schema.contains("enum") && schema["enum"].is_array()) {
+				bool matched = false;
+				for (const Json& candidate : schema["enum"]) {
+					if (value == candidate) {
+						matched = true;
+						break;
+					}
+				}
+				if (!matched) {
+					throw Error(path + " is not an allowed value");
+				}
+			}
+			if (value.is_number()) {
+				const long double number = value.get<long double>();
+				if (schema.contains("minimum") && number < schema["minimum"].get<long double>()) {
+					throw Error(path + " is below the minimum");
+				}
+				if (schema.contains("maximum") && number > schema["maximum"].get<long double>()) {
+					throw Error(path + " is above the maximum");
+				}
+			}
+			if (value.is_string()) {
+				const size_t size = value.get_ref<const std::string&>().size();
+				if (schema.contains("minLength") && size < schema["minLength"].get<size_t>()) {
+					throw Error(path + " is shorter than minLength");
+				}
+				if (schema.contains("maxLength") && size > schema["maxLength"].get<size_t>()) {
+					throw Error(path + " is longer than maxLength");
+				}
+			}
+			if (value.is_array()) {
+				if (schema.contains("minItems") && value.size() < schema["minItems"].get<size_t>()) {
+					throw Error(path + " has fewer than minItems");
+				}
+				if (schema.contains("maxItems") && value.size() > schema["maxItems"].get<size_t>()) {
+					throw Error(path + " has more than maxItems");
+				}
+				if (schema.contains("items")) {
+					for (size_t index = 0; index < value.size(); ++index) {
+						ValidateSchema(value[index], schema["items"], path + "[" + std::to_string(index) + "]");
+					}
+				}
+			}
+			if (value.is_object()) {
+				if (schema.contains("required") && schema["required"].is_array()) {
+					for (const Json& required : schema["required"]) {
+						if (required.is_string() && !value.contains(required.get<std::string>())) {
+							throw Error(path + "." + required.get<std::string>() + " is required");
+						}
+					}
+				}
+				const Json properties = schema.value("properties", Json::object());
+				for (auto iterator = value.begin(); iterator != value.end(); ++iterator) {
+					if (properties.contains(iterator.key())) {
+						ValidateSchema(iterator.value(), properties[iterator.key()], path + "." + iterator.key());
+					} else if (schema.value("additionalProperties", true) == false) {
+						throw Error(path + "." + iterator.key() + " is not allowed");
+					}
+				}
+			}
+		}
 	}
 
 	Protocol::Protocol(ToolRegistry& registry) :
@@ -93,6 +176,7 @@ namespace mcp {
 			throw Error("tool arguments must be an object");
 		}
 		try {
+			ValidateSchema(arguments, tool->inputSchema, "arguments");
 			return tool->handler(arguments);
 		} catch (const Error& error) {
 			return ErrorResult(error.what());

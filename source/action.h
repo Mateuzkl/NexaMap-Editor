@@ -46,7 +46,9 @@ enum ChangeType {
 	CHANGE_HOUSE_REGISTRY,
 	CHANGE_HOUSE_UPDATE,
 	CHANGE_TOWN_REGISTRY,
+	CHANGE_TOWN_UPDATE,
 	CHANGE_WAYPOINT_REGISTRY,
+	CHANGE_WAYPOINT_UPDATE,
 };
 
 class Change {
@@ -74,7 +76,9 @@ public:
 	static Change* UpdateHouse(const HouseSnapshot& before, const HouseSnapshot& after, SessionId sessionId);
 	static Change* Create(Waypoint* wp, const Position& where);
 	static Change* CreateWaypoint(const std::string& name, const Position& position, bool add);
+	static Change* UpdateWaypoint(const std::string& beforeName, const Position& beforePosition, const std::string& afterName, const Position& afterPosition);
 	static Change* CreateTown(uint32_t id, const std::string& name, const Position& templePosition, bool add);
+	static Change* UpdateTown(uint32_t id, const std::string& beforeName, const Position& beforeTemplePosition, const std::string& afterName, const Position& afterTemplePosition);
 	static Change* CreateZone(const std::string& name, unsigned int id, bool add);
 	static Change* RenameZone(const std::string& oldName, const std::string& newName);
 	~Change();
@@ -151,7 +155,9 @@ protected:
 	bool applyHouseChange(Change* change);
 	bool applyHouseUpdate(Change* change);
 	bool applyTownChange(Change* change);
+	bool applyTownUpdate(Change* change);
 	bool applyWaypointRegistryChange(Change* change);
+	bool applyWaypointUpdate(Change* change);
 	bool canApplyHouseChanges() const;
 
 	bool commited;

@@ -20,18 +20,6 @@
 
 namespace mcp {
 	namespace {
-		void VerifyWritableContext(const EditorContext& context, const Json& arguments) {
-			if (context.editor.multiplayer && context.editor.multiplayer->active() && !context.editor.multiplayer->canEdit()) {
-				throw Error("the active multiplayer role cannot edit this map");
-			}
-			if (arguments.contains("mapSessionId") && (!arguments["mapSessionId"].is_number_unsigned() || arguments["mapSessionId"].get<SessionId>() != context.mapSessionId)) {
-				throw Error("stale map session; inspect map_info again before writing");
-			}
-			if (arguments.contains("workspaceGeneration") && (!arguments["workspaceGeneration"].is_number_unsigned() || arguments["workspaceGeneration"].get<uint64_t>() != context.workspaceGeneration)) {
-				throw Error("stale resource workspace; inspect workspace_info again before writing");
-			}
-		}
-
 		std::pair<size_t, size_t> Pagination(const Json& arguments, size_t maximum = 500) {
 			const int64_t offset = arguments.value("offset", int64_t(0));
 			const int64_t limit = arguments.value("limit", int64_t(100));
@@ -69,8 +57,13 @@ namespace mcp {
 		}
 
 		void CommitEntityAction(const EditorContext& context, std::unique_ptr<Action> action) {
+			std::unique_ptr<BatchAction> batch(context.editor.actionQueue->createBatch(ACTION_MCP));
 			context.editor.actionQueue->resetTimer();
-			context.editor.addAction(action.release(), 0);
+			if (!batch->addAndCommitAction(action.release())) {
+				batch->rollback();
+				throw Error("could not commit entity change");
+			}
+			context.editor.addBatch(batch.release(), 0);
 			context.editor.actionQueue->resetTimer();
 			g_gui.RefreshView();
 		}
@@ -282,8 +275,9 @@ namespace mcp {
 } if (!arguments.contains("name") || !arguments.contains("templePosition")){ throw Error("create requires name and templePosition");
 } action->addChange(Change::CreateTown(id, arguments["name"].get<std::string>(), ParsePosition(arguments["templePosition"], "templePosition"), true)); } else { if (!existing){ throw Error("town not found");
 } if (operation == "delete" && !arguments.value("confirm", false)){ throw Error("delete requires confirm=true");
-} action->addChange(Change::CreateTown(id, existing->getName(), existing->getTemplePosition(), false)); if (operation == "update"){ action->addChange(Change::CreateTown(id, arguments.value("name", existing->getName()), arguments.contains("templePosition") ? ParsePosition(arguments["templePosition"], "templePosition") : existing->getTemplePosition(), true));
-} else if (operation != "delete"){ throw Error("unsupported town operation");
+} if (operation == "update"){ action->addChange(Change::UpdateTown(id, existing->getName(), existing->getTemplePosition(), arguments.value("name", existing->getName()), arguments.contains("templePosition") ? ParsePosition(arguments["templePosition"], "templePosition") : existing->getTemplePosition()));
+} else if (operation == "delete"){ action->addChange(Change::CreateTown(id, existing->getName(), existing->getTemplePosition(), false));
+} else { throw Error("unsupported town operation");
 } } CommitEntityAction(context, std::move(action)); return MutationResult(context, operation); })); },
 			});
 
@@ -306,9 +300,9 @@ namespace mcp {
 } const Position position = ParsePosition(arguments["position"]); if (!context.map.getTile(position)){ throw Error("waypoint position must already be mapped");
 } action->addChange(Change::CreateWaypoint(name, position, true)); } else { if (!existing){ throw Error("waypoint not found");
 } if (operation == "delete" && !arguments.value("confirm", false)){ throw Error("delete requires confirm=true");
-} action->addChange(Change::CreateWaypoint(existing->name, existing->pos, false)); if (operation == "update") { const std::string newName = arguments.value("newName", existing->name); const Position position = arguments.contains("position") ? ParsePosition(arguments["position"]) : existing->pos; if (!context.map.getTile(position)){ throw Error("waypoint position must already be mapped");
+} if (operation == "update") { const std::string newName = arguments.value("newName", existing->name); const Position position = arguments.contains("position") ? ParsePosition(arguments["position"]) : existing->pos; if (!context.map.getTile(position)){ throw Error("waypoint position must already be mapped");
 } Waypoint* collision = context.map.waypoints.getWaypoint(newName); if (collision && collision != existing){ throw Error("new waypoint name already exists");
-} action->addChange(Change::CreateWaypoint(newName, position, true)); } else if (operation != "delete"){ throw Error("unsupported waypoint operation");
+} action->addChange(Change::UpdateWaypoint(existing->name, existing->pos, newName, position)); } else if (operation == "delete"){ action->addChange(Change::CreateWaypoint(existing->name, existing->pos, false)); } else { throw Error("unsupported waypoint operation");
 } } CommitEntityAction(context, std::move(action)); return MutationResult(context, operation); })); },
 			});
 
@@ -445,7 +439,10 @@ namespace mcp {
 							tile->update();
 							action->addChange(newd Change(tile.release()));
 						}
-						batch->addAndCommitAction(action.release());
+						if (!batch->addAndCommitAction(action.release())) {
+							batch->rollback();
+							throw Error("could not commit spawn changes");
+						}
 						context.editor.addBatch(batch.release(), 0);
 						context.editor.actionQueue->resetTimer();
 						g_gui.RefreshView();

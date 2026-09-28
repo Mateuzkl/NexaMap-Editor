@@ -18,25 +18,34 @@
 #include <algorithm>
 #include <memory>
 #include <mutex>
+#include <set>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace mcp {
 	namespace {
-		void VerifyWritableContext(const EditorContext& context, const Json& arguments) {
-			if (context.editor.multiplayer && context.editor.multiplayer->active() && !context.editor.multiplayer->canEdit()) {
-				throw Error("the active multiplayer role cannot edit this map");
-			}
-			if (arguments.contains("mapSessionId")) {
-				if (!arguments["mapSessionId"].is_number_unsigned() || arguments["mapSessionId"].get<SessionId>() != context.mapSessionId) {
-					throw Error("stale map session; inspect map_info again before writing");
+		class ScopedBrushSelection final {
+		public:
+			explicit ScopedBrushSelection(Brush* brush) :
+				previous_(g_gui.GetCurrentBrush()) {
+				try {
+					g_gui.SelectBrushInternal(brush);
+				} catch (...) {
+					g_gui.SelectBrushInternal(previous_);
+					throw;
 				}
 			}
-			if (arguments.contains("workspaceGeneration")) {
-				if (!arguments["workspaceGeneration"].is_number_unsigned() || arguments["workspaceGeneration"].get<uint64_t>() != context.workspaceGeneration) {
-					throw Error("stale resource workspace; inspect workspace_info again before writing");
-				}
+
+			~ScopedBrushSelection() noexcept {
+				g_gui.SelectBrushInternal(previous_);
 			}
-		}
+
+			ScopedBrushSelection(const ScopedBrushSelection&) = delete;
+			ScopedBrushSelection& operator=(const ScopedBrushSelection&) = delete;
+
+		private:
+			Brush* previous_ = nullptr;
+		};
 
 		std::vector<Position> ParsePositions(const Json& arguments) {
 			std::vector<Position> positions;
@@ -62,42 +71,7 @@ namespace mcp {
 			return positions;
 		}
 
-		void EnforceSelectionBoundary(const EditorContext& context, const std::vector<Position>& positions, bool allowExpansion) {
-			if (allowExpansion || context.editor.selection.size() == 0) {
-				return;
-			}
-			std::unordered_set<const Tile*> selected;
-			for (const Tile* tile : context.editor.selection) {
-				selected.insert(tile);
-			}
-			for (const Position& position : positions) {
-				const Tile* tile = context.map.getTile(position);
-				if (!tile || selected.find(tile) == selected.end()) {
-					throw Error("write would leave the current selection; pass allowExpansion=true only when intended");
-				}
-			}
-		}
-
-		bool IsProtected(const Item& item) {
-			if (item.getActionID() != 0 || item.getUniqueID() != 0 || dynamic_cast<const Teleport*>(&item)) {
-				return true;
-			}
-			const auto* container = dynamic_cast<const Container*>(&item);
-			return container && container->getItemCount() != 0;
-		}
-
-		uint16_t RequiredItemId(const Json& value) {
-			if (!value.is_number_unsigned()) {
-				throw Error("item id must be an unsigned integer");
-			}
-			const uint64_t id = value.get<uint64_t>();
-			if (id == 0 || id > 65535 || !g_items.typeExists(static_cast<int>(id))) {
-				throw Error("item id is not loaded in the active resource session");
-			}
-			return static_cast<uint16_t>(id);
-		}
-
-		Item* CreateItemFromSpec(const Json& specification, Map& map, size_t depth = 0) {
+		Item* CreateItemFromSpec(const Json& specification, size_t depth = 0) {
 			if (!specification.is_object() || !specification.contains("id")) {
 				throw Error("each added item must contain id");
 			}
@@ -114,9 +88,6 @@ namespace mcp {
 			}
 			if (specification.contains("uniqueId")) {
 				const uint16_t uniqueId = specification["uniqueId"].get<uint16_t>();
-				if (uniqueId != 0 && map.hasUniqueId(uniqueId)) {
-					throw Error("uniqueId already exists on this map");
-				}
 				item->setUniqueID(uniqueId);
 			}
 			if (specification.contains("text")) {
@@ -155,7 +126,7 @@ namespace mcp {
 					throw Error("container contents exceed its loaded volume");
 				}
 				for (const Json& child : specification["contents"]) {
-					container->getVector().push_back(CreateItemFromSpec(child, map, depth + 1));
+					container->getVector().push_back(CreateItemFromSpec(child, depth + 1));
 				}
 			}
 			return item.release();
@@ -209,17 +180,12 @@ namespace mcp {
 								throw Error("brush cannot draw at one or more requested positions");
 							}
 						}
-						Brush* previous = g_gui.GetCurrentBrush();
 						context.editor.actionQueue->resetTimer();
-						g_gui.SelectBrushInternal(brush);
+						ScopedBrushSelection brushSelection(brush);
+						bool applied = true;
 						if (brush->isDoodad()) {
-							for (const Position& position : positions) {
-								if (erase) {
-									context.editor.undraw(position, alt);
-								} else {
-									context.editor.draw(position, alt);
-								}
-							}
+							PositionVector drawPositions(positions.begin(), positions.end());
+							applied = context.editor.applyDoodadPositions(drawPositions, alt, !erase, ACTION_MCP);
 						} else {
 							PositionVector drawPositions(positions.begin(), positions.end());
 							PositionVector borderPositions;
@@ -249,10 +215,9 @@ namespace mcp {
 								context.editor.draw(drawPositions, borderPositions, alt);
 							}
 						}
-						g_gui.SelectBrushInternal(previous);
 						context.editor.actionQueue->resetTimer();
 						g_gui.RefreshView();
-						return Json { { "applied", true }, { "brush", brushName }, { "kind", BrushKind(*brush) }, { "positions", positions.size() }, { "mapSessionId", context.mapSessionId }, { "changeGeneration", context.map.getChangeGeneration() }, { "undoAvailable", context.editor.actionQueue->canUndo() } };
+						return Json { { "applied", applied }, { "brush", brushName }, { "kind", BrushKind(*brush) }, { "positions", positions.size() }, { "mapSessionId", context.mapSessionId }, { "changeGeneration", context.map.getChangeGeneration() }, { "undoAvailable", context.editor.actionQueue->canUndo() } };
 					}));
 				},
 			});
@@ -290,10 +255,16 @@ namespace mcp {
 							positions.push_back(ParsePosition(edit["position"]));
 						}
 						EnforceSelectionBoundary(context, positions, allowExpansion);
-						std::unique_ptr<BatchAction> batch(context.editor.actionQueue->createBatch(ACTION_MCP));
-						std::unique_ptr<Action> action(context.editor.actionQueue->createAction(batch.get()));
+						std::set<Position> editedPositions;
+						std::vector<const Tile*> originalTiles;
+						std::vector<std::unique_ptr<Tile>> stagedTiles;
+						originalTiles.reserve(arguments["tiles"].size());
+						stagedTiles.reserve(arguments["tiles"].size());
 						for (const Json& edit : arguments["tiles"]) {
 							const Position position = ParsePosition(edit["position"]);
+							if (!editedPositions.insert(position).second) {
+								throw Error("tile_edit contains the same position more than once");
+							}
 							TileLocation* location = context.map.createTileL(position);
 							Tile* existing = location->get();
 							std::unique_ptr<Tile> tile(existing ? existing->deepCopy(context.map) : context.map.allocator(location));
@@ -309,13 +280,13 @@ namespace mcp {
 									if (!g_items.getItemType(id).isGroundTile()) {
 										throw Error("ground id must identify a ground item");
 									}
-									tile->addItem(CreateItemFromSpec(edit["ground"], context.map));
+									tile->addItem(CreateItemFromSpec(edit["ground"]));
 								}
 							}
 							if (edit.value("clearItems", false)) {
 								auto iterator = tile->items.begin();
 								while (iterator != tile->items.end()) {
-									if (preserveProtected && IsProtected(**iterator)) {
+									if (preserveProtected && IsProtectedItem(**iterator)) {
 										++iterator;
 										continue;
 									}
@@ -333,7 +304,7 @@ namespace mcp {
 								}
 								auto iterator = tile->items.begin();
 								while (iterator != tile->items.end()) {
-									if (removeIds.count((*iterator)->getID()) == 0 || (preserveProtected && IsProtected(**iterator))) {
+									if (removeIds.count((*iterator)->getID()) == 0 || (preserveProtected && IsProtectedItem(**iterator))) {
 										++iterator;
 										continue;
 									}
@@ -346,7 +317,7 @@ namespace mcp {
 									throw Error("addItems must be an array of at most 128 item specifications");
 								}
 								for (const Json& specification : edit["addItems"]) {
-									tile->addItem(CreateItemFromSpec(specification, context.map));
+									tile->addItem(CreateItemFromSpec(specification));
 								}
 							}
 							if (edit.contains("mapFlags")) {
@@ -387,9 +358,45 @@ namespace mcp {
 								}
 							}
 							tile->update();
+							originalTiles.push_back(existing);
+							stagedTiles.push_back(std::move(tile));
+						}
+
+						std::unordered_map<uint16_t, int64_t> uniqueIdDeltas;
+						auto collectUniqueIds = [&uniqueIdDeltas](const Tile* tile, int64_t delta) {
+							if (!tile) {
+								return;
+							}
+							auto collect = [&uniqueIdDeltas, delta](const Item* item) {
+								if (item && item->getUniqueID() != 0) {
+									uniqueIdDeltas[item->getUniqueID()] += delta;
+								}
+							};
+							collect(tile->ground);
+							for (const Item* item : tile->items) {
+								collect(item);
+							}
+						};
+						for (size_t index = 0; index < stagedTiles.size(); ++index) {
+							collectUniqueIds(originalTiles[index], -1);
+							collectUniqueIds(stagedTiles[index].get(), 1);
+						}
+						for (const auto& [uniqueId, delta] : uniqueIdDeltas) {
+							const int64_t finalCount = static_cast<int64_t>(context.map.getUniqueIdCount(uniqueId)) + delta;
+							if (finalCount < 0 || finalCount > 1) {
+								throw Error("tile_edit would create a duplicate uniqueId in the final map state");
+							}
+						}
+
+						std::unique_ptr<BatchAction> batch(context.editor.actionQueue->createBatch(ACTION_MCP));
+						std::unique_ptr<Action> action(context.editor.actionQueue->createAction(batch.get()));
+						for (auto& tile : stagedTiles) {
 							action->addChange(newd Change(tile.release()));
 						}
-						batch->addAndCommitAction(action.release());
+						if (!batch->addAndCommitAction(action.release())) {
+							batch->rollback();
+							throw Error("tile_edit could not commit the requested changes");
+						}
 						context.editor.actionQueue->resetTimer();
 						context.editor.addBatch(batch.release(), 0);
 						context.editor.actionQueue->resetTimer();

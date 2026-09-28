@@ -5,8 +5,15 @@
 
 #include "../brush.h"
 #include "../carpet_brush.h"
+#include "../complexitem.h"
+#include "../editor.h"
 #include "../ground_brush.h"
+#include "../item.h"
+#include "../items.h"
+#include "../map.h"
+#include "../multiplayer_session.h"
 #include "../table_brush.h"
+#include "../tile.h"
 #include "../wall_brush.h"
 
 #include <algorithm>
@@ -94,6 +101,67 @@ namespace mcp {
 			throw Error("requested region is too large; maximum area is " + std::to_string(maximumArea) + " tiles");
 		}
 		return region;
+	}
+
+	void VerifyWritableContext(const EditorContext& context, const Json& arguments) {
+		if (context.editor.multiplayer && context.editor.multiplayer->active() && !context.editor.multiplayer->canEdit()) {
+			throw Error("the active multiplayer role cannot edit this map");
+		}
+		if (arguments.contains("mapSessionId") && (!arguments["mapSessionId"].is_number_unsigned() || arguments["mapSessionId"].get<SessionId>() != context.mapSessionId)) {
+			throw Error("stale map session; inspect map_info again before writing");
+		}
+		if (arguments.contains("workspaceGeneration") && (!arguments["workspaceGeneration"].is_number_unsigned() || arguments["workspaceGeneration"].get<uint64_t>() != context.workspaceGeneration)) {
+			throw Error("stale resource workspace; inspect workspace_info again before writing");
+		}
+	}
+
+	void EnforceSelectionBoundary(const EditorContext& context, const std::vector<Position>& positions, bool allowExpansion) {
+		if (allowExpansion || context.editor.selection.size() == 0) {
+			return;
+		}
+		std::unordered_set<const Tile*> selected;
+		for (const Tile* tile : context.editor.selection) {
+			selected.insert(tile);
+		}
+		for (const Position& position : positions) {
+			const Tile* tile = context.map.getTile(position);
+			if (!tile || selected.find(tile) == selected.end()) {
+				throw Error("write would leave the current selection; pass allowExpansion=true only when intended");
+			}
+		}
+	}
+
+	void EnforceSelectionBoundary(const EditorContext& context, const Region& region, bool allowExpansion) {
+		if (allowExpansion || context.editor.selection.size() == 0) {
+			return;
+		}
+		std::vector<Position> positions;
+		positions.reserve(region.area());
+		for (int y = region.from.y; y <= region.to.y; ++y) {
+			for (int x = region.from.x; x <= region.to.x; ++x) {
+				positions.emplace_back(x, y, region.from.z);
+			}
+		}
+		EnforceSelectionBoundary(context, positions, false);
+	}
+
+	bool IsProtectedItem(const Item& item) {
+		if (item.getActionID() != 0 || item.getUniqueID() != 0 || dynamic_cast<const Teleport*>(&item)) {
+			return true;
+		}
+		const auto* container = dynamic_cast<const Container*>(&item);
+		return container && container->getItemCount() != 0;
+	}
+
+	uint16_t RequiredItemId(const Json& value) {
+		if (!value.is_number_unsigned()) {
+			throw Error("item id must be an unsigned integer");
+		}
+		const uint64_t id = value.get<uint64_t>();
+		if (id == 0 || id > 65535 || !g_items.typeExists(static_cast<int>(id))) {
+			throw Error("item id is not loaded in the active resource session");
+		}
+		return static_cast<uint16_t>(id);
 	}
 
 	Json OnGui(std::function<Json(const EditorContext&)> function) {

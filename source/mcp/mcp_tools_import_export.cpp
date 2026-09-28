@@ -13,13 +13,11 @@
 #include "../iominimap.h"
 #include "../iomap.h"
 #include "../map.h"
-#include "../multiplayer_session.h"
 #include "../tile.h"
 
 #include <map>
 #include <mutex>
 #include <set>
-#include <unordered_set>
 
 #include <wx/filename.h>
 #include <wx/image.h>
@@ -29,18 +27,6 @@ namespace mcp {
 		void RequireConfirmation(const Json& arguments) {
 			if (!arguments.value("confirm", false)) {
 				throw Error("this non-undoable operation requires confirm=true");
-			}
-		}
-
-		void VerifyWritableContext(const EditorContext& context, const Json& arguments) {
-			if (context.editor.multiplayer && context.editor.multiplayer->active() && !context.editor.multiplayer->canEdit()) {
-				throw Error("the active multiplayer role cannot edit this map");
-			}
-			if (arguments.contains("mapSessionId") && (!arguments["mapSessionId"].is_number_unsigned() || arguments["mapSessionId"].get<SessionId>() != context.mapSessionId)) {
-				throw Error("stale map session; inspect map_info again before writing");
-			}
-			if (arguments.contains("workspaceGeneration") && (!arguments["workspaceGeneration"].is_number_unsigned() || arguments["workspaceGeneration"].get<uint64_t>() != context.workspaceGeneration)) {
-				throw Error("stale resource workspace; inspect workspace_info again before writing");
 			}
 		}
 
@@ -107,21 +93,6 @@ namespace mcp {
 			return value;
 		}
 
-		void EnforceSelectionBoundary(const EditorContext& context, const std::vector<Position>& positions, bool allowExpansion) {
-			if (allowExpansion || context.editor.selection.size() == 0) {
-				return;
-			}
-			std::unordered_set<const Tile*> selected;
-			for (const Tile* tile : context.editor.selection) {
-				selected.insert(tile);
-			}
-			for (const Position& position : positions) {
-				const Tile* tile = context.map.getTile(position);
-				if (!tile || !selected.contains(tile)) {
-					throw Error("bitmap write would leave the current selection; pass allowExpansion=true only when intended");
-				}
-			}
-		}
 	}
 
 	void RegisterImportExportTools() {
