@@ -337,7 +337,8 @@ namespace {
 
 class ProceduralPreviewPanel final : public wxScrolledWindow {
 public:
-	explicit ProceduralPreviewPanel(wxWindow* parent) : wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxSize(640, 420), wxBORDER_SIMPLE | wxHSCROLL | wxVSCROLL) {
+	explicit ProceduralPreviewPanel(wxWindow* parent) :
+		wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxSize(640, 420), wxBORDER_SIMPLE | wxHSCROLL | wxVSCROLL) {
 		SetBackgroundStyle(wxBG_STYLE_PAINT);
 		SetScrollRate(16, 16);
 		Bind(wxEVT_PAINT, &ProceduralPreviewPanel::OnPaint, this);
