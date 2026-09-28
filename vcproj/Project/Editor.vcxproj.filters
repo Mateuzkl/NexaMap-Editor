@@ -730,6 +730,33 @@
     <ClCompile Include="..\..\source\main_menubar.cpp">
       <Filter>gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_common.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_context.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_gui_call.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_item_identity.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_protocol.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_registry.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_server.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_orientation.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_window.cpp">
+      <Filter>gui</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\palette_brushlist.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>

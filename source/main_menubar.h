@@ -190,6 +190,7 @@ namespace MenuBar {
 		MULTIPLAYER_LOCK_SELECTION,
 		MULTIPLAYER_UNLOCK,
 		COMMAND_PALETTE,
+		MCP_SERVER,
 		SHOW_FAVORITES,
 		USE_CPU_GEOMETRY_CACHE,
 		USE_GPU_GROUND_CACHE,
@@ -356,6 +357,7 @@ public:
 	void OnAbout(wxCommandEvent& event);
 	void OnShowHotkeys(wxCommandEvent& event);
 	void OnCommandPalette(wxCommandEvent& event);
+	void OnMcpServer(wxCommandEvent& event);
 	void OnShowFavorites(wxCommandEvent& event);
 
 	// Access actions map for hotkey discovery

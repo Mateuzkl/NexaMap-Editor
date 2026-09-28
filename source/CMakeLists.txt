@@ -99,6 +99,15 @@ ${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.h
 ${CMAKE_CURRENT_LIST_DIR}/atlas_page_epochs.h
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.h
 ${CMAKE_CURRENT_LIST_DIR}/map_window.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_common.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_context.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_gui_call.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.h
 ${CMAKE_CURRENT_LIST_DIR}/viewport_metrics.h
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials.h
@@ -223,6 +232,15 @@ ${CMAKE_CURRENT_LIST_DIR}/creature_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_common.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_context.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_gui_call.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor_resource_session.cpp
@@ -400,6 +418,20 @@ ${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
+PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+# The MCP boundary intentionally keeps translation-unit-local helpers private.
+# Compile it outside unity batches so those helpers remain isolated in every build system.
+set_source_files_properties(
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_common.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_context.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_gui_call.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.cpp
 PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Keep local macros in the legacy RNG and standalone playtest modules isolated.
