@@ -14,6 +14,8 @@
 #include "../items.h"
 #include "../map.h"
 #include "../multiplayer_session.h"
+#include "../procedural_map_generator.h"
+#include "../procedural_map_generator_window.h"
 #include "../table_brush.h"
 #include "../tile.h"
 #include "../wall_brush.h"
@@ -25,6 +27,8 @@
 #include <limits>
 #include <mutex>
 #include <unordered_set>
+
+#include <wx/app.h>
 
 namespace mcp {
 	namespace {
@@ -332,6 +336,73 @@ namespace mcp {
 							}
 						}
 						return Json { { "brushes", std::move(brushes) }, { "assetMode", AssetModeName(context.assetMode) }, { "itemIdMode", McpItemIdModeName(context.itemIdMode) } };
+					}));
+				},
+			});
+
+			registry.add({
+				"generator_presets",
+				"List the deterministic procedural presets understood by the native NexaMap generator.",
+				EmptySchema(),
+				false,
+				[](const Json&) {
+					Json presets = Json::array();
+					for (size_t index = 0; index < static_cast<size_t>(ProceduralMap::Preset::Count); ++index) {
+						presets.push_back({ { "id", index }, { "name", ProceduralMap::PresetName(static_cast<ProceduralMap::Preset>(index)) } });
+					}
+					return StructuredResult({ { "presets", std::move(presets) } });
+				},
+			});
+
+			registry.add({
+				"generator_open",
+				"Open the native Procedural Map Generator for the current selection with an AI-written brief prefilled. The user still reviews Preview and explicitly chooses Apply.",
+				{
+					{ "type", "object" },
+					{ "properties", {
+										{ "prompt", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 4000 } } },
+										{ "width", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 512 }, { "default", 50 } } },
+										{ "height", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 512 }, { "default", 50 } } },
+									} },
+					{ "required", Json::array({ "prompt" }) },
+					{ "additionalProperties", false },
+				},
+				false,
+				[](const Json& arguments) {
+					if (!arguments.contains("prompt") || !arguments["prompt"].is_string()) {
+						throw Error("prompt must be a string");
+					}
+					const std::string prompt = arguments["prompt"].get<std::string>();
+					if (prompt.empty() || prompt.size() > 4000) {
+						throw Error("prompt must contain between 1 and 4000 bytes");
+					}
+					const int width = arguments.value("width", 50);
+					const int height = arguments.value("height", 50);
+					if (width < 1 || width > 512 || height < 1 || height > 512) {
+						throw Error("width and height must be between 1 and 512");
+					}
+					return StructuredResult(OnGui([prompt, width, height](const EditorContext& context) {
+						if (context.editor.selection.size() == 0 && (width > context.map.getWidth() || height > context.map.getHeight())) {
+							throw Error("The requested rectangle exceeds the open map bounds.");
+						}
+						const SessionId expectedSession = context.mapSessionId;
+						const bool usesSelection = context.editor.selection.size() != 0;
+						wxTheApp->CallAfter([prompt, expectedSession, width, height] {
+							Editor* editor = g_gui.GetCurrentEditor();
+							if (!editor || editor->map.getSessionId() != expectedSession) {
+								return;
+							}
+							RunProceduralMapGenerator(g_gui.root, *editor, g_gui.GetCurrentFloor(), prompt, width, height);
+						});
+						return Json {
+							{ "queued", true },
+							{ "mapSessionId", expectedSession },
+							{ "selectionTiles", context.editor.selection.size() },
+							{ "areaMode", usesSelection ? "selection" : "explicit-rectangle" },
+							{ "requestedWidth", width },
+							{ "requestedHeight", height },
+							{ "next", "In NexaMap choose Interpret Brief, review materials, Generate Preview, then Apply." },
+						};
 					}));
 				},
 			});

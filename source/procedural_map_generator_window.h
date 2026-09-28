@@ -37,7 +37,7 @@ class ProceduralPreviewPanel;
 
 class ProceduralGeneratorDialog final : public wxDialog {
 public:
-	ProceduralGeneratorDialog(wxWindow* parent, Editor& editor, int currentFloor);
+	ProceduralGeneratorDialog(wxWindow* parent, Editor& editor, int currentFloor, const std::string& initialBrief = {}, int initialWidth = 0, int initialHeight = 0);
 	~ProceduralGeneratorDialog() override;
 
 private:
@@ -168,6 +168,6 @@ private:
 	bool closing = false;
 };
 
-bool RunProceduralMapGenerator(wxWindow* parent, Editor& editor, int currentFloor);
+bool RunProceduralMapGenerator(wxWindow* parent, Editor& editor, int currentFloor, const std::string& initialBrief = {}, int initialWidth = 0, int initialHeight = 0);
 
 #endif
