@@ -19,13 +19,27 @@ namespace mcp {
 		}
 
 		bool MatchesType(const Json& value, const std::string& type) {
-			if (type == "object") return value.is_object();
-			if (type == "array") return value.is_array();
-			if (type == "string") return value.is_string();
-			if (type == "integer") return value.is_number_integer() || value.is_number_unsigned();
-			if (type == "number") return value.is_number();
-			if (type == "boolean") return value.is_boolean();
-			if (type == "null") return value.is_null();
+			if (type == "object") {
+				return value.is_object();
+			}
+			if (type == "array") {
+				return value.is_array();
+			}
+			if (type == "string") {
+				return value.is_string();
+			}
+			if (type == "integer") {
+				return value.is_number_integer() || value.is_number_unsigned();
+			}
+			if (type == "number") {
+				return value.is_number();
+			}
+			if (type == "boolean") {
+				return value.is_boolean();
+			}
+			if (type == "null") {
+				return value.is_null();
+			}
 			return true;
 		}
 
