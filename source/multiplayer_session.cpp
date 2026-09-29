@@ -1281,6 +1281,19 @@ bool MultiplayerSession::canEdit() const {
 	const auto p = participants.find(localId);
 	return p != participants.end() && (p->second.role == Role::Host || p->second.role == Role::Editor);
 }
+
+bool MultiplayerSession::canEditMapMetadata(Map* map) {
+	if (!map) {
+		return false;
+	}
+	if (auto* session = current()) {
+		if (&session->getEditor().map != map) {
+			return true;
+		}
+		return session->canEdit();
+	}
+	return true;
+}
 bool MultiplayerSession::canUndo() const {
 	return canEdit() && historyPosition > 0;
 }
@@ -2118,7 +2131,7 @@ bool MultiplayerSession::saveBackup(BackupReason reason) {
 
 		auto cleanupPartialFiles = [&]() {
 			static constexpr std::string_view extensions[] = {
-				".otbm", "-spawn.xml", "-monster.xml", "-npc.xml", "-house.xml", "-waypoint.xml", "-zones.xml", ".complete"
+				".otbm", "-spawn.xml", "-monster.xml", "-npc.xml", "-house.xml", "-waypoint.xml", "-waypoint-groups.xml", "-zones.xml", ".complete"
 			};
 			for (const auto ext : extensions) {
 				std::error_code rmEc;
@@ -2273,6 +2286,7 @@ void MultiplayerSession::pruneOldBackups(const std::filesystem::path& directory,
 			"-npc.xml",
 			"-house.xml",
 			"-waypoint.xml",
+			"-waypoint-groups.xml",
 			"-zones.xml",
 			".complete"
 		};

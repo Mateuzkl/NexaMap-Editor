@@ -101,6 +101,8 @@ public:
 	void OnSelectCreatureBrush(wxCommandEvent& event);
 	void OnSelectSpawnBrush(wxCommandEvent& event);
 	void OnSelectHouseBrush(wxCommandEvent& event);
+	void OnWaypointRename(wxCommandEvent& event);
+	void OnWaypointDelete(wxCommandEvent& event);
 	void OnSelectCollectionBrush(wxCommandEvent& event);
 	void OnSelectMoveTo(wxCommandEvent& event);
 	// ---
@@ -178,6 +180,11 @@ private:
 	static bool processed[BLOCK_SIZE * BLOCK_SIZE];
 
 	void EditTileProperties(Position position, bool browse, bool topItem);
+	Waypoint* getWaypointAt(int map_x, int map_y, int map_z) const;
+	void beginWaypointDrag(Waypoint* waypoint, const Position& previewPosition);
+	void updateWaypointDrag(const Position& previewPosition);
+	void finishWaypointDrag(bool commit, bool releaseCapture = true);
+	void showWaypointContextMenu(const std::string& waypointName);
 	Editor& editor;
 	MapDrawer* drawer;
 	std::shared_ptr<const MinimapImportDocument> minimap_import_overlay;
@@ -212,6 +219,12 @@ private:
 	bool drawing;
 	bool dragging_draw;
 	bool replace_dragging;
+	bool dragging_waypoint;
+	std::string waypoint_drag_name_;
+	Position waypoint_drag_origin_pos_;
+	Position waypoint_drag_preview_pos_;
+	std::string context_waypoint_name_;
+	bool skip_properties_release_ = false;
 
 	uint8_t* screenshot_buffer;
 	bool screenshot_captured = false;

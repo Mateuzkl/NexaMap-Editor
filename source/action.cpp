@@ -56,6 +56,8 @@ namespace {
 	struct WaypointRegistryChange {
 		std::string name;
 		Position position;
+		std::string category;
+		std::optional<size_t> orderIndex;
 		bool add = true;
 	};
 	struct WaypointState {
@@ -113,10 +115,10 @@ Change* Change::Create(Waypoint* wp, const Position& where) {
 	return c;
 }
 
-Change* Change::CreateWaypoint(const std::string& name, const Position& position, bool add) {
+Change* Change::CreateWaypoint(const std::string& name, const Position& position, bool add, std::string category, std::optional<size_t> orderIndex) {
 	auto* c = newd Change();
 	c->type = CHANGE_WAYPOINT_REGISTRY;
-	c->data = newd WaypointRegistryChange { name, position, add };
+	c->data = newd WaypointRegistryChange { name, position, std::move(category), orderIndex, add };
 	return c;
 }
 
@@ -238,6 +240,16 @@ uint32_t Change::memsize() const {
 			mem += sizeof(ZoneRenameChange) + change->from.capacity() + change->to.capacity();
 			break;
 		}
+		case CHANGE_MOVE_HOUSE_EXIT:
+			ASSERT(data);
+			mem += sizeof(std::pair<uint32_t, Position>);
+			break;
+		case CHANGE_MOVE_WAYPOINT: {
+			ASSERT(data);
+			const auto* pair = reinterpret_cast<std::pair<std::string, Position>*>(data);
+			mem += sizeof(std::pair<std::string, Position>) + pair->first.capacity();
+			break;
+		}
 		case CHANGE_HOUSE_REGISTRY: {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<HouseRegistryChange*>(data);
@@ -265,7 +277,7 @@ uint32_t Change::memsize() const {
 		case CHANGE_WAYPOINT_REGISTRY: {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<WaypointRegistryChange*>(data);
-			mem += sizeof(WaypointRegistryChange) + change->name.capacity();
+			mem += sizeof(WaypointRegistryChange) + change->name.capacity() + change->category.capacity();
 			break;
 		}
 		case CHANGE_WAYPOINT_UPDATE: {
@@ -420,20 +432,25 @@ bool Action::applyWaypointRegistryChange(Change* c) {
 		if (existing) {
 			return false;
 		}
-		auto* waypoint = newd Waypoint();
+		auto waypoint = std::make_unique<Waypoint>();
 		waypoint->name = change->name;
 		waypoint->pos = change->position;
-		editor.map.waypoints.addWaypoint(waypoint);
+		waypoint->category = change->category;
+		if (!editor.map.waypoints.addWaypoint(std::move(waypoint), change->orderIndex)) {
+			return false;
+		}
+		const Waypoint* added = editor.map.waypoints.getWaypoint(change->name);
+		change->category = added ? added->category : change->category;
+		change->orderIndex = editor.map.waypoints.waypointOrderIndex(change->name);
 		change->add = false;
 		return true;
 	}
-	if (!existing || existing->pos != change->position) {
+	if (!existing || existing->pos != change->position || existing->category != change->category || editor.map.waypoints.waypointOrderIndex(change->name) != change->orderIndex) {
 		return false;
 	}
-	if (TileLocation* location = editor.map.getTileL(existing->pos); location && location->getWaypointCount() > 0) {
-		location->decreaseWaypointCount();
+	if (!editor.map.waypoints.removeWaypoint(change->name)) {
+		return false;
 	}
-	editor.map.waypoints.removeWaypoint(change->name);
 	change->add = true;
 	return true;
 }
@@ -443,41 +460,27 @@ bool Action::applyWaypointUpdate(Change* c) {
 	if (!change) {
 		return false;
 	}
-	const std::string beforeKey = as_lower_str(change->before.name);
-	std::string afterKey = as_lower_str(change->after.name);
-	auto iterator = editor.map.waypoints.waypoints.find(beforeKey);
-	if (iterator == editor.map.waypoints.waypoints.end() || !iterator->second) {
+	Waypoint* waypoint = editor.map.waypoints.getWaypoint(change->before.name);
+	if (!waypoint || waypoint->name != change->before.name || waypoint->pos != change->before.position) {
 		return false;
 	}
-	Waypoint* waypoint = iterator->second;
-	if (waypoint->name != change->before.name || waypoint->pos != change->before.position) {
+	const bool rename = change->before.name != change->after.name;
+	const bool move = change->before.position != change->after.position;
+	if (move && !change->after.position.isValid()) {
 		return false;
 	}
-	if (beforeKey != afterKey && editor.map.waypoints.waypoints.contains(afterKey)) {
+	if (as_lower_str(change->before.name) != as_lower_str(change->after.name) && editor.map.waypoints.getWaypoint(change->after.name)) {
 		return false;
 	}
-	TileLocation* oldLocation = change->before.position == Position() ? nullptr : editor.map.getTileL(change->before.position);
-	TileLocation* newLocation = change->after.position == Position() ? nullptr : editor.map.getTileL(change->after.position);
-	if ((oldLocation && oldLocation->getWaypointCount() == 0) || (change->after.position != Position() && !newLocation)) {
+	if (rename && !editor.map.waypoints.renameWaypoint(change->before.name, change->after.name)) {
 		return false;
 	}
-
-	// Allocate/copy the target strings before touching registry keys or tile
-	// counters. Everything after these assignments is no-throw.
-	waypoint->name = change->after.name;
-	waypoint->pos = change->after.position;
-	if (beforeKey != afterKey) {
-		auto node = editor.map.waypoints.waypoints.extract(iterator);
-		node.key().swap(afterKey);
-		editor.map.waypoints.waypoints.insert(std::move(node));
-	}
-	if (change->before.position != change->after.position) {
-		if (oldLocation) {
-			oldLocation->decreaseWaypointCount();
+	const std::string currentName = rename ? change->after.name : change->before.name;
+	if (move && !editor.map.waypoints.moveWaypoint(currentName, change->after.position)) {
+		if (rename) {
+			editor.map.waypoints.renameWaypoint(change->after.name, change->before.name);
 		}
-		if (newLocation) {
-			newLocation->increaseWaypointCount();
-		}
+		return false;
 	}
 	std::swap(change->before, change->after);
 	return true;
@@ -551,6 +554,8 @@ size_t Action::memsize() const {
 			case CHANGE_ZONE_REGISTRY:
 			case CHANGE_RENAME_ZONE:
 			case CHANGE_HOUSE_REGISTRY:
+			case CHANGE_MOVE_HOUSE_EXIT:
+			case CHANGE_MOVE_WAYPOINT:
 			case CHANGE_HOUSE_UPDATE:
 			case CHANGE_TOWN_REGISTRY:
 			case CHANGE_TOWN_UPDATE:
@@ -673,25 +678,10 @@ bool Action::commit() {
 				Waypoint* wp = editor.map.waypoints.getWaypoint(p->first);
 
 				if (wp) {
-					// Change the tiles
-					TileLocation* oldtile = editor.map.getTileL(wp->pos);
-					TileLocation* newtile = editor.map.getTileL(p->second);
-
-					// Only need to remove from old if it actually exists
-					if (p->second != Position()) {
-						if (oldtile && oldtile->getWaypointCount() > 0) {
-							oldtile->decreaseWaypointCount();
-						}
+					const Position oldPosition = wp->pos;
+					if (editor.map.waypoints.moveWaypoint(p->first, p->second)) {
+						p->second = oldPosition;
 					}
-
-					if (newtile) {
-						newtile->increaseWaypointCount();
-					}
-
-					// Update shit
-					Position oldpos = wp->pos;
-					wp->pos = p->second;
-					p->second = oldpos;
 				}
 				break;
 			}
@@ -834,25 +824,10 @@ bool Action::undo() {
 				Waypoint* wp = editor.map.waypoints.getWaypoint(p->first);
 
 				if (wp) {
-					// Change the tiles
-					TileLocation* oldtile = editor.map.getTileL(wp->pos);
-					TileLocation* newtile = editor.map.getTileL(p->second);
-
-					// Only need to remove from old if it actually exists
-					if (p->second != Position()) {
-						if (oldtile && oldtile->getWaypointCount() > 0) {
-							oldtile->decreaseWaypointCount();
-						}
+					const Position oldPosition = wp->pos;
+					if (editor.map.waypoints.moveWaypoint(p->first, p->second)) {
+						p->second = oldPosition;
 					}
-
-					if (newtile) {
-						newtile->increaseWaypointCount();
-					}
-
-					// Update shit
-					Position oldpos = wp->pos;
-					wp->pos = p->second;
-					p->second = oldpos;
 				}
 				break;
 			}

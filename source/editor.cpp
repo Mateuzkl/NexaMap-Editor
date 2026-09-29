@@ -383,7 +383,7 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 
 	// Make temporary backups
 	// converter.Assign(wxstr(savefile));
-	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones;
+	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones, backup_waypoint_groups, waypoint_groups_filename;
 
 	if (converter.GetExt() == "otgz") {
 		save_otgz = true;
@@ -435,6 +435,14 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::remove(backup_zones.c_str());
 			std::rename((map_path + map.zonefile).c_str(), backup_zones.c_str());
 		}
+
+		converter.Assign(wxstr(savefile));
+		waypoint_groups_filename = map_path + nstr(converter.GetName()) + "-waypoint-groups.xml";
+		if (wxFileExists(wxstr(waypoint_groups_filename))) {
+			backup_waypoint_groups = waypoint_groups_filename + "~";
+			std::remove(backup_waypoint_groups.c_str());
+			std::rename(waypoint_groups_filename.c_str(), backup_waypoint_groups.c_str());
+		}
 	}
 
 	// Save the map
@@ -446,7 +454,8 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		  << backup_spawn << '\n'
 		  << backup_spawn_npc << '\n'
 		  << backup_waypoint << '\n'
-		  << backup_zones << '\n';
+		  << backup_zones << '\n'
+		  << backup_waypoint_groups << '\n';
 	}
 
 	{
@@ -519,6 +528,11 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 				converter.SetFullName(wxstr(map.zonefile));
 				std::string zones_filename = map_path + nstr(converter.GetName());
 				std::rename(backup_zones.c_str(), std::string(zones_filename + ".xml").c_str());
+			}
+
+			if (!backup_waypoint_groups.empty()) {
+				std::remove(waypoint_groups_filename.c_str());
+				std::rename(backup_waypoint_groups.c_str(), waypoint_groups_filename.c_str());
 			}
 
 			// Display the stage and underlying reason instead of reporting every
@@ -599,6 +613,11 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::string zones_filename = map_path + nstr(converter.GetName());
 			std::rename(backup_zones.c_str(), std::string(zones_filename + "." + date.str() + ".xml").c_str());
 		}
+
+		if (!backup_waypoint_groups.empty()) {
+			const std::string backup_filename = waypoint_groups_filename.substr(0, waypoint_groups_filename.size() - 4) + "." + date.str() + ".xml";
+			std::rename(backup_waypoint_groups.c_str(), backup_filename.c_str());
+		}
 	} else {
 		// Delete the temporary files
 		std::remove(backup_otbm.c_str());
@@ -607,6 +626,7 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		std::remove(backup_spawn_npc.c_str());
 		std::remove(backup_waypoint.c_str());
 		std::remove(backup_zones.c_str());
+		std::remove(backup_waypoint_groups.c_str());
 	}
 
 	map.clearChanges();
@@ -830,13 +850,7 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 		}
 	}
 
-	// Plain merge of waypoints, very simple! :)
-	for (auto iter = imported_map.waypoints.begin(); iter != imported_map.waypoints.end(); ++iter) {
-		iter->second->pos += offset;
-	}
-
-	map.waypoints.waypoints.insert(imported_map.waypoints.begin(), imported_map.waypoints.end());
-	imported_map.waypoints.waypoints.clear();
+	map.waypoints.importWaypointsFrom(imported_map.waypoints, offset);
 
 	uint64_t tiles_merged = 0;
 	uint64_t tiles_to_import = imported_map.tilecount;
@@ -1816,7 +1830,7 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 		addBatch(batch, 2);
 	} else if (brush->isWaypoint()) {
 		WaypointBrush* waypoint_brush = brush->asWaypoint();
-		if (!waypoint_brush->canDraw(&map, offset)) {
+		if (waypoint_brush->getWaypoint().empty()) {
 			return;
 		}
 
@@ -1827,6 +1841,10 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 
 		BatchAction* batch = actionQueue->createBatch(ACTION_DRAW);
 		Action* action = actionQueue->createAction(batch);
+		if (!waypoint_brush->canDraw(&map, offset) && !map.getTile(offset)) {
+			Tile* new_tile = map.allocator(map.createTileL(offset));
+			action->addChange(newd Change(new_tile));
+		}
 		action->addChange(Change::Create(waypoint, offset));
 		batch->addAndCommitAction(action);
 		addBatch(batch, 2);

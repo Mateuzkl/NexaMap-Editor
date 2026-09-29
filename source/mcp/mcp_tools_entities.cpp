@@ -287,7 +287,7 @@ namespace mcp {
 				{ { "type", "object" }, { "properties", paginationProperties }, { "additionalProperties", false } },
 				false,
 				[](const Json& arguments) { return StructuredResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json values = Json::array(); size_t index = 0; for (const auto& [key, waypoint] : context.map.waypoints){ if (index++ >= offset && values.size() < limit && waypoint){ values.push_back({ { "name", waypoint->name }, { "position", PositionJson(waypoint->pos) } });
-}} return PageResult(std::move(values), offset, limit, context.map.waypoints.waypoints.size(), "waypoints"); })); },
+}} return PageResult(std::move(values), offset, limit, context.map.waypoints.size(), "waypoints"); })); },
 			});
 
 			registry.add({
@@ -302,7 +302,7 @@ namespace mcp {
 } if (operation == "delete" && !arguments.value("confirm", false)){ throw Error("delete requires confirm=true");
 } if (operation == "update") { const std::string newName = arguments.value("newName", existing->name); const Position position = arguments.contains("position") ? ParsePosition(arguments["position"]) : existing->pos; if (!context.map.getTile(position)){ throw Error("waypoint position must already be mapped");
 } Waypoint* collision = context.map.waypoints.getWaypoint(newName); if (collision && collision != existing){ throw Error("new waypoint name already exists");
-} action->addChange(Change::UpdateWaypoint(existing->name, existing->pos, newName, position)); } else if (operation == "delete"){ action->addChange(Change::CreateWaypoint(existing->name, existing->pos, false)); } else { throw Error("unsupported waypoint operation");
+} action->addChange(Change::UpdateWaypoint(existing->name, existing->pos, newName, position)); } else if (operation == "delete"){ action->addChange(Change::CreateWaypoint(existing->name, existing->pos, false, existing->category, context.map.waypoints.waypointOrderIndex(existing->name))); } else { throw Error("unsupported waypoint operation");
 } } CommitEntityAction(context, std::move(action)); return MutationResult(context, operation); })); },
 			});
 
