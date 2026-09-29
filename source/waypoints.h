@@ -21,7 +21,8 @@
 #include "position.h"
 
 #include <map>
-#include <set>
+#include <memory>
+#include <string_view>
 #include <vector>
 
 class Waypoint {
@@ -31,42 +32,37 @@ public:
 	std::string category;
 };
 
-typedef std::map<std::string, Waypoint*> WaypointMap;
+using WaypointMap = std::map<std::string, std::unique_ptr<Waypoint>>;
 
 class Waypoints {
-	Map& map;
-
 public:
-	Waypoints(Map& map) :
-		map(map) { }
-	~Waypoints() {
-		for (WaypointMap::iterator iter = waypoints.begin(); iter != waypoints.end(); ++iter) {
-			delete iter->second;
-		}
-	}
+	explicit Waypoints(Map& map) :
+		map_(map) { }
 
-	void addWaypoint(Waypoint* wp);
-	Waypoint* getWaypoint(std::string name);
-	const Waypoint* getWaypoint(std::string name) const;
+	bool addWaypoint(std::unique_ptr<Waypoint> waypoint);
+	bool removeWaypoint(std::string_view name);
+	bool renameWaypoint(std::string_view oldName, std::string newName);
+	bool moveWaypoint(std::string_view name, const Position& newPosition);
+	void clear();
+	void importWaypointsFrom(Waypoints& source, const Position& offset);
+
+	Waypoint* getWaypoint(std::string_view name);
+	const Waypoint* getWaypoint(std::string_view name) const;
 	Waypoint* getWaypoint(const TileLocation* location);
-	void removeWaypoint(std::string name);
+	const Waypoint* getWaypoint(const TileLocation* location) const;
 
 	void clearGroups();
-	void addCategory(const std::string& name);
-	void removeCategory(const std::string& name);
-	bool renameCategory(const std::string& oldName, const std::string& newName);
-	void setWaypointCategory(const std::string& waypointName, const std::string& category);
+	bool addCategory(std::string name);
+	bool removeCategory(std::string_view name);
+	bool renameCategory(std::string_view oldName, std::string newName);
+	bool setWaypointCategory(std::string_view waypointName, std::string category);
 	bool hasGroups() const;
-	void syncWaypointOrders();
-	void registerWaypointOrder(const Waypoint* wp);
-	void unregisterWaypointOrder(const std::string& name);
-	void renameInOrders(const std::string& oldName, const std::string& newName);
-	bool moveCategoryRelative(const std::string& category, const std::string& anchorCategory, bool insertBefore);
-	bool moveWaypointRelative(const std::string& waypoint, const std::string& anchorWaypoint, bool insertBefore);
-	bool moveWaypointIntoCategory(const std::string& waypoint, const std::string& category, bool atEnd);
-	bool nudgeCategory(const std::string& category, bool moveUp);
-	std::vector<std::string> orderedWaypointsInCategory(const std::string& category) const;
-	void notifyWaypointPositionChanged(Waypoint* wp, const Position& oldPos);
+	void normalizeOrders();
+	bool moveCategoryRelative(std::string_view category, std::string_view anchorCategory, bool insertBefore);
+	bool moveWaypointRelative(std::string_view waypoint, std::string_view anchorWaypoint, bool insertBefore);
+	bool moveWaypointIntoCategory(std::string_view waypoint, std::string_view category, bool atEnd);
+	bool nudgeCategory(std::string_view category, bool moveUp);
+	std::vector<std::string> orderedWaypointsInCategory(std::string_view category) const;
 	bool applyOrderingFromMetadata(
 		const std::vector<std::string>& categoryOrder,
 		const std::vector<std::string>& uncategorizedOrder,
@@ -75,28 +71,59 @@ public:
 	);
 	bool validateInvariants(std::string* error = nullptr) const;
 
-	WaypointMap waypoints;
-	std::map<Position, Waypoint*> waypoint_by_position;
-	std::vector<std::string> categories;
-	std::vector<std::string> uncategorized_order;
-	std::map<std::string, std::vector<std::string>> category_waypoint_order;
+	size_t size() const noexcept {
+		return waypoints_.size();
+	}
+	bool empty() const noexcept {
+		return waypoints_.empty();
+	}
+	const std::vector<std::string>& categories() const noexcept {
+		return categories_;
+	}
+	const std::vector<std::string>& uncategorizedOrder() const noexcept {
+		return uncategorizedOrder_;
+	}
+	const std::map<std::string, std::vector<std::string>>& categoryWaypointOrders() const noexcept {
+		return categoryWaypointOrder_;
+	}
 
-	WaypointMap::iterator begin() {
-		return waypoints.begin();
+	WaypointMap::const_iterator begin() const noexcept {
+		return waypoints_.begin();
 	}
-	WaypointMap::const_iterator begin() const {
-		return waypoints.begin();
+	WaypointMap::const_iterator end() const noexcept {
+		return waypoints_.end();
 	}
-	WaypointMap::iterator end() {
-		return waypoints.end();
+	WaypointMap::const_iterator begin() noexcept {
+		return waypoints_.cbegin();
 	}
-	WaypointMap::const_iterator end() const {
-		return waypoints.end();
+	WaypointMap::const_iterator end() noexcept {
+		return waypoints_.cend();
 	}
 
 private:
-	void removeWaypointFromPositionIndex(Waypoint* wp);
-	void indexWaypointPosition(Waypoint* wp);
+	using PositionIndex = std::map<Position, std::vector<Waypoint*>>;
+
+	void decrementTileCount(const Position& position);
+	void incrementTileCount(const Position& position);
+	void removeWaypointFromPositionIndex(Waypoint* waypoint, const Position& position);
+	void indexWaypointPosition(Waypoint* waypoint);
+	void unregisterWaypointOrder(std::string_view name);
+	void registerWaypointOrder(const Waypoint& waypoint);
+	std::unique_ptr<Waypoint> extractWaypoint(std::string_view name);
+	bool validateMetadata(
+		const std::vector<std::string>& categoryOrder,
+		const std::vector<std::string>& uncategorizedOrder,
+		const std::map<std::string, std::vector<std::string>>& categoryOrders,
+		const std::map<std::string, std::string>& waypointCategoryByName,
+		std::string* error
+	) const;
+
+	Map& map_;
+	WaypointMap waypoints_;
+	PositionIndex waypointByPosition_;
+	std::vector<std::string> categories_;
+	std::vector<std::string> uncategorizedOrder_;
+	std::map<std::string, std::vector<std::string>> categoryWaypointOrder_;
 };
 
 #endif

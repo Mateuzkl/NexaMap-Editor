@@ -300,6 +300,8 @@ size_t Action::memsize() const {
 			case CHANGE_ZONE_REGISTRY:
 			case CHANGE_RENAME_ZONE:
 			case CHANGE_HOUSE_REGISTRY:
+			case CHANGE_MOVE_HOUSE_EXIT:
+			case CHANGE_MOVE_WAYPOINT:
 				mem += c->memsize();
 				break;
 
@@ -417,25 +419,10 @@ bool Action::commit() {
 				Waypoint* wp = editor.map.waypoints.getWaypoint(p->first);
 
 				if (wp) {
-					// Change the tiles
-					TileLocation* oldtile = editor.map.getTileL(wp->pos);
-					TileLocation* newtile = editor.map.getTileL(p->second);
-
-					// Only need to remove from old if it actually exists
-					if (p->second != Position()) {
-						if (oldtile && oldtile->getWaypointCount() > 0) {
-							oldtile->decreaseWaypointCount();
-						}
+					const Position oldPosition = wp->pos;
+					if (editor.map.waypoints.moveWaypoint(p->first, p->second)) {
+						p->second = oldPosition;
 					}
-
-					if (newtile) {
-						newtile->increaseWaypointCount();
-					}
-
-					Position oldpos = wp->pos;
-					wp->pos = p->second;
-					editor.map.waypoints.notifyWaypointPositionChanged(wp, oldpos);
-					p->second = oldpos;
 				}
 				break;
 			}
@@ -548,25 +535,10 @@ bool Action::undo() {
 				Waypoint* wp = editor.map.waypoints.getWaypoint(p->first);
 
 				if (wp) {
-					// Change the tiles
-					TileLocation* oldtile = editor.map.getTileL(wp->pos);
-					TileLocation* newtile = editor.map.getTileL(p->second);
-
-					// Only need to remove from old if it actually exists
-					if (p->second != Position()) {
-						if (oldtile && oldtile->getWaypointCount() > 0) {
-							oldtile->decreaseWaypointCount();
-						}
+					const Position oldPosition = wp->pos;
+					if (editor.map.waypoints.moveWaypoint(p->first, p->second)) {
+						p->second = oldPosition;
 					}
-
-					if (newtile) {
-						newtile->increaseWaypointCount();
-					}
-
-					Position oldpos = wp->pos;
-					wp->pos = p->second;
-					editor.map.waypoints.notifyWaypointPositionChanged(wp, oldpos);
-					p->second = oldpos;
 				}
 				break;
 			}

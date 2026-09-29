@@ -489,7 +489,7 @@ namespace Multiplayer {
 		}
 		return tile;
 	}
-	Bytes encodeMetadata(Map& map) {
+	Bytes encodeMetadata(const Map& map) {
 		Writer out(MaxMetadata);
 		out.u8(2);
 		out.u32(map.towns.count());
@@ -511,27 +511,34 @@ namespace Multiplayer {
 			out.u8(h.guildhall);
 			position(out, h.exit);
 		}
-		map.waypoints.syncWaypointOrders();
-		out.u32(static_cast<uint32_t>(map.waypoints.waypoints.size()));
+		std::string waypointError;
+		if (!map.waypoints.validateInvariants(&waypointError)) {
+			throw Error("Invalid waypoint state: " + waypointError);
+		}
+		out.u32(static_cast<uint32_t>(map.waypoints.size()));
 		for (const auto& [name, wp] : map.waypoints) {
 			out.string(wp->name, 1024);
 			position(out, wp->pos);
 			out.string(wp->category, 1024);
 		}
-		out.u32(static_cast<uint32_t>(map.waypoints.categories.size()));
-		for (const auto& category : map.waypoints.categories) {
+		out.u32(static_cast<uint32_t>(map.waypoints.categories().size()));
+		for (const auto& category : map.waypoints.categories()) {
 			out.string(category, 1024);
 		}
-		out.u32(static_cast<uint32_t>(map.waypoints.uncategorized_order.size()));
-		for (const auto& waypointName : map.waypoints.uncategorized_order) {
+		out.u32(static_cast<uint32_t>(map.waypoints.uncategorizedOrder().size()));
+		for (const auto& waypointName : map.waypoints.uncategorizedOrder()) {
 			out.string(waypointName, 1024);
 		}
-		for (const auto& category : map.waypoints.categories) {
-			const auto found = map.waypoints.category_waypoint_order.find(category);
-			const auto& order = found != map.waypoints.category_waypoint_order.end() ? found->second : std::vector<std::string> {};
-			out.u32(static_cast<uint32_t>(order.size()));
-			for (const auto& waypointName : order) {
-				out.string(waypointName, 1024);
+		for (const auto& category : map.waypoints.categories()) {
+			const auto& categoryOrders = map.waypoints.categoryWaypointOrders();
+			const auto found = categoryOrders.find(category);
+			if (found == categoryOrders.end()) {
+				out.u32(0);
+			} else {
+				out.u32(static_cast<uint32_t>(found->second.size()));
+				for (const auto& waypointName : found->second) {
+					out.string(waypointName, 1024);
+				}
 			}
 		}
 		out.u32(static_cast<uint32_t>(map.zones.size()));
@@ -589,22 +596,17 @@ namespace Multiplayer {
 		for (const auto& [name, pos] : data.waypoints) {
 			waypoints.insert(name);
 			const std::string category = data.format_version >= 2 && data.waypoint_category.count(name) != 0 ? data.waypoint_category.at(name) : std::string();
-			auto* wp = map.waypoints.getWaypoint(name);
-			if (wp && wp->pos == pos && (data.format_version < 2 || wp->category == category)) {
+			if (Waypoint* waypoint = map.waypoints.getWaypoint(name)) {
+				if (waypoint->pos != pos) {
+					map.waypoints.moveWaypoint(name, pos);
+				}
 				continue;
 			}
-			if (wp) {
-				map.waypoints.removeWaypoint(name);
-			}
-			wp = new Waypoint;
-			wp->name = name;
-			wp->pos = pos;
-			if (data.format_version >= 2) {
-				if (const auto found = data.waypoint_category.find(name); found != data.waypoint_category.end()) {
-					wp->category = found->second;
-				}
-			}
-			map.waypoints.addWaypoint(wp);
+			auto waypoint = std::make_unique<Waypoint>();
+			waypoint->name = name;
+			waypoint->pos = pos;
+			waypoint->category = category;
+			map.waypoints.addWaypoint(std::move(waypoint));
 		}
 		for (auto it = map.waypoints.begin(); it != map.waypoints.end();) {
 			auto name = it->first;
@@ -624,7 +626,6 @@ namespace Multiplayer {
 			}
 		} else {
 			map.waypoints.clearGroups();
-			map.waypoints.syncWaypointOrders();
 		}
 		// Replace the small registry; tile memberships are carried by tile changes.
 		std::vector<std::string> oldZones;

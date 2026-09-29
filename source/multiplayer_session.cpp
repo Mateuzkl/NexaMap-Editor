@@ -1288,7 +1288,7 @@ bool MultiplayerSession::canEditMapMetadata(Map* map) {
 	}
 	if (auto* session = current()) {
 		if (&session->getEditor().map != map) {
-			return false;
+			return true;
 		}
 		return session->canEdit();
 	}

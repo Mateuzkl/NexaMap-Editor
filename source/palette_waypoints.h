@@ -84,17 +84,17 @@ protected:
 	void markCategoryExpanded(const std::string& category);
 	void rememberExpandedCategoriesFromTree();
 	void activateWaypoint(Waypoint* wp);
+	void activateTreeItem(const wxTreeItemId& item);
 	std::string getTargetCategory() const;
 	WaypointTreeItemData* getSelectedItemData() const;
 	wxTreeItemId findWaypointItem(const std::string& name) const;
 	wxTreeItemId findCategoryItem(const std::string& name) const;
-	bool applyTreeDrop(const wxTreeItemId& source, const wxTreeItemId& target, int hitFlags);
 	bool applyTreeDropInternal(const wxTreeItemId& source, const wxTreeItemId& target, int hitFlags);
 	bool renameWaypointInternal(const std::string& oldName, const std::string& newName);
 	bool deleteWaypointInternal(const std::string& name);
 	bool deleteCategoryInternal(const std::string& name);
+	bool deleteSelectedTreeItem();
 	static void markMapMetadataChanged(Map* map);
-	void OnRefreshTimer(wxTimerEvent& event);
 
 	wxTreeCtrl* waypoint_tree;
 	wxTreeItemId drag_item_;
@@ -103,7 +103,6 @@ protected:
 	wxButton* remove_waypoint_button;
 	std::set<std::string> collapsed_categories_;
 	std::unordered_map<std::string, wxTreeItemId> waypoint_items_;
-	bool editing_new_waypoint_ = false;
 	bool suppress_tree_expansion_events_ = false;
 
 	DECLARE_EVENT_TABLE()

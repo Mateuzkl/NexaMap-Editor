@@ -245,7 +245,7 @@ bool UnreachableCleaner::isFloorInScope(int z) const {
 void UnreachableCleaner::buildWaypointIndex() {
 	waypointPositions_.clear();
 	for (auto it = map_.waypoints.begin(); it != map_.waypoints.end(); ++it) {
-		const Waypoint* wp = it->second;
+		const Waypoint* wp = it->second.get();
 		if (wp) {
 			waypointPositions_.insert(positionHash(wp->pos.x, wp->pos.y, wp->pos.z));
 		}
@@ -535,9 +535,6 @@ int64_t UnreachableCleaner::execute(std::function<bool(int, const std::string&)>
 					}
 				}
 				for (const auto& wpName : wpsToRemove) {
-					if (TileLocation* loc = map_.getTileL(pos)) {
-						loc->decreaseWaypointCount();
-					}
 					map_.waypoints.removeWaypoint(wpName);
 				}
 			}

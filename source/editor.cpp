@@ -839,13 +839,7 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 		}
 	}
 
-	// Plain merge of waypoints, very simple! :)
-	for (auto iter = imported_map.waypoints.begin(); iter != imported_map.waypoints.end(); ++iter) {
-		iter->second->pos += offset;
-	}
-
-	map.waypoints.waypoints.insert(imported_map.waypoints.begin(), imported_map.waypoints.end());
-	imported_map.waypoints.waypoints.clear();
+	map.waypoints.importWaypointsFrom(imported_map.waypoints, offset);
 
 	uint64_t tiles_merged = 0;
 	uint64_t tiles_to_import = imported_map.tilecount;

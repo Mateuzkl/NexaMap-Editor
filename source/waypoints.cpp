@@ -19,131 +19,485 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
-#include "waypoints.h"
 #include "map.h"
+#include "waypoints.h"
 
 namespace {
-	void removeFromVector(std::vector<std::string>& values, const std::string& name) {
-		values.erase(std::remove(values.begin(), values.end(), name), values.end());
+	void removeFromVector(std::vector<std::string>& values, std::string_view name) {
+		const std::string key = as_lower_str(std::string(name));
+		values.erase(
+			std::remove_if(values.begin(), values.end(), [&](const std::string& value) {
+				return as_lower_str(value) == key;
+			}),
+			values.end()
+		);
 	}
 
-	bool vectorHasDuplicate(const std::vector<std::string>& values) {
-		std::set<std::string> seen;
-		for (const auto& value : values) {
-			if (!seen.insert(as_lower_str(value)).second) {
-				return true;
-			}
-		}
-		return false;
+	bool insertCaseInsensitive(std::set<std::string>& values, std::string_view value) {
+		return values.insert(as_lower_str(std::string(value))).second;
+	}
+
+	const std::string* findCategory(
+		const std::vector<std::string>& categories,
+		std::string_view category
+	) {
+		const std::string key = as_lower_str(std::string(category));
+		const auto found = std::find_if(categories.begin(), categories.end(), [&](const std::string& candidate) {
+			return as_lower_str(candidate) == key;
+		});
+		return found == categories.end() ? nullptr : &*found;
 	}
 } // namespace
 
-void Waypoints::removeWaypointFromPositionIndex(Waypoint* wp) {
-	if (!wp || !wp->pos.isValid()) {
+void Waypoints::incrementTileCount(const Position& position) {
+	if (!position.isValid()) {
 		return;
 	}
-	const auto found = waypoint_by_position.find(wp->pos);
-	if (found != waypoint_by_position.end() && found->second == wp) {
-		waypoint_by_position.erase(found);
+	Tile* tile = map_.getTile(position);
+	if (!tile) {
+		tile = map_.allocator(map_.createTileL(position));
+		map_.setTile(position, tile);
+	}
+	tile->getLocation()->increaseWaypointCount();
+}
+
+void Waypoints::decrementTileCount(const Position& position) {
+	if (!position.isValid()) {
+		return;
+	}
+	if (TileLocation* location = map_.getTileL(position); location && location->getWaypointCount() > 0) {
+		location->decreaseWaypointCount();
 	}
 }
 
-void Waypoints::indexWaypointPosition(Waypoint* wp) {
-	if (!wp || !wp->pos.isValid()) {
+void Waypoints::removeWaypointFromPositionIndex(Waypoint* waypoint, const Position& position) {
+	if (!waypoint || !position.isValid()) {
 		return;
 	}
-	waypoint_by_position[wp->pos] = wp;
+	const auto found = waypointByPosition_.find(position);
+	if (found == waypointByPosition_.end()) {
+		return;
+	}
+	auto& bucket = found->second;
+	bucket.erase(std::remove(bucket.begin(), bucket.end(), waypoint), bucket.end());
+	if (bucket.empty()) {
+		waypointByPosition_.erase(found);
+	}
 }
 
-void Waypoints::notifyWaypointPositionChanged(Waypoint* wp, const Position& oldPos) {
-	if (!wp) {
+void Waypoints::indexWaypointPosition(Waypoint* waypoint) {
+	if (!waypoint || !waypoint->pos.isValid()) {
 		return;
 	}
-	if (oldPos.isValid()) {
-		const auto found = waypoint_by_position.find(oldPos);
-		if (found != waypoint_by_position.end() && found->second == wp) {
-			waypoint_by_position.erase(found);
-		}
+	auto& bucket = waypointByPosition_[waypoint->pos];
+	if (std::find(bucket.begin(), bucket.end(), waypoint) == bucket.end()) {
+		bucket.push_back(waypoint);
 	}
-	indexWaypointPosition(wp);
 }
 
-void Waypoints::addWaypoint(Waypoint* wp) {
-	if (!wp) {
-		return;
+bool Waypoints::addWaypoint(std::unique_ptr<Waypoint> waypoint) {
+	if (!waypoint || waypoint->name.empty() || !waypoint->pos.isValid()) {
+		return false;
 	}
-	const std::string key = as_lower_str(wp->name);
-	const auto existing = waypoints.find(key);
-	if (existing != waypoints.end() && existing->second == wp) {
-		registerWaypointOrder(wp);
-		return;
+	const std::string key = as_lower_str(waypoint->name);
+	if (waypoints_.contains(key)) {
+		return false;
 	}
-	removeWaypoint(wp->name);
-	if (wp->pos != Position()) {
-		Tile* t = map.getTile(wp->pos);
-		if (!t) {
-			map.setTile(wp->pos, t = map.allocator(map.createTileL(wp->pos)));
-		}
-		t->getLocation()->increaseWaypointCount();
+	if (!waypoint->category.empty()) {
+		addCategory(waypoint->category);
 	}
-	waypoints.insert(std::make_pair(key, wp));
-	indexWaypointPosition(wp);
-	registerWaypointOrder(wp);
+	Waypoint* observer = waypoint.get();
+	waypoints_.emplace(key, std::move(waypoint));
+	incrementTileCount(observer->pos);
+	indexWaypointPosition(observer);
+	registerWaypointOrder(*observer);
+	return true;
 }
 
-Waypoint* Waypoints::getWaypoint(std::string name) {
-	to_lower_str(name);
-	auto iter = waypoints.find(name);
-	if (iter == waypoints.end()) {
+std::unique_ptr<Waypoint> Waypoints::extractWaypoint(std::string_view name) {
+	const std::string key = as_lower_str(std::string(name));
+	const auto found = waypoints_.find(key);
+	if (found == waypoints_.end()) {
 		return nullptr;
 	}
-	return iter->second;
+	Waypoint* waypoint = found->second.get();
+	unregisterWaypointOrder(waypoint->name);
+	removeWaypointFromPositionIndex(waypoint, waypoint->pos);
+	decrementTileCount(waypoint->pos);
+	auto owned = std::move(found->second);
+	waypoints_.erase(found);
+	return owned;
 }
 
-const Waypoint* Waypoints::getWaypoint(std::string name) const {
-	to_lower_str(name);
-	const auto iter = waypoints.find(name);
-	if (iter == waypoints.end()) {
-		return nullptr;
+bool Waypoints::removeWaypoint(std::string_view name) {
+	return static_cast<bool>(extractWaypoint(name));
+}
+
+bool Waypoints::renameWaypoint(std::string_view oldName, std::string newName) {
+	if (newName.empty()) {
+		return false;
 	}
-	return iter->second;
+	const std::string oldKey = as_lower_str(std::string(oldName));
+	const std::string newKey = as_lower_str(newName);
+	auto found = waypoints_.find(oldKey);
+	if (found == waypoints_.end()) {
+		return false;
+	}
+	if (oldKey != newKey && waypoints_.contains(newKey)) {
+		return false;
+	}
+
+	Waypoint* waypoint = found->second.get();
+	const std::string previousName = waypoint->name;
+	for (auto& name : uncategorizedOrder_) {
+		if (as_lower_str(name) == oldKey) {
+			name = newName;
+		}
+	}
+	for (auto& [category, order] : categoryWaypointOrder_) {
+		for (auto& name : order) {
+			if (as_lower_str(name) == oldKey) {
+				name = newName;
+			}
+		}
+	}
+	waypoint->name = std::move(newName);
+	if (oldKey != newKey) {
+		auto node = waypoints_.extract(found);
+		node.key() = newKey;
+		waypoints_.insert(std::move(node));
+	}
+	return waypoint->name != previousName;
+}
+
+bool Waypoints::moveWaypoint(std::string_view name, const Position& newPosition) {
+	Waypoint* waypoint = getWaypoint(name);
+	if (!waypoint || !newPosition.isValid() || waypoint->pos == newPosition) {
+		return false;
+	}
+	const Position oldPosition = waypoint->pos;
+	removeWaypointFromPositionIndex(waypoint, oldPosition);
+	decrementTileCount(oldPosition);
+	waypoint->pos = newPosition;
+	incrementTileCount(newPosition);
+	indexWaypointPosition(waypoint);
+	return true;
+}
+
+void Waypoints::clear() {
+	while (!waypoints_.empty()) {
+		extractWaypoint(waypoints_.begin()->first);
+	}
+	waypointByPosition_.clear();
+	categories_.clear();
+	uncategorizedOrder_.clear();
+	categoryWaypointOrder_.clear();
+}
+
+void Waypoints::importWaypointsFrom(Waypoints& source, const Position& offset) {
+	if (&source == this) {
+		return;
+	}
+	source.normalizeOrders();
+	for (const auto& category : source.categories_) {
+		addCategory(category);
+	}
+
+	std::vector<std::string> orderedNames = source.uncategorizedOrder_;
+	for (const auto& category : source.categories_) {
+		if (const auto found = source.categoryWaypointOrder_.find(category); found != source.categoryWaypointOrder_.end()) {
+			orderedNames.insert(orderedNames.end(), found->second.begin(), found->second.end());
+		}
+	}
+	for (const auto& [key, waypoint] : source.waypoints_) {
+		if (std::find_if(orderedNames.begin(), orderedNames.end(), [&](const std::string& name) {
+				return as_lower_str(name) == key;
+			})
+			== orderedNames.end()) {
+			orderedNames.push_back(waypoint->name);
+		}
+	}
+
+	for (const auto& name : orderedNames) {
+		auto waypoint = source.extractWaypoint(name);
+		if (!waypoint || getWaypoint(waypoint->name)) {
+			continue;
+		}
+		waypoint->pos += offset;
+		if (waypoint->pos.isValid()) {
+			addWaypoint(std::move(waypoint));
+		}
+	}
+	source.clearGroups();
+	normalizeOrders();
+}
+
+Waypoint* Waypoints::getWaypoint(std::string_view name) {
+	const auto found = waypoints_.find(as_lower_str(std::string(name)));
+	return found == waypoints_.end() ? nullptr : found->second.get();
+}
+
+const Waypoint* Waypoints::getWaypoint(std::string_view name) const {
+	const auto found = waypoints_.find(as_lower_str(std::string(name)));
+	return found == waypoints_.end() ? nullptr : found->second.get();
 }
 
 Waypoint* Waypoints::getWaypoint(const TileLocation* location) {
+	return const_cast<Waypoint*>(std::as_const(*this).getWaypoint(location));
+}
+
+const Waypoint* Waypoints::getWaypoint(const TileLocation* location) const {
 	if (!location) {
 		return nullptr;
 	}
-	const auto found = waypoint_by_position.find(location->position);
-	if (found != waypoint_by_position.end()) {
-		return found->second;
+	const auto found = waypointByPosition_.find(location->position);
+	if (found == waypointByPosition_.end()) {
+		return nullptr;
 	}
-	return nullptr;
-}
-
-void Waypoints::removeWaypoint(std::string name) {
-	to_lower_str(name);
-	auto iter = waypoints.find(name);
-	if (iter == waypoints.end()) {
-		return;
-	}
-	if (Waypoint* wp = iter->second) {
-		unregisterWaypointOrder(wp->name);
-		removeWaypointFromPositionIndex(wp);
-		delete wp;
-	}
-	waypoints.erase(iter);
+	const auto observer = std::find_if(found->second.begin(), found->second.end(), [](const Waypoint* waypoint) {
+		return waypoint != nullptr;
+	});
+	return observer == found->second.end() ? nullptr : *observer;
 }
 
 void Waypoints::clearGroups() {
-	categories.clear();
-	uncategorized_order.clear();
-	category_waypoint_order.clear();
-	for (auto& entry : waypoints) {
-		if (entry.second) {
-			entry.second->category.clear();
+	categories_.clear();
+	categoryWaypointOrder_.clear();
+	uncategorizedOrder_.clear();
+	for (auto& [key, waypoint] : waypoints_) {
+		waypoint->category.clear();
+		uncategorizedOrder_.push_back(waypoint->name);
+	}
+}
+
+bool Waypoints::addCategory(std::string name) {
+	if (name.empty() || findCategory(categories_, name)) {
+		return false;
+	}
+	categories_.push_back(std::move(name));
+	categoryWaypointOrder_[categories_.back()];
+	return true;
+}
+
+bool Waypoints::removeCategory(std::string_view name) {
+	const std::string* actual = findCategory(categories_, name);
+	if (!actual) {
+		return false;
+	}
+	const std::string category = *actual;
+	categories_.erase(std::remove(categories_.begin(), categories_.end(), category), categories_.end());
+	categoryWaypointOrder_.erase(category);
+	for (auto& [key, waypoint] : waypoints_) {
+		if (waypoint->category == category) {
+			waypoint->category.clear();
 		}
 	}
+	normalizeOrders();
+	return true;
+}
+
+bool Waypoints::renameCategory(std::string_view oldName, std::string newName) {
+	if (newName.empty()) {
+		return false;
+	}
+	const std::string* actual = findCategory(categories_, oldName);
+	if (!actual) {
+		return false;
+	}
+	if (const std::string* duplicate = findCategory(categories_, newName); duplicate && duplicate != actual) {
+		return false;
+	}
+	const std::string oldCategory = *actual;
+	if (oldCategory == newName) {
+		return true;
+	}
+	for (auto& category : categories_) {
+		if (category == oldCategory) {
+			category = newName;
+			break;
+		}
+	}
+	if (auto found = categoryWaypointOrder_.find(oldCategory); found != categoryWaypointOrder_.end()) {
+		categoryWaypointOrder_[newName] = std::move(found->second);
+		categoryWaypointOrder_.erase(found);
+	}
+	for (auto& [key, waypoint] : waypoints_) {
+		if (waypoint->category == oldCategory) {
+			waypoint->category = newName;
+		}
+	}
+	normalizeOrders();
+	return true;
+}
+
+bool Waypoints::setWaypointCategory(std::string_view waypointName, std::string category) {
+	Waypoint* waypoint = getWaypoint(waypointName);
+	if (!waypoint) {
+		return false;
+	}
+	if (!category.empty()) {
+		if (const std::string* existing = findCategory(categories_, category)) {
+			category = *existing;
+		} else {
+			addCategory(category);
+		}
+	}
+	if (waypoint->category == category) {
+		return false;
+	}
+	unregisterWaypointOrder(waypoint->name);
+	waypoint->category = std::move(category);
+	registerWaypointOrder(*waypoint);
+	return true;
+}
+
+bool Waypoints::hasGroups() const {
+	if (!categories_.empty() || !uncategorizedOrder_.empty() || !categoryWaypointOrder_.empty()) {
+		return true;
+	}
+	return std::any_of(waypoints_.begin(), waypoints_.end(), [](const auto& entry) {
+		return !entry.second->category.empty();
+	});
+}
+
+void Waypoints::unregisterWaypointOrder(std::string_view name) {
+	removeFromVector(uncategorizedOrder_, name);
+	for (auto& [category, order] : categoryWaypointOrder_) {
+		removeFromVector(order, name);
+	}
+}
+
+void Waypoints::registerWaypointOrder(const Waypoint& waypoint) {
+	unregisterWaypointOrder(waypoint.name);
+	if (waypoint.category.empty()) {
+		uncategorizedOrder_.push_back(waypoint.name);
+		return;
+	}
+	if (!findCategory(categories_, waypoint.category)) {
+		addCategory(waypoint.category);
+	}
+	categoryWaypointOrder_[waypoint.category].push_back(waypoint.name);
+}
+
+void Waypoints::normalizeOrders() {
+	std::vector<std::string> normalizedCategories;
+	std::set<std::string> seenCategories;
+	for (const auto& category : categories_) {
+		if (!category.empty() && insertCaseInsensitive(seenCategories, category)) {
+			normalizedCategories.push_back(category);
+		}
+	}
+	for (const auto& [key, waypoint] : waypoints_) {
+		if (!waypoint->category.empty() && insertCaseInsensitive(seenCategories, waypoint->category)) {
+			normalizedCategories.push_back(waypoint->category);
+		}
+	}
+
+	std::vector<std::string> normalizedUncategorized;
+	std::map<std::string, std::vector<std::string>> normalizedCategoryOrders;
+	for (const auto& category : normalizedCategories) {
+		normalizedCategoryOrders[category];
+	}
+	std::set<std::string> listed;
+	auto preserve = [&](const std::vector<std::string>& order, const std::string& category) {
+		auto& destination = category.empty() ? normalizedUncategorized : normalizedCategoryOrders[category];
+		for (const auto& name : order) {
+			const Waypoint* waypoint = getWaypoint(name);
+			if (!waypoint || waypoint->category != category || !insertCaseInsensitive(listed, waypoint->name)) {
+				continue;
+			}
+			destination.push_back(waypoint->name);
+		}
+	};
+	preserve(uncategorizedOrder_, "");
+	for (const auto& category : normalizedCategories) {
+		if (const auto found = categoryWaypointOrder_.find(category); found != categoryWaypointOrder_.end()) {
+			preserve(found->second, category);
+		}
+	}
+	for (const auto& [key, waypoint] : waypoints_) {
+		if (!insertCaseInsensitive(listed, waypoint->name)) {
+			continue;
+		}
+		if (waypoint->category.empty()) {
+			normalizedUncategorized.push_back(waypoint->name);
+		} else {
+			normalizedCategoryOrders[waypoint->category].push_back(waypoint->name);
+		}
+	}
+	categories_ = std::move(normalizedCategories);
+	uncategorizedOrder_ = std::move(normalizedUncategorized);
+	categoryWaypointOrder_ = std::move(normalizedCategoryOrders);
+}
+
+bool Waypoints::validateMetadata(
+	const std::vector<std::string>& categoryOrder,
+	const std::vector<std::string>& uncategorizedOrder,
+	const std::map<std::string, std::vector<std::string>>& categoryOrders,
+	const std::map<std::string, std::string>& waypointCategoryByName,
+	std::string* error
+) const {
+	auto fail = [&](const char* message) {
+		if (error) {
+			*error = message;
+		}
+		return false;
+	};
+	std::set<std::string> categoryNames;
+	for (const auto& category : categoryOrder) {
+		if (category.empty() || !insertCaseInsensitive(categoryNames, category)) {
+			return fail("Waypoint categories contain an empty or duplicate name.");
+		}
+	}
+	if (categoryOrders.size() != categoryOrder.size()) {
+		return fail("Waypoint category ordering is incomplete.");
+	}
+	for (const auto& [category, order] : categoryOrders) {
+		if (!findCategory(categoryOrder, category)) {
+			return fail("Waypoint order references an unknown category.");
+		}
+	}
+	if (waypointCategoryByName.size() != waypoints_.size()) {
+		return fail("Waypoint category metadata is incomplete.");
+	}
+
+	std::set<std::string> listed;
+	auto validateOrder = [&](const std::vector<std::string>& order, std::string_view category) {
+		for (const auto& name : order) {
+			const Waypoint* waypoint = getWaypoint(name);
+			if (!waypoint || !insertCaseInsensitive(listed, name)) {
+				return false;
+			}
+			const auto categoryFound = waypointCategoryByName.find(waypoint->name);
+			if (categoryFound == waypointCategoryByName.end() || categoryFound->second != category) {
+				return false;
+			}
+		}
+		return true;
+	};
+	if (!validateOrder(uncategorizedOrder, "")) {
+		return fail("Invalid or duplicate uncategorized waypoint reference.");
+	}
+	for (const auto& category : categoryOrder) {
+		const auto found = categoryOrders.find(category);
+		if (found == categoryOrders.end() || !validateOrder(found->second, category)) {
+			return fail("Invalid, duplicate, or mismatched categorized waypoint reference.");
+		}
+	}
+	for (const auto& [name, category] : waypointCategoryByName) {
+		if (!getWaypoint(name)) {
+			return fail("Waypoint category metadata references a missing waypoint.");
+		}
+		if (!category.empty() && !findCategory(categoryOrder, category)) {
+			return fail("Waypoint references an unknown category.");
+		}
+		if (!listed.contains(as_lower_str(name))) {
+			return fail("Waypoint ordering is incomplete.");
+		}
+	}
+	return listed.size() == waypoints_.size() || fail("Waypoint ordering is incomplete.");
 }
 
 bool Waypoints::applyOrderingFromMetadata(
@@ -152,356 +506,133 @@ bool Waypoints::applyOrderingFromMetadata(
 	const std::map<std::string, std::vector<std::string>>& categoryOrders,
 	const std::map<std::string, std::string>& waypointCategoryByName
 ) {
-	clearGroups();
-	categories = categoryOrder;
-	for (const auto& category : categories) {
-		category_waypoint_order[category];
+	if (!validateMetadata(categoryOrder, uncategorizedOrder, categoryOrders, waypointCategoryByName, nullptr)) {
+		return false;
 	}
-	for (const auto& [name, category] : waypointCategoryByName) {
-		if (Waypoint* wp = getWaypoint(name)) {
-			wp->category = category;
-		}
+	for (auto& [key, waypoint] : waypoints_) {
+		waypoint->category = waypointCategoryByName.at(waypoint->name);
 	}
-	uncategorized_order = uncategorizedOrder;
-	for (const auto& [category, order] : categoryOrders) {
-		category_waypoint_order[category] = order;
-	}
+	categories_ = categoryOrder;
+	uncategorizedOrder_ = uncategorizedOrder;
+	categoryWaypointOrder_ = categoryOrders;
 	return validateInvariants(nullptr);
 }
 
 bool Waypoints::validateInvariants(std::string* error) const {
-	std::set<std::string> categoryNames;
-	for (const auto& category : categories) {
-		if (category.empty()) {
+	std::map<std::string, std::string> categoriesByWaypoint;
+	for (const auto& [key, waypoint] : waypoints_) {
+		if (!waypoint || key != as_lower_str(waypoint->name)) {
 			if (error) {
-				*error = "Empty category name in category list.";
+				*error = "Waypoint registry key does not match its object.";
 			}
 			return false;
 		}
-		if (!categoryNames.insert(category).second) {
+		categoriesByWaypoint.emplace(waypoint->name, waypoint->category);
+		const auto index = waypointByPosition_.find(waypoint->pos);
+		if (index == waypointByPosition_.end() || std::count(index->second.begin(), index->second.end(), waypoint.get()) != 1) {
 			if (error) {
-				*error = "Duplicate category name.";
+				*error = "Waypoint position index is missing or duplicated.";
 			}
 			return false;
 		}
 	}
-	if (vectorHasDuplicate(uncategorized_order)) {
-		if (error) {
-			*error = "Duplicate waypoint in uncategorized order.";
+	for (const auto& [position, bucket] : waypointByPosition_) {
+		if (bucket.empty()) {
+			if (error) {
+				*error = "Waypoint position index contains an empty bucket.";
+			}
+			return false;
 		}
+		for (const Waypoint* waypoint : bucket) {
+			if (!waypoint || waypoint->pos != position || getWaypoint(waypoint->name) != waypoint) {
+				if (error) {
+					*error = "Waypoint position index contains a stale observer.";
+				}
+				return false;
+			}
+		}
+	}
+	return validateMetadata(
+		categories_,
+		uncategorizedOrder_,
+		categoryWaypointOrder_,
+		categoriesByWaypoint,
+		error
+	);
+}
+
+std::vector<std::string> Waypoints::orderedWaypointsInCategory(std::string_view category) const {
+	if (category.empty()) {
+		return uncategorizedOrder_;
+	}
+	const auto found = categoryWaypointOrder_.find(std::string(category));
+	return found == categoryWaypointOrder_.end() ? std::vector<std::string>() : found->second;
+}
+
+bool Waypoints::moveCategoryRelative(std::string_view category, std::string_view anchorCategory, bool insertBefore) {
+	const std::string* sourceName = findCategory(categories_, category);
+	const std::string* anchorName = findCategory(categories_, anchorCategory);
+	if (!sourceName || !anchorName || sourceName == anchorName) {
 		return false;
 	}
-	std::set<std::string> listed;
-	for (const auto& name : uncategorized_order) {
-		const Waypoint* wp = getWaypoint(name);
-		if (!wp) {
-			if (error) {
-				*error = "Uncategorized order references missing waypoint.";
-			}
-			return false;
-		}
-		if (!wp->category.empty()) {
-			if (error) {
-				*error = "Uncategorized order contains categorized waypoint.";
-			}
-			return false;
-		}
-		if (!listed.insert(as_lower_str(name)).second) {
-			if (error) {
-				*error = "Waypoint listed more than once.";
-			}
-			return false;
-		}
-	}
-	for (const auto& [category, order] : category_waypoint_order) {
-		if (!categoryNames.contains(category)) {
-			if (error) {
-				*error = "Category order references unknown category.";
-			}
-			return false;
-		}
-		if (vectorHasDuplicate(order)) {
-			if (error) {
-				*error = "Duplicate waypoint in category order.";
-			}
-			return false;
-		}
-		std::set<std::string> seenInCategory;
-		for (const auto& name : order) {
-			const Waypoint* wp = getWaypoint(name);
-			if (!wp) {
-				if (error) {
-					*error = "Category order references missing waypoint.";
-				}
-				return false;
-			}
-			if (wp->category != category) {
-				if (error) {
-					*error = "Waypoint category does not match order bucket.";
-				}
-				return false;
-			}
-			if (!listed.insert(as_lower_str(name)).second || !seenInCategory.insert(as_lower_str(name)).second) {
-				if (error) {
-					*error = "Waypoint listed more than once.";
-				}
-				return false;
-			}
-		}
-	}
-	for (const auto& entry : waypoints) {
-		if (!entry.second) {
-			continue;
-		}
-		if (!listed.contains(entry.first)) {
-			if (error) {
-				*error = "Live waypoint missing from order data.";
-			}
-			return false;
-		}
-	}
+	const std::string source = *sourceName;
+	const std::string anchor = *anchorName;
+	categories_.erase(std::find(categories_.begin(), categories_.end(), source));
+	auto anchorPosition = std::find(categories_.begin(), categories_.end(), anchor);
+	categories_.insert(insertBefore ? anchorPosition : std::next(anchorPosition), source);
 	return true;
 }
 
-void Waypoints::addCategory(const std::string& name) {
-	if (name.empty()) {
-		return;
-	}
-	for (const auto& existing : categories) {
-		if (existing == name) {
-			return;
-		}
-	}
-	categories.push_back(name);
-	category_waypoint_order[name];
-}
-
-void Waypoints::removeCategory(const std::string& name) {
-	categories.erase(
-		std::remove(categories.begin(), categories.end(), name),
-		categories.end()
-	);
-	const auto found = category_waypoint_order.find(name);
-	if (found != category_waypoint_order.end()) {
-		for (const auto& waypointName : found->second) {
-			if (Waypoint* wp = getWaypoint(waypointName)) {
-				wp->category.clear();
-				uncategorized_order.push_back(wp->name);
-			}
-		}
-		category_waypoint_order.erase(found);
-	}
-	for (auto& entry : waypoints) {
-		if (entry.second && entry.second->category == name) {
-			entry.second->category.clear();
-		}
-	}
-}
-
-bool Waypoints::renameCategory(const std::string& oldName, const std::string& newName) {
-	if (oldName.empty() || newName.empty() || oldName == newName) {
+bool Waypoints::moveWaypointRelative(std::string_view waypointName, std::string_view anchorName, bool insertBefore) {
+	Waypoint* waypoint = getWaypoint(waypointName);
+	Waypoint* anchor = getWaypoint(anchorName);
+	if (!waypoint || !anchor || waypoint == anchor) {
 		return false;
 	}
-	for (const auto& existing : categories) {
-		if (existing == newName) {
-			return false;
-		}
-	}
-	for (auto& category : categories) {
-		if (category == oldName) {
-			category = newName;
-			for (auto& entry : waypoints) {
-				if (entry.second && entry.second->category == oldName) {
-					entry.second->category = newName;
-				}
-			}
-			if (auto found = category_waypoint_order.find(oldName); found != category_waypoint_order.end()) {
-				category_waypoint_order[newName] = std::move(found->second);
-				category_waypoint_order.erase(found);
-			}
-			return true;
-		}
-	}
-	return false;
+	unregisterWaypointOrder(waypoint->name);
+	waypoint->category = anchor->category;
+	auto& order = waypoint->category.empty() ? uncategorizedOrder_ : categoryWaypointOrder_[waypoint->category];
+	const auto anchorPosition = std::find(order.begin(), order.end(), anchor->name);
+	order.insert(anchorPosition == order.end() ? order.end() : (insertBefore ? anchorPosition : std::next(anchorPosition)), waypoint->name);
+	return true;
 }
 
-void Waypoints::setWaypointCategory(const std::string& waypointName, const std::string& category) {
-	if (Waypoint* wp = getWaypoint(waypointName)) {
-		unregisterWaypointOrder(wp->name);
-		wp->category = category;
-		if (!category.empty()) {
+bool Waypoints::moveWaypointIntoCategory(std::string_view waypointName, std::string_view categoryName, bool atEnd) {
+	Waypoint* waypoint = getWaypoint(waypointName);
+	if (!waypoint) {
+		return false;
+	}
+	std::string category(categoryName);
+	if (!category.empty()) {
+		if (const std::string* actual = findCategory(categories_, category)) {
+			category = *actual;
+		} else {
 			addCategory(category);
 		}
-		registerWaypointOrder(wp);
 	}
-}
-
-bool Waypoints::hasGroups() const {
-	if (!categories.empty() || !uncategorized_order.empty() || !category_waypoint_order.empty()) {
-		return true;
-	}
-	for (const auto& entry : waypoints) {
-		if (entry.second && !entry.second->category.empty()) {
-			return true;
-		}
-	}
-	return false;
-}
-
-void Waypoints::unregisterWaypointOrder(const std::string& name) {
-	removeFromVector(uncategorized_order, name);
-	for (auto& entry : category_waypoint_order) {
-		removeFromVector(entry.second, name);
-	}
-}
-
-void Waypoints::registerWaypointOrder(const Waypoint* wp) {
-	if (!wp) {
-		return;
-	}
-	std::vector<std::string>* order = nullptr;
-	if (wp->category.empty()) {
-		order = &uncategorized_order;
-	} else {
-		addCategory(wp->category);
-		order = &category_waypoint_order[wp->category];
-	}
-	if (!wp->name.empty()) {
-		if (std::find(order->begin(), order->end(), wp->name) != order->end()) {
-			return;
-		}
-		unregisterWaypointOrder(wp->name);
-	} else {
-		removeFromVector(*order, std::string());
-	}
-	order->push_back(wp->name);
-}
-
-void Waypoints::renameInOrders(const std::string& oldName, const std::string& newName) {
-	for (auto& name : uncategorized_order) {
-		if (name == oldName) {
-			name = newName;
-		}
-	}
-	for (auto& entry : category_waypoint_order) {
-		for (auto& name : entry.second) {
-			if (name == oldName) {
-				name = newName;
-			}
-		}
-	}
-}
-
-void Waypoints::syncWaypointOrders() {
-	std::set<std::string> listed;
-	for (const auto& name : uncategorized_order) {
-		listed.insert(as_lower_str(name));
-	}
-	for (const auto& entry : category_waypoint_order) {
-		for (const auto& name : entry.second) {
-			listed.insert(as_lower_str(name));
-		}
-	}
-	for (const auto& entry : waypoints) {
-		if (!entry.second) {
-			continue;
-		}
-		if (listed.count(as_lower_str(entry.second->name)) != 0) {
-			continue;
-		}
-		registerWaypointOrder(entry.second);
-	}
-}
-
-std::vector<std::string> Waypoints::orderedWaypointsInCategory(const std::string& category) const {
-	if (category.empty()) {
-		return uncategorized_order;
-	}
-	const auto found = category_waypoint_order.find(category);
-	if (found != category_waypoint_order.end()) {
-		return found->second;
-	}
-	return {};
-}
-
-bool Waypoints::moveCategoryRelative(const std::string& category, const std::string& anchorCategory, bool insertBefore) {
-	if (category.empty() || anchorCategory.empty() || category == anchorCategory) {
-		return false;
-	}
-	auto src = std::find(categories.begin(), categories.end(), category);
-	auto anchor = std::find(categories.begin(), categories.end(), anchorCategory);
-	if (src == categories.end() || anchor == categories.end()) {
-		return false;
-	}
-	categories.erase(src);
-	anchor = std::find(categories.begin(), categories.end(), anchorCategory);
-	if (insertBefore) {
-		categories.insert(anchor, category);
-	} else {
-		categories.insert(std::next(anchor), category);
-	}
+	unregisterWaypointOrder(waypoint->name);
+	waypoint->category = category;
+	auto& order = category.empty() ? uncategorizedOrder_ : categoryWaypointOrder_[category];
+	order.insert(atEnd ? order.end() : order.begin(), waypoint->name);
 	return true;
 }
 
-bool Waypoints::moveWaypointRelative(const std::string& waypoint, const std::string& anchorWaypoint, bool insertBefore) {
-	Waypoint* wp = getWaypoint(waypoint);
-	Waypoint* anchor = getWaypoint(anchorWaypoint);
-	if (!wp || !anchor || wp == anchor) {
+bool Waypoints::nudgeCategory(std::string_view category, bool moveUp) {
+	const std::string* actual = findCategory(categories_, category);
+	if (!actual) {
 		return false;
 	}
-	unregisterWaypointOrder(wp->name);
-	wp->category = anchor->category;
-	auto& order = wp->category.empty() ? uncategorized_order : category_waypoint_order[wp->category];
-	auto position = std::find(order.begin(), order.end(), anchor->name);
-	if (position == order.end()) {
-		order.push_back(wp->name);
-		return true;
-	}
-	if (insertBefore) {
-		order.insert(position, wp->name);
-	} else {
-		order.insert(std::next(position), wp->name);
-	}
-	return true;
-}
-
-bool Waypoints::moveWaypointIntoCategory(const std::string& waypoint, const std::string& category, bool atEnd) {
-	Waypoint* wp = getWaypoint(waypoint);
-	if (!wp) {
-		return false;
-	}
-	unregisterWaypointOrder(wp->name);
-	wp->category = category;
-	if (!category.empty()) {
-		addCategory(category);
-	}
-	auto& order = category.empty() ? uncategorized_order : category_waypoint_order[category];
-	if (atEnd) {
-		order.push_back(wp->name);
-	} else {
-		order.insert(order.begin(), wp->name);
-	}
-	return true;
-}
-
-bool Waypoints::nudgeCategory(const std::string& category, bool moveUp) {
-	if (category.empty()) {
-		return false;
-	}
-	auto iter = std::find(categories.begin(), categories.end(), category);
-	if (iter == categories.end()) {
-		return false;
-	}
+	auto position = std::find(categories_.begin(), categories_.end(), *actual);
 	if (moveUp) {
-		if (iter == categories.begin()) {
+		if (position == categories_.begin()) {
 			return false;
 		}
-		std::iter_swap(iter, std::prev(iter));
+		std::iter_swap(position, std::prev(position));
 	} else {
-		if (std::next(iter) == categories.end()) {
+		if (std::next(position) == categories_.end()) {
 			return false;
 		}
-		std::iter_swap(iter, std::next(iter));
+		std::iter_swap(position, std::next(position));
 	}
 	return true;
 }

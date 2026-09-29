@@ -521,21 +521,47 @@ bool Application::OnInit() {
 			);
 
 			if (ret == wxID_YES) {
-				auto restoreBackup = [](const std::string& backupPath) {
-					if (backupPath.empty()) {
-						return;
+				auto restoreBackup = [](const std::string& backupPath) -> std::string {
+					if (backupPath.empty() || backupPath.back() != '~') {
+						wxLogWarning("Ignoring malformed crash-recovery path: %s", wxstr(backupPath));
+						return {};
 					}
-					std::remove(backupPath.substr(0, backupPath.size() - 1).c_str());
-					std::rename(backupPath.c_str(), backupPath.substr(0, backupPath.size() - 1).c_str());
+					const std::string destination = backupPath.substr(0, backupPath.size() - 1);
+					if (destination.empty()) {
+						wxLogWarning("Ignoring crash-recovery path with an empty destination: %s", wxstr(backupPath));
+						return {};
+					}
+					std::error_code error;
+					if (!std::filesystem::exists(backupPath, error) || error) {
+						wxLogWarning("Crash-recovery backup does not exist: %s", wxstr(backupPath));
+						return {};
+					}
+					const bool destinationExists = std::filesystem::exists(destination, error);
+					if (error) {
+						wxLogWarning("Could not inspect crash-recovery destination %s: %s", wxstr(destination), wxstr(error.message()));
+						return {};
+					}
+					if (destinationExists && !std::filesystem::remove(destination, error)) {
+						wxLogWarning("Could not remove crash-recovery destination %s: %s", wxstr(destination), wxstr(error.message()));
+						return {};
+					}
+					error.clear();
+					std::filesystem::rename(backupPath, destination, error);
+					if (error) {
+						wxLogWarning("Could not restore backup %s: %s", wxstr(backupPath), wxstr(error.message()));
+						return {};
+					}
+					return destination;
 				};
-				restoreBackup(backups[0]);
+				const std::string primaryDestination = restoreBackup(backups[0]);
 				for (size_t index = 1; index < backups.size(); ++index) {
 					restoreBackup(backups[index]);
 				}
 
-				// Load the map
-				g_gui.LoadMap(wxstr(backups[0].substr(0, backups[0].size() - 1)));
-				return true;
+				if (!primaryDestination.empty()) {
+					g_gui.LoadMap(wxstr(primaryDestination));
+					return true;
+				}
 			}
 		}
 	}

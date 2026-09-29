@@ -1290,7 +1290,7 @@ void IOMapOTBM::readWaypoints(BinaryNode* mapNode, Map& map) {
 		wp.pos.y = y;
 		wp.pos.z = z;
 
-		map.waypoints.addWaypoint(newd Waypoint(wp));
+		map.waypoints.addWaypoint(std::make_unique<Waypoint>(wp));
 	}
 }
 
@@ -1814,25 +1814,34 @@ bool IOMapOTBM::loadWaypointGroups(Map& map, const FileName& dir) {
 		return true;
 	}
 
-	map.waypoints.clearGroups();
+	std::vector<std::string> categories;
+	std::vector<std::string> uncategorizedOrder;
+	std::map<std::string, std::vector<std::string>> categoryOrders;
+	std::map<std::string, std::string> waypointCategories;
 	for (pugi::xml_node node = root.first_child(); node; node = node.next_sibling()) {
 		const std::string nodeName = as_lower_str(node.name());
 		if (nodeName == "category") {
 			const std::string name = node.attribute("name").as_string();
-			map.waypoints.addCategory(name);
+			categories.push_back(name);
+			categoryOrders[name];
 		} else if (nodeName == "waypoint") {
 			const std::string name = node.attribute("name").as_string();
 			const std::string category = node.attribute("category").as_string();
-			if (Waypoint* wp = map.waypoints.getWaypoint(name)) {
-				wp->category = category;
-				if (category.empty()) {
-					map.waypoints.uncategorized_order.push_back(wp->name);
-				} else {
-					map.waypoints.addCategory(category);
-					map.waypoints.category_waypoint_order[category].push_back(wp->name);
-				}
+			const Waypoint* waypoint = map.waypoints.getWaypoint(name);
+			if (!waypoint || !waypointCategories.emplace(waypoint->name, category).second) {
+				warnings.push_back("Invalid waypoint group sidecar: duplicate or unknown waypoint '" + name + "'.");
+				return false;
+			}
+			if (category.empty()) {
+				uncategorizedOrder.push_back(waypoint->name);
+			} else {
+				categoryOrders[category].push_back(waypoint->name);
 			}
 		}
+	}
+	if (!map.waypoints.applyOrderingFromMetadata(categories, uncategorizedOrder, categoryOrders, waypointCategories)) {
+		warnings.push_back("Invalid waypoint group sidecar: ordering/category invariants failed. Default grouping was kept.");
+		return false;
 	}
 	return true;
 }
@@ -2131,14 +2140,14 @@ void IOMapOTBM::writeTowns(Map& map, NodeFileWriteHandle& f) {
 
 void IOMapOTBM::writeWaypoints(Map& map, NodeFileWriteHandle& f, bool& waypointsWarning) {
 	bool supportWaypoints = version.otbm >= MAP_OTBM_3;
-	if (supportWaypoints || map.waypoints.waypoints.size() > 0) {
+	if (supportWaypoints || !map.waypoints.empty()) {
 		if (!supportWaypoints) {
 			waypointsWarning = true;
 		}
 
 		f.addNode(OTBM_WAYPOINTS);
 		for (const auto& waypointEntry : map.waypoints) {
-			Waypoint* waypoint = waypointEntry.second;
+			const Waypoint* waypoint = waypointEntry.second.get();
 			f.addNode(OTBM_WAYPOINT);
 			f.addString(waypoint->name);
 			f.addU16(waypoint->pos.x);
@@ -2502,6 +2511,11 @@ bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
 		}
 		return true;
 	}
+	std::string invariantError;
+	if (!map.waypoints.validateInvariants(&invariantError)) {
+		warnings.push_back("Could not save waypoint groups: " + invariantError);
+		return false;
+	}
 
 	std::string saveError;
 	const bool saved = saveSidecarXml(dir, waypointGroupsFilename(dir), saveError, [&](pugi::xml_document& doc) {
@@ -2510,14 +2524,14 @@ bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
 		}
 
 		pugi::xml_node root = doc.append_child("waypointgroups");
-		map.waypoints.syncWaypointOrders();
-		for (const auto& category : map.waypoints.categories) {
+		for (const auto& category : map.waypoints.categories()) {
 			pugi::xml_node categoryNode = root.append_child("category");
 			categoryNode.append_attribute("name") = category.c_str();
-			const auto found = map.waypoints.category_waypoint_order.find(category);
-			if (found != map.waypoints.category_waypoint_order.end()) {
+			const auto& categoryOrders = map.waypoints.categoryWaypointOrders();
+			const auto found = categoryOrders.find(category);
+			if (found != categoryOrders.end()) {
 				for (const auto& waypointName : found->second) {
-					if (Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
+					if (const Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
 						pugi::xml_node waypointNode = root.append_child("waypoint");
 						waypointNode.append_attribute("name") = waypoint->name.c_str();
 						waypointNode.append_attribute("category") = category.c_str();
@@ -2525,8 +2539,8 @@ bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
 				}
 			}
 		}
-		for (const auto& waypointName : map.waypoints.uncategorized_order) {
-			if (Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
+		for (const auto& waypointName : map.waypoints.uncategorizedOrder()) {
+			if (const Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
 				pugi::xml_node waypointNode = root.append_child("waypoint");
 				waypointNode.append_attribute("name") = waypoint->name.c_str();
 				waypointNode.append_attribute("category") = "";

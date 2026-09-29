@@ -181,8 +181,9 @@ private:
 
 	void EditTileProperties(Position position, bool browse, bool topItem);
 	Waypoint* getWaypointAt(int map_x, int map_y, int map_z) const;
-	void beginWaypointDrag(const Position& pos);
-	void endWaypointDrag();
+	void beginWaypointDrag(Waypoint* waypoint, const Position& previewPosition);
+	void updateWaypointDrag(const Position& previewPosition);
+	void finishWaypointDrag(bool commit, bool releaseCapture = true);
 	void showWaypointContextMenu(const std::string& waypointName);
 	Editor& editor;
 	MapDrawer* drawer;
@@ -219,8 +220,9 @@ private:
 	bool dragging_draw;
 	bool replace_dragging;
 	bool dragging_waypoint;
-
-	Position waypoint_drag_last_pos;
+	std::string waypoint_drag_name_;
+	Position waypoint_drag_origin_pos_;
+	Position waypoint_drag_preview_pos_;
 	std::string context_waypoint_name_;
 	bool skip_properties_release_ = false;
 

@@ -26,7 +26,6 @@
 #include "waypoint_brush.h"
 #include "map.h"
 #include "map_tab.h"
-#include "multiplayer_session.h"
 
 namespace {
 	constexpr const char* kUncategorizedLabel = "Uncategorized";
@@ -59,7 +58,6 @@ EVT_TREE_ITEM_COLLAPSED(PALETTE_WAYPOINT_TREE, WaypointPalettePanel::OnTreeItemC
 
 EVT_MENU(PALETTE_WAYPOINT_RENAME, WaypointPalettePanel::OnMenuRename)
 EVT_MENU(PALETTE_WAYPOINT_DELETE, WaypointPalettePanel::OnMenuDelete)
-EVT_TIMER(PALETTE_DELAYED_REFRESH_TIMER, WaypointPalettePanel::OnRefreshTimer)
 END_EVENT_TABLE()
 
 WaypointPalettePanel::WaypointPalettePanel(wxWindow* parent, wxWindowID id) :
@@ -172,11 +170,6 @@ void WaypointPalettePanel::refreshWaypointTree() {
 	rebuildTree();
 }
 
-void WaypointPalettePanel::OnRefreshTimer(wxTimerEvent&) {
-	refreshWaypointTree();
-	g_gui.RefreshOtherPalettes(GetParentPalette());
-}
-
 std::string WaypointPalettePanel::getTargetCategory() const {
 	if (WaypointTreeItemData* data = getSelectedItemData()) {
 		if (data->kind == TreeItemKind::Category) {
@@ -239,9 +232,10 @@ bool WaypointPalettePanel::computeInsertBefore(int hitFlags, const std::string& 
 		return false;
 	}
 	if (categoryDrop) {
-		auto sourceIndex = std::find(map->waypoints.categories.begin(), map->waypoints.categories.end(), sourceKey);
-		auto targetIndex = std::find(map->waypoints.categories.begin(), map->waypoints.categories.end(), targetKey);
-		if (sourceIndex != map->waypoints.categories.end() && targetIndex != map->waypoints.categories.end() && sourceIndex != targetIndex) {
+		const auto& categories = map->waypoints.categories();
+		auto sourceIndex = std::find(categories.begin(), categories.end(), sourceKey);
+		auto targetIndex = std::find(categories.begin(), categories.end(), targetKey);
+		if (sourceIndex != categories.end() && targetIndex != categories.end() && sourceIndex != targetIndex) {
 			return sourceIndex > targetIndex;
 		}
 		return false;
@@ -272,11 +266,10 @@ void WaypointPalettePanel::rebuildTree() {
 		return;
 	}
 
-	map->waypoints.syncWaypointOrders();
+	map->waypoints.normalizeOrders();
 
 	const wxTreeItemId root = waypoint_tree->AddRoot("Waypoints");
-	std::unordered_map<std::string, wxTreeItemId> categoryItems;
-	for (const auto& category : map->waypoints.categories) {
+	for (const auto& category : map->waypoints.categories()) {
 		const wxTreeItemId categoryItem = waypoint_tree->AppendItem(
 			root,
 			categoryTreeLabel(category),
@@ -284,8 +277,6 @@ void WaypointPalettePanel::rebuildTree() {
 			-1,
 			newd WaypointTreeItemData(TreeItemKind::Category, category)
 		);
-		categoryItems.emplace(category, categoryItem);
-
 		for (const std::string& wpName : map->waypoints.orderedWaypointsInCategory(category)) {
 			Waypoint* wp = map->waypoints.getWaypoint(wpName);
 			if (!wp) {
@@ -351,6 +342,21 @@ void WaypointPalettePanel::activateWaypoint(Waypoint* wp) {
 	g_gui.SetScreenCenterPosition(wp->pos);
 }
 
+void WaypointPalettePanel::activateTreeItem(const wxTreeItemId& item) {
+	if (!map || !item.IsOk()) {
+		return;
+	}
+	auto* data = dynamic_cast<WaypointTreeItemData*>(waypoint_tree->GetItemData(item));
+	if (!data || data->kind != TreeItemKind::Waypoint) {
+		return;
+	}
+	Waypoint* waypoint = map->waypoints.getWaypoint(data->name);
+	if (!waypoint || g_gui.waypoint_brush->getWaypoint() == waypoint->name) {
+		return;
+	}
+	activateWaypoint(waypoint);
+}
+
 void WaypointPalettePanel::SelectWaypoint(Waypoint* wp) {
 	if (!map || !wp) {
 		return;
@@ -368,18 +374,6 @@ void WaypointPalettePanel::SelectWaypoint(Waypoint* wp) {
 }
 
 void WaypointPalettePanel::OnUpdate() {
-	if (editing_new_waypoint_ && map) {
-		if (WaypointTreeItemData* data = getSelectedItemData()) {
-			if (data->kind == TreeItemKind::Waypoint) {
-				if (Waypoint* wp = map->waypoints.getWaypoint(data->name)) {
-					if (wp->name.empty() && wp->pos == Position()) {
-						map->waypoints.removeWaypoint(wp->name);
-					}
-				}
-			}
-		}
-	}
-
 	if (!map) {
 		waypoint_tree->Enable(false);
 		add_category_button->Enable(false);
@@ -398,29 +392,11 @@ void WaypointPalettePanel::OnUpdate() {
 
 void WaypointPalettePanel::OnTreeSelectionChanged(wxTreeEvent& event) {
 	event.Skip();
-	if (!map) {
-		return;
-	}
-	if (WaypointTreeItemData* data = dynamic_cast<WaypointTreeItemData*>(waypoint_tree->GetItemData(event.GetItem()))) {
-		if (data->kind == TreeItemKind::Waypoint) {
-			if (Waypoint* wp = map->waypoints.getWaypoint(data->name)) {
-				activateWaypoint(wp);
-			}
-		}
-	}
+	activateTreeItem(event.GetItem());
 }
 
 void WaypointPalettePanel::OnTreeItemActivated(wxTreeEvent& event) {
-	if (!map) {
-		return;
-	}
-	if (WaypointTreeItemData* data = dynamic_cast<WaypointTreeItemData*>(waypoint_tree->GetItemData(event.GetItem()))) {
-		if (data->kind == TreeItemKind::Waypoint) {
-			if (Waypoint* wp = map->waypoints.getWaypoint(data->name)) {
-				activateWaypoint(wp);
-			}
-		}
-	}
+	activateTreeItem(event.GetItem());
 }
 
 void WaypointPalettePanel::OnTreeItemExpanded(wxTreeEvent& event) {
@@ -462,30 +438,21 @@ void WaypointPalettePanel::OnTreeBeginLabelEdit(wxTreeEvent& event) {
 void WaypointPalettePanel::OnTreeEndLabelEdit(wxTreeEvent& event) {
 	g_gui.EnableHotkeys();
 	if (!map || !event.GetItem().IsOk()) {
-		editing_new_waypoint_ = false;
 		return;
 	}
 	MultiplayerSession::MetadataEdit multiplayerEdit(map);
 	if (!multiplayerEdit.allowed()) {
 		event.Veto();
-		editing_new_waypoint_ = false;
 		return;
 	}
 
 	WaypointTreeItemData* data = dynamic_cast<WaypointTreeItemData*>(waypoint_tree->GetItemData(event.GetItem()));
 	if (!data) {
-		editing_new_waypoint_ = false;
 		return;
 	}
 
 	const std::string newLabel = nstr(event.GetLabel());
 	if (event.IsEditCancelled()) {
-		if (editing_new_waypoint_ && data->kind == TreeItemKind::Waypoint) {
-			deleteWaypointInternal(data->name);
-			markMapMetadataChanged(map);
-			refreshWaypointTree();
-		}
-		editing_new_waypoint_ = false;
 		return;
 	}
 
@@ -509,15 +476,8 @@ void WaypointPalettePanel::OnTreeEndLabelEdit(wxTreeEvent& event) {
 
 	if (data->kind == TreeItemKind::Waypoint) {
 		if (!renameWaypointInternal(data->name, newLabel)) {
-			if (newLabel.empty()) {
-				deleteWaypointInternal(data->name);
-				markMapMetadataChanged(map);
-				refreshWaypointTree();
-			} else {
-				event.Veto();
-			}
+			event.Veto();
 		} else {
-			editing_new_waypoint_ = false;
 			markMapMetadataChanged(map);
 			refreshWaypointTree();
 		}
@@ -629,10 +589,6 @@ void WaypointPalettePanel::OnTreeEndDrag(wxTreeEvent& event) {
 	});
 }
 
-bool WaypointPalettePanel::applyTreeDrop(const wxTreeItemId& source, const wxTreeItemId& target, int hitFlags) {
-	return applyTreeDropInternal(source, target, hitFlags);
-}
-
 bool WaypointPalettePanel::applyTreeDropInternal(const wxTreeItemId& source, const wxTreeItemId& target, int hitFlags) {
 	auto* sourceData = dynamic_cast<WaypointTreeItemData*>(waypoint_tree->GetItemData(source));
 	auto* targetData = dynamic_cast<WaypointTreeItemData*>(waypoint_tree->GetItemData(target));
@@ -654,7 +610,7 @@ bool WaypointPalettePanel::applyTreeDropInternal(const wxTreeItemId& source, con
 		}
 		const bool insertBefore = computeInsertBefore(hitFlags, sourceData->name, categoryData->name, true);
 		if (categoryData->name == sourceData->name) {
-			return map->waypoints.nudgeCategory(sourceData->name, insertBefore);
+			return false;
 		}
 		markCategoryExpanded(sourceData->name);
 		markCategoryExpanded(categoryData->name);
@@ -712,26 +668,7 @@ void WaypointPalettePanel::OnMenuRename(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void WaypointPalettePanel::OnMenuDelete(wxCommandEvent& WXUNUSED(event)) {
-	if (!map || !MultiplayerSession::canEditMapMetadata(map)) {
-		return;
-	}
-	if (WaypointTreeItemData* data = getSelectedItemData()) {
-		if (data->kind == TreeItemKind::Waypoint) {
-			if (DeleteWaypoint(data->name)) {
-				refreshWaypointTree();
-			}
-		} else if (data->kind == TreeItemKind::Category && !data->name.empty()) {
-			MultiplayerSession::MetadataEdit multiplayerEdit(map);
-			if (!multiplayerEdit.allowed()) {
-				return;
-			}
-			if (deleteCategoryInternal(data->name)) {
-				collapsed_categories_.erase(data->name);
-				markMapMetadataChanged(map);
-				refreshWaypointTree();
-			}
-		}
-	}
+	deleteSelectedTreeItem();
 }
 
 bool WaypointPalettePanel::renameWaypointInternal(const std::string& oldName, const std::string& newName) {
@@ -753,16 +690,10 @@ bool WaypointPalettePanel::renameWaypointInternal(const std::string& oldName, co
 		return false;
 	}
 
-	auto* nwp = newd Waypoint(*wp);
-	nwp->name = newName;
-
-	if (map->getTile(wp->pos)) {
-		map->getTileL(wp->pos)->decreaseWaypointCount();
+	if (!map->waypoints.renameWaypoint(oldName, newName)) {
+		return false;
 	}
-	map->waypoints.renameInOrders(oldName, newName);
-	map->waypoints.removeWaypoint(wp->name);
-	map->waypoints.addWaypoint(nwp);
-	g_gui.waypoint_brush->setWaypoint(nwp);
+	g_gui.waypoint_brush->setWaypoint(map->waypoints.getWaypoint(newName));
 	return true;
 }
 
@@ -791,9 +722,6 @@ bool WaypointPalettePanel::deleteWaypointInternal(const std::string& name) {
 		return false;
 	}
 
-	if (map->getTile(wp->pos)) {
-		map->getTileL(wp->pos)->decreaseWaypointCount();
-	}
 	map->waypoints.removeWaypoint(wp->name);
 	if (g_gui.waypoint_brush && as_lower_str(g_gui.waypoint_brush->getWaypoint()) == as_lower_str(name)) {
 		g_gui.waypoint_brush->setWaypoint(nullptr);
@@ -839,7 +767,7 @@ void WaypointPalettePanel::OnClickAddCategory(wxCommandEvent& WXUNUSED(event)) {
 	}
 
 	const std::string categoryName = nstr(name);
-	for (const auto& existing : map->waypoints.categories) {
+	for (const auto& existing : map->waypoints.categories()) {
 		if (existing == categoryName) {
 			g_gui.SetStatusText("There already is a category with this name.");
 			return;
@@ -862,60 +790,41 @@ void WaypointPalettePanel::OnClickAddWaypoint(wxCommandEvent& WXUNUSED(event)) {
 	}
 
 	const std::string targetCategory = getTargetCategory();
-
-	if (auto* live = MultiplayerSession::current(); live && &live->getEditor().map == map) {
-		MultiplayerSession::MetadataEdit multiplayerEdit(map);
-		if (!multiplayerEdit.allowed()) {
-			return;
-		}
-		const wxString name = wxGetTextFromUser("Waypoint name", "New multiplayer waypoint", "", this);
-		if (name.empty() || map->waypoints.getWaypoint(nstr(name))) {
-			return;
-		}
-		auto* waypoint = new Waypoint;
-		waypoint->name = nstr(name);
-		waypoint->category = targetCategory;
-		if (auto* tab = g_gui.GetCurrentMapTab()) {
-			waypoint->pos = tab->GetScreenCenterPosition();
-		}
-		map->waypoints.addWaypoint(waypoint);
-		markMapMetadataChanged(map);
-		refreshWaypointTree();
+	MultiplayerSession::MetadataEdit multiplayerEdit(map);
+	if (!multiplayerEdit.allowed()) {
 		return;
 	}
-
-	auto* wp = newd Waypoint();
-	wp->category = targetCategory;
+	const wxString name = wxGetTextFromUser("Waypoint name", "New waypoint", "", this);
+	if (name.empty() || map->waypoints.getWaypoint(nstr(name))) {
+		return;
+	}
+	auto waypoint = std::make_unique<Waypoint>();
+	waypoint->name = nstr(name);
+	waypoint->category = targetCategory;
 	if (!targetCategory.empty()) {
 		markCategoryExpanded(targetCategory);
 	} else {
 		markCategoryExpanded(std::string());
 	}
 	if (MapTab* mapTab = g_gui.GetCurrentMapTab()) {
-		wp->pos = mapTab->GetScreenCenterPosition();
+		waypoint->pos = mapTab->GetScreenCenterPosition();
 	}
-	map->waypoints.addWaypoint(wp);
-	editing_new_waypoint_ = true;
+	const std::string waypointName = waypoint->name;
+	if (!map->waypoints.addWaypoint(std::move(waypoint))) {
+		return;
+	}
 	markMapMetadataChanged(map);
-	rebuildTree();
-	SelectWaypoint(wp);
-	const std::string editName = wp->name;
-	CallAfter([weak = wxWeakRef<WaypointPalettePanel>(this), editName]() {
-		if (!weak || weak->IsBeingDeleted()) {
-			return;
-		}
-		const wxTreeItemId item = weak->findWaypointItem(editName);
-		if (item.IsOk()) {
-			weak->waypoint_tree->SelectItem(item);
-			weak->waypoint_tree->EnsureVisible(item);
-			weak->waypoint_tree->EditLabel(item);
-		}
-	});
+	refreshWaypointTree();
+	SelectWaypoint(map->waypoints.getWaypoint(waypointName));
 }
 
 void WaypointPalettePanel::OnClickRemoveWaypoint(wxCommandEvent& WXUNUSED(event)) {
+	deleteSelectedTreeItem();
+}
+
+bool WaypointPalettePanel::deleteSelectedTreeItem() {
 	if (!map || !MultiplayerSession::canEditMapMetadata(map)) {
-		return;
+		return false;
 	}
 
 	if (WaypointTreeItemData* data = getSelectedItemData()) {
@@ -923,20 +832,23 @@ void WaypointPalettePanel::OnClickRemoveWaypoint(wxCommandEvent& WXUNUSED(event)
 			if (!data->name.empty()) {
 				MultiplayerSession::MetadataEdit multiplayerEdit(map);
 				if (!multiplayerEdit.allowed()) {
-					return;
+					return false;
 				}
 				if (deleteCategoryInternal(data->name)) {
 					collapsed_categories_.erase(data->name);
 					markMapMetadataChanged(map);
 					refreshWaypointTree();
+					return true;
 				}
 			}
-			return;
+			return false;
 		}
 		if (data->kind == TreeItemKind::Waypoint) {
 			if (DeleteWaypoint(data->name)) {
 				refreshWaypointTree();
+				return true;
 			}
 		}
 	}
+	return false;
 }
