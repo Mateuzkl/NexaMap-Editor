@@ -33,6 +33,7 @@ namespace mcp {
 	void VerifyWritableContext(const EditorContext& context, const Json& arguments);
 	void EnforceSelectionBoundary(const EditorContext& context, const std::vector<Position>& positions, bool allowExpansion);
 	void EnforceSelectionBoundary(const EditorContext& context, const Region& region, bool allowExpansion);
+	void EnforceReferenceTargetBoundary(const EditorContext& context, const std::vector<Position>& positions, bool allowReferenceSourceOverwrite);
 	[[nodiscard]] bool IsProtectedItem(const Item& item);
 	[[nodiscard]] uint16_t RequiredItemId(const Json& value);
 	[[nodiscard]] Json OnGui(std::function<Json(const EditorContext&)> function);

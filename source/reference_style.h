@@ -34,7 +34,7 @@ struct ReferenceTileCell {
 	int16_t localX = 0;
 	int16_t localY = 0;
 	int16_t localZ = 0;
-	bool mapped = false;   ///< Has ground or any visible item.
+	bool mapped = false; ///< Has ground or any visible item.
 	bool walkable = true;
 	bool blocking = false;
 	bool wall = false;
@@ -46,22 +46,22 @@ struct ReferenceTileCell {
 
 /// Observed usage of a single item ID in the reference.
 struct ReferenceItemUsage {
-	uint16_t activeId = 0;      ///< The ID as it appears in the map (server or client).
+	uint16_t activeId = 0; ///< The ID as it appears in the map (server or client).
 	uint16_t serverId = 0;
 	uint16_t clientId = 0;
 	std::string name;
-	std::string category;       ///< ground, border, wall, door, carpet, table, doodad, item
+	std::string category; ///< ground, border, wall, door, carpet, table, doodad, item
 	size_t count = 0;
-	double ratio = 0.0;         ///< count / total visible items
-	std::string brush;          ///< Owning brush name (empty if unmapped).
-	std::string brushKind;      ///< ground, wall, door, carpet, table, doodad, raw
+	double ratio = 0.0; ///< count / total visible items
+	std::string brush; ///< Owning brush name (empty if unmapped).
+	std::string brushKind; ///< ground, wall, door, carpet, table, doodad, raw
 	bool sourceVerified = true; ///< This ID was directly observed in active resources.
 };
 
 /// Aggregated brush usage.
 struct ReferenceBrushUsage {
 	std::string name;
-	std::string kind;           ///< ground, wall, door, carpet, table, doodad, raw
+	std::string kind; ///< ground, wall, door, carpet, table, doodad, raw
 	size_t count = 0;
 	double ratio = 0.0;
 	uint16_t lookId = 0;
@@ -148,6 +148,11 @@ struct ReferenceStyleSnapshot {
 	Position sourceMin;
 	Position sourceMax;
 
+	/// Exact source tiles captured as visual reference. This is retained
+	/// independently of the normalized cells so the source can be protected
+	/// from generation writes after the editor selection has changed.
+	std::vector<Position> sourceMask;
+
 	size_t selectedTileCount = 0;
 	size_t mappedTileCount = 0;
 	size_t ignoredOtherFloorTiles = 0;
@@ -177,6 +182,19 @@ struct ReferenceStyleSnapshot {
 	std::string topologyGrid;
 };
 
+/// Explicit writable destination for a reference-driven generation request.
+/// It deliberately has no relationship to the current editor selection after
+/// capture; callers must capture it again whenever the intended target changes.
+struct TargetAreaSnapshot {
+	SessionId mapSessionId = InvalidSessionId;
+	uint64_t workspaceGeneration = 0;
+	int floor = 0;
+	Position targetMin;
+	Position targetMax;
+	std::vector<Position> positions;
+	bool allowReferenceSourceOverwrite = false;
+};
+
 // ─── Capture options ────────────────────────────────────────────────
 
 struct ReferenceStyleCaptureOptions {
@@ -186,6 +204,32 @@ struct ReferenceStyleCaptureOptions {
 	/// Maximum tiles to accept (hard cap).
 	size_t maxTiles = 65536;
 };
+
+/// Captures the exact currently selected positions as a generation target.
+/// This is intentionally separate from ReferenceStyleAnalyzer::Capture.
+[[nodiscard]] TargetAreaSnapshot CaptureTargetAreaSnapshot(
+	const Selection& selection,
+	int floor,
+	SessionId mapSessionId,
+	uint64_t workspaceGeneration,
+	size_t maxTiles = 65536
+);
+
+[[nodiscard]] bool ReferenceSourceOverlapsTarget(
+	const ReferenceStyleSnapshot& reference,
+	const TargetAreaSnapshot& target
+);
+
+/// Returns a user-facing rejection reason, or std::nullopt when every write
+/// position is inside the current target and the reference source is protected.
+[[nodiscard]] std::optional<std::string> ValidateReferenceTargetWrite(
+	const ReferenceStyleSnapshot* reference,
+	const TargetAreaSnapshot* target,
+	SessionId activeMapSessionId,
+	uint64_t activeWorkspaceGeneration,
+	const std::vector<Position>& writePositions,
+	bool allowReferenceSourceOverwrite = false
+);
 
 // ─── Analyzer (stateless) ───────────────────────────────────────────
 

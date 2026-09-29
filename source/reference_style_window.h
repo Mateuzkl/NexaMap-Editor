@@ -12,8 +12,8 @@ class wxListBox;
 
 /// Compact non-blocking panel/dialog showing the captured AI style reference.
 /// Displays a visual preview thumbnail, metrics (tiles, floor, visible IDs, brushes),
-/// top materials, and quick actions: [Refresh from Selection], [Clear Reference],
-/// [Copy Example Prompt], [Close].
+/// top materials, and distinct source/target actions. The reference source is
+/// read-only; only an explicitly captured target can be used for generation.
 class ReferenceStyleWindow final : public wxDialog {
 public:
 	static void Open(wxWindow* parent);
@@ -28,17 +28,23 @@ private:
 	void RefreshView();
 	void OnRefreshFromSelection(wxCommandEvent& event);
 	void OnClearReference(wxCommandEvent& event);
+	void OnSetCurrentSelectionAsTarget(wxCommandEvent& event);
+	void OnClearTarget(wxCommandEvent& event);
 	void OnCopyExamplePrompt(wxCommandEvent& event);
 	void OnCloseButton(wxCommandEvent& event);
 	void OnClose(wxCloseEvent& event);
 
 	wxStaticBitmap* thumbnailBitmap_ = nullptr;
 	wxStaticText* statusLabel_ = nullptr;
+	wxStaticText* targetStatusLabel_ = nullptr;
+	wxStaticText* workflowLabel_ = nullptr;
 	wxStaticText* metricsLabel_ = nullptr;
 	wxStaticText* brushesLabel_ = nullptr;
 	wxListBox* materialsListBox_ = nullptr;
 	wxButton* refreshButton_ = nullptr;
 	wxButton* clearButton_ = nullptr;
+	wxButton* setTargetButton_ = nullptr;
+	wxButton* clearTargetButton_ = nullptr;
 	wxButton* copyPromptButton_ = nullptr;
 };
 

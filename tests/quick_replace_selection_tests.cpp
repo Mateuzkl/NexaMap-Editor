@@ -9,6 +9,8 @@
 #include "map.h"
 #include "replace_tool/quick_replace_selection_model.h"
 #include "replace_tool/replace_engine.h"
+#include "reference_style.h"
+#include "reference_style_store.h"
 #include "tile.h"
 
 #include <iostream>
@@ -358,6 +360,68 @@ namespace {
 		QuickReplaceCheck(std::all_of(positions.begin(), positions.end(), [&editor](const Position& position) { return editor.map.getTile(position)->ground->getID() == 102; }), "One redo did not reapply all bulk replacements");
 		std::cout << "PASS invalid target safety and 128 replacements in one undo/redo action\n";
 	}
+
+	void ReferenceSourceTargetIsolationAndUndo() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(102, "Stone floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(200, "Source decoration");
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		const Position sourceLeft(400, 400, 7);
+		const Position sourceRight(401, 400, 7);
+		const Position targetLeft(420, 400, 7);
+		const Position targetRight(421, 400, 7);
+		Tile* sourceA = AddTile(editor.map, sourceLeft, 100);
+		Tile* sourceB = AddTile(editor.map, sourceRight, 100);
+		sourceA->addItem(Item::Create(200));
+		Tile* targetA = AddTile(editor.map, targetLeft, 100);
+		Tile* targetB = AddTile(editor.map, targetRight, 100);
+
+		// Select and capture source A. The selection is then cleared, exactly as
+		// the UI and MCP capture workflows do, before a different target is chosen.
+		editor.selection.addInternal(sourceA);
+		editor.selection.addInternal(sourceB);
+		ReferenceStyleCaptureOptions referenceOptions;
+		referenceOptions.floor = 7;
+		ReferenceStyleSnapshot reference = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, referenceOptions);
+		QuickReplaceCheck(reference.selectedTileCount == 2 && reference.sourceMask.size() == 2, "reference source capture must keep its exact source mask");
+		ReferenceStyleStore::Instance().set(reference);
+		editor.selection.clear();
+
+		// Select and explicitly capture target B; it is independent from source A.
+		editor.selection.addInternal(targetA);
+		editor.selection.addInternal(targetB);
+		TargetAreaSnapshot target = CaptureTargetAreaSnapshot(
+			editor.selection,
+			7,
+			editor.map.getSessionId(),
+			reference.workspaceGeneration
+		);
+		QuickReplaceCheck(target.positions.size() == 2 && !ReferenceSourceOverlapsTarget(reference, target), "target must be a separate non-overlapping selection");
+		ReferenceStyleStore::Instance().setTarget(target);
+		QuickReplaceCheck(!ValidateReferenceTargetWrite(&reference, &target, editor.map.getSessionId(), reference.workspaceGeneration, target.positions).has_value(), "target write must validate");
+		QuickReplaceCheck(ValidateReferenceTargetWrite(&reference, &target, editor.map.getSessionId(), reference.workspaceGeneration, { sourceLeft }).has_value(), "source position must not validate as a target write");
+
+		ReplacementRule rule;
+		rule.sourceServerId = ServerItemId(100);
+		rule.targets.push_back(ReplacementTarget::ForItem(ServerItemId(102), 100));
+		ReplaceExecutionOptions options;
+		options.dryRun = false;
+		options.includeContainerContents = false;
+		options.matchFilter = [](const Tile& tile, const Item& item) { return ClassifyPlacedItem(tile, item) == QuickReplaceCategory::Ground; };
+		const ReplaceExecutionResult result = ReplaceEngine::Run(editor, { targetA, targetB }, { rule }, options);
+		QuickReplaceCheck(result.committed && result.replacements == 2, "generation fixture must edit only target B");
+		QuickReplaceCheck(editor.map.getTile(sourceLeft)->ground->getID() == 100 && editor.map.getTile(sourceRight)->ground->getID() == 100 && HasItem(*editor.map.getTile(sourceLeft), 200), "reference source tiles must remain logically unchanged");
+		QuickReplaceCheck(editor.map.getTile(targetLeft)->ground->getID() == 102 && editor.map.getTile(targetRight)->ground->getID() == 102, "target tiles must receive the generated edit");
+		QuickReplaceCheck(editor.actionQueue->undo(), "target operation undo failed");
+		QuickReplaceCheck(editor.map.getTile(targetLeft)->ground->getID() == 100 && editor.map.getTile(targetRight)->ground->getID() == 100, "undo must restore only target B");
+		QuickReplaceCheck(editor.map.getTile(sourceLeft)->ground->getID() == 100 && editor.map.getTile(sourceRight)->ground->getID() == 100 && HasItem(*editor.map.getTile(sourceLeft), 200), "undo must leave reference source unchanged");
+
+		ReferenceStyleStore::Instance().clear();
+		std::cout << "PASS reference source/target isolation and target-only undo\n";
+	}
 }
 
 void RunQuickReplaceSelectionTests() {
@@ -367,4 +431,5 @@ void RunQuickReplaceSelectionTests() {
 	RemoveSelectedCategoryIsAtomic();
 	CompleteDoodadBrushIsAtomic();
 	BulkUndoAndInvalidTargetSafety();
+	ReferenceSourceTargetIsolationAndUndo();
 }

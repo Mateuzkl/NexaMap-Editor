@@ -35,6 +35,7 @@ struct EditorResourceSession::Storage {
 	WorkspaceSession workspace;
 	CopyBuffer copyBuffer;
 	std::optional<ReferenceStyleSnapshot> referenceStyle;
+	std::optional<TargetAreaSnapshot> targetArea;
 };
 
 namespace {
@@ -61,6 +62,7 @@ void EditorResourceSession::swapWithGlobals() {
 	g_gui.copybuffer.swap(storage->copyBuffer);
 	ClientAssets::swapState(clientAssetsState);
 	ReferenceStyleStore::Instance().swapWith(storage->referenceStyle);
+	ReferenceStyleStore::Instance().swapTargetWith(storage->targetArea);
 }
 
 EditorResourceSessionPtr GetActiveEditorResourceSession() {

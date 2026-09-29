@@ -67,9 +67,9 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor, bool ingamePreview) :
 }
 
 MapWindow::~MapWindow() {
-	if (canvas) {
-		canvas->Unbind(wxEVT_SIZE, &MapWindow::OnCanvasSize, this);
-	}
+	// MapTab destroys its child windows in its own destructor, before this base
+	// destructor runs. The canvas owns its event binding and releases it during
+	// child destruction; touching it here would dereference a freed window.
 }
 
 void MapWindow::OnCanvasSize(wxSizeEvent& event) {

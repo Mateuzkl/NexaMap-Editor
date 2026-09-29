@@ -38,116 +38,116 @@
 
 namespace {
 
-// ─── Helpers ────────────────────────────────────────────────────────
+	// ─── Helpers ────────────────────────────────────────────────────────
 
-int DetectMajorityFloor(const Selection& selection) {
-	std::unordered_map<int, size_t> floorCounts;
-	for (const Tile* tile : selection) {
-		if (tile) {
-			++floorCounts[tile->getZ()];
+	int DetectMajorityFloor(const Selection& selection) {
+		std::unordered_map<int, size_t> floorCounts;
+		for (const Tile* tile : selection) {
+			if (tile) {
+				++floorCounts[tile->getZ()];
+			}
 		}
-	}
-	int bestFloor = 7;
-	size_t bestCount = 0;
-	for (const auto& [floor, count] : floorCounts) {
-		if (count > bestCount) {
-			bestCount = count;
-			bestFloor = floor;
+		int bestFloor = 7;
+		size_t bestCount = 0;
+		for (const auto& [floor, count] : floorCounts) {
+			if (count > bestCount) {
+				bestCount = count;
+				bestFloor = floor;
+			}
 		}
+		return bestFloor;
 	}
-	return bestFloor;
-}
 
-std::string BrushKindFromItem(const Tile& tile, const Item& item) {
-	if (tile.ground == &item) {
-		GroundBrush* gb = item.getGroundBrush();
-		if (gb) {
-			return "ground";
+	std::string BrushKindFromItem(const Tile& tile, const Item& item) {
+		if (tile.ground == &item) {
+			GroundBrush* gb = item.getGroundBrush();
+			if (gb) {
+				return "ground";
+			}
 		}
-	}
-	if (item.getWallBrush()) {
-		return "wall";
-	}
-	if (item.getDoorBrush()) {
-		return "door";
-	}
-	if (item.getCarpetBrush()) {
-		return "carpet";
-	}
-	if (item.getTableBrush()) {
-		return "table";
-	}
-	if (item.getDoodadBrush()) {
-		return "doodad";
-	}
-	if (item.getRAWBrush()) {
-		return "raw";
-	}
-	return "";
-}
-
-std::string BrushNameFromItem(const Tile& tile, const Item& item) {
-	if (tile.ground == &item) {
-		GroundBrush* gb = item.getGroundBrush();
-		if (gb) {
-			return gb->getName();
+		if (item.getWallBrush()) {
+			return "wall";
 		}
+		if (item.getDoorBrush()) {
+			return "door";
+		}
+		if (item.getCarpetBrush()) {
+			return "carpet";
+		}
+		if (item.getTableBrush()) {
+			return "table";
+		}
+		if (item.getDoodadBrush()) {
+			return "doodad";
+		}
+		if (item.getRAWBrush()) {
+			return "raw";
+		}
+		return "";
 	}
-	if (WallBrush* wb = item.getWallBrush()) {
-		return wb->getName();
-	}
-	if (DoorBrush* db = item.getDoorBrush()) {
-		return db->getName();
-	}
-	if (CarpetBrush* cb = item.getCarpetBrush()) {
-		return cb->getName();
-	}
-	if (TableBrush* tb = item.getTableBrush()) {
-		return tb->getName();
-	}
-	if (Brush* doodad = item.getDoodadBrush()) {
-		return doodad->getName();
-	}
-	if (RAWBrush* raw = item.getRAWBrush()) {
-		return raw->getName();
-	}
-	return "";
-}
 
-double SafeRatio(size_t numerator, size_t denominator) {
-	return denominator > 0 ? static_cast<double>(numerator) / static_cast<double>(denominator) : 0.0;
-}
+	std::string BrushNameFromItem(const Tile& tile, const Item& item) {
+		if (tile.ground == &item) {
+			GroundBrush* gb = item.getGroundBrush();
+			if (gb) {
+				return gb->getName();
+			}
+		}
+		if (WallBrush* wb = item.getWallBrush()) {
+			return wb->getName();
+		}
+		if (DoorBrush* db = item.getDoorBrush()) {
+			return db->getName();
+		}
+		if (CarpetBrush* cb = item.getCarpetBrush()) {
+			return cb->getName();
+		}
+		if (TableBrush* tb = item.getTableBrush()) {
+			return tb->getName();
+		}
+		if (Brush* doodad = item.getDoodadBrush()) {
+			return doodad->getName();
+		}
+		if (RAWBrush* raw = item.getRAWBrush()) {
+			return raw->getName();
+		}
+		return "";
+	}
 
-double RoundTo(double value, int decimals) {
-	const double factor = std::pow(10.0, decimals);
-	return std::round(value * factor) / factor;
-}
+	double SafeRatio(size_t numerator, size_t denominator) {
+		return denominator > 0 ? static_cast<double>(numerator) / static_cast<double>(denominator) : 0.0;
+	}
 
-bool IsPerimeterCell(int localX, int localY, int width, int height) {
-	return localX == 0 || localY == 0 || localX == width - 1 || localY == height - 1;
-}
+	double RoundTo(double value, int decimals) {
+		const double factor = std::pow(10.0, decimals);
+		return std::round(value * factor) / factor;
+	}
 
-char TopologyChar(const ReferenceTileCell& cell) {
-	if (!cell.mapped) {
-		return 'X';
+	bool IsPerimeterCell(int localX, int localY, int width, int height) {
+		return localX == 0 || localY == 0 || localX == width - 1 || localY == height - 1;
 	}
-	if (cell.teleport) {
-		return 'T';
+
+	char TopologyChar(const ReferenceTileCell& cell) {
+		if (!cell.mapped) {
+			return 'X';
+		}
+		if (cell.teleport) {
+			return 'T';
+		}
+		if (cell.door) {
+			return 'D';
+		}
+		if (cell.spawn) {
+			return 'S';
+		}
+		if (cell.creature) {
+			return 'C';
+		}
+		if (cell.wall || cell.blocking) {
+			return 'W';
+		}
+		return '.';
 	}
-	if (cell.door) {
-		return 'D';
-	}
-	if (cell.spawn) {
-		return 'S';
-	}
-	if (cell.creature) {
-		return 'C';
-	}
-	if (cell.wall || cell.blocking) {
-		return 'W';
-	}
-	return '.';
-}
 
 } // namespace
 
@@ -195,10 +195,18 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 	Position maxPos = floorTiles.front()->getPosition();
 	for (const Tile* tile : floorTiles) {
 		const Position& p = tile->getPosition();
-		if (p.x < minPos.x) minPos.x = p.x;
-		if (p.y < minPos.y) minPos.y = p.y;
-		if (p.x > maxPos.x) maxPos.x = p.x;
-		if (p.y > maxPos.y) maxPos.y = p.y;
+		if (p.x < minPos.x) {
+			minPos.x = p.x;
+		}
+		if (p.y < minPos.y) {
+			minPos.y = p.y;
+		}
+		if (p.x > maxPos.x) {
+			maxPos.x = p.x;
+		}
+		if (p.y > maxPos.y) {
+			maxPos.y = p.y;
+		}
 	}
 
 	ReferenceStyleSnapshot snapshot;
@@ -206,6 +214,10 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 	snapshot.floor = captureFloor;
 	snapshot.sourceMin = minPos;
 	snapshot.sourceMax = maxPos;
+	snapshot.sourceMask.reserve(floorTiles.size());
+	for (const Tile* tile : floorTiles) {
+		snapshot.sourceMask.push_back(tile->getPosition());
+	}
 	snapshot.selectedTileCount = floorTiles.size();
 	snapshot.ignoredOtherFloorTiles = ignoredOtherFloor;
 
@@ -289,12 +301,24 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 
 			const QuickReplaceCategory cat = ClassifyPlacedItem(*tile, *item);
 			switch (cat) {
-				case QuickReplaceCategory::Border: ++borderItemCount; break;
-				case QuickReplaceCategory::Wall: ++wallItemCount; tileHasWall = true; break;
-				case QuickReplaceCategory::Door: tileHasDoor = true; break;
-				case QuickReplaceCategory::Doodad: ++doodadItemCount; break;
-				case QuickReplaceCategory::Item: ++decorativeItemCount; break;
-				default: break;
+				case QuickReplaceCategory::Border:
+					++borderItemCount;
+					break;
+				case QuickReplaceCategory::Wall:
+					++wallItemCount;
+					tileHasWall = true;
+					break;
+				case QuickReplaceCategory::Door:
+					tileHasDoor = true;
+					break;
+				case QuickReplaceCategory::Doodad:
+					++doodadItemCount;
+					break;
+				case QuickReplaceCategory::Item:
+					++decorativeItemCount;
+					break;
+				default:
+					break;
 			}
 
 			if (item->isBlocking()) {
@@ -489,10 +513,9 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 			snapshot.brushes.push_back(std::move(bu));
 		}
 		// Sort by count descending.
-		std::sort(snapshot.brushes.begin(), snapshot.brushes.end(),
-			[](const ReferenceBrushUsage& a, const ReferenceBrushUsage& b) {
-				return a.count > b.count;
-			});
+		std::sort(snapshot.brushes.begin(), snapshot.brushes.end(), [](const ReferenceBrushUsage& a, const ReferenceBrushUsage& b) {
+			return a.count > b.count;
+		});
 	}
 
 	// ── 4. Ground family profile (reuse BorderLearningScanner) ────
@@ -526,10 +549,9 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 			snapshot.groundFamilies.push_back(std::move(gf));
 		}
 		// Sort by tile count descending.
-		std::sort(snapshot.groundFamilies.begin(), snapshot.groundFamilies.end(),
-			[](const ReferenceGroundFamily& a, const ReferenceGroundFamily& b) {
-				return a.tiles > b.tiles;
-			});
+		std::sort(snapshot.groundFamilies.begin(), snapshot.groundFamilies.end(), [](const ReferenceGroundFamily& a, const ReferenceGroundFamily& b) {
+			return a.tiles > b.tiles;
+		});
 
 		// Detect transitions.
 		const auto blTransitions = BorderLearningAnalyzer::detectTransitions(borderSnapshot);
@@ -549,8 +571,7 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 				bool atBoundary = false;
 				for (size_t ni = 0; ni < 8; ++ni) {
 					const BorderGroundFamilyIndex nf = blTile.neighbourFamilies[ni];
-					if ((blTile.groundFamily == tr.familyA && nf == tr.familyB) ||
-						(blTile.groundFamily == tr.familyB && nf == tr.familyA)) {
+					if ((blTile.groundFamily == tr.familyA && nf == tr.familyB) || (blTile.groundFamily == tr.familyB && nf == tr.familyA)) {
 						atBoundary = true;
 						break;
 					}
@@ -634,6 +655,47 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 			}
 		}
 		snapshot.topologyGrid = oss.str();
+	}
+
+	return snapshot;
+}
+
+TargetAreaSnapshot CaptureTargetAreaSnapshot(
+	const Selection& selection,
+	int floor,
+	SessionId mapSessionId,
+	uint64_t workspaceGeneration,
+	size_t maxTiles
+) {
+	TargetAreaSnapshot snapshot;
+	snapshot.mapSessionId = mapSessionId;
+	snapshot.workspaceGeneration = workspaceGeneration;
+	snapshot.floor = floor;
+
+	for (const Tile* tile : selection) {
+		if (tile && tile->getZ() == floor) {
+			snapshot.positions.push_back(tile->getPosition());
+		}
+	}
+
+	if (snapshot.positions.empty() || snapshot.positions.size() > maxTiles) {
+		snapshot.positions.clear();
+		return snapshot;
+	}
+
+	std::sort(snapshot.positions.begin(), snapshot.positions.end());
+	snapshot.positions.erase(std::unique(snapshot.positions.begin(), snapshot.positions.end()), snapshot.positions.end());
+	if (snapshot.positions.empty()) {
+		return snapshot;
+	}
+
+	snapshot.targetMin = snapshot.positions.front();
+	snapshot.targetMax = snapshot.positions.front();
+	for (const Position& position : snapshot.positions) {
+		snapshot.targetMin.x = std::min(snapshot.targetMin.x, position.x);
+		snapshot.targetMin.y = std::min(snapshot.targetMin.y, position.y);
+		snapshot.targetMax.x = std::max(snapshot.targetMax.x, position.x);
+		snapshot.targetMax.y = std::max(snapshot.targetMax.y, position.y);
 	}
 
 	return snapshot;

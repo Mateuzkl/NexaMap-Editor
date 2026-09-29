@@ -12,6 +12,7 @@
 #include "../items.h"
 #include "../map.h"
 #include "../multiplayer_session.h"
+#include "../reference_style_store.h"
 #include "../table_brush.h"
 #include "../tile.h"
 #include "../wall_brush.h"
@@ -143,6 +144,24 @@ namespace mcp {
 			}
 		}
 		EnforceSelectionBoundary(context, positions, false);
+	}
+
+	void EnforceReferenceTargetBoundary(const EditorContext& context, const std::vector<Position>& positions, bool allowReferenceSourceOverwrite) {
+		const std::optional<ReferenceStyleSnapshot> reference = ReferenceStyleStore::Instance().getSnapshot();
+		if (!reference) {
+			return;
+		}
+		const std::optional<TargetAreaSnapshot> target = ReferenceStyleStore::Instance().getTargetSnapshot();
+		if (const std::optional<std::string> rejection = ValidateReferenceTargetWrite(
+				&*reference,
+				target ? &*target : nullptr,
+				context.mapSessionId,
+				context.workspaceGeneration,
+				positions,
+				allowReferenceSourceOverwrite
+			)) {
+			throw Error(*rejection);
+		}
 	}
 
 	bool IsProtectedItem(const Item& item) {
