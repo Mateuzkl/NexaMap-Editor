@@ -266,6 +266,11 @@ void Settings::IO(IOMode mode) {
 	Int(ALWAYS_SHOW_ZONES, 1);
 	Int(EXT_HOUSE_SHADER, 1);
 
+	section("MCP");
+	Int(MCP_ENABLED, 0);
+	Int(MCP_PORT, 7331);
+	Int(MCP_ALLOW_WRITE, 0);
+
 	section("Version");
 	Int(VERSION_ID, 0);
 	Int(CHECK_SIGNATURES, 1);

@@ -27,6 +27,7 @@
 #include "theme.h"
 #include "client_assets.h"
 #include "workspace_session.h"
+#include "mcp/mcp_window.h"
 
 #include "materials.h"
 #include "map.h"
@@ -467,6 +468,7 @@ bool Application::OnInit() {
 	g_gui.root = newd MainFrame(__W_RME_APPLICATION_NAME__, wxDefaultPosition, wxSize(700, 500));
 	SetTopWindow(g_gui.root);
 	g_gui.SetTitle("");
+	mcp::StartConfiguredServer();
 
 	g_hotkey_manager.DiscoverActions(g_gui.root->GetMainMenuBar());
 	g_hotkey_manager.RebuildAccelerators(g_gui.root);
@@ -675,6 +677,7 @@ int Application::OnRun() {
 }
 
 void Application::ShutdownServices() {
+	mcp::StopServer();
 	g_gui.DrainEditorDisposals();
 #ifdef _USE_PROCESS_COM
 	wxDELETE(m_proc_server);

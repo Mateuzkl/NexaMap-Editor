@@ -1613,6 +1613,102 @@ void removeDuplicateWalls(Tile* buffer, Tile* tile) {
 	}
 }
 
+bool Editor::applyDoodadPositions(const PositionVector& positions, bool alt, bool dodraw, ActionIdentifier identifier) {
+	Brush* brush = g_gui.GetCurrentBrush();
+	if (!brush || !brush->isDoodad() || positions.empty()) {
+		return false;
+	}
+
+	std::unique_ptr<BatchAction> batch(actionQueue->createBatch(identifier));
+	PositionList tilestoborder;
+	try {
+		if (dodraw) {
+			BaseMap* bufferMap = g_gui.doodad_buffer_map.get();
+			DoodadBrush* doodadBrush = brush->asDoodad();
+			for (const Position& offset : positions) {
+				std::unique_ptr<Action> action(actionQueue->createAction(batch.get()));
+				const Position deltaPosition = offset - Position(0x8000, 0x8000, 0x8);
+				for (MapIterator iterator = bufferMap->begin(); iterator != bufferMap->end(); ++iterator) {
+					Tile* bufferTile = (*iterator)->get();
+					const Position position = bufferTile->getPosition() + deltaPosition;
+					if (!position.isValid()) {
+						continue;
+					}
+
+					TileLocation* location = map.createTileL(position);
+					Tile* tile = location->get();
+					const bool canPlace = doodadBrush->placeOnBlocking() || alt || (tile && !tile->isBlocking());
+					if (!canPlace) {
+						continue;
+					}
+					if (tile && !doodadBrush->placeOnDuplicate() && !alt) {
+						const bool duplicate = std::any_of(tile->items.begin(), tile->items.end(), [doodadBrush](const Item* item) { return item && doodadBrush->ownsItem(item); });
+						if (duplicate) {
+							continue;
+						}
+					}
+
+					std::unique_ptr<Tile> changed(tile ? tile->deepCopy(map) : map.allocator(location));
+					removeDuplicateWalls(bufferTile, changed.get());
+					doSurroundingBorders(doodadBrush, tilestoborder, bufferTile, changed.get());
+					changed->merge(bufferTile);
+					action->addChange(newd Change(changed.release()));
+				}
+				if (action->size() != 0 && !batch->addAndCommitAction(action.release())) {
+					batch->rollback();
+					throw std::runtime_error("could not commit doodad placement action");
+				}
+			}
+		} else {
+			std::unique_ptr<Action> action(actionQueue->createAction(batch.get()));
+			for (const Position& position : positions) {
+				Tile* tile = map.getTile(position);
+				if (!tile) {
+					continue;
+				}
+				std::unique_ptr<Tile> changed(tile->deepCopy(map));
+				brush->undraw(&map, changed.get());
+				action->addChange(newd Change(changed.release()));
+			}
+			if (action->size() != 0 && !batch->addAndCommitAction(action.release())) {
+				batch->rollback();
+				throw std::runtime_error("could not commit doodad erase action");
+			}
+		}
+
+		if (!tilestoborder.empty()) {
+			tilestoborder.sort();
+			tilestoborder.unique();
+			std::unique_ptr<Action> borderAction(actionQueue->createAction(batch.get()));
+			for (const Position& position : tilestoborder) {
+				Tile* tile = map.getTile(position);
+				if (!tile) {
+					continue;
+				}
+				std::unique_ptr<Tile> changed(tile->deepCopy(map));
+				changed->borderize(&map);
+				changed->wallize(&map);
+				borderAction->addChange(newd Change(changed.release()));
+			}
+			if (borderAction->size() != 0 && !batch->addAndCommitAction(borderAction.release())) {
+				batch->rollback();
+				throw std::runtime_error("could not commit doodad border action");
+			}
+		}
+	} catch (...) {
+		batch->rollback();
+		throw;
+	}
+
+	if (batch->size() == 0) {
+		return false;
+	}
+	actionQueue->resetTimer();
+	addBatch(batch.release(), 0);
+	actionQueue->resetTimer();
+	return true;
+}
+
 void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 	Brush* brush = g_gui.GetCurrentBrush();
 	if (!brush) {

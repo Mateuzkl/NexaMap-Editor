@@ -33,6 +33,39 @@ namespace {
 		bool add = true;
 		SessionId activeHouseSessionId = InvalidSessionId;
 	};
+	struct HouseUpdateChange {
+		HouseSnapshot before;
+		HouseSnapshot after;
+		SessionId sessionId = InvalidSessionId;
+	};
+	struct TownRegistryChange {
+		uint32_t id = 0;
+		std::string name;
+		Position templePosition;
+		bool add = true;
+	};
+	struct TownState {
+		std::string name;
+		Position templePosition;
+	};
+	struct TownUpdateChange {
+		uint32_t id = 0;
+		TownState before;
+		TownState after;
+	};
+	struct WaypointRegistryChange {
+		std::string name;
+		Position position;
+		bool add = true;
+	};
+	struct WaypointState {
+		std::string name;
+		Position position;
+	};
+	struct WaypointUpdateChange {
+		WaypointState before;
+		WaypointState after;
+	};
 }
 
 Change::Change() :
@@ -56,10 +89,17 @@ Change* Change::Create(House* house, const Position& where) {
 	return c;
 }
 
-Change* Change::CreateHouse(const HouseSnapshot& snapshot) {
+Change* Change::CreateHouse(const HouseSnapshot& snapshot, bool add, SessionId activeHouseSessionId) {
 	auto* c = newd Change();
 	c->type = CHANGE_HOUSE_REGISTRY;
-	c->data = newd HouseRegistryChange { snapshot, true, InvalidSessionId };
+	c->data = newd HouseRegistryChange { snapshot, add, activeHouseSessionId };
+	return c;
+}
+
+Change* Change::UpdateHouse(const HouseSnapshot& before, const HouseSnapshot& after, SessionId sessionId) {
+	auto* c = newd Change();
+	c->type = CHANGE_HOUSE_UPDATE;
+	c->data = newd HouseUpdateChange { before, after, sessionId };
 	return c;
 }
 
@@ -70,6 +110,34 @@ Change* Change::Create(Waypoint* wp, const Position& where) {
 	p->first = wp->name;
 	p->second = where;
 	c->data = p;
+	return c;
+}
+
+Change* Change::CreateWaypoint(const std::string& name, const Position& position, bool add) {
+	auto* c = newd Change();
+	c->type = CHANGE_WAYPOINT_REGISTRY;
+	c->data = newd WaypointRegistryChange { name, position, add };
+	return c;
+}
+
+Change* Change::UpdateWaypoint(const std::string& beforeName, const Position& beforePosition, const std::string& afterName, const Position& afterPosition) {
+	auto* c = newd Change();
+	c->type = CHANGE_WAYPOINT_UPDATE;
+	c->data = newd WaypointUpdateChange { { beforeName, beforePosition }, { afterName, afterPosition } };
+	return c;
+}
+
+Change* Change::CreateTown(uint32_t id, const std::string& name, const Position& templePosition, bool add) {
+	auto* c = newd Change();
+	c->type = CHANGE_TOWN_REGISTRY;
+	c->data = newd TownRegistryChange { id, name, templePosition, add };
+	return c;
+}
+
+Change* Change::UpdateTown(uint32_t id, const std::string& beforeName, const Position& beforeTemplePosition, const std::string& afterName, const Position& afterTemplePosition) {
+	auto* c = newd Change();
+	c->type = CHANGE_TOWN_UPDATE;
+	c->data = newd TownUpdateChange { id, { beforeName, beforeTemplePosition }, { afterName, afterTemplePosition } };
 	return c;
 }
 
@@ -116,6 +184,26 @@ void Change::clear() {
 		case CHANGE_HOUSE_REGISTRY:
 			ASSERT(data);
 			delete reinterpret_cast<HouseRegistryChange*>(data);
+			break;
+		case CHANGE_HOUSE_UPDATE:
+			ASSERT(data);
+			delete reinterpret_cast<HouseUpdateChange*>(data);
+			break;
+		case CHANGE_TOWN_REGISTRY:
+			ASSERT(data);
+			delete reinterpret_cast<TownRegistryChange*>(data);
+			break;
+		case CHANGE_TOWN_UPDATE:
+			ASSERT(data);
+			delete reinterpret_cast<TownUpdateChange*>(data);
+			break;
+		case CHANGE_WAYPOINT_REGISTRY:
+			ASSERT(data);
+			delete reinterpret_cast<WaypointRegistryChange*>(data);
+			break;
+		case CHANGE_WAYPOINT_UPDATE:
+			ASSERT(data);
+			delete reinterpret_cast<WaypointUpdateChange*>(data);
 			break;
 		case CHANGE_NONE:
 			break;
@@ -166,6 +254,36 @@ uint32_t Change::memsize() const {
 			mem += sizeof(HouseRegistryChange) + change->snapshot.name.capacity();
 			break;
 		}
+		case CHANGE_HOUSE_UPDATE: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<HouseUpdateChange*>(data);
+			mem += sizeof(HouseUpdateChange) + change->before.name.capacity() + change->after.name.capacity();
+			break;
+		}
+		case CHANGE_TOWN_REGISTRY: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<TownRegistryChange*>(data);
+			mem += sizeof(TownRegistryChange) + change->name.capacity();
+			break;
+		}
+		case CHANGE_TOWN_UPDATE: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<TownUpdateChange*>(data);
+			mem += sizeof(TownUpdateChange) + change->before.name.capacity() + change->after.name.capacity();
+			break;
+		}
+		case CHANGE_WAYPOINT_REGISTRY: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<WaypointRegistryChange*>(data);
+			mem += sizeof(WaypointRegistryChange) + change->name.capacity();
+			break;
+		}
+		case CHANGE_WAYPOINT_UPDATE: {
+			ASSERT(data);
+			const auto* change = reinterpret_cast<WaypointUpdateChange*>(data);
+			mem += sizeof(WaypointUpdateChange) + change->before.name.capacity() + change->after.name.capacity();
+			break;
+		}
 		default:
 			break;
 	}
@@ -207,7 +325,15 @@ void Action::applyZoneChange(Change* c) {
 
 bool Action::canApplyHouseChanges() const {
 	for (const Change* c : changes) {
-		if (!c || c->type != CHANGE_HOUSE_REGISTRY) {
+		if (!c || (c->type != CHANGE_HOUSE_REGISTRY && c->type != CHANGE_HOUSE_UPDATE)) {
+			continue;
+		}
+		if (c->type == CHANGE_HOUSE_UPDATE) {
+			const auto* change = reinterpret_cast<const HouseUpdateChange*>(c->data);
+			const House* house = change ? editor.map.houses.getHouse(change->before.id) : nullptr;
+			if (!change || change->before.id != change->after.id || !house || house->getSessionId() != change->sessionId || house->getSnapshot() != change->before) {
+				return false;
+			}
 			continue;
 		}
 
@@ -229,6 +355,128 @@ bool Action::canApplyHouseChanges() const {
 			return false;
 		}
 	}
+	return true;
+}
+
+bool Action::applyHouseUpdate(Change* c) {
+	auto* change = reinterpret_cast<HouseUpdateChange*>(c->data);
+	House* house = change ? editor.map.houses.getHouse(change->before.id) : nullptr;
+	if (!change || !house || house->getSessionId() != change->sessionId || house->getSnapshot() != change->before) {
+		return false;
+	}
+	house->setExit(change->after.exit);
+	house->rent = change->after.rent;
+	house->requiredReset = change->after.requiredReset;
+	house->clientid = change->after.clientid;
+	house->beds = change->after.beds;
+	house->name = change->after.name;
+	house->townid = change->after.townid;
+	house->guildhall = change->after.guildhall;
+	std::swap(change->before, change->after);
+	return true;
+}
+
+bool Action::applyTownChange(Change* c) {
+	auto* change = reinterpret_cast<TownRegistryChange*>(c->data);
+	if (!change) {
+		return false;
+	}
+	if (change->add) {
+		if (editor.map.towns.getTown(change->id)) {
+			return false;
+		}
+		auto* town = newd Town(change->id);
+		town->setName(change->name);
+		town->setTemplePosition(change->templePosition);
+		if (!editor.map.towns.addTown(town)) {
+			delete town;
+			return false;
+		}
+		change->add = false;
+		return true;
+	}
+	auto iterator = editor.map.towns.find(change->id);
+	if (iterator == editor.map.towns.end() || !iterator->second || iterator->second->getName() != change->name || iterator->second->getTemplePosition() != change->templePosition) {
+		return false;
+	}
+	Town* town = iterator->second;
+	editor.map.towns.erase(iterator);
+	delete town;
+	change->add = true;
+	return true;
+}
+
+bool Action::applyTownUpdate(Change* c) {
+	auto* change = reinterpret_cast<TownUpdateChange*>(c->data);
+	Town* town = change ? editor.map.towns.getTown(change->id) : nullptr;
+	if (!change || !town || town->getName() != change->before.name || town->getTemplePosition() != change->before.templePosition) {
+		return false;
+	}
+	// std::string assignment is the only potentially throwing mutation. Do it
+	// before the no-throw position/state swaps so failure leaves the town intact.
+	town->setName(change->after.name);
+	town->setTemplePosition(change->after.templePosition);
+	std::swap(change->before, change->after);
+	return true;
+}
+
+bool Action::applyWaypointRegistryChange(Change* c) {
+	auto* change = reinterpret_cast<WaypointRegistryChange*>(c->data);
+	if (!change) {
+		return false;
+	}
+	Waypoint* existing = editor.map.waypoints.getWaypoint(change->name);
+	if (change->add) {
+		if (existing) {
+			return false;
+		}
+		auto waypoint = std::make_unique<Waypoint>();
+		waypoint->name = change->name;
+		waypoint->pos = change->position;
+		if (!editor.map.waypoints.addWaypoint(std::move(waypoint))) {
+			return false;
+		}
+		change->add = false;
+		return true;
+	}
+	if (!existing || existing->pos != change->position) {
+		return false;
+	}
+	if (!editor.map.waypoints.removeWaypoint(change->name)) {
+		return false;
+	}
+	change->add = true;
+	return true;
+}
+
+bool Action::applyWaypointUpdate(Change* c) {
+	auto* change = reinterpret_cast<WaypointUpdateChange*>(c->data);
+	if (!change) {
+		return false;
+	}
+	Waypoint* waypoint = editor.map.waypoints.getWaypoint(change->before.name);
+	if (!waypoint || waypoint->name != change->before.name || waypoint->pos != change->before.position) {
+		return false;
+	}
+	const bool rename = change->before.name != change->after.name;
+	const bool move = change->before.position != change->after.position;
+	if (move && !change->after.position.isValid()) {
+		return false;
+	}
+	if (as_lower_str(change->before.name) != as_lower_str(change->after.name) && editor.map.waypoints.getWaypoint(change->after.name)) {
+		return false;
+	}
+	if (rename && !editor.map.waypoints.renameWaypoint(change->before.name, change->after.name)) {
+		return false;
+	}
+	const std::string currentName = rename ? change->after.name : change->before.name;
+	if (move && !editor.map.waypoints.moveWaypoint(currentName, change->after.position)) {
+		if (rename) {
+			editor.map.waypoints.renameWaypoint(change->after.name, change->before.name);
+		}
+		return false;
+	}
+	std::swap(change->before, change->after);
 	return true;
 }
 
@@ -302,6 +550,11 @@ size_t Action::memsize() const {
 			case CHANGE_HOUSE_REGISTRY:
 			case CHANGE_MOVE_HOUSE_EXIT:
 			case CHANGE_MOVE_WAYPOINT:
+			case CHANGE_HOUSE_UPDATE:
+			case CHANGE_TOWN_REGISTRY:
+			case CHANGE_TOWN_UPDATE:
+			case CHANGE_WAYPOINT_REGISTRY:
+			case CHANGE_WAYPOINT_UPDATE:
 				mem += c->memsize();
 				break;
 
@@ -438,6 +691,36 @@ bool Action::commit() {
 					return false;
 				}
 				break;
+			case CHANGE_HOUSE_UPDATE:
+				if (!applyHouseUpdate(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_TOWN_REGISTRY:
+				if (!applyTownChange(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_TOWN_UPDATE:
+				if (!applyTownUpdate(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_WAYPOINT_REGISTRY:
+				if (!applyWaypointRegistryChange(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_WAYPOINT_UPDATE:
+				if (!applyWaypointUpdate(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
 
 			default:
 				break;
@@ -550,6 +833,36 @@ bool Action::undo() {
 
 			case CHANGE_HOUSE_REGISTRY:
 				if (!applyHouseChange(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_HOUSE_UPDATE:
+				if (!applyHouseUpdate(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_TOWN_REGISTRY:
+				if (!applyTownChange(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_TOWN_UPDATE:
+				if (!applyTownUpdate(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_WAYPOINT_REGISTRY:
+				if (!applyWaypointRegistryChange(c)) {
+					editor.selection.finish(Selection::INTERNAL);
+					return false;
+				}
+				break;
+			case CHANGE_WAYPOINT_UPDATE:
+				if (!applyWaypointUpdate(c)) {
 					editor.selection.finish(Selection::INTERNAL);
 					return false;
 				}
