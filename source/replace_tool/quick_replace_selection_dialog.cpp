@@ -55,21 +55,21 @@ protected:
 	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const override {
 		const QuickReplaceCandidate& candidate = candidates_.at(index);
 		if (Sprite* sprite = g_gui.gfx.getSprite(candidate.spriteClientId)) {
-			sprite->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX() + FromDIP(7), rect.GetY() + FromDIP(6), FromDIP(32), FromDIP(32));
+			sprite->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX() + FromDIP(5), rect.GetY() + FromDIP(4), FromDIP(32), FromDIP(32));
 		}
 		dc.SetTextForeground(IsSelected(index) ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::Text));
-		const int textX = rect.GetX() + FromDIP(48);
+		const int textX = rect.GetX() + FromDIP(43);
 		dc.DrawText(
 			wxString::Format("%s  |  ID %u  |  x%zu", QuickReplaceCategoryName(candidate.category), candidate.mapItemId, candidate.count),
 			textX,
-			rect.GetY() + FromDIP(4)
+			rect.GetY() + FromDIP(2)
 		);
 		dc.SetTextForeground(IsSelected(index) ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::TextSubtle));
-		dc.DrawText(wxString::FromUTF8(candidate.name), textX, rect.GetY() + FromDIP(23));
+		dc.DrawText(wxString::FromUTF8(candidate.name), textX, rect.GetY() + FromDIP(20));
 	}
 
 	wxCoord OnMeasureItem(size_t WXUNUSED(index)) const override {
-		return FromDIP(45);
+		return FromDIP(40);
 	}
 
 private:
@@ -263,13 +263,13 @@ private:
 namespace {
 	wxStaticBoxSizer* CreatePreviewCard(wxWindow* parent, const wxString& title, DCButton*& sprite, wxStaticText*& details) {
 		auto* card = newd wxStaticBoxSizer(wxVERTICAL, parent, title);
-		card->SetMinSize(parent->FromDIP(wxSize(220, 320)));
+		card->SetMinSize(parent->FromDIP(wxSize(150, 170)));
 		wxWindow* cardParent = card->GetStaticBox();
 		sprite = newd DCButton(cardParent, wxID_ANY, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_64x64, 0);
 		details = newd wxStaticText(cardParent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
-		details->SetMinSize(parent->FromDIP(wxSize(190, 100)));
-		card->Add(sprite, 0, wxALIGN_CENTER | wxTOP | wxLEFT | wxRIGHT, parent->FromDIP(10));
-		card->Add(details, 0, wxEXPAND | wxALL, parent->FromDIP(8));
+		details->SetMinSize(parent->FromDIP(wxSize(136, 66)));
+		card->Add(sprite, 0, wxALIGN_CENTER | wxTOP | wxLEFT | wxRIGHT, parent->FromDIP(5));
+		card->Add(details, 1, wxEXPAND | wxALL, parent->FromDIP(4));
 		return card;
 	}
 
@@ -292,59 +292,63 @@ QuickReplaceSelectionDialog::QuickReplaceSelectionDialog(MapCanvas* parent, Edit
 
 	auto* root = newd wxBoxSizer(wxVERTICAL);
 	scopeLabel_ = newd wxStaticText(this, wxID_ANY, wxEmptyString);
-	root->Add(scopeLabel_, 0, wxEXPAND | wxALL, FromDIP(10));
+	root->Add(scopeLabel_, 0, wxEXPAND | wxALL, FromDIP(6));
 
 	auto* content = newd wxBoxSizer(wxHORIZONTAL);
-	auto* foundBox = newd wxStaticBoxSizer(wxVERTICAL, this, "ITEMS FOUND IN SELECTION");
+	auto* foundBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Items found in selection");
 	sourceList_ = newd QuickReplaceCandidateList(foundBox->GetStaticBox(), candidates_);
-	sourceList_->SetMinSize(FromDIP(wxSize(380, 380)));
-	foundBox->Add(sourceList_, 1, wxEXPAND | wxALL, FromDIP(6));
-	content->Add(foundBox, 1, wxEXPAND | wxRIGHT, FromDIP(8));
+	sourceList_->SetMinSize(FromDIP(wxSize(290, 250)));
+	foundBox->Add(sourceList_, 1, wxEXPAND | wxALL, FromDIP(4));
+	content->Add(foundBox, 4, wxEXPAND | wxRIGHT, FromDIP(6));
 
-	auto* replacementBox = newd wxStaticBoxSizer(wxVERTICAL, this, "REPLACEMENT");
+	auto* replacementBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Replacement");
 	wxWindow* replacementParent = replacementBox->GetStaticBox();
 	auto* previews = newd wxBoxSizer(wxHORIZONTAL);
-	previews->Add(CreatePreviewCard(replacementParent, "BEFORE", beforeSprite_, beforeDetails_), 1, wxEXPAND);
+	previews->Add(CreatePreviewCard(replacementParent, "Before", beforeSprite_, beforeDetails_), 1, wxEXPAND);
 	auto* arrow = newd wxStaticText(replacementParent, wxID_ANY, wxString::FromUTF8("\xE2\x86\x92"));
 	wxFont arrowFont = arrow->GetFont();
-	arrowFont.SetPointSize(22);
+	arrowFont.SetPointSize(16);
 	arrowFont.SetWeight(wxFONTWEIGHT_BOLD);
 	arrow->SetFont(arrowFont);
-	previews->Add(arrow, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT, FromDIP(8));
-	previews->Add(CreatePreviewCard(replacementParent, "AFTER", afterSprite_, afterDetails_), 1, wxEXPAND);
-	replacementBox->Add(previews, 1, wxEXPAND | wxALL, FromDIP(6));
+	previews->Add(arrow, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT, FromDIP(4));
+	previews->Add(CreatePreviewCard(replacementParent, "After", afterSprite_, afterDetails_), 1, wxEXPAND);
+	replacementBox->Add(previews, 1, wxEXPAND | wxALL, FromDIP(4));
 
 	auto* targetButtons = newd wxBoxSizer(wxHORIZONTAL);
 	chooseButton_ = newd wxButton(replacementParent, wxID_ANY, "Choose Replacement...");
 	removeButton_ = newd wxButton(replacementParent, wxID_ANY, "Remove Selected Item");
 	removeButton_->SetToolTip("Remove every matching occurrence of the selected item and category from the captured area.");
-	targetButtons->Add(chooseButton_, 0, wxRIGHT, FromDIP(6));
-	targetButtons->Add(removeButton_, 0);
-	replacementBox->Add(targetButtons, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+	targetButtons->Add(chooseButton_, 1, wxRIGHT, FromDIP(4));
+	targetButtons->Add(removeButton_, 1);
+	replacementBox->Add(targetButtons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(5));
+
+	auto* optionsRow = newd wxBoxSizer(wxHORIZONTAL);
+	auto* options = newd wxBoxSizer(wxVERTICAL);
 	sameCategoryCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Keep same item category");
 	sameCategoryCheck_->SetValue(true);
-	replacementBox->Add(sameCategoryCheck_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+	options->Add(sameCategoryCheck_, 0, wxBOTTOM, FromDIP(2));
 	autoBorderCheck_ = newd wxCheckBox(replacementParent, wxID_ANY, "Rebuild surrounding floor borders");
 	autoBorderCheck_->SetValue(false);
 	autoBorderCheck_->SetToolTip("May modify adjacent tiles outside the selected area. All changes remain part of the same Undo/Redo operation.");
-	replacementBox->Add(autoBorderCheck_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+	options->Add(autoBorderCheck_, 0);
+	optionsRow->Add(options, 1, wxALIGN_CENTER_VERTICAL);
 	replaceButton_ = newd wxButton(replacementParent, wxID_ANY, "Replace");
 	replaceButton_->SetDefault();
-	replacementBox->Add(replaceButton_, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
-	content->Add(replacementBox, 1, wxEXPAND);
-	root->Add(content, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
+	optionsRow->Add(replaceButton_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+	replacementBox->Add(optionsRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+	content->Add(replacementBox, 5, wxEXPAND);
+	root->Add(content, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(6));
 
+	auto* footer = newd wxBoxSizer(wxHORIZONTAL);
 	statusLabel_ = newd wxStaticText(this, wxID_ANY, wxEmptyString);
-	root->Add(statusLabel_, 0, wxEXPAND | wxALL, FromDIP(10));
-	auto* buttons = newd wxBoxSizer(wxHORIZONTAL);
-	buttons->AddStretchSpacer();
+	footer->Add(statusLabel_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 	closeButton_ = newd wxButton(this, wxID_CANCEL, "Close");
-	buttons->Add(closeButton_, 0);
-	root->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+	footer->Add(closeButton_, 0);
+	root->Add(footer, 0, wxEXPAND | wxALL, FromDIP(6));
 
 	SetSizer(root);
-	SetMinSize(FromDIP(wxSize(980, 600)));
-	SetSize(FromDIP(wxSize(1040, 650)));
+	SetMinSize(FromDIP(wxSize(760, 420)));
+	SetSize(FromDIP(wxSize(820, 460)));
 	CentreOnParent();
 
 	sourceList_->Bind(wxEVT_LISTBOX, &QuickReplaceSelectionDialog::OnSourceSelected, this);
@@ -442,7 +446,7 @@ void QuickReplaceSelectionDialog::UpdateSourcePreview() {
 	}
 	beforeSprite_->SetSprite(candidate->spriteClientId);
 	beforeDetails_->SetLabel(CandidateDetails(*candidate));
-	beforeDetails_->Wrap(FromDIP(190));
+	beforeDetails_->Wrap(FromDIP(136));
 	chooseButton_->Enable(true);
 	removeButton_->Enable(true);
 	autoBorderCheck_->Enable(candidate->category == QuickReplaceCategory::Ground);
@@ -463,7 +467,7 @@ void QuickReplaceSelectionDialog::UpdateTargetPreview() {
 			)
 				   : wxString("Remove selected item")
 		);
-		afterDetails_->Wrap(FromDIP(190));
+		afterDetails_->Wrap(FromDIP(136));
 		sameCategoryCheck_->Enable(false);
 		replaceButton_->SetLabel("Remove");
 		Layout();
@@ -483,7 +487,7 @@ void QuickReplaceSelectionDialog::UpdateTargetPreview() {
 		details << "\nComplete palette brush";
 	}
 	afterDetails_->SetLabel(details);
-	afterDetails_->Wrap(FromDIP(190));
+	afterDetails_->Wrap(FromDIP(136));
 	Layout();
 	UpdateReplaceState();
 }
