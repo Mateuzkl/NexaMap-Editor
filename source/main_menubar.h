@@ -145,6 +145,8 @@ namespace MenuBar {
 		MATERIALS_WORKBENCH,
 		BORDER_WORKSPACE,
 		LEARN_BORDER_SELECTION,
+		CAPTURE_AI_STYLE_REFERENCE,
+		SHOW_AI_STYLE_REFERENCE,
 		SELECT_TERRAIN,
 		SELECT_DOODAD,
 		SELECT_ITEM,
@@ -336,6 +338,8 @@ public:
 	void OnMaterialsWorkbench(wxCommandEvent& event);
 	void OnBorderWorkspace(wxCommandEvent& event);
 	void OnLearnBorderSelection(wxCommandEvent& event);
+	void OnCaptureAIStyleReference(wxCommandEvent& event);
+	void OnShowAIStyleReference(wxCommandEvent& event);
 	void OnSelectTerrainPalette(wxCommandEvent& event);
 	void OnSelectDoodadPalette(wxCommandEvent& event);
 	void OnSelectItemPalette(wxCommandEvent& event);

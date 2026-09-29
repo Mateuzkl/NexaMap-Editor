@@ -19,6 +19,7 @@
 #include "mcp_tools_import_export.h"
 #include "mcp_tools_map.h"
 #include "mcp_tools_orientation.h"
+#include "mcp_tools_reference.h"
 #include "mcp_tools_render.h"
 #include "mcp_tools_region.h"
 #include "mcp_tools_search.h"
@@ -113,6 +114,7 @@ namespace mcp {
 	Server::Server() {
 		RegisterOrientationTools();
 		RegisterMapTools();
+		RegisterReferenceTools();
 		RegisterBrushTools();
 		RegisterEditTools();
 		RegisterEditorTools();

@@ -114,6 +114,7 @@ ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_reference.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.h
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.h
@@ -149,6 +150,9 @@ ${CMAKE_CURRENT_LIST_DIR}/preferences.h
 ${CMAKE_CURRENT_LIST_DIR}/process_com.h
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
+${CMAKE_CURRENT_LIST_DIR}/reference_style.h
+${CMAKE_CURRENT_LIST_DIR}/reference_style_store.h
+${CMAKE_CURRENT_LIST_DIR}/reference_style_window.h
 ${CMAKE_CURRENT_LIST_DIR}/remove_unreachable_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.h
@@ -258,6 +262,7 @@ ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_reference.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.cpp
@@ -362,6 +367,9 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_manager.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_scope.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_visual_similarity_service.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/visual_similarity_index.cpp
+${CMAKE_CURRENT_LIST_DIR}/reference_style.cpp
+${CMAKE_CURRENT_LIST_DIR}/reference_style_store.cpp
+${CMAKE_CURRENT_LIST_DIR}/reference_style_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/session_id.cpp
@@ -460,6 +468,7 @@ ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_reference.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.cpp
