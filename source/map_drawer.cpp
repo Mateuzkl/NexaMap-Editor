@@ -1975,7 +1975,10 @@ void MapDrawer::DrawCreatureName(int screenx, int screeny, const std::string& na
 
 	// Calculate center anchor above the creature head in screen pixels:
 	const float anchorX = (screenx + TileSize / 2.0f) / zoom;
-	const float anchorY = (screeny - heightOffset) / zoom;
+	// Some NPC outfits use a padded multi-tile canvas even when the visible
+	// character is much shorter. Keep their label close to the visible sprite.
+	const int labelHeightOffset = isNpc ? std::min(heightOffset, TileSize) : heightOffset;
+	const float anchorY = (screeny - labelHeightOffset) / zoom;
 
 	const float boxX = std::round(anchorX - boxWidth / 2.0f);
 	const float boxY = std::round(anchorY - boxHeight - 2.0f);
