@@ -115,6 +115,9 @@ public: // Functions
 	void draw(const PositionVector& todraw, PositionVector& toborder, bool alt);
 	void undraw(const PositionVector& posvec, bool alt);
 	void undraw(const PositionVector& todraw, PositionVector& toborder, bool alt);
+	// Apply all doodad anchors as one deterministic undo entry. The selected
+	// brush must be a doodad and its native preview buffer must be populated.
+	bool applyDoodadPositions(const PositionVector& positions, bool alt, bool draw, ActionIdentifier identifier = ACTION_MCP);
 
 protected:
 	void drawInternal(const Position offset, bool alt, bool dodraw);

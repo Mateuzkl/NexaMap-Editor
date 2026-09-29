@@ -208,6 +208,31 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	g_gui.CaptureCrossClientCopy(*this);
 }
 
+void CopyBuffer::copyRegion(Editor& editor, const Position& from, const Position& to) {
+	clear();
+	tiles = std::make_unique<BaseMap>();
+	sourceMapSessionId = editor.map.getSessionId();
+	copyPos = from;
+
+	for (int y = from.y; y <= to.y; ++y) {
+		for (int x = from.x; x <= to.x; ++x) {
+			const Position position(x, y, from.z);
+			Tile* source = editor.map.getTile(position);
+			if (!source) {
+				continue;
+			}
+			TileLocation* location = tiles->createTileL(position);
+			Tile* copied = source->deepCopy(*tiles);
+			copied->setLocation(location);
+			tiles->setTile(position, copied);
+			captureHouse(editor.map, copied->getHouseID());
+			includePosition(position);
+		}
+	}
+	spawnDependencies = CaptureSpawnDependencies(*tiles, &editor.map);
+	g_gui.CaptureCrossClientCopy(*this);
+}
+
 void CopyBuffer::cut(Editor& editor, int floor) {
 	if (editor.selection.size() == 0) {
 		g_gui.SetStatusText("No tiles to cut.");

@@ -30,6 +30,7 @@
 #include "border_learning_window.h"
 #include "border_workspace_window.h"
 #include "materials_workbench_window.h"
+#include "mcp/mcp_window.h"
 #include "map_item_id_converter_window.h"
 #include "map_diagnostics_window.h"
 #include "minimap_import_window.h"
@@ -253,6 +254,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
 	MAKE_ACTION(SHOW_HOTKEYS, wxITEM_NORMAL, OnShowHotkeys);
 	MAKE_ACTION(COMMAND_PALETTE, wxITEM_NORMAL, OnCommandPalette);
+	MAKE_ACTION(MCP_SERVER, wxITEM_NORMAL, OnMcpServer);
 	MAKE_ACTION(SHOW_FAVORITES, wxITEM_NORMAL, OnShowFavorites);
 
 	// A deleter, this way the frame does not need
@@ -2605,6 +2607,10 @@ void MainMenuBar::OnNewPalette(wxCommandEvent& event) {
 
 void MainMenuBar::OnMaterialsWorkbench(wxCommandEvent& WXUNUSED(event)) {
 	MaterialsWorkbenchWindow::Open(frame);
+}
+
+void MainMenuBar::OnMcpServer(wxCommandEvent& WXUNUSED(event)) {
+	mcp::Window::Open(frame);
 }
 
 void MainMenuBar::OnBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {

@@ -68,6 +68,7 @@
 	</menu>
 	<menu name="Tools">
 		<item name="Command Palette..." action="COMMAND_PALETTE" hotkey="Ctrl+Shift+P" help="Search and execute NexaMap commands."/>
+		<item name="MCP Server..." action="MCP_SERVER" help="Connect AI clients to the active NexaMap workspace through a loopback-only MCP server."/>
 		<separator/>
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
 		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>

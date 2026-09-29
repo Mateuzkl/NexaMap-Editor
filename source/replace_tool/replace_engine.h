@@ -6,6 +6,7 @@
 #define RME_REPLACE_TOOL_REPLACE_ENGINE_H_
 
 #include "../doodad_brush.h"
+#include "../item.h"
 #include "replace_rule.h"
 
 #include <cstddef>
@@ -56,5 +57,11 @@ class ReplaceEngine {
 public:
 	[[nodiscard]] static ReplaceExecutionResult Run(Editor& editor, const std::vector<Tile*>& tiles, const std::vector<ReplacementRule>& rules, ReplaceExecutionOptions options = {});
 };
+
+// Rebuild an item through the factory so replacing an ID cannot leave a
+// Container/Teleport/Door/Depot (or other specialized item) with the wrong
+// runtime type. Container contents are retained when possible and otherwise
+// returned to the caller for promotion into the owning item vector.
+[[nodiscard]] bool ReplaceItemPreservingState(Item*& item, uint16_t targetServerId, ItemVector& promotedContents);
 
 #endif

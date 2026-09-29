@@ -129,40 +129,8 @@ namespace {
 				return;
 			}
 
-			ItemVector preservedContents;
-			if (auto* container = dynamic_cast<Container*>(item)) {
-				preservedContents.swap(container->getVector());
-			}
-
-			const uint16_t originalId = item->getID();
-			auto restoreOriginal = [&]() {
-				item->setID(originalId);
-				if (auto* originalContainer = dynamic_cast<Container*>(item)) {
-					originalContainer->getVector().swap(preservedContents);
-				}
-			};
-			item->setID(plan.targetServerId);
-			// Bypass virtual dispatch once so the factory selects the target type.
-			std::unique_ptr<Item> replacement(item->Item::deepCopy());
-			if (!replacement) {
-				restoreOriginal();
+			if (!ReplaceItemPreservingState(item, plan.targetServerId, promotedContents)) {
 				return;
-			}
-			if (typeid(*replacement) == typeid(*item)) {
-				// Same-type replacements can retain their specialized OTBM state.
-				replacement.reset(item->deepCopy());
-				if (!replacement) {
-					restoreOriginal();
-					return;
-				}
-			}
-			delete item;
-			item = replacement.release();
-
-			if (auto* replacementContainer = dynamic_cast<Container*>(item)) {
-				replacementContainer->getVector().swap(preservedContents);
-			} else {
-				promotedContents.insert(promotedContents.end(), preservedContents.begin(), preservedContents.end());
 			}
 		}
 
@@ -231,6 +199,49 @@ namespace {
 			}
 		}
 	}
+}
+
+bool ReplaceItemPreservingState(Item*& item, uint16_t targetServerId, ItemVector& promotedContents) {
+	if (!item) {
+		return false;
+	}
+
+	ItemVector preservedContents;
+	if (auto* container = dynamic_cast<Container*>(item)) {
+		preservedContents.swap(container->getVector());
+	}
+
+	const uint16_t originalId = item->getID();
+	auto restoreOriginal = [&]() {
+		item->setID(originalId);
+		if (auto* originalContainer = dynamic_cast<Container*>(item)) {
+			originalContainer->getVector().swap(preservedContents);
+		}
+	};
+	item->setID(targetServerId);
+	// Bypass virtual dispatch once so the factory selects the target type.
+	std::unique_ptr<Item> replacement(item->Item::deepCopy());
+	if (!replacement) {
+		restoreOriginal();
+		return false;
+	}
+	if (typeid(*replacement) == typeid(*item)) {
+		// Same-type replacements can retain their specialized OTBM state.
+		replacement.reset(item->deepCopy());
+		if (!replacement) {
+			restoreOriginal();
+			return false;
+		}
+	}
+	delete item;
+	item = replacement.release();
+
+	if (auto* replacementContainer = dynamic_cast<Container*>(item)) {
+		replacementContainer->getVector().swap(preservedContents);
+	} else {
+		promotedContents.insert(promotedContents.end(), preservedContents.begin(), preservedContents.end());
+	}
+	return true;
 }
 
 ReplaceExecutionResult ReplaceEngine::Run(Editor& editor, const std::vector<Tile*>& tiles, const std::vector<ReplacementRule>& rules, ReplaceExecutionOptions options) {

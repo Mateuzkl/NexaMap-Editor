@@ -120,6 +120,32 @@ if(BUILD_TESTING)
 	target_compile_features(playtest_controller_tests PRIVATE cxx_std_20)
 	add_test(NAME playtest_controller_tests COMMAND playtest_controller_tests)
 
+	add_executable(mcp_protocol_tests
+		tests/mcp_protocol_tests.cpp
+		source/mcp/mcp_common.cpp
+		source/mcp/mcp_protocol.cpp
+		source/mcp/mcp_registry.cpp
+	)
+	target_include_directories(mcp_protocol_tests PRIVATE source)
+	target_link_libraries(mcp_protocol_tests PRIVATE nlohmann_json::nlohmann_json)
+	target_compile_features(mcp_protocol_tests PRIVATE cxx_std_20)
+	if(MSVC)
+		target_compile_options(mcp_protocol_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME mcp_protocol_tests COMMAND mcp_protocol_tests)
+
+	add_executable(mcp_security_tests
+		tests/mcp_security_tests.cpp
+		source/mcp/mcp_common.cpp
+	)
+	target_include_directories(mcp_security_tests PRIVATE source)
+	target_link_libraries(mcp_security_tests PRIVATE nlohmann_json::nlohmann_json)
+	target_compile_features(mcp_security_tests PRIVATE cxx_std_20)
+	if(MSVC)
+		target_compile_options(mcp_security_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME mcp_security_tests COMMAND mcp_security_tests)
+
 	add_executable(quick_replace_selection_tests tests/quick_replace_selection_test_main.cpp tests/quick_replace_selection_tests.cpp ${rme_SRC})
 	target_include_directories(quick_replace_selection_tests PRIVATE source)
 	target_compile_features(quick_replace_selection_tests PRIVATE cxx_std_20)
