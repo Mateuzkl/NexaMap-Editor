@@ -22,6 +22,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -39,7 +40,7 @@ public:
 	explicit Waypoints(Map& map) :
 		map_(map) { }
 
-	bool addWaypoint(std::unique_ptr<Waypoint> waypoint);
+	bool addWaypoint(std::unique_ptr<Waypoint> waypoint, std::optional<size_t> orderIndex = std::nullopt);
 	bool removeWaypoint(std::string_view name);
 	bool renameWaypoint(std::string_view oldName, std::string newName);
 	bool moveWaypoint(std::string_view name, const Position& newPosition);
@@ -63,6 +64,7 @@ public:
 	bool moveWaypointIntoCategory(std::string_view waypoint, std::string_view category, bool atEnd);
 	bool nudgeCategory(std::string_view category, bool moveUp);
 	std::vector<std::string> orderedWaypointsInCategory(std::string_view category) const;
+	std::optional<size_t> waypointOrderIndex(std::string_view waypointName) const;
 	bool applyOrderingFromMetadata(
 		const std::vector<std::string>& categoryOrder,
 		const std::vector<std::string>& uncategorizedOrder,
@@ -108,7 +110,7 @@ private:
 	void removeWaypointFromPositionIndex(Waypoint* waypoint, const Position& position);
 	void indexWaypointPosition(Waypoint* waypoint);
 	void unregisterWaypointOrder(std::string_view name);
-	void registerWaypointOrder(const Waypoint& waypoint);
+	void registerWaypointOrder(Waypoint& waypoint, std::optional<size_t> orderIndex = std::nullopt);
 	std::unique_ptr<Waypoint> extractWaypoint(std::string_view name);
 	bool validateMetadata(
 		const std::vector<std::string>& categoryOrder,

@@ -97,7 +97,7 @@ void Waypoints::indexWaypointPosition(Waypoint* waypoint) {
 	}
 }
 
-bool Waypoints::addWaypoint(std::unique_ptr<Waypoint> waypoint) {
+bool Waypoints::addWaypoint(std::unique_ptr<Waypoint> waypoint, std::optional<size_t> orderIndex) {
 	if (!waypoint || waypoint->name.empty() || !waypoint->pos.isValid()) {
 		return false;
 	}
@@ -106,13 +106,17 @@ bool Waypoints::addWaypoint(std::unique_ptr<Waypoint> waypoint) {
 		return false;
 	}
 	if (!waypoint->category.empty()) {
-		addCategory(waypoint->category);
+		if (const std::string* category = findCategory(categories_, waypoint->category)) {
+			waypoint->category = *category;
+		} else {
+			addCategory(waypoint->category);
+		}
 	}
 	Waypoint* observer = waypoint.get();
 	waypoints_.emplace(key, std::move(waypoint));
 	incrementTileCount(observer->pos);
 	indexWaypointPosition(observer);
-	registerWaypointOrder(*observer);
+	registerWaypointOrder(*observer, orderIndex);
 	return true;
 }
 
@@ -369,16 +373,19 @@ void Waypoints::unregisterWaypointOrder(std::string_view name) {
 	}
 }
 
-void Waypoints::registerWaypointOrder(const Waypoint& waypoint) {
+void Waypoints::registerWaypointOrder(Waypoint& waypoint, std::optional<size_t> orderIndex) {
 	unregisterWaypointOrder(waypoint.name);
-	if (waypoint.category.empty()) {
-		uncategorizedOrder_.push_back(waypoint.name);
-		return;
+	std::vector<std::string>* order = &uncategorizedOrder_;
+	if (!waypoint.category.empty()) {
+		if (const std::string* category = findCategory(categories_, waypoint.category)) {
+			waypoint.category = *category;
+		} else {
+			addCategory(waypoint.category);
+		}
+		order = &categoryWaypointOrder_[waypoint.category];
 	}
-	if (!findCategory(categories_, waypoint.category)) {
-		addCategory(waypoint.category);
-	}
-	categoryWaypointOrder_[waypoint.category].push_back(waypoint.name);
+	const size_t index = std::min(orderIndex.value_or(order->size()), order->size());
+	order->insert(order->begin() + index, waypoint.name);
 }
 
 void Waypoints::normalizeOrders() {
@@ -567,6 +574,26 @@ std::vector<std::string> Waypoints::orderedWaypointsInCategory(std::string_view 
 	}
 	const auto found = categoryWaypointOrder_.find(std::string(category));
 	return found == categoryWaypointOrder_.end() ? std::vector<std::string>() : found->second;
+}
+
+std::optional<size_t> Waypoints::waypointOrderIndex(std::string_view waypointName) const {
+	const Waypoint* waypoint = getWaypoint(waypointName);
+	if (!waypoint) {
+		return std::nullopt;
+	}
+	const std::vector<std::string>* order = &uncategorizedOrder_;
+	if (!waypoint->category.empty()) {
+		const auto category = categoryWaypointOrder_.find(waypoint->category);
+		if (category == categoryWaypointOrder_.end()) {
+			return std::nullopt;
+		}
+		order = &category->second;
+	}
+	const std::string key = as_lower_str(waypoint->name);
+	const auto position = std::find_if(order->begin(), order->end(), [&](const std::string& name) {
+		return as_lower_str(name) == key;
+	});
+	return position == order->end() ? std::nullopt : std::optional<size_t>(std::distance(order->begin(), position));
 }
 
 bool Waypoints::moveCategoryRelative(std::string_view category, std::string_view anchorCategory, bool insertBefore) {

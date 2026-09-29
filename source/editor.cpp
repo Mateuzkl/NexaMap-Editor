@@ -383,7 +383,7 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 
 	// Make temporary backups
 	// converter.Assign(wxstr(savefile));
-	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones, backup_waypoint_groups;
+	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones, backup_waypoint_groups, waypoint_groups_filename;
 
 	if (converter.GetExt() == "otgz") {
 		save_otgz = true;
@@ -437,11 +437,11 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		}
 
 		converter.Assign(wxstr(savefile));
-		const std::string groupsSidecar = map_path + nstr(converter.GetName()) + "-waypoint-groups.xml";
-		if (wxFileExists(wxstr(groupsSidecar))) {
-			backup_waypoint_groups = groupsSidecar + "~";
+		waypoint_groups_filename = map_path + nstr(converter.GetName()) + "-waypoint-groups.xml";
+		if (wxFileExists(wxstr(waypoint_groups_filename))) {
+			backup_waypoint_groups = waypoint_groups_filename + "~";
 			std::remove(backup_waypoint_groups.c_str());
-			std::rename(groupsSidecar.c_str(), backup_waypoint_groups.c_str());
+			std::rename(waypoint_groups_filename.c_str(), backup_waypoint_groups.c_str());
 		}
 	}
 
@@ -530,6 +530,11 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 				std::rename(backup_zones.c_str(), std::string(zones_filename + ".xml").c_str());
 			}
 
+			if (!backup_waypoint_groups.empty()) {
+				std::remove(waypoint_groups_filename.c_str());
+				std::rename(backup_waypoint_groups.c_str(), waypoint_groups_filename.c_str());
+			}
+
 			// Display the stage and underlying reason instead of reporting every
 			// pipeline failure as an OTBM open error.
 			wxString message = "Could not save map.";
@@ -608,6 +613,11 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::string zones_filename = map_path + nstr(converter.GetName());
 			std::rename(backup_zones.c_str(), std::string(zones_filename + "." + date.str() + ".xml").c_str());
 		}
+
+		if (!backup_waypoint_groups.empty()) {
+			const std::string backup_filename = waypoint_groups_filename.substr(0, waypoint_groups_filename.size() - 4) + "." + date.str() + ".xml";
+			std::rename(backup_waypoint_groups.c_str(), backup_filename.c_str());
+		}
 	} else {
 		// Delete the temporary files
 		std::remove(backup_otbm.c_str());
@@ -616,6 +626,7 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		std::remove(backup_spawn_npc.c_str());
 		std::remove(backup_waypoint.c_str());
 		std::remove(backup_zones.c_str());
+		std::remove(backup_waypoint_groups.c_str());
 	}
 
 	map.clearChanges();

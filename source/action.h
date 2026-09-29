@@ -23,6 +23,7 @@
 
 #include <deque>
 #include <memory>
+#include <optional>
 #include <string>
 
 class Editor;
@@ -75,7 +76,7 @@ public:
 	static Change* CreateHouse(const HouseSnapshot& snapshot, bool add = true, SessionId activeHouseSessionId = InvalidSessionId);
 	static Change* UpdateHouse(const HouseSnapshot& before, const HouseSnapshot& after, SessionId sessionId);
 	static Change* Create(Waypoint* wp, const Position& where);
-	static Change* CreateWaypoint(const std::string& name, const Position& position, bool add);
+	static Change* CreateWaypoint(const std::string& name, const Position& position, bool add, std::string category = {}, std::optional<size_t> orderIndex = std::nullopt);
 	static Change* UpdateWaypoint(const std::string& beforeName, const Position& beforePosition, const std::string& afterName, const Position& afterPosition);
 	static Change* CreateTown(uint32_t id, const std::string& name, const Position& templePosition, bool add);
 	static Change* UpdateTown(uint32_t id, const std::string& beforeName, const Position& beforeTemplePosition, const std::string& afterName, const Position& afterTemplePosition);

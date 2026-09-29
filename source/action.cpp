@@ -56,6 +56,8 @@ namespace {
 	struct WaypointRegistryChange {
 		std::string name;
 		Position position;
+		std::string category;
+		std::optional<size_t> orderIndex;
 		bool add = true;
 	};
 	struct WaypointState {
@@ -113,10 +115,10 @@ Change* Change::Create(Waypoint* wp, const Position& where) {
 	return c;
 }
 
-Change* Change::CreateWaypoint(const std::string& name, const Position& position, bool add) {
+Change* Change::CreateWaypoint(const std::string& name, const Position& position, bool add, std::string category, std::optional<size_t> orderIndex) {
 	auto* c = newd Change();
 	c->type = CHANGE_WAYPOINT_REGISTRY;
-	c->data = newd WaypointRegistryChange { name, position, add };
+	c->data = newd WaypointRegistryChange { name, position, std::move(category), orderIndex, add };
 	return c;
 }
 
@@ -275,7 +277,7 @@ uint32_t Change::memsize() const {
 		case CHANGE_WAYPOINT_REGISTRY: {
 			ASSERT(data);
 			const auto* change = reinterpret_cast<WaypointRegistryChange*>(data);
-			mem += sizeof(WaypointRegistryChange) + change->name.capacity();
+			mem += sizeof(WaypointRegistryChange) + change->name.capacity() + change->category.capacity();
 			break;
 		}
 		case CHANGE_WAYPOINT_UPDATE: {
@@ -433,13 +435,17 @@ bool Action::applyWaypointRegistryChange(Change* c) {
 		auto waypoint = std::make_unique<Waypoint>();
 		waypoint->name = change->name;
 		waypoint->pos = change->position;
-		if (!editor.map.waypoints.addWaypoint(std::move(waypoint))) {
+		waypoint->category = change->category;
+		if (!editor.map.waypoints.addWaypoint(std::move(waypoint), change->orderIndex)) {
 			return false;
 		}
+		const Waypoint* added = editor.map.waypoints.getWaypoint(change->name);
+		change->category = added ? added->category : change->category;
+		change->orderIndex = editor.map.waypoints.waypointOrderIndex(change->name);
 		change->add = false;
 		return true;
 	}
-	if (!existing || existing->pos != change->position) {
+	if (!existing || existing->pos != change->position || existing->category != change->category || editor.map.waypoints.waypointOrderIndex(change->name) != change->orderIndex) {
 		return false;
 	}
 	if (!editor.map.waypoints.removeWaypoint(change->name)) {

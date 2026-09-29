@@ -66,6 +66,23 @@ namespace {
 		check(map.waypoints.validateInvariants(nullptr), "category mutations should preserve invariants");
 	}
 
+	void testCanonicalCategoryAndOrderRestore() {
+		Map map;
+		map.setWidth(256);
+		map.setHeight(256);
+		check(map.waypoints.addCategory("Routes"), "canonical category should be added");
+		check(map.waypoints.addWaypoint(waypoint("first", Position(71, 70, 7), "routes")), "case-variant category waypoint should be added");
+		check(map.waypoints.addWaypoint(waypoint("third", Position(73, 70, 7), "ROUTES")), "second case-variant category waypoint should be added");
+		check(map.waypoints.getWaypoint("first")->category == "Routes", "waypoint category should use canonical spelling");
+		check(map.waypoints.getWaypoint("third")->category == "Routes", "all category spellings should be canonicalized");
+
+		auto restored = waypoint("second", Position(72, 70, 7), "routes");
+		check(map.waypoints.addWaypoint(std::move(restored), 1), "waypoint should be restored at a saved order index");
+		check(map.waypoints.orderedWaypointsInCategory("Routes") == std::vector<std::string>({ "first", "second", "third" }), "restored waypoint should keep its category order");
+		check(map.waypoints.waypointOrderIndex("second") == std::optional<size_t>(1), "saved waypoint order index should be observable");
+		check(map.waypoints.validateInvariants(nullptr), "canonicalized categories and restored order should preserve invariants");
+	}
+
 	void testAtomicMetadataValidation() {
 		Map map;
 		map.setWidth(256);
@@ -113,6 +130,7 @@ namespace {
 int RunMultiplayerSessionTests(int, char**) {
 	testPositionIndexAndCounts();
 	testCategoriesRenameAndNormalization();
+	testCanonicalCategoryAndOrderRestore();
 	testAtomicMetadataValidation();
 	testImportTransfersOwnershipAndIndexes();
 

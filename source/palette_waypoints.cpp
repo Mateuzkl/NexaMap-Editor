@@ -767,14 +767,10 @@ void WaypointPalettePanel::OnClickAddCategory(wxCommandEvent& WXUNUSED(event)) {
 	}
 
 	const std::string categoryName = nstr(name);
-	for (const auto& existing : map->waypoints.categories()) {
-		if (existing == categoryName) {
-			g_gui.SetStatusText("There already is a category with this name.");
-			return;
-		}
+	if (!map->waypoints.addCategory(categoryName)) {
+		g_gui.SetStatusText("There already is a category with this name.");
+		return;
 	}
-
-	map->waypoints.addCategory(categoryName);
 	markMapMetadataChanged(map);
 	refreshWaypointTree();
 	if (const wxTreeItemId item = findCategoryItem(categoryName); item.IsOk()) {
