@@ -40,6 +40,7 @@
 #include "application.h"
 #include "border_workspace_window.h"
 #include "border_learning_window.h"
+#include "reference_style_window.h"
 #include "procedural_map_generator_window.h"
 #include "palette_saved_terrain.h"
 #include "browse_tile_window.h"
@@ -212,6 +213,7 @@ EVT_MENU(MAP_POPUP_MENU_SELECT_RAW_BRUSH, MapCanvas::OnSelectRAWBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_GROUND_BRUSH, MapCanvas::OnSelectGroundBrush)
 EVT_MENU(MAP_POPUP_MENU_OPEN_BORDER_WORKSPACE, MapCanvas::OnOpenBorderWorkspace)
 EVT_MENU(MAP_POPUP_MENU_LEARN_BORDER_SELECTION, MapCanvas::OnLearnBorderSelection)
+EVT_MENU(MAP_POPUP_MENU_CAPTURE_AI_STYLE_REFERENCE, MapCanvas::OnCaptureAIStyleReference)
 EVT_MENU(MAP_POPUP_MENU_SAVE_TERRAIN, MapCanvas::OnSaveTerrain)
 EVT_MENU(MAP_POPUP_MENU_PROCEDURAL_GENERATOR, MapCanvas::OnProceduralMapGenerator)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOODAD_BRUSH, MapCanvas::OnSelectDoodadBrush)
@@ -2763,6 +2765,13 @@ void MapCanvas::OnLearnBorderSelection(wxCommandEvent& WXUNUSED(event)) {
 	BorderLearningWindow::Open(this, editor, GetFloor());
 }
 
+void MapCanvas::OnCaptureAIStyleReference(wxCommandEvent& WXUNUSED(event)) {
+	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
+		return;
+	}
+	ReferenceStyleWindow::CaptureAndOpen(this);
+}
+
 void MapCanvas::OnSaveTerrain(wxCommandEvent& WXUNUSED(event)) {
 	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
 		return;
@@ -3350,6 +3359,11 @@ void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 			MAP_POPUP_MENU_LEARN_BORDER_SELECTION,
 			"Learn Border from Selection...",
 			"Analyze selected terrain and collect border sprite candidates"
+		);
+		Append(
+			MAP_POPUP_MENU_CAPTURE_AI_STYLE_REFERENCE,
+			"Capture as AI Style Reference",
+			"Capture selected area visual vocabulary as an AI style reference"
 		);
 		wxMenuItem* saveTerrain = Append(
 			MAP_POPUP_MENU_SAVE_TERRAIN,

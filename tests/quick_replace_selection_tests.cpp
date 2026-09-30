@@ -9,6 +9,8 @@
 #include "map.h"
 #include "replace_tool/quick_replace_selection_model.h"
 #include "replace_tool/replace_engine.h"
+#include "reference_style.h"
+#include "reference_style_store.h"
 #include "tile.h"
 
 #include <iostream>
@@ -358,6 +360,145 @@ namespace {
 		QuickReplaceCheck(std::all_of(positions.begin(), positions.end(), [&editor](const Position& position) { return editor.map.getTile(position)->ground->getID() == 102; }), "One redo did not reapply all bulk replacements");
 		std::cout << "PASS invalid target safety and 128 replacements in one undo/redo action\n";
 	}
+
+	void ReferenceSourceTargetIsolationAndUndo() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(102, "Stone floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(200, "Source decoration");
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		const Position sourceLeft(400, 400, 7);
+		const Position sourceRight(401, 400, 7);
+		const Position targetLeft(420, 400, 7);
+		const Position targetRight(421, 400, 7);
+		Tile* sourceA = AddTile(editor.map, sourceLeft, 100);
+		Tile* sourceB = AddTile(editor.map, sourceRight, 100);
+		sourceA->addItem(Item::Create(200));
+		Tile* targetA = AddTile(editor.map, targetLeft, 100);
+		Tile* targetB = AddTile(editor.map, targetRight, 100);
+
+		// Select and capture source A. The selection is then cleared, exactly as
+		// the UI and MCP capture workflows do, before a different target is chosen.
+		editor.selection.addInternal(sourceA);
+		editor.selection.addInternal(sourceB);
+		ReferenceStyleCaptureOptions referenceOptions;
+		referenceOptions.floor = 7;
+		ReferenceStyleSnapshot reference = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, referenceOptions);
+		QuickReplaceCheck(reference.selectedTileCount == 2 && reference.sourceMask.size() == 2, "reference source capture must keep its exact source mask");
+		ReferenceStyleStore::Instance().set(reference);
+		editor.selection.clear();
+
+		// Select and explicitly capture target B; it is independent from source A.
+		editor.selection.addInternal(targetA);
+		editor.selection.addInternal(targetB);
+		TargetAreaSnapshot target = CaptureTargetAreaSnapshot(
+			editor.selection,
+			7,
+			editor.map.getSessionId(),
+			reference.workspaceGeneration
+		);
+		QuickReplaceCheck(target.positions.size() == 2 && !ReferenceSourceOverlapsTarget(reference, target), "target must be a separate non-overlapping selection");
+		ReferenceStyleStore::Instance().setTarget(target);
+		QuickReplaceCheck(!ValidateReferenceTargetWrite(&reference, &target, editor.map.getSessionId(), reference.workspaceGeneration, target.positions).has_value(), "target write must validate");
+		QuickReplaceCheck(ValidateReferenceTargetWrite(&reference, &target, editor.map.getSessionId(), reference.workspaceGeneration, { sourceLeft }).has_value(), "source position must not validate as a target write");
+
+		ReplacementRule rule;
+		rule.sourceServerId = ServerItemId(100);
+		rule.targets.push_back(ReplacementTarget::ForItem(ServerItemId(102), 100));
+		ReplaceExecutionOptions options;
+		options.dryRun = false;
+		options.includeContainerContents = false;
+		options.matchFilter = [](const Tile& tile, const Item& item) { return ClassifyPlacedItem(tile, item) == QuickReplaceCategory::Ground; };
+		const ReplaceExecutionResult result = ReplaceEngine::Run(editor, { targetA, targetB }, { rule }, options);
+		QuickReplaceCheck(result.committed && result.replacements == 2, "generation fixture must edit only target B");
+		QuickReplaceCheck(editor.map.getTile(sourceLeft)->ground->getID() == 100 && editor.map.getTile(sourceRight)->ground->getID() == 100 && HasItem(*editor.map.getTile(sourceLeft), 200), "reference source tiles must remain logically unchanged");
+		QuickReplaceCheck(editor.map.getTile(targetLeft)->ground->getID() == 102 && editor.map.getTile(targetRight)->ground->getID() == 102, "target tiles must receive the generated edit");
+		QuickReplaceCheck(editor.actionQueue->undo(), "target operation undo failed");
+		QuickReplaceCheck(editor.map.getTile(targetLeft)->ground->getID() == 100 && editor.map.getTile(targetRight)->ground->getID() == 100, "undo must restore only target B");
+		QuickReplaceCheck(editor.map.getTile(sourceLeft)->ground->getID() == 100 && editor.map.getTile(sourceRight)->ground->getID() == 100 && HasItem(*editor.map.getTile(sourceLeft), 200), "undo must leave reference source unchanged");
+
+		ReferenceStyleStore::Instance().clear();
+		std::cout << "PASS reference source/target isolation and target-only undo\n";
+	}
+
+	void ReferenceAutoFloorTieUsesLowestFloor() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		Tile* higherFloor = AddTile(editor.map, Position(500, 500, 7), 100);
+		Tile* lowerFloor = AddTile(editor.map, Position(500, 500, 6), 100);
+		editor.selection.addInternal(higherFloor);
+		editor.selection.addInternal(lowerFloor);
+
+		ReferenceStyleCaptureOptions options;
+		options.floor = -1;
+		const ReferenceStyleSnapshot snapshot = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(snapshot.floor == 6 && snapshot.selectedTileCount == 1 && snapshot.sourceMask.size() == 1 && snapshot.sourceMask.front() == Position(500, 500, 6), "automatic reference capture must choose the lowest floor on a tie");
+		std::cout << "PASS deterministic floor choice for tied reference selections\n";
+	}
+
+	void ReferenceCaptureFrozenAndBounded() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(102, "Stone floor").group = ITEM_GROUP_GROUND;
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		Tile* first = AddTile(editor.map, Position(600, 600, 7), 100);
+		Tile* distant = AddTile(editor.map, Position(900, 900, 7), 100);
+		editor.selection.addInternal(first);
+		ReferenceStyleCaptureOptions options;
+		options.floor = 7;
+		const ReferenceStyleSnapshot frozen = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(frozen.selectedTileCount == 1 && frozen.renderCells.size() == 1 && frozen.renderCells.front().clientIds == std::vector<uint16_t> { 1100 }, "reference render must store source draw IDs by value");
+		first->ground->setID(102);
+		QuickReplaceCheck(frozen.renderCells.front().clientIds == std::vector<uint16_t> { 1100 }, "editing source must not change frozen reference render data");
+		editor.selection.addInternal(distant);
+		const ReferenceStyleSnapshot rejected = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(rejected.selectedTileCount == 0 && !rejected.captureError.empty(), "sparse wide selection must reject before allocating a bounding grid");
+		std::cout << "PASS frozen reference rendering and bounded sparse selection\n";
+	}
+
+	void ReferenceIrregularPerimeterAndMetadata() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(200, "Stone wall").isWall = true;
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		Tile* innerEdge = nullptr;
+		for (int y = 0; y < 5; ++y) {
+			for (int x = 0; x < 5; ++x) {
+				if (x == 2 && y == 2) {
+					continue;
+				}
+				Tile* tile = AddTile(editor.map, Position(700 + x, 700 + y, 7), 100);
+				editor.selection.addInternal(tile);
+				if (x == 2 && y == 1) {
+					innerEdge = tile;
+				}
+			}
+		}
+		QuickReplaceCheck(innerEdge != nullptr, "irregular fixture is missing its inner edge");
+		innerEdge->addItem(Item::Create(200));
+		innerEdge->house_id = 42;
+		innerEdge->zones.insert(9);
+		auto waypoint = std::make_unique<Waypoint>();
+		waypoint->name = "reference-point";
+		waypoint->pos = innerEdge->getPosition();
+		QuickReplaceCheck(editor.map.waypoints.addWaypoint(std::move(waypoint)), "reference waypoint fixture failed");
+
+		ReferenceStyleCaptureOptions options;
+		options.floor = 7;
+		const ReferenceStyleSnapshot snapshot = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(snapshot.selectedTileCount == 24 && snapshot.layout.perimeterWallRatio == 0.05, "perimeter must include the exact mask's inner hole edges");
+		QuickReplaceCheck(snapshot.gameplay.houses == 1 && snapshot.gameplay.zones == 1 && snapshot.gameplay.waypoints == 1, "captured gameplay metadata must not report fake zero counts");
+		std::cout << "PASS irregular reference perimeter and protected metadata counts\n";
+	}
 }
 
 void RunQuickReplaceSelectionTests() {
@@ -367,4 +508,8 @@ void RunQuickReplaceSelectionTests() {
 	RemoveSelectedCategoryIsAtomic();
 	CompleteDoodadBrushIsAtomic();
 	BulkUndoAndInvalidTargetSafety();
+	ReferenceSourceTargetIsolationAndUndo();
+	ReferenceAutoFloorTieUsesLowestFloor();
+	ReferenceCaptureFrozenAndBounded();
+	ReferenceIrregularPerimeterAndMetadata();
 }

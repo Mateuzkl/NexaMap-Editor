@@ -305,6 +305,12 @@
     <ClCompile Include="..\..\source\materials_workbench_window.cpp">
       <IncludeInUnityFile>false</IncludeInUnityFile>
     </ClCompile>
+    <ClInclude Include="..\..\source\reference_style.h" />
+    <ClCompile Include="..\..\source\reference_style.cpp" />
+    <ClInclude Include="..\..\source\reference_style_store.h" />
+    <ClCompile Include="..\..\source\reference_style_store.cpp" />
+    <ClInclude Include="..\..\source\reference_style_window.h" />
+    <ClCompile Include="..\..\source\reference_style_window.cpp" />
     <ClInclude Include="..\..\source\map_item_id_converter_window.h" />
     <ClCompile Include="..\..\source\map_item_id_converter_window.cpp" />
     <ClInclude Include="..\..\source\map_item_id_converter.h" />
@@ -481,6 +487,7 @@
     <ClInclude Include="..\..\source\mcp\mcp_tools_import_export.h" />
     <ClInclude Include="..\..\source\mcp\mcp_tools_map.h" />
     <ClInclude Include="..\..\source\mcp\mcp_tools_orientation.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_reference.h" />
     <ClInclude Include="..\..\source\mcp\mcp_tools_render.h" />
     <ClInclude Include="..\..\source\mcp\mcp_tools_region.h" />
     <ClInclude Include="..\..\source\mcp\mcp_tools_search.h" />
@@ -559,6 +566,10 @@
       <IncludeInUnityFile>false</IncludeInUnityFile>
     </ClCompile>
     <ClCompile Include="..\..\source\mcp\mcp_tools_orientation.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_reference.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <IncludeInUnityFile>false</IncludeInUnityFile>
     </ClCompile>

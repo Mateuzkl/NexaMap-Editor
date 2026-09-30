@@ -7,6 +7,7 @@
 #include "../action.h"
 #include "../brush.h"
 #include "../complexitem.h"
+#include "../doodad_brush.h"
 #include "../editor.h"
 #include "../gui.h"
 #include "../item.h"
@@ -69,6 +70,43 @@ namespace mcp {
 			std::sort(positions.begin(), positions.end());
 			positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
 			return positions;
+		}
+
+		std::vector<Position> DoodadAffectedPositions(const PositionVector& anchors, const DoodadBrush& brush, bool erase) {
+			if (erase) {
+				return { anchors.begin(), anchors.end() };
+			}
+
+			BaseMap* bufferMap = g_gui.doodad_buffer_map.get();
+			if (!bufferMap) {
+				throw Error("doodad preview buffer is unavailable");
+			}
+
+			std::vector<Position> affected;
+			for (const Position& anchor : anchors) {
+				const Position delta = anchor - Position(0x8000, 0x8000, 0x8);
+				for (MapIterator iterator = bufferMap->begin(); iterator != bufferMap->end(); ++iterator) {
+					Tile* bufferTile = (*iterator)->get();
+					const Position placed = bufferTile->getPosition() + delta;
+					if (!placed.isValid()) {
+						continue;
+					}
+					affected.push_back(placed);
+					if (brush.doNewBorders()) {
+						for (int dy = -1; dy <= 1; ++dy) {
+							for (int dx = -1; dx <= 1; ++dx) {
+								const Position border(placed.x + dx, placed.y + dy, placed.z);
+								if (border.isValid()) {
+									affected.push_back(border);
+								}
+							}
+						}
+					}
+				}
+			}
+			std::sort(affected.begin(), affected.end());
+			affected.erase(std::unique(affected.begin(), affected.end()), affected.end());
+			return affected;
 		}
 
 		Item* CreateItemFromSpec(const Json& specification, size_t depth = 0) {
@@ -154,6 +192,7 @@ namespace mcp {
 										{ "alt", { { "type", "boolean" }, { "default", false } } },
 										{ "autoborder", { { "type", "boolean" }, { "default", true } } },
 										{ "allowExpansion", { { "type", "boolean" }, { "default", false } } },
+										{ "allowReferenceSourceOverwrite", { { "type", "boolean" }, { "default", false } } },
 										{ "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } },
 										{ "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } },
 									} },
@@ -171,8 +210,10 @@ namespace mcp {
 					const bool alt = arguments.value("alt", false);
 					const bool autoborder = arguments.value("autoborder", true);
 					const bool allowExpansion = arguments.value("allowExpansion", false);
+					const bool allowReferenceSourceOverwrite = arguments.value("allowReferenceSourceOverwrite", false);
 					return StructuredResult(OnGui([=](const EditorContext& context) {
 						VerifyWritableContext(context, arguments);
+						EnforceReferenceTargetBoundary(context, positions, allowReferenceSourceOverwrite);
 						EnforceSelectionBoundary(context, positions, allowExpansion);
 						Brush* brush = FindBrush(brushName);
 						for (const Position& position : positions) {
@@ -185,6 +226,7 @@ namespace mcp {
 						bool applied = true;
 						if (brush->isDoodad()) {
 							PositionVector drawPositions(positions.begin(), positions.end());
+							EnforceReferenceTargetBoundary(context, DoodadAffectedPositions(drawPositions, *brush->asDoodad(), erase), allowReferenceSourceOverwrite);
 							applied = context.editor.applyDoodadPositions(drawPositions, alt, !erase, ACTION_MCP);
 						} else {
 							PositionVector drawPositions(positions.begin(), positions.end());
@@ -209,6 +251,7 @@ namespace mcp {
 									}
 								}
 							}
+							EnforceReferenceTargetBoundary(context, borderPositions.empty() ? positions : std::vector<Position>(borderPositions.begin(), borderPositions.end()), allowReferenceSourceOverwrite);
 							if (erase) {
 								context.editor.undraw(drawPositions, borderPositions, alt);
 							} else {
@@ -231,6 +274,7 @@ namespace mcp {
 										{ "tiles", { { "type", "array" }, { "minItems", 1 }, { "maxItems", 4096 }, { "items", { { "type", "object" } } } } },
 										{ "preserveProtected", { { "type", "boolean" }, { "default", true } } },
 										{ "allowExpansion", { { "type", "boolean" }, { "default", false } } },
+										{ "allowReferenceSourceOverwrite", { { "type", "boolean" }, { "default", false } } },
 										{ "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } },
 										{ "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } },
 									} },
@@ -244,7 +288,8 @@ namespace mcp {
 					}
 					const bool preserveProtected = arguments.value("preserveProtected", true);
 					const bool allowExpansion = arguments.value("allowExpansion", false);
-					return StructuredResult(OnGui([arguments, preserveProtected, allowExpansion](const EditorContext& context) {
+					const bool allowReferenceSourceOverwrite = arguments.value("allowReferenceSourceOverwrite", false);
+					return StructuredResult(OnGui([arguments, preserveProtected, allowExpansion, allowReferenceSourceOverwrite](const EditorContext& context) {
 						VerifyWritableContext(context, arguments);
 						std::vector<Position> positions;
 						positions.reserve(arguments["tiles"].size());
@@ -254,6 +299,7 @@ namespace mcp {
 							}
 							positions.push_back(ParsePosition(edit["position"]));
 						}
+						EnforceReferenceTargetBoundary(context, positions, allowReferenceSourceOverwrite);
 						EnforceSelectionBoundary(context, positions, allowExpansion);
 						std::set<Position> editedPositions;
 						std::vector<const Tile*> originalTiles;

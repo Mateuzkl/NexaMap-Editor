@@ -308,6 +308,19 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME border_learning_tests COMMAND border_learning_tests)
 
+	add_executable(reference_style_tests
+		tests/reference_style_tests.cpp
+		source/reference_style_store.cpp
+	)
+	target_include_directories(reference_style_tests PRIVATE source)
+	set_target_properties(reference_style_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/reference_style_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/reference_style_tests"
+	)
+	add_test(NAME reference_style_tests COMMAND reference_style_tests)
+
 	add_executable(minimap_import_tests
 		tests/minimap_import_tests.cpp
 		source/minimap_import.cpp
