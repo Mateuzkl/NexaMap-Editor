@@ -50,7 +50,7 @@ namespace {
 		int bestFloor = 7;
 		size_t bestCount = 0;
 		for (const auto& [floor, count] : floorCounts) {
-			if (count > bestCount) {
+			if (count > bestCount || (count == bestCount && floor < bestFloor)) {
 				bestCount = count;
 				bestFloor = floor;
 			}

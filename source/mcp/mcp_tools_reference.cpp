@@ -511,13 +511,13 @@ namespace mcp {
 					const std::string detail = arguments.value("detail", std::string("summary"));
 
 					return OnGui([detail](const EditorContext& context) {
-						const ReferenceStyleSnapshot* snapshotPtr = ReferenceStyleStore::Instance().get();
-						if (!snapshotPtr) {
+						const std::optional<ReferenceStyleSnapshot> snapshotCopy = ReferenceStyleStore::Instance().getSnapshot();
+						if (!snapshotCopy) {
 							throw Error("No AI style reference has been captured. Select a reference room in NexaMap and call reference_capture first.");
 						}
 
-						CheckReferenceCompatibility(*snapshotPtr, context);
-						const ReferenceStyleSnapshot& snapshot = *snapshotPtr;
+						CheckReferenceCompatibility(*snapshotCopy, context);
+						const ReferenceStyleSnapshot& snapshot = *snapshotCopy;
 
 						if (detail == "materials") {
 							return FormatMaterials(snapshot);
@@ -582,13 +582,13 @@ namespace mcp {
 					const bool dimUnselected = arguments.value("dimUnselected", true);
 
 					return OnGui([maxSize, tileSize, dimUnselected](const EditorContext& context) mutable {
-						const ReferenceStyleSnapshot* snapshotPtr = ReferenceStyleStore::Instance().get();
-						if (!snapshotPtr) {
+						const std::optional<ReferenceStyleSnapshot> snapshotCopy = ReferenceStyleStore::Instance().getSnapshot();
+						if (!snapshotCopy) {
 							throw Error("No AI style reference has been captured. Call reference_capture first.");
 						}
 
-						CheckReferenceCompatibility(*snapshotPtr, context);
-						const ReferenceStyleSnapshot& snapshot = *snapshotPtr;
+						CheckReferenceCompatibility(*snapshotCopy, context);
+						const ReferenceStyleSnapshot& snapshot = *snapshotCopy;
 
 						const int width = snapshot.sourceMax.x - snapshot.sourceMin.x + 1;
 						const int height = snapshot.sourceMax.y - snapshot.sourceMin.y + 1;
@@ -646,7 +646,7 @@ namespace mcp {
 										  "4. Use brush_apply or tile_edit ONLY inside target_get exactPositions. These tools reject a missing, stale, or overlapping target by default.",
 										  "5. Render only the target with map_render_region.",
 										  "6. Run border_check, path_check, and map_validate for the target, then fix the reported issues inside the same target.",
-								  }) },
+									  }) },
 						{ "rules", Json::array({
 									   "reference_get/reference_render are SOURCE STYLE ONLY; target_get is the ONLY writable destination.",
 									   "Never use reference source bounds or sourceMask as the generation destination.",
@@ -679,13 +679,13 @@ namespace mcp {
 					const Region region = ParseRegion(arguments, 16384);
 
 					return OnGui([region](const EditorContext& context) {
-						const ReferenceStyleSnapshot* snapshotPtr = ReferenceStyleStore::Instance().get();
-						if (!snapshotPtr) {
+						const std::optional<ReferenceStyleSnapshot> snapshotCopy = ReferenceStyleStore::Instance().getSnapshot();
+						if (!snapshotCopy) {
 							throw Error("No AI style reference has been captured. Call reference_capture first.");
 						}
 
-						CheckReferenceCompatibility(*snapshotPtr, context);
-						const ReferenceStyleSnapshot& ref = *snapshotPtr;
+						CheckReferenceCompatibility(*snapshotCopy, context);
+						const ReferenceStyleSnapshot& ref = *snapshotCopy;
 
 						// Collect target region brushes.
 						std::unordered_set<std::string> refGrounds;

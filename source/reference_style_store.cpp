@@ -5,13 +5,13 @@
 
 namespace {
 
-bool BoundsOverlap(const Position& firstMin, const Position& firstMax, const Position& secondMin, const Position& secondMax) {
-	return firstMin.x <= secondMax.x && firstMax.x >= secondMin.x && firstMin.y <= secondMax.y && firstMax.y >= secondMin.y;
-}
+	bool BoundsOverlap(const Position& firstMin, const Position& firstMax, const Position& secondMin, const Position& secondMax) {
+		return firstMin.x <= secondMax.x && firstMax.x >= secondMin.x && firstMin.y <= secondMax.y && firstMax.y >= secondMin.y;
+	}
 
-bool HasExactPosition(const std::vector<Position>& positions, const Position& position) {
-	return std::binary_search(positions.begin(), positions.end(), position);
-}
+	bool HasExactPosition(const std::vector<Position>& positions, const Position& position) {
+		return std::binary_search(positions.begin(), positions.end(), position);
+	}
 
 } // namespace
 
@@ -36,11 +36,6 @@ void ReferenceStyleStore::clear() {
 bool ReferenceStyleStore::hasReference() const noexcept {
 	std::lock_guard lock(mutex_);
 	return currentSnapshot_.has_value();
-}
-
-const ReferenceStyleSnapshot* ReferenceStyleStore::get() const noexcept {
-	std::lock_guard lock(mutex_);
-	return currentSnapshot_.has_value() ? &*currentSnapshot_ : nullptr;
 }
 
 std::optional<ReferenceStyleSnapshot> ReferenceStyleStore::getSnapshot() const {

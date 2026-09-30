@@ -130,11 +130,11 @@ namespace {
 	}
 
 	constexpr const char* ExamplePromptTemplate = "Use reference_get and reference_render as SOURCE STYLE ONLY.\n\n"
-											  "Call target_get and create the room only inside its exact target positions.\n"
-											  "Never write in the reference source bounds or source mask.\n\n"
-											  "Match the reference floors, walls, borders, and decoration density without copying protected metadata.\n"
-											  "Use only loaded NexaMap resources.\n\n"
-											  "Render and validate the target, then fix any border or path problems inside the target.";
+												  "Call target_get and create the room only inside its exact target positions.\n"
+												  "Never write in the reference source bounds or source mask.\n\n"
+												  "Match the reference floors, walls, borders, and decoration density without copying protected metadata.\n"
+												  "Use only loaded NexaMap resources.\n\n"
+												  "Render and validate the target, then fix any border or path problems inside the target.";
 
 } // namespace
 
@@ -262,7 +262,7 @@ void ReferenceStyleWindow::BindEvents() {
 }
 
 void ReferenceStyleWindow::RefreshView() {
-	const ReferenceStyleSnapshot* snapshot = ReferenceStyleStore::Instance().get();
+	const std::optional<ReferenceStyleSnapshot> snapshot = ReferenceStyleStore::Instance().getSnapshot();
 	if (!snapshot) {
 		thumbnailBitmap_->SetBitmap(CreateEmptyThumbnail());
 		statusLabel_->SetLabel("Reference Source: Not selected");

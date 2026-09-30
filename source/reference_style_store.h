@@ -18,7 +18,7 @@ public:
 	void set(ReferenceStyleSnapshot snapshot);
 	void clear();
 	[[nodiscard]] bool hasReference() const noexcept;
-	[[nodiscard]] const ReferenceStyleSnapshot* get() const noexcept;
+	/// Return an owned copy so callers can safely read it after the lock ends.
 	[[nodiscard]] std::optional<ReferenceStyleSnapshot> getSnapshot() const;
 
 	void setTarget(TargetAreaSnapshot snapshot);

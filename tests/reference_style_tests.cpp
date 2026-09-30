@@ -28,7 +28,7 @@ namespace {
 		auto& store = ReferenceStyleStore::Instance();
 		store.clear();
 		require(!store.hasReference(), "cleared store must not have reference");
-		require(store.get() == nullptr, "cleared store must return nullptr");
+		require(!store.getSnapshot().has_value(), "cleared store must return no snapshot");
 
 		ReferenceStyleSnapshot snapshot;
 		snapshot.version = 1;
@@ -65,8 +65,8 @@ namespace {
 
 		store.set(snapshot);
 		require(store.hasReference(), "store must have reference after set");
-		const auto* retrieved = store.get();
-		require(retrieved != nullptr, "get() must return valid snapshot");
+		const std::optional<ReferenceStyleSnapshot> retrieved = store.getSnapshot();
+		require(retrieved.has_value(), "getSnapshot() must return a snapshot copy");
 		require(retrieved->selectedTileCount == 480, "tile count must match");
 		require(retrieved->items.size() == 1, "items count must match");
 		require(retrieved->brushes.size() == 1, "brushes count must match");
@@ -87,11 +87,13 @@ namespace {
 		// Swap back.
 		store.swapWith(sessionBStorage);
 		require(store.hasReference(), "store must have restored reference");
-		require(store.get()->selectedTileCount == 480, "restored snapshot must match");
+		const std::optional<ReferenceStyleSnapshot> ownedCopy = store.getSnapshot();
+		require(ownedCopy && ownedCopy->selectedTileCount == 480, "restored snapshot must match");
 
-		// Clear.
+		// A reader owns its copy even after another caller clears the store.
 		store.clear();
 		require(!store.hasReference(), "must be cleared");
+		require(ownedCopy->selectedTileCount == 480 && ownedCopy->items[0].name == "Earth", "clearing the store must not invalidate an earlier read");
 	}
 
 	void TestValueSnapshotImmutability() {
@@ -125,8 +127,8 @@ namespace {
 		original.topologyGrid = "XXXXX";
 
 		// Check store snapshot is immutable.
-		const auto* inStore = store.get();
-		require(inStore != nullptr, "snapshot in store must exist");
+		const std::optional<ReferenceStyleSnapshot> inStore = store.getSnapshot();
+		require(inStore.has_value(), "snapshot in store must exist");
 		require(inStore->selectedTileCount == 10, "inStore count must remain 10");
 		require(inStore->cells.size() == 1, "inStore cells must remain 1");
 		require(inStore->cells[0].wall == true, "inStore cell must remain wall");

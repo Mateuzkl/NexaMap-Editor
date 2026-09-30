@@ -422,6 +422,24 @@ namespace {
 		ReferenceStyleStore::Instance().clear();
 		std::cout << "PASS reference source/target isolation and target-only undo\n";
 	}
+
+	void ReferenceAutoFloorTieUsesLowestFloor() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		Tile* higherFloor = AddTile(editor.map, Position(500, 500, 7), 100);
+		Tile* lowerFloor = AddTile(editor.map, Position(500, 500, 6), 100);
+		editor.selection.addInternal(higherFloor);
+		editor.selection.addInternal(lowerFloor);
+
+		ReferenceStyleCaptureOptions options;
+		options.floor = -1;
+		const ReferenceStyleSnapshot snapshot = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(snapshot.floor == 6 && snapshot.selectedTileCount == 1 && snapshot.sourceMask.size() == 1 && snapshot.sourceMask.front() == Position(500, 500, 6), "automatic reference capture must choose the lowest floor on a tie");
+		std::cout << "PASS deterministic floor choice for tied reference selections\n";
+	}
 }
 
 void RunQuickReplaceSelectionTests() {
@@ -432,4 +450,5 @@ void RunQuickReplaceSelectionTests() {
 	CompleteDoodadBrushIsAtomic();
 	BulkUndoAndInvalidTargetSafety();
 	ReferenceSourceTargetIsolationAndUndo();
+	ReferenceAutoFloorTieUsesLowestFloor();
 }
