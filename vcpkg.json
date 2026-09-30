@@ -10,6 +10,7 @@
 		"glad",
 		"opengl",
 		"protobuf",
-		"liblzma"
+		"liblzma",
+		"lua"
 	]
 }

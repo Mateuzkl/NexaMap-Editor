@@ -67,6 +67,7 @@
 		<item name="Release My Locks" action="MULTIPLAYER_UNLOCK" help="Release your tile and area locks."/>
 	</menu>
 	<menu name="Tools">
+		<item name="Lua Extensions..." action="LUA_EXTENSIONS" help="Discover and preview sandboxed Lua generators; apply within the selected target with Undo."/>
 		<item name="Command Palette..." action="COMMAND_PALETTE" hotkey="Ctrl+Shift+P" help="Search and execute NexaMap commands."/>
 		<item name="MCP Server..." action="MCP_SERVER" help="Connect AI clients to the active NexaMap workspace through a loopback-only MCP server."/>
 		<separator/>
