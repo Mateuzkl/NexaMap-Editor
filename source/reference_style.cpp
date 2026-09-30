@@ -31,8 +31,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <set>
 #include <sstream>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -58,18 +60,42 @@ namespace {
 		return bestFloor;
 	}
 
-	std::string BrushKindFromItem(const Tile& tile, const Item& item) {
+	Brush* ResolveBrush(const Tile& tile, const Item& item) {
 		if (tile.ground == &item) {
-			GroundBrush* gb = item.getGroundBrush();
-			if (gb) {
-				return "ground";
+			if (GroundBrush* brush = item.getGroundBrush()) {
+				return brush;
 			}
 		}
-		if (item.getWallBrush()) {
-			return "wall";
+		if (DoorBrush* db = item.getDoorBrush()) {
+			return db;
+		}
+		if (WallBrush* wb = item.getWallBrush()) {
+			return wb;
+		}
+		if (CarpetBrush* cb = item.getCarpetBrush()) {
+			return cb;
+		}
+		if (TableBrush* tb = item.getTableBrush()) {
+			return tb;
+		}
+		if (Brush* doodad = item.getDoodadBrush()) {
+			return doodad;
+		}
+		if (RAWBrush* raw = item.getRAWBrush()) {
+			return raw;
+		}
+		return nullptr;
+	}
+
+	std::string BrushKindFromItem(const Tile& tile, const Item& item) {
+		if (tile.ground == &item && item.getGroundBrush()) {
+			return "ground";
 		}
 		if (item.getDoorBrush()) {
 			return "door";
+		}
+		if (item.getWallBrush()) {
+			return "wall";
 		}
 		if (item.getCarpetBrush()) {
 			return "carpet";
@@ -80,38 +106,12 @@ namespace {
 		if (item.getDoodadBrush()) {
 			return "doodad";
 		}
-		if (item.getRAWBrush()) {
-			return "raw";
-		}
-		return "";
+		return item.getRAWBrush() ? "raw" : "";
 	}
 
 	std::string BrushNameFromItem(const Tile& tile, const Item& item) {
-		if (tile.ground == &item) {
-			GroundBrush* gb = item.getGroundBrush();
-			if (gb) {
-				return gb->getName();
-			}
-		}
-		if (WallBrush* wb = item.getWallBrush()) {
-			return wb->getName();
-		}
-		if (DoorBrush* db = item.getDoorBrush()) {
-			return db->getName();
-		}
-		if (CarpetBrush* cb = item.getCarpetBrush()) {
-			return cb->getName();
-		}
-		if (TableBrush* tb = item.getTableBrush()) {
-			return tb->getName();
-		}
-		if (Brush* doodad = item.getDoodadBrush()) {
-			return doodad->getName();
-		}
-		if (RAWBrush* raw = item.getRAWBrush()) {
-			return raw->getName();
-		}
-		return "";
+		Brush* brush = ResolveBrush(tile, item);
+		return brush ? brush->getName() : "";
 	}
 
 	double SafeRatio(size_t numerator, size_t denominator) {
@@ -123,8 +123,8 @@ namespace {
 		return std::round(value * factor) / factor;
 	}
 
-	bool IsPerimeterCell(int localX, int localY, int width, int height) {
-		return localX == 0 || localY == 0 || localX == width - 1 || localY == height - 1;
+	bool IsPerimeterCell(const Position& position, const std::set<Position>& selectedPositions) {
+		return !selectedPositions.contains(Position(position.x - 1, position.y, position.z)) || !selectedPositions.contains(Position(position.x + 1, position.y, position.z)) || !selectedPositions.contains(Position(position.x, position.y - 1, position.z)) || !selectedPositions.contains(Position(position.x, position.y + 1, position.z));
 	}
 
 	char TopologyChar(const ReferenceTileCell& cell) {
@@ -181,8 +181,15 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 		}
 	}
 
-	if (floorTiles.empty() || floorTiles.size() > options.maxTiles) {
-		return {};
+	if (floorTiles.empty()) {
+		ReferenceStyleSnapshot rejected;
+		rejected.captureError = "The selection has no tiles on the requested floor.";
+		return rejected;
+	}
+	if (floorTiles.size() > options.maxTiles) {
+		ReferenceStyleSnapshot rejected;
+		rejected.captureError = "The reference selection exceeds the maximum selected tile count.";
+		return rejected;
 	}
 
 	// Sort by position for deterministic output.
@@ -207,6 +214,23 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 		if (p.y > maxPos.y) {
 			maxPos.y = p.y;
 		}
+	}
+
+	const int64_t spanWidth = static_cast<int64_t>(maxPos.x) - minPos.x + 1;
+	const int64_t spanHeight = static_cast<int64_t>(maxPos.y) - minPos.y + 1;
+	if (spanWidth <= 0 || spanHeight <= 0 || spanWidth > static_cast<int64_t>(options.maxWidth) || spanHeight > static_cast<int64_t>(options.maxHeight) || spanWidth * spanHeight > static_cast<int64_t>(options.maxBoundingArea)) {
+		ReferenceStyleSnapshot rejected;
+		rejected.captureError = "The reference bounds are too large or sparse. Select an area within 256 x 256 tiles.";
+		return rejected;
+	}
+	size_t observedItems = 0;
+	for (const Tile* tile : floorTiles) {
+		if (tile->items.size() > options.maxObservedItems - observedItems) {
+			ReferenceStyleSnapshot rejected;
+			rejected.captureError = "The reference contains too many stacked items to capture safely.";
+			return rejected;
+		}
+		observedItems += tile->items.size();
 	}
 
 	ReferenceStyleSnapshot snapshot;
@@ -237,8 +261,8 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 		snapshot.sourceMapSessionId = fullMap->getSessionId();
 	}
 
-	const int gridWidth = maxPos.x - minPos.x + 1;
-	const int gridHeight = maxPos.y - minPos.y + 1;
+	const int gridWidth = static_cast<int>(spanWidth);
+	const int gridHeight = static_cast<int>(spanHeight);
 
 	// Build selected position set for topology.
 	std::set<Position> selectedPositions;
@@ -248,6 +272,7 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 
 	// ── 1. Per-cell topology ──────────────────────────────────────
 	snapshot.cells.reserve(floorTiles.size());
+	snapshot.renderCells.reserve(floorTiles.size());
 	size_t mappedCount = 0;
 	size_t walkableCount = 0;
 	size_t blockingCount = 0;
@@ -268,16 +293,28 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 
 	// Gameplay summary counters.
 	ReferenceGameplaySummary& gameplay = snapshot.gameplay;
+	std::set<uint32_t> houseIds;
+	std::set<unsigned int> zoneIds;
+	std::unordered_map<uint32_t, std::pair<std::string, std::string>> observedBrushes;
+	const auto recordBrush = [&](const Tile& tile, const Item& item, QuickReplaceCategory category) {
+		const uint32_t key = (static_cast<uint32_t>(item.getID()) << 8) | static_cast<uint8_t>(category);
+		observedBrushes.try_emplace(key, BrushNameFromItem(tile, item), BrushKindFromItem(tile, item));
+	};
 
 	for (const Tile* tile : floorTiles) {
 		const Position& pos = tile->getPosition();
 		ReferenceTileCell cell;
-		cell.localX = static_cast<int16_t>(pos.x - minPos.x);
-		cell.localY = static_cast<int16_t>(pos.y - minPos.y);
+		cell.localX = pos.x - minPos.x;
+		cell.localY = pos.y - minPos.y;
 		cell.localZ = 0;
+		ReferenceRenderCell renderCell;
+		renderCell.localX = cell.localX;
+		renderCell.localY = cell.localY;
 
 		const bool hasGround = tile->ground != nullptr && tile->ground->getID() != 0;
-		const bool hasItems = !tile->items.empty();
+		const bool hasItems = std::any_of(tile->items.begin(), tile->items.end(), [](const Item* item) {
+			return item && item->getID() != 0 && !item->isMetaItem();
+		});
 		cell.mapped = hasGround || hasItems;
 		if (cell.mapped) {
 			++mappedCount;
@@ -285,7 +322,13 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 
 		if (hasGround) {
 			++groundCount;
+			renderCell.clientIds.push_back(tile->ground->getClientID());
+			recordBrush(*tile, *tile->ground, QuickReplaceCategory::Ground);
 		}
+		if (tile->getHouseID() != 0) {
+			houseIds.insert(tile->getHouseID());
+		}
+		zoneIds.insert(tile->zones.begin(), tile->zones.end());
 
 		// Scan items for type flags.
 		bool tileHasWall = false;
@@ -298,8 +341,10 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 				continue;
 			}
 			++totalVisibleItems;
+			renderCell.clientIds.push_back(item->getClientID());
 
 			const QuickReplaceCategory cat = ClassifyPlacedItem(*tile, *item);
+			recordBrush(*tile, *item, cat);
 			switch (cat) {
 				case QuickReplaceCategory::Border:
 					++borderItemCount;
@@ -362,7 +407,7 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 		}
 
 		// Perimeter tracking.
-		const bool isPerimeter = IsPerimeterCell(cell.localX, cell.localY, gridWidth, gridHeight);
+		const bool isPerimeter = IsPerimeterCell(pos, selectedPositions);
 		if (isPerimeter) {
 			++perimeterTiles;
 			if (tileHasWall) {
@@ -376,6 +421,16 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 		}
 
 		snapshot.cells.push_back(cell);
+		snapshot.renderCells.push_back(std::move(renderCell));
+	}
+	gameplay.houses = houseIds.size();
+	gameplay.zones = zoneIds.size();
+	if (fullMap) {
+		for (const auto& [name, waypoint] : fullMap->waypoints) {
+			if (waypoint && selectedPositions.contains(waypoint->pos)) {
+				++gameplay.waypoints;
+			}
+		}
 	}
 
 	snapshot.mappedTileCount = mappedCount;
@@ -416,25 +471,10 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 				usage.clientId = type.clientID;
 			}
 
-			// Look up brush relationship on a representative tile.
-			for (const Tile* tile : floorTiles) {
-				if (tile->ground && tile->ground->getID() == candidate.mapItemId) {
-					usage.brush = BrushNameFromItem(*tile, *tile->ground);
-					usage.brushKind = BrushKindFromItem(*tile, *tile->ground);
-					break;
-				}
-				bool found = false;
-				for (const Item* item : tile->items) {
-					if (item && item->getID() == candidate.mapItemId) {
-						usage.brush = BrushNameFromItem(*tile, *item);
-						usage.brushKind = BrushKindFromItem(*tile, *item);
-						found = true;
-						break;
-					}
-				}
-				if (found) {
-					break;
-				}
+			const uint32_t key = (static_cast<uint32_t>(candidate.mapItemId) << 8) | static_cast<uint8_t>(candidate.category);
+			if (const auto it = observedBrushes.find(key); it != observedBrushes.end()) {
+				usage.brush = it->second.first;
+				usage.brushKind = it->second.second;
 			}
 
 			usage.sourceVerified = true;
@@ -456,31 +496,24 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 
 		for (const Tile* tile : floorTiles) {
 			const auto addBrush = [&](const Tile& t, const Item& item) {
-				const std::string brushName = BrushNameFromItem(t, item);
-				if (brushName.empty()) {
+				Brush* brush = ResolveBrush(t, item);
+				if (!brush) {
 					return;
 				}
-				auto& accum = brushMap[brushName];
+				const std::string brushName = brush->getName();
+				const std::string kind = BrushKindFromItem(t, item);
+				const std::string key = kind + '\0' + brushName;
+				auto& accum = brushMap[key];
 				if (accum.kind.empty()) {
-					accum.kind = BrushKindFromItem(t, item);
-					Brush* brush = item.getBrush();
-					if (!brush) {
-						brush = item.getDoodadBrush();
+					accum.kind = kind;
+					accum.lookId = brush->getLookID();
+					accum.hasVariations = brush->getMaxVariation() > 1;
+					if (GroundBrush* gb = dynamic_cast<GroundBrush*>(brush)) {
+						accum.needBorders = gb->hasOuterBorder() || gb->hasInnerBorder() || gb->hasOptionalBorder();
 					}
-					if (!brush) {
-						brush = item.getRAWBrush();
-					}
-					if (brush) {
-						accum.lookId = brush->getLookID();
-						if (GroundBrush* gb = dynamic_cast<GroundBrush*>(brush)) {
-							accum.needBorders = gb->hasOuterBorder() || gb->hasInnerBorder() || gb->hasOptionalBorder();
-							accum.hasVariations = true;
-						}
-						// Collect tilesets that contain this brush.
-						for (const auto& [tsName, ts] : g_materials.tilesets) {
-							if (ts && ts->containsBrush(brush)) {
-								accum.tilesets.insert(tsName);
-							}
+					for (const auto& [tsName, ts] : g_materials.tilesets) {
+						if (ts && ts->containsBrush(brush)) {
+							accum.tilesets.insert(tsName);
 						}
 					}
 				}
@@ -498,9 +531,9 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 		}
 
 		snapshot.brushes.reserve(brushMap.size());
-		for (auto& [name, accum] : brushMap) {
+		for (auto& [key, accum] : brushMap) {
 			ReferenceBrushUsage bu;
-			bu.name = name;
+			bu.name = key.substr(accum.kind.size() + 1);
 			bu.kind = accum.kind;
 			bu.count = accum.count;
 			bu.ratio = RoundTo(SafeRatio(accum.count, totalVisibleItems), 4);
@@ -510,11 +543,15 @@ ReferenceStyleSnapshot ReferenceStyleAnalyzer::Capture(
 			for (const auto& ts : accum.tilesets) {
 				bu.tilesets.push_back(ts);
 			}
+			std::sort(bu.tilesets.begin(), bu.tilesets.end());
 			snapshot.brushes.push_back(std::move(bu));
 		}
 		// Sort by count descending.
 		std::sort(snapshot.brushes.begin(), snapshot.brushes.end(), [](const ReferenceBrushUsage& a, const ReferenceBrushUsage& b) {
-			return a.count > b.count;
+			if (a.count != b.count) {
+				return a.count > b.count;
+			}
+			return std::tie(a.kind, a.name) < std::tie(b.kind, b.name);
 		});
 	}
 

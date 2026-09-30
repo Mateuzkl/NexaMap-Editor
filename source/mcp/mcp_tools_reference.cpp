@@ -52,35 +52,37 @@ namespace mcp {
 				throw Error("could not encode the rendered image as PNG");
 			}
 			const wxStreamBuffer* buffer = output.GetOutputStreamBuffer();
+			if (output.GetSize() > 2 * 1024 * 1024) {
+				throw Error("The reference image exceeds the 2 MiB response limit. Request a smaller render.");
+			}
 			return wxBase64Encode(buffer->GetBufferStart(), output.GetSize()).ToStdString();
 		}
 
-		void DrawItem(wxMemoryDC& dc, const Item* item, int x, int y, int tileSize) {
-			if (!item || g_gui.gfx.isUnloaded()) {
-				return;
+		Json PageInfo(size_t total, size_t offset, size_t limit) {
+			return {
+				{ "total", total },
+				{ "offset", offset },
+				{ "limit", limit },
+				{ "hasMore", offset < total && total - offset > limit },
+			};
+		}
+
+		Json BoundJson(Json result) {
+			if (result.dump().size() > 1024 * 1024) {
+				throw Error("The reference response exceeds 1 MiB. Request a smaller page.");
 			}
-			Sprite* sprite = g_gui.gfx.getSprite(item->getClientID());
-			if (sprite) {
-				sprite->DrawTo(&dc, tileSize <= 16 ? SPRITE_SIZE_16x16 : SPRITE_SIZE_32x32, x, y, tileSize, tileSize);
-			}
+			return result;
 		}
 
 		wxBitmap RenderReferenceMaskBitmap(
 			const ReferenceStyleSnapshot& snapshot,
-			const Map& map,
 			int tileSize,
 			bool dimUnselected
 		) {
 			const int width = snapshot.sourceMax.x - snapshot.sourceMin.x + 1;
 			const int height = snapshot.sourceMax.y - snapshot.sourceMin.y + 1;
-
-			// Build set of local coordinates that belong to the reference mask.
-			std::set<std::pair<int16_t, int16_t>> selectedMask;
-			for (const Position& position : snapshot.sourceMask) {
-				selectedMask.insert({
-					static_cast<int16_t>(position.x - snapshot.sourceMin.x),
-					static_cast<int16_t>(position.y - snapshot.sourceMin.y),
-				});
+			if (width <= 0 || height <= 0 || static_cast<int64_t>(width) * tileSize * height * tileSize > 1024 * 1024) {
+				throw Error("The reference render exceeds the 1 megapixel limit. Request a smaller tileSize.");
 			}
 
 			wxBitmap bitmap(width * tileSize, height * tileSize, 32);
@@ -88,31 +90,21 @@ namespace mcp {
 			dc.SetBackground(wxBrush(wxColour(8, 10, 12)));
 			dc.Clear();
 
-			for (int y = snapshot.sourceMin.y; y <= snapshot.sourceMax.y; ++y) {
-				for (int x = snapshot.sourceMin.x; x <= snapshot.sourceMax.x; ++x) {
-					const int localX = x - snapshot.sourceMin.x;
-					const int localY = y - snapshot.sourceMin.y;
-					const int drawX = localX * tileSize;
-					const int drawY = localY * tileSize;
-
-					const bool isSelected = selectedMask.contains({ static_cast<int16_t>(localX), static_cast<int16_t>(localY) });
-					if (!isSelected) {
-						if (dimUnselected) {
-							dc.SetPen(*wxTRANSPARENT_PEN);
-							dc.SetBrush(wxBrush(wxColour(12, 14, 18)));
-							dc.DrawRectangle(drawX, drawY, tileSize, tileSize);
+			for (const auto& cell : snapshot.renderCells) {
+				const int drawX = cell.localX * tileSize;
+				const int drawY = cell.localY * tileSize;
+				if (dimUnselected) {
+					dc.SetPen(*wxTRANSPARENT_PEN);
+					dc.SetBrush(wxBrush(wxColour(48, 65, 82)));
+					dc.DrawRectangle(drawX, drawY, tileSize, tileSize);
+				}
+				if (!g_gui.gfx.isUnloaded()) {
+					for (uint16_t clientId : cell.clientIds) {
+						if (clientId != 0) {
+							if (Sprite* sprite = g_gui.gfx.getSprite(clientId)) {
+								sprite->DrawTo(&dc, tileSize <= 16 ? SPRITE_SIZE_16x16 : SPRITE_SIZE_32x32, drawX, drawY, tileSize, tileSize);
+							}
 						}
-						continue;
-					}
-
-					const Tile* tile = map.getTile(x, y, snapshot.floor);
-					if (!tile) {
-						continue;
-					}
-
-					DrawItem(dc, tile->ground, drawX, drawY, tileSize);
-					for (const Item* item : tile->items) {
-						DrawItem(dc, item, drawX, drawY, tileSize);
 					}
 				}
 			}
@@ -188,10 +180,10 @@ namespace mcp {
 			};
 		}
 
-		Json FormatTarget(const TargetAreaSnapshot& target) {
+		Json FormatTarget(const TargetAreaSnapshot& target, size_t offset = 0, size_t limit = 250) {
 			Json positions = Json::array();
-			for (const Position& position : target.positions) {
-				positions.push_back(PositionJson(position));
+			for (size_t i = offset; i < target.positions.size() && i - offset < limit; ++i) {
+				positions.push_back(PositionJson(target.positions[i]));
 			}
 			return {
 				{ "role", "only-writable-generation-destination" },
@@ -203,14 +195,16 @@ namespace mcp {
 								{ "to", PositionJson(target.targetMax) },
 							} },
 				{ "selectedTileCount", target.positions.size() },
+				{ "page", PageInfo(target.positions.size(), offset, limit) },
 				{ "exactPositions", std::move(positions) },
 				{ "allowReferenceSourceOverwrite", target.allowReferenceSourceOverwrite },
 			};
 		}
 
-		Json FormatMaterials(const ReferenceStyleSnapshot& snapshot) {
+		Json FormatMaterials(const ReferenceStyleSnapshot& snapshot, size_t offset, size_t limit) {
 			Json itemsJson = Json::array();
-			for (const auto& item : snapshot.items) {
+			for (size_t i = offset; i < snapshot.items.size() && i - offset < limit; ++i) {
+				const auto& item = snapshot.items[i];
 				itemsJson.push_back({
 					{ "activeId", item.activeId },
 					{ "serverId", item.serverId },
@@ -226,7 +220,8 @@ namespace mcp {
 			}
 
 			Json brushesJson = Json::array();
-			for (const auto& brush : snapshot.brushes) {
+			for (size_t i = offset; i < snapshot.brushes.size() && i - offset < limit; ++i) {
+				const auto& brush = snapshot.brushes[i];
 				brushesJson.push_back({
 					{ "name", brush.name },
 					{ "kind", brush.kind },
@@ -241,7 +236,9 @@ namespace mcp {
 
 			return {
 				{ "items", std::move(itemsJson) },
+				{ "itemsPage", PageInfo(snapshot.items.size(), offset, limit) },
 				{ "brushes", std::move(brushesJson) },
+				{ "brushesPage", PageInfo(snapshot.brushes.size(), offset, limit) },
 			};
 		}
 
@@ -281,9 +278,10 @@ namespace mcp {
 			};
 		}
 
-		Json FormatBorders(const ReferenceStyleSnapshot& snapshot) {
+		Json FormatBorders(const ReferenceStyleSnapshot& snapshot, size_t offset, size_t limit) {
 			Json familiesJson = Json::array();
-			for (const auto& gf : snapshot.groundFamilies) {
+			for (size_t i = offset; i < snapshot.groundFamilies.size() && i - offset < limit; ++i) {
+				const auto& gf = snapshot.groundFamilies[i];
 				familiesJson.push_back({
 					{ "name", gf.name },
 					{ "brush", gf.brush },
@@ -297,7 +295,8 @@ namespace mcp {
 			}
 
 			Json transitionsJson = Json::array();
-			for (const auto& tr : snapshot.transitions) {
+			for (size_t i = offset; i < snapshot.transitions.size() && i - offset < limit; ++i) {
+				const auto& tr = snapshot.transitions[i];
 				transitionsJson.push_back({
 					{ "groundA", tr.groundA },
 					{ "groundB", tr.groundB },
@@ -309,7 +308,9 @@ namespace mcp {
 
 			return {
 				{ "groundFamilies", std::move(familiesJson) },
+				{ "groundFamiliesPage", PageInfo(snapshot.groundFamilies.size(), offset, limit) },
 				{ "transitions", std::move(transitionsJson) },
+				{ "transitionsPage", PageInfo(snapshot.transitions.size(), offset, limit) },
 			};
 		}
 
@@ -366,11 +367,8 @@ namespace mcp {
 						);
 
 						if (snapshot.selectedTileCount == 0) {
-							throw Error("The selection has no tiles on the requested floor. Select tiles and try again.");
+							throw Error(snapshot.captureError.empty() ? "The selection has no tiles on the requested floor. Select tiles and try again." : snapshot.captureError);
 						}
-
-						// Store the captured reference snapshot in the active session store.
-						ReferenceStyleStore::Instance().set(snapshot);
 
 						Json result {
 							{ "captured", true },
@@ -389,7 +387,9 @@ namespace mcp {
 						};
 
 						if (includeImage) {
-							wxBitmap bitmap = RenderReferenceMaskBitmap(snapshot, context.map, 32, true);
+							const int maxDim = std::max(snapshot.layout.width, snapshot.layout.height);
+							const int tileSize = std::max(1, std::min(32, 1024 / maxDim));
+							wxBitmap bitmap = RenderReferenceMaskBitmap(snapshot, tileSize, true);
 							result["image"] = {
 								{ "mimeType", "image/png" },
 								{ "data", EncodePng(bitmap) },
@@ -397,6 +397,9 @@ namespace mcp {
 								{ "pixelHeight", bitmap.GetHeight() },
 							};
 						}
+						// Commit only after optional image encoding succeeds; failed captures
+						// must leave the previous reference and selection untouched.
+						ReferenceStyleStore::Instance().set(snapshot);
 
 						// The selection was the source. Clearing it prevents clients that still
 						// inspect selection_get from mistaking it for a writable destination.
@@ -464,10 +467,22 @@ namespace mcp {
 			registry.add({
 				"target_get",
 				"Retrieve the exact captured writable generation target. This is the only destination reference-driven writes may modify.",
-				EmptyObjectSchema(),
+				{
+					{ "type", "object" },
+					{ "properties", {
+										{ "offset", { { "type", "integer" }, { "minimum", 0 }, { "default", 0 } } },
+										{ "limit", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 250 }, { "default", 250 } } },
+									} },
+					{ "additionalProperties", false },
+				},
 				false,
-				[](const Json&) {
-					return OnGui([](const EditorContext& context) {
+				[](const Json& arguments) {
+					const int offset = arguments.value("offset", 0);
+					const int limit = arguments.value("limit", 250);
+					if (offset < 0 || limit < 1 || limit > 250) {
+						throw Error("Invalid target page. Use offset >= 0 and limit between 1 and 250.");
+					}
+					return OnGui([offset, limit](const EditorContext& context) {
 						const std::optional<TargetAreaSnapshot> target = ReferenceStyleStore::Instance().getTargetSnapshot();
 						if (!target) {
 							throw Error("No target area is selected. Select a target area and call target_capture first.");
@@ -478,7 +493,7 @@ namespace mcp {
 						if (target->workspaceGeneration != context.workspaceGeneration) {
 							throw Error("Target area belongs to a stale resource workspace. Capture the target again.");
 						}
-						return FormatTarget(*target);
+						return BoundJson(FormatTarget(*target, offset, limit));
 					});
 				},
 			});
@@ -503,14 +518,21 @@ namespace mcp {
 					{ "type", "object" },
 					{ "properties", {
 										{ "detail", { { "type", "string" }, { "enum", Json::array({ "summary", "materials", "layout", "borders", "full" }) }, { "default", "summary" } } },
+										{ "offset", { { "type", "integer" }, { "minimum", 0 }, { "default", 0 } } },
+										{ "limit", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 250 }, { "default", 250 } } },
 									} },
 					{ "additionalProperties", false },
 				},
 				false,
 				[](const Json& arguments) {
 					const std::string detail = arguments.value("detail", std::string("summary"));
+					const int offset = arguments.value("offset", 0);
+					const int limit = arguments.value("limit", 250);
+					if (offset < 0 || limit < 1 || limit > 250) {
+						throw Error("Invalid reference page. Use offset >= 0 and limit between 1 and 250.");
+					}
 
-					return OnGui([detail](const EditorContext& context) {
+					return OnGui([detail, offset, limit](const EditorContext& context) {
 						const std::optional<ReferenceStyleSnapshot> snapshotCopy = ReferenceStyleStore::Instance().getSnapshot();
 						if (!snapshotCopy) {
 							throw Error("No AI style reference has been captured. Select a reference room in NexaMap and call reference_capture first.");
@@ -520,22 +542,23 @@ namespace mcp {
 						const ReferenceStyleSnapshot& snapshot = *snapshotCopy;
 
 						if (detail == "materials") {
-							return FormatMaterials(snapshot);
+							return BoundJson(FormatMaterials(snapshot, offset, limit));
 						}
 						if (detail == "layout") {
-							return FormatLayout(snapshot);
+							return BoundJson(FormatLayout(snapshot));
 						}
 						if (detail == "borders") {
-							return FormatBorders(snapshot);
+							return BoundJson(FormatBorders(snapshot, offset, limit));
 						}
 						if (detail == "full") {
 							Json fullResult = FormatSummary(snapshot, context);
-							fullResult["materials"] = FormatMaterials(snapshot);
+							fullResult["materials"] = FormatMaterials(snapshot, offset, limit);
 							fullResult["layout"] = FormatLayout(snapshot);
-							fullResult["borders"] = FormatBorders(snapshot);
+							fullResult["borders"] = FormatBorders(snapshot, offset, limit);
 
 							Json cellsJson = Json::array();
-							for (const auto& cell : snapshot.cells) {
+							for (size_t i = offset; i < snapshot.cells.size() && i - offset < limit; ++i) {
+								const auto& cell = snapshot.cells[i];
 								cellsJson.push_back({
 									{ "x", cell.localX },
 									{ "y", cell.localY },
@@ -548,12 +571,14 @@ namespace mcp {
 								});
 							}
 							fullResult["cells"] = std::move(cellsJson);
+							fullResult["cellsPage"] = PageInfo(snapshot.cells.size(), offset, limit);
 							Json sourceMask = Json::array();
-							for (const Position& position : snapshot.sourceMask) {
-								sourceMask.push_back(PositionJson(position));
+							for (size_t i = offset; i < snapshot.sourceMask.size() && i - offset < limit; ++i) {
+								sourceMask.push_back(PositionJson(snapshot.sourceMask[i]));
 							}
 							fullResult["sourceMask"] = std::move(sourceMask);
-							return fullResult;
+							fullResult["sourceMaskPage"] = PageInfo(snapshot.sourceMask.size(), offset, limit);
+							return BoundJson(std::move(fullResult));
 						}
 
 						// Default: summary.
@@ -595,11 +620,14 @@ namespace mcp {
 
 						// Clamp tileSize so dimensions do not exceed maxSize or 2048.
 						const int maxDim = std::max(width, height);
+						if (maxDim > maxSize) {
+							throw Error("The reference bounds exceed maxSize even at one pixel per tile. Increase maxSize.");
+						}
 						if (maxDim * tileSize > maxSize) {
 							tileSize = std::max(1, maxSize / maxDim);
 						}
 
-						wxBitmap bitmap = RenderReferenceMaskBitmap(snapshot, context.map, tileSize, dimUnselected);
+						wxBitmap bitmap = RenderReferenceMaskBitmap(snapshot, tileSize, dimUnselected);
 
 						Json metadata {
 							{ "referenceVersion", snapshot.version },
@@ -642,6 +670,7 @@ namespace mcp {
 						{ "workflow", Json::array({
 										  "1. Call reference_get and reference_render. They describe SOURCE STYLE ONLY and are never a writable destination.",
 										  "2. Call target_get. Its exact positions are the ONLY writable generation destination; never use reference source bounds as a target.",
+										  "2a. If target_get reports hasMore, fetch every page with offset/limit before planning writes.",
 										  "3. Plan the target layout using the source style without copying protected gameplay metadata.",
 										  "4. Use brush_apply or tile_edit ONLY inside target_get exactPositions. These tools reject a missing, stale, or overlapping target by default.",
 										  "5. Render only the target with map_render_region.",
@@ -650,6 +679,7 @@ namespace mcp {
 						{ "rules", Json::array({
 									   "reference_get/reference_render are SOURCE STYLE ONLY; target_get is the ONLY writable destination.",
 									   "Never use reference source bounds or sourceMask as the generation destination.",
+									   "Use offset/limit pagination in reference_get and target_get; never infer omitted target positions from a bounding rectangle.",
 									   "Prefer brush_apply using captured brush names over painting raw item IDs.",
 									   "Let autoborder generate border transitions between ground types; do not guess border IDs manually.",
 									   "Use tile_edit for source-verified raw items only when no semantic brush exists.",

@@ -440,6 +440,65 @@ namespace {
 		QuickReplaceCheck(snapshot.floor == 6 && snapshot.selectedTileCount == 1 && snapshot.sourceMask.size() == 1 && snapshot.sourceMask.front() == Position(500, 500, 6), "automatic reference capture must choose the lowest floor on a tie");
 		std::cout << "PASS deterministic floor choice for tied reference selections\n";
 	}
+
+	void ReferenceCaptureFrozenAndBounded() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(102, "Stone floor").group = ITEM_GROUP_GROUND;
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		Tile* first = AddTile(editor.map, Position(600, 600, 7), 100);
+		Tile* distant = AddTile(editor.map, Position(900, 900, 7), 100);
+		editor.selection.addInternal(first);
+		ReferenceStyleCaptureOptions options;
+		options.floor = 7;
+		const ReferenceStyleSnapshot frozen = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(frozen.selectedTileCount == 1 && frozen.renderCells.size() == 1 && frozen.renderCells.front().clientIds == std::vector<uint16_t> { 1100 }, "reference render must store source draw IDs by value");
+		first->ground->setID(102);
+		QuickReplaceCheck(frozen.renderCells.front().clientIds == std::vector<uint16_t> { 1100 }, "editing source must not change frozen reference render data");
+		editor.selection.addInternal(distant);
+		const ReferenceStyleSnapshot rejected = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(rejected.selectedTileCount == 0 && !rejected.captureError.empty(), "sparse wide selection must reject before allocating a bounding grid");
+		std::cout << "PASS frozen reference rendering and bounded sparse selection\n";
+	}
+
+	void ReferenceIrregularPerimeterAndMetadata() {
+		Definitions definitions;
+		definitions.Add(100, "Wooden floor").group = ITEM_GROUP_GROUND;
+		definitions.Add(200, "Stone wall").isWall = true;
+
+		CopyBuffer copyBuffer;
+		Editor editor(copyBuffer, nullptr);
+		Tile* innerEdge = nullptr;
+		for (int y = 0; y < 5; ++y) {
+			for (int x = 0; x < 5; ++x) {
+				if (x == 2 && y == 2) {
+					continue;
+				}
+				Tile* tile = AddTile(editor.map, Position(700 + x, 700 + y, 7), 100);
+				editor.selection.addInternal(tile);
+				if (x == 2 && y == 1) {
+					innerEdge = tile;
+				}
+			}
+		}
+		QuickReplaceCheck(innerEdge != nullptr, "irregular fixture is missing its inner edge");
+		innerEdge->addItem(Item::Create(200));
+		innerEdge->house_id = 42;
+		innerEdge->zones.insert(9);
+		auto waypoint = std::make_unique<Waypoint>();
+		waypoint->name = "reference-point";
+		waypoint->pos = innerEdge->getPosition();
+		QuickReplaceCheck(editor.map.waypoints.addWaypoint(std::move(waypoint)), "reference waypoint fixture failed");
+
+		ReferenceStyleCaptureOptions options;
+		options.floor = 7;
+		const ReferenceStyleSnapshot snapshot = ReferenceStyleAnalyzer::Capture(editor.selection, editor.map, options);
+		QuickReplaceCheck(snapshot.selectedTileCount == 24 && snapshot.layout.perimeterWallRatio == 0.05, "perimeter must include the exact mask's inner hole edges");
+		QuickReplaceCheck(snapshot.gameplay.houses == 1 && snapshot.gameplay.zones == 1 && snapshot.gameplay.waypoints == 1, "captured gameplay metadata must not report fake zero counts");
+		std::cout << "PASS irregular reference perimeter and protected metadata counts\n";
+	}
 }
 
 void RunQuickReplaceSelectionTests() {
@@ -451,4 +510,6 @@ void RunQuickReplaceSelectionTests() {
 	BulkUndoAndInvalidTargetSafety();
 	ReferenceSourceTargetIsolationAndUndo();
 	ReferenceAutoFloorTieUsesLowestFloor();
+	ReferenceCaptureFrozenAndBounded();
+	ReferenceIrregularPerimeterAndMetadata();
 }

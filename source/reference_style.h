@@ -31,9 +31,9 @@ enum class ReferenceAssetMode : uint8_t {
 
 /// A single cell in the normalized reference grid.
 struct ReferenceTileCell {
-	int16_t localX = 0;
-	int16_t localY = 0;
-	int16_t localZ = 0;
+	int32_t localX = 0;
+	int32_t localY = 0;
+	int32_t localZ = 0;
 	bool mapped = false; ///< Has ground or any visible item.
 	bool walkable = true;
 	bool blocking = false;
@@ -42,6 +42,13 @@ struct ReferenceTileCell {
 	bool teleport = false;
 	bool spawn = false;
 	bool creature = false;
+};
+
+/// Value-only draw stack captured before the source map can change.
+struct ReferenceRenderCell {
+	int32_t localX = 0;
+	int32_t localY = 0;
+	std::vector<uint16_t> clientIds; ///< Ground first, then visible items in stack order.
 };
 
 /// Observed usage of a single item ID in the reference.
@@ -135,6 +142,7 @@ struct ReferenceGameplaySummary {
 /// Safe to retain after selection change, map edit, undo, session switch.
 struct ReferenceStyleSnapshot {
 	uint32_t version = 1;
+	std::string captureError; ///< Non-empty only when capture was rejected.
 
 	/// Source identification — used for compatibility checks.
 	SessionId sourceMapSessionId = InvalidSessionId;
@@ -159,6 +167,7 @@ struct ReferenceStyleSnapshot {
 
 	/// Per-cell topology (normalized local coordinates).
 	std::vector<ReferenceTileCell> cells;
+	std::vector<ReferenceRenderCell> renderCells;
 
 	/// Item distribution profile.
 	std::vector<ReferenceItemUsage> items;
@@ -203,6 +212,10 @@ struct ReferenceStyleCaptureOptions {
 
 	/// Maximum tiles to accept (hard cap).
 	size_t maxTiles = 65536;
+	size_t maxWidth = 256;
+	size_t maxHeight = 256;
+	size_t maxBoundingArea = 65536;
+	size_t maxObservedItems = 262144;
 };
 
 /// Captures the exact currently selected positions as a generation target.

@@ -31,6 +31,7 @@ private:
 	void OnSetCurrentSelectionAsTarget(wxCommandEvent& event);
 	void OnClearTarget(wxCommandEvent& event);
 	void OnCopyExamplePrompt(wxCommandEvent& event);
+	void OnCopyReferenceData(wxCommandEvent& event);
 	void OnCloseButton(wxCommandEvent& event);
 	void OnClose(wxCloseEvent& event);
 
@@ -46,6 +47,7 @@ private:
 	wxButton* setTargetButton_ = nullptr;
 	wxButton* clearTargetButton_ = nullptr;
 	wxButton* copyPromptButton_ = nullptr;
+	wxButton* copyDataButton_ = nullptr;
 };
 
 #endif // NEXAMAP_REFERENCE_STYLE_WINDOW_H_

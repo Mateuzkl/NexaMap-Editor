@@ -12,6 +12,7 @@
 #include "reference_style.h"
 #include "reference_style_store.h"
 #include "tile.h"
+#include "workspace_session.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -58,7 +59,7 @@ namespace {
 		}
 
 		const int maxDim = std::max(width, height);
-		const int tileSize = std::max(2, std::min(32, ThumbnailSize / maxDim));
+		const int tileSize = std::max(1, std::min(32, ThumbnailSize / maxDim));
 		const int renderW = width * tileSize;
 		const int renderH = height * tileSize;
 
@@ -67,52 +68,21 @@ namespace {
 		dc.SetBackground(wxBrush(wxColour(12, 14, 18)));
 		dc.Clear();
 
-		// Check if current editor has the map available.
-		Editor* editor = g_gui.GetCurrentEditor();
-		const Map* map = editor ? &editor->map : nullptr;
-
-		std::set<std::pair<int16_t, int16_t>> mask;
-		for (const Position& position : snapshot.sourceMask) {
-			mask.insert({
-				static_cast<int16_t>(position.x - snapshot.sourceMin.x),
-				static_cast<int16_t>(position.y - snapshot.sourceMin.y),
-			});
-		}
-
-		for (int y = 0; y < height; ++y) {
-			for (int x = 0; x < width; ++x) {
-				const int drawX = x * tileSize;
-				const int drawY = y * tileSize;
-
-				if (!mask.contains({ static_cast<int16_t>(x), static_cast<int16_t>(y) })) {
-					continue;
-				}
-
-				if (map && !g_gui.gfx.isUnloaded()) {
-					const Tile* tile = map->getTile(snapshot.sourceMin.x + x, snapshot.sourceMin.y + y, snapshot.floor);
-					if (tile) {
-						if (tile->ground) {
-							Sprite* sprite = g_gui.gfx.getSprite(tile->ground->getClientID());
-							if (sprite) {
-								sprite->DrawTo(&dc, tileSize <= 16 ? SPRITE_SIZE_16x16 : SPRITE_SIZE_32x32, drawX, drawY, tileSize, tileSize);
-							}
+		const bool compatibleSprites = snapshot.workspaceGeneration == g_workspace.getGeneration() && !g_gui.gfx.isUnloaded();
+		for (const auto& cell : snapshot.renderCells) {
+			const int drawX = cell.localX * tileSize;
+			const int drawY = cell.localY * tileSize;
+			dc.SetPen(*wxTRANSPARENT_PEN);
+			dc.SetBrush(wxBrush(wxColour(60, 80, 100)));
+			dc.DrawRectangle(drawX, drawY, tileSize, tileSize);
+			if (compatibleSprites) {
+				for (uint16_t clientId : cell.clientIds) {
+					if (clientId != 0) {
+						if (Sprite* sprite = g_gui.gfx.getSprite(clientId)) {
+							sprite->DrawTo(&dc, tileSize <= 16 ? SPRITE_SIZE_16x16 : SPRITE_SIZE_32x32, drawX, drawY, tileSize, tileSize);
 						}
-						for (const Item* item : tile->items) {
-							if (item && !item->isMetaItem()) {
-								Sprite* sprite = g_gui.gfx.getSprite(item->getClientID());
-								if (sprite) {
-									sprite->DrawTo(&dc, tileSize <= 16 ? SPRITE_SIZE_16x16 : SPRITE_SIZE_32x32, drawX, drawY, tileSize, tileSize);
-								}
-							}
-						}
-						continue;
 					}
 				}
-
-				// Fallback: draw topology color.
-				dc.SetPen(*wxTRANSPARENT_PEN);
-				dc.SetBrush(wxBrush(wxColour(60, 80, 100)));
-				dc.DrawRectangle(drawX, drawY, tileSize, tileSize);
 			}
 		}
 		dc.SelectObject(wxNullBitmap);
@@ -122,9 +92,11 @@ namespace {
 		wxMemoryDC finalDc(finalBmp);
 		finalDc.SetBackground(wxBrush(wxColour(18, 20, 26)));
 		finalDc.Clear();
-		const int offsetX = (ThumbnailSize - renderW) / 2;
-		const int offsetY = (ThumbnailSize - renderH) / 2;
-		finalDc.DrawBitmap(contentBmp, std::max(0, offsetX), std::max(0, offsetY), false);
+		const double scale = std::min(1.0, static_cast<double>(ThumbnailSize) / std::max(renderW, renderH));
+		const int scaledW = std::max(1, static_cast<int>(renderW * scale));
+		const int scaledH = std::max(1, static_cast<int>(renderH * scale));
+		const wxBitmap scaled = (scaledW == renderW && scaledH == renderH) ? contentBmp : wxBitmap(contentBmp.ConvertToImage().Scale(scaledW, scaledH));
+		finalDc.DrawBitmap(scaled, (ThumbnailSize - scaledW) / 2, (ThumbnailSize - scaledH) / 2, false);
 		finalDc.SelectObject(wxNullBitmap);
 		return finalBmp;
 	}
@@ -167,7 +139,7 @@ void ReferenceStyleWindow::CaptureAndOpen(wxWindow* parent) {
 
 	ReferenceStyleSnapshot snapshot = ReferenceStyleAnalyzer::Capture(editor->selection, editor->map, options);
 	if (snapshot.selectedTileCount == 0) {
-		wxMessageBox("The selection has no tiles on the current floor.", "AI Style Reference", wxOK | wxICON_WARNING, parent);
+		wxMessageBox(snapshot.captureError.empty() ? "The selection has no tiles on the current floor." : snapshot.captureError, "AI Style Reference", wxOK | wxICON_WARNING, parent);
 		return;
 	}
 
@@ -243,8 +215,10 @@ void ReferenceStyleWindow::BuildLayout() {
 
 	auto* actionRow3 = newd wxBoxSizer(wxHORIZONTAL);
 	copyPromptButton_ = newd wxButton(this, wxID_COPY, "Copy Example Prompt");
+	copyDataButton_ = newd wxButton(this, wxID_ANY, "Copy IDs & Materials");
 	auto* closeButton = newd wxButton(this, wxID_CLOSE, "Close");
 	actionRow3->Add(copyPromptButton_, 1, wxRIGHT, FromDIP(6));
+	actionRow3->Add(copyDataButton_, 1, wxRIGHT, FromDIP(6));
 	actionRow3->Add(closeButton, 1);
 	rootSizer->Add(actionRow3, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
 
@@ -258,6 +232,7 @@ void ReferenceStyleWindow::BindEvents() {
 	setTargetButton_->Bind(wxEVT_BUTTON, &ReferenceStyleWindow::OnSetCurrentSelectionAsTarget, this);
 	clearTargetButton_->Bind(wxEVT_BUTTON, &ReferenceStyleWindow::OnClearTarget, this);
 	copyPromptButton_->Bind(wxEVT_BUTTON, &ReferenceStyleWindow::OnCopyExamplePrompt, this);
+	copyDataButton_->Bind(wxEVT_BUTTON, &ReferenceStyleWindow::OnCopyReferenceData, this);
 	Bind(wxEVT_BUTTON, &ReferenceStyleWindow::OnCloseButton, this, wxID_CLOSE);
 }
 
@@ -276,12 +251,14 @@ void ReferenceStyleWindow::RefreshView() {
 		setTargetButton_->Enable(false);
 		clearTargetButton_->Enable(false);
 		copyPromptButton_->Enable(false);
+		copyDataButton_->Enable(false);
 		return;
 	}
 
 	clearButton_->Enable(true);
 	setTargetButton_->Enable(true);
 	copyPromptButton_->Enable(true);
+	copyDataButton_->Enable(true);
 
 	// Update thumbnail.
 	thumbnailBitmap_->SetBitmap(RenderThumbnail(*snapshot));
@@ -292,7 +269,11 @@ void ReferenceStyleWindow::RefreshView() {
 	statusLabel_->SetLabel(ssStatus.str());
 
 	const std::optional<TargetAreaSnapshot> target = ReferenceStyleStore::Instance().getTargetSnapshot();
-	if (target) {
+	if (snapshot->workspaceGeneration != g_workspace.getGeneration()) {
+		targetStatusLabel_->SetLabel("Target Area: Unavailable (resources changed)");
+		workflowLabel_->SetLabel("The captured reference belongs to an older resource session. Capture it again before generating.");
+		clearTargetButton_->Enable(target.has_value());
+	} else if (target) {
 		targetStatusLabel_->SetLabel("Target Area: " + std::to_string(target->positions.size()) + " tiles \u2713");
 		workflowLabel_->SetLabel("AI writes are restricted to the captured target area. The reference source remains read-only.");
 		clearTargetButton_->Enable(true);
@@ -338,7 +319,7 @@ void ReferenceStyleWindow::RefreshView() {
 
 	// Top decorative items.
 	for (const auto& item : snapshot->items) {
-		if (item.category == "doodad" || item.category == "item") {
+		if (item.category == "Doodad" || item.category == "Item") {
 			std::ostringstream entry;
 			entry << "[Item] " << item.name << " (ID " << item.activeId << ", x" << item.count << ")";
 			materialsListBox_->Append(entry.str());
@@ -359,7 +340,7 @@ void ReferenceStyleWindow::OnRefreshFromSelection(wxCommandEvent& WXUNUSED(event
 
 	ReferenceStyleSnapshot snapshot = ReferenceStyleAnalyzer::Capture(editor->selection, editor->map, options);
 	if (snapshot.selectedTileCount == 0) {
-		wxMessageBox("The selection contains no tiles on the current floor.", "AI Style Reference", wxOK | wxICON_WARNING, this);
+		wxMessageBox(snapshot.captureError.empty() ? "The selection contains no tiles on the current floor." : snapshot.captureError, "AI Style Reference", wxOK | wxICON_WARNING, this);
 		return;
 	}
 
@@ -412,6 +393,75 @@ void ReferenceStyleWindow::OnCopyExamplePrompt(wxCommandEvent& WXUNUSED(event)) 
 		wxTheClipboard->SetData(new wxTextDataObject(ExamplePromptTemplate));
 		wxTheClipboard->Close();
 		wxMessageBox("Example prompt copied to clipboard!\n\nYou can now paste it directly into Codex or Claude.", "AI Style Reference", wxOK | wxICON_INFORMATION, this);
+	}
+}
+
+void ReferenceStyleWindow::OnCopyReferenceData(wxCommandEvent& WXUNUSED(event)) {
+	const std::optional<ReferenceStyleSnapshot> snapshot = ReferenceStyleStore::Instance().getSnapshot();
+	if (!snapshot) {
+		return;
+	}
+	std::ostringstream output;
+	output << "AI STYLE REFERENCE\nAsset mode: "
+		   << (snapshot->assetMode == ReferenceAssetMode::Appearances ? "Appearances" : snapshot->assetMode == ReferenceAssetMode::ClassicDatSpr ? "ClassicDatSpr"
+																																				 : "Unknown")
+		   << "\nItem ID mode: "
+		   << (snapshot->itemIdMode == ItemIdMode::ClientId ? "ClientId" : snapshot->itemIdMode == ItemIdMode::ServerId ? "ServerId"
+																														: "Unknown")
+		   << "\nFloor: " << snapshot->floor << "\nTiles: " << snapshot->selectedTileCount << "\n";
+	const std::pair<const char*, const char*> sections[] = {
+		{ "GROUNDS", "Floor" },
+		{ "WALLS", "Wall" },
+		{ "BORDERS", "Border" },
+		{ "DOORS", "Door" },
+		{ "CARPETS", "Carpet" },
+		{ "TABLES", "Table" },
+		{ "DOODADS", "Doodad" },
+		{ "RAW / ITEMS", "Item" },
+	};
+	for (const auto& [heading, category] : sections) {
+		output << "\n[" << heading << "]\n";
+		for (const auto& item : snapshot->items) {
+			if (item.category == category) {
+				output << "ActiveID: " << item.activeId << " | ServerID: " << item.serverId << " | ClientID: " << item.clientId
+					   << " | Name: " << item.name << " | Count: " << item.count << " | Ratio: " << item.ratio
+					   << " | Brush: " << item.brush << " | SourceVerified: " << (item.sourceVerified ? "yes" : "no") << '\n';
+			}
+		}
+	}
+	output << "\n[GROUND FAMILIES]\n";
+	for (const auto& family : snapshot->groundFamilies) {
+		output << "Name: " << family.name << " | Representative ID: " << family.representativeItemId
+			   << " | Tiles: " << family.tiles << " | Ratio: " << family.ratio << " | Observed IDs:";
+		for (uint16_t id : family.itemIds) {
+			output << ' ' << id;
+		}
+		output << '\n';
+	}
+	output << "\n[BORDER TRANSITIONS]\n";
+	for (const auto& transition : snapshot->transitions) {
+		output << "Ground A: " << transition.groundA << " | Ground B: " << transition.groundB << " | Border IDs:";
+		for (uint16_t id : transition.borderItemIds) {
+			output << ' ' << id;
+		}
+		output << " | Alignments:";
+		for (const auto& alignment : transition.borderAlignments) {
+			output << ' ' << alignment;
+		}
+		output << '\n';
+	}
+	output << "\n[BRUSHES]\n";
+	for (const auto& brush : snapshot->brushes) {
+		output << "Kind: " << brush.kind << " | Name: " << brush.name << " | Look ID: " << brush.lookId << " | Tilesets:";
+		for (const auto& tileset : brush.tilesets) {
+			output << ' ' << tileset;
+		}
+		output << '\n';
+	}
+	if (wxTheClipboard->Open()) {
+		const std::string text = output.str();
+		wxTheClipboard->SetData(new wxTextDataObject(wxString::FromUTF8(text.c_str())));
+		wxTheClipboard->Close();
 	}
 }
 
