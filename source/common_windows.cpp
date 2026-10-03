@@ -30,6 +30,7 @@
 #include "gui.h"
 #include "application.h"
 #include "common_windows.h"
+#include "palette_model.h"
 
 #include <limits>
 #include <set>
@@ -1155,17 +1156,24 @@ Brush* FindDialogListBox::GetSelectedBrush() {
 }
 
 void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
+	constexpr int iconDim = 32;
+	int charHeight = dc.GetCharHeight();
+	if (charHeight <= 0) {
+		charHeight = 14;
+	}
+	auto layout = PaletteModel::CalculateListItemLayout(rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight(), iconDim, charHeight);
+
 	if (no_matches) {
-		dc.DrawText("No matches for your search.", rect.GetX() + 40, rect.GetY() + 6);
+		dc.DrawText("No matches for your search.", layout.textX, layout.textY);
 	} else if (cleared) {
-		dc.DrawText("Please enter your search string.", rect.GetX() + 40, rect.GetY() + 6);
+		dc.DrawText("Please enter your search string.", layout.textX, layout.textY);
 	} else {
 		if (n >= brushlist.size() || !brushlist[n]) {
 			return;
 		}
 		Sprite* spr = g_gui.gfx.getSprite(brushlist[n]->getLookID());
 		if (spr) {
-			spr->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
+			spr->DrawTo(&dc, SPRITE_SIZE_32x32, layout.iconX, layout.iconY, layout.iconWidth, layout.iconHeight);
 		}
 
 		if (IsSelected(n)) {
@@ -1174,12 +1182,12 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 			dc.SetTextForeground(Theme::Get(Theme::Role::Text));
 		}
 
-		dc.DrawText(wxstr(brushlist[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);
+		dc.DrawText(wxstr(brushlist[n]->getName()), layout.textX, layout.textY);
 	}
 }
 
 wxCoord FindDialogListBox::OnMeasureItem(size_t n) const {
-	return 32;
+	return FromDIP(36);
 }
 
 // ============================================================================

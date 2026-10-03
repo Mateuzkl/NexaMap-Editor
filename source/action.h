@@ -19,9 +19,11 @@
 #define RME_ACTION_H_
 
 #include "position.h"
+#include "session_id.h"
 
 #include <deque>
 #include <memory>
+#include <optional>
 #include <string>
 
 class Editor;
@@ -43,6 +45,11 @@ enum ChangeType {
 	CHANGE_ZONE_REGISTRY,
 	CHANGE_RENAME_ZONE,
 	CHANGE_HOUSE_REGISTRY,
+	CHANGE_HOUSE_UPDATE,
+	CHANGE_TOWN_REGISTRY,
+	CHANGE_TOWN_UPDATE,
+	CHANGE_WAYPOINT_REGISTRY,
+	CHANGE_WAYPOINT_UPDATE,
 };
 
 class Change {
@@ -66,8 +73,13 @@ private:
 public:
 	Change(Tile* tile);
 	static Change* Create(House* house, const Position& where);
-	static Change* CreateHouse(const HouseSnapshot& snapshot);
+	static Change* CreateHouse(const HouseSnapshot& snapshot, bool add = true, SessionId activeHouseSessionId = InvalidSessionId);
+	static Change* UpdateHouse(const HouseSnapshot& before, const HouseSnapshot& after, SessionId sessionId);
 	static Change* Create(Waypoint* wp, const Position& where);
+	static Change* CreateWaypoint(const std::string& name, const Position& position, bool add, std::string category = {}, std::optional<size_t> orderIndex = std::nullopt);
+	static Change* UpdateWaypoint(const std::string& beforeName, const Position& beforePosition, const std::string& afterName, const Position& afterPosition);
+	static Change* CreateTown(uint32_t id, const std::string& name, const Position& templePosition, bool add);
+	static Change* UpdateTown(uint32_t id, const std::string& beforeName, const Position& beforeTemplePosition, const std::string& afterName, const Position& afterTemplePosition);
 	static Change* CreateZone(const std::string& name, unsigned int id, bool add);
 	static Change* RenameZone(const std::string& oldName, const std::string& newName);
 	~Change();
@@ -108,6 +120,7 @@ enum ActionIdentifier {
 	ACTION_IMPORT_MINIMAP,
 	ACTION_IMPORT_PNG,
 	ACTION_ZONE_EDIT,
+	ACTION_MCP,
 };
 
 class Action {
@@ -141,6 +154,11 @@ protected:
 	Action(Editor& editor, ActionIdentifier ident);
 	void applyZoneChange(Change* change);
 	bool applyHouseChange(Change* change);
+	bool applyHouseUpdate(Change* change);
+	bool applyTownChange(Change* change);
+	bool applyTownUpdate(Change* change);
+	bool applyWaypointRegistryChange(Change* change);
+	bool applyWaypointUpdate(Change* change);
 	bool canApplyHouseChanges() const;
 
 	bool commited;

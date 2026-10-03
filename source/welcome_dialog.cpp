@@ -468,6 +468,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_open_project.png", "Workspace", "Client + server resources", "Open the configured Server Workspace.", WELCOME_DIALOG_OPEN_WORKSPACE, true);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_new_map.png", "New Map", "Create an OTBM map", "Create a new OTBM map.", wxID_NEW);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_open_project.png", "Open Map", "Open an existing map", "Open an existing OTBM map.", wxID_OPEN);
+	AddNavigationItem(navigationPanel, navigationSizer, "icon_multiplayer.png", "Multiplayer", "Join a shared map", "Join a multiplayer NexaMap session by host/IP, port and password.", WELCOME_DIALOG_MULTIPLAYER_JOIN);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_map_converter.png", "Converters", "Maps, spawns and custom servers", "Open standard or custom server converters.", WELCOME_DIALOG_MAP_CONVERTER);
 	AddNavigationItem(navigationPanel, navigationSizer, "icon_preferences.png", "Preferences", "Configure the editor", "Configure NexaMap Editor.", wxID_PREFERENCES);
 
@@ -662,13 +663,10 @@ void WelcomeDialogPanel::OnSelectClient(wxCommandEvent& WXUNUSED(event)) {
 	wxArrayString warnings;
 	if (!g_workspace.configureClient(dialog.GetPath(), error, warnings)) {
 		wxMessageBox(error, "Client folder not supported", wxOK | wxICON_ERROR, this);
-	}
-	if (!warnings.empty()) {
-		wxString message;
+	} else {
 		for (const wxString& warning : warnings) {
-			message << warning << "\n";
+			wxLogWarning("Client detection: %s", warning);
 		}
-		wxMessageBox(message, "Client detection warnings", wxOK | wxICON_WARNING, this);
 	}
 	RefreshWorkspaceDashboard();
 }
@@ -776,7 +774,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		m_server_status_label->SetForegroundColour(subtle);
 	}
 
-	if (server.usesAppearanceAssetsLoader()) {
+	if (server.usesCanaryCrystalLoader()) {
 		setResource(m_items_otb_status, "appearances.dat", server.hasAppearances(), "Found", true);
 	} else {
 		setResource(m_items_otb_status, "items.otb", server.hasItemsOtb(), "Found", true);
@@ -794,7 +792,7 @@ void WelcomeDialogPanel::RefreshWorkspaceDashboard() {
 		: (idPreference == ItemIdModePreference::ClientId ? wxString("Manual") : wxString("Auto"));
 	m_id_mode_value->SetLabel(idMode == ItemIdMode::Unknown ? wxString("Needs review") : preferenceLabel + "  |  " + wxString::FromUTF8(ItemIdModeName(idMode)));
 	m_id_mode_value->SetForegroundColour(idMode == ItemIdMode::Unknown ? warning : cyan);
-	m_items_source_value->SetLabel(server.usesAppearanceAssetsLoader() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
+	m_items_source_value->SetLabel(server.usesCanaryCrystalLoader() ? wxString("appearances.dat") : (server.hasItemsOtb() ? wxString("items.otb") : wxString("-")));
 	m_workspace_status_value->SetLabel(g_workspace.isReady() ? "Ready" : "Setup required");
 	m_workspace_status_value->SetForegroundColour(g_workspace.isReady() ? green : warning);
 	m_open_workspace_button->Enable(g_workspace.isReady());

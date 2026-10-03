@@ -26,6 +26,7 @@ ${CMAKE_CURRENT_LIST_DIR}/cross_client_clipboard.h
 ${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/creature.h
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.h
+${CMAKE_CURRENT_LIST_DIR}/creature_cache.h
 ${CMAKE_CURRENT_LIST_DIR}/creatures.h
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.h
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.h
@@ -84,6 +85,7 @@ ${CMAKE_CURRENT_LIST_DIR}/main.h
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.h
 ${CMAKE_CURRENT_LIST_DIR}/main_toolbar.h
 ${CMAKE_CURRENT_LIST_DIR}/map.h
+${CMAKE_CURRENT_LIST_DIR}/map_backup.h
 ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics.h
 ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_scanner.h
 ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.h
@@ -103,26 +105,31 @@ ${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.h
 ${CMAKE_CURRENT_LIST_DIR}/atlas_page_epochs.h
 ${CMAKE_CURRENT_LIST_DIR}/map_tab.h
 ${CMAKE_CURRENT_LIST_DIR}/map_window.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_common.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_context.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_gui_call.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tool_utils.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_brush.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_edit.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_editor.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_reference.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_validate.h
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.h
+${CMAKE_CURRENT_LIST_DIR}/viewport_metrics.h
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.h
 ${CMAKE_CURRENT_LIST_DIR}/materials.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.h
-${CMAKE_CURRENT_LIST_DIR}/mount_id_resolver.h
-${CMAKE_CURRENT_LIST_DIR}/monster_definition.h
-${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.h
-${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.h
-${CMAKE_CURRENT_LIST_DIR}/monster_editor_dialog.h
-${CMAKE_CURRENT_LIST_DIR}/monster_spell_area.h
-${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.h
-${CMAKE_CURRENT_LIST_DIR}/npc_definition.h
-${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.h
-${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.h
-${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.h
-${CMAKE_CURRENT_LIST_DIR}/spell_definition.h
-${CMAKE_CURRENT_LIST_DIR}/spell_area_library.h
-${CMAKE_CURRENT_LIST_DIR}/spell_area_editor_dialog.h
-${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.h
-${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.h
-${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.h
@@ -137,6 +144,7 @@ ${CMAKE_CURRENT_LIST_DIR}/palette_brush_tool.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.h
+${CMAKE_CURRENT_LIST_DIR}/palette_model.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_window.h
 ${CMAKE_CURRENT_LIST_DIR}/pngfiles.h
@@ -148,8 +156,14 @@ ${CMAKE_CURRENT_LIST_DIR}/preferences.h
 ${CMAKE_CURRENT_LIST_DIR}/process_com.h
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
+${CMAKE_CURRENT_LIST_DIR}/reference_style.h
+${CMAKE_CURRENT_LIST_DIR}/reference_style_store.h
+${CMAKE_CURRENT_LIST_DIR}/reference_style_window.h
+${CMAKE_CURRENT_LIST_DIR}/remove_unreachable_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_model.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_execution_plan.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_item_grid_panel.h
@@ -167,20 +181,11 @@ ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/session_id.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
-${CMAKE_CURRENT_LIST_DIR}/server_content_index.h
-${CMAKE_CURRENT_LIST_DIR}/source_text_utils.h
-${CMAKE_CURRENT_LIST_DIR}/lua_source_scanner.h
-${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.h
-${CMAKE_CURRENT_LIST_DIR}/server_item_id_map.h
-${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.h
-${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.h
-${CMAKE_CURRENT_LIST_DIR}/editor_autosave_state.h
-${CMAKE_CURRENT_LIST_DIR}/editor_source_monitor.h
-${CMAKE_CURRENT_LIST_DIR}/source_compare_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.h
 ${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.h
+${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.h
@@ -197,6 +202,7 @@ ${CMAKE_CURRENT_LIST_DIR}/town.h
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
+${CMAKE_CURRENT_LIST_DIR}/unreachable_cleaner.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/workspace_session.h
 ${CMAKE_CURRENT_LIST_DIR}/version_info.h
@@ -243,9 +249,31 @@ ${CMAKE_CURRENT_LIST_DIR}/cross_client_paste_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp
+${CMAKE_CURRENT_LIST_DIR}/creature_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/depot_conversion_validation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_common.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_context.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_gui_call.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tool_utils.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_edit.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_editor.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_reference.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_validate.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor_resource_session.cpp
@@ -257,6 +285,7 @@ ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gl_renderer.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_backup.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_chunk_render_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/post_process_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
@@ -311,25 +340,6 @@ ${CMAKE_CURRENT_LIST_DIR}/map_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/materials_workbench_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/materials.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_window.cpp
-${CMAKE_CURRENT_LIST_DIR}/mount_id_resolver.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_definition.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_editor_dialog.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_editor_sections.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_editor_attacks.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_spell_area.cpp
-${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.cpp
-${CMAKE_CURRENT_LIST_DIR}/npc_definition.cpp
-${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
-${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
-${CMAKE_CURRENT_LIST_DIR}/outfit_color_picker.cpp
-${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
-${CMAKE_CURRENT_LIST_DIR}/spell_area_library.cpp
-${CMAKE_CURRENT_LIST_DIR}/spell_area_editor_dialog.cpp
-${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.cpp
-${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
-${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.cpp
@@ -344,6 +354,7 @@ ${CMAKE_CURRENT_LIST_DIR}/palette_brush_tool.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_model.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_waypoints.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/pngfiles.cpp
@@ -351,8 +362,11 @@ ${CMAKE_CURRENT_LIST_DIR}/preferences.cpp
 ${CMAKE_CURRENT_LIST_DIR}/process_com.cpp
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/remove_unreachable_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/advanced_replace_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/replace_tool/quick_replace_selection_model.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_engine.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_execution_plan.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_item_grid_panel.cpp
@@ -365,22 +379,21 @@ ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_rule_manager.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_scope.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/replace_visual_similarity_service.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_tool/visual_similarity_index.cpp
+${CMAKE_CURRENT_LIST_DIR}/reference_style.cpp
+${CMAKE_CURRENT_LIST_DIR}/reference_style_store.cpp
+${CMAKE_CURRENT_LIST_DIR}/reference_style_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/session_id.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
-${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
-${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
-${CMAKE_CURRENT_LIST_DIR}/server_item_id_map.cpp
-${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.cpp
-${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.cpp
-${CMAKE_CURRENT_LIST_DIR}/source_compare_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/server_workspace.cpp
 ${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_format_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_source_remap_core.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_export_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_xml_converter.cpp
@@ -396,6 +409,7 @@ ${CMAKE_CURRENT_LIST_DIR}/town.cpp
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.cpp
+${CMAKE_CURRENT_LIST_DIR}/unreachable_cleaner.cpp
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/workspace_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/zones.cpp
@@ -440,35 +454,38 @@ ${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
 )
 set_source_files_properties(
-	${CMAKE_CURRENT_LIST_DIR}/mount_id_resolver.cpp
-	${CMAKE_CURRENT_LIST_DIR}/server_content_index.cpp
-	${CMAKE_CURRENT_LIST_DIR}/server_content_browser_dialog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/server_item_id_map.cpp
-	${CMAKE_CURRENT_LIST_DIR}/server_vocation_catalog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/server_visual_catalog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_definition.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_definition_creation.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_section_codec.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_editor_dialog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_editor_sections.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_editor_attacks.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_spell_area.cpp
-	${CMAKE_CURRENT_LIST_DIR}/monster_spell_preview.cpp
-	${CMAKE_CURRENT_LIST_DIR}/npc_definition.cpp
-	${CMAKE_CURRENT_LIST_DIR}/npc_definition_creation.cpp
-	${CMAKE_CURRENT_LIST_DIR}/npc_editor_dialog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/spell_definition.cpp
-	${CMAKE_CURRENT_LIST_DIR}/spell_area_library.cpp
-	${CMAKE_CURRENT_LIST_DIR}/spell_area_editor_dialog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/spell_area_resolver.cpp
-	${CMAKE_CURRENT_LIST_DIR}/spell_editor_dialog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/spell_visual_browser_dialog.cpp
-	${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.cpp
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_transport.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_protocol.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_crypto.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_codec.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_session.cpp
 ${CMAKE_CURRENT_LIST_DIR}/multiplayer_window.cpp
+PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+# The MCP boundary intentionally keeps translation-unit-local helpers private.
+# Compile it outside unity batches so those helpers remain isolated in every build system.
+set_source_files_properties(
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_common.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_context.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_gui_call.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_item_identity.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_protocol.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_registry.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_server.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tool_utils.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_edit.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_editor.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_entities.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_import_export.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_map.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_orientation.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_reference.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_render.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_region.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_search.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_tools_validate.cpp
+${CMAKE_CURRENT_LIST_DIR}/mcp/mcp_window.cpp
 PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Keep local macros in the legacy RNG and standalone playtest modules isolated.

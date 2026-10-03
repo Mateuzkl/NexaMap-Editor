@@ -25,6 +25,7 @@ class BrushPalettePanel;
 class CreaturePalettePanel;
 class HousePalettePanel;
 class WaypointPalettePanel;
+class Waypoint;
 class ZonesPalettePanel;
 class SavedTerrainPalettePanel;
 class FavoritesPalettePanel;
@@ -61,6 +62,11 @@ public:
 	virtual void OnUpdateBrushSize(BrushShape shape, int size);
 	// Updates the content of the palette (eg. houses, creatures)
 	virtual void OnUpdate(Map* map);
+
+	bool JumpToBrush(const Brush* brush, const std::string& preferredPalette = "", int targetCategory = 0, const std::string& targetTilesetName = "");
+	void SelectWaypoint(Waypoint* wp);
+	bool RenameWaypointFromMap(const std::string& oldName, const std::string& newName);
+	bool DeleteWaypointFromMap(const std::string& name);
 
 	// wxWidgets Event Handlers
 	void OnSwitchingPage(wxChoicebookEvent& event);

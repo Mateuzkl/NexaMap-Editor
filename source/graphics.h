@@ -24,10 +24,9 @@
 #include "outfit.h"
 #include "common.h"
 #include <chrono>
-#include <cstddef>
 #include <deque>
 #include <memory>
-#include <unordered_map>
+#include <array>
 
 #include "client_version.h"
 #include <wx/artprov.h>
@@ -36,6 +35,7 @@ namespace rme {
 	namespace protobuf {
 		namespace appearances {
 			class Appearance;
+			class FrameGroup;
 		}
 	}
 }
@@ -46,8 +46,6 @@ enum SpriteSize {
 	SPRITE_SIZE_32x32,
 	SPRITE_SIZE_COUNT
 };
-
-[[nodiscard]] uint32_t GetOutfitColorRgb(std::size_t colorId);
 
 enum AnimationDirection {
 	ANIMATION_FORWARD = 0,
@@ -92,7 +90,8 @@ public:
 	void unloadDC() override;
 
 protected:
-	wxBitmap* bm[SPRITE_SIZE_COUNT];
+	std::array<std::unique_ptr<wxBitmap>, SPRITE_SIZE_COUNT> bm;
+	mutable std::map<std::pair<SpriteSize, std::pair<int, int>>, wxBitmap> scaled_cache;
 };
 
 struct SpriteVisualFingerprint {
@@ -130,20 +129,7 @@ public:
 	void unloadDC() override;
 
 	void clean(int time);
-	bool getVisualPreviewRGBA(
-		std::vector<uint8_t>& pixels,
-		int& pixelWidth,
-		int& pixelHeight,
-		bool& pending,
-		bool allowAsync = true,
-		const Outfit* outfit = nullptr,
-		int direction = 2,
-		int frame = 0,
-		int patternZ = 0,
-		int patternX = 0,
-		int patternY = 0,
-		int mountClientId = 0
-	);
+	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync = true, const Outfit* outfit = nullptr);
 	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 
 	int getDrawHeight() const;
@@ -356,6 +342,12 @@ private:
 	bool is_complete;
 };
 
+enum FrameGroupType : int {
+	FRAME_GROUP_DEFAULT = 0,
+	FRAME_GROUP_IDLE = 0,
+	FRAME_GROUP_MOVING = 1
+};
+
 class GraphicManager {
 public:
 	GraphicManager();
@@ -375,9 +367,7 @@ public:
 	}
 
 	Sprite* getSprite(int id);
-	GameSprite* getCreatureSprite(int id);
-	GameSprite* getEffectSprite(int id);
-	GameSprite* getDistanceSprite(int id);
+	GameSprite* getCreatureSprite(int id, FrameGroupType group = FRAME_GROUP_DEFAULT);
 	GameSprite* getEditorSprite(int id);
 
 	long getElapsedTime() const {
@@ -385,10 +375,6 @@ public:
 	}
 
 	uint16_t getItemSpriteMaxID() const;
-	uint16_t getEffectSpriteMaxID() const;
-	uint16_t getDistanceSpriteMaxID() const;
-	std::size_t getDeferredAppearanceVisualCount() const;
-	std::size_t getMaterializedAppearanceVisualCount() const;
 
 	// Get an unused texture id (this is acquired by simply increasing a value starting from 0x10000000)
 	GLuint getFreeTextureID();
@@ -405,8 +391,6 @@ public:
 	bool loadSpriteData(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadAppearanceItem(const rme::protobuf::appearances::Appearance& appearance, ItemType* item, wxString& error, wxArrayString& warnings);
 	bool loadAppearanceOutfit(const rme::protobuf::appearances::Appearance& appearance, wxString& error, wxArrayString& warnings);
-	bool loadAppearanceEffect(const rme::protobuf::appearances::Appearance& appearance, wxString& error, wxArrayString& warnings);
-	bool loadAppearanceMissile(const rme::protobuf::appearances::Appearance& appearance, wxString& error, wxArrayString& warnings);
 
 	// Cleans old & unused textures according to config settings
 	void garbageCollection();
@@ -479,12 +463,15 @@ private:
 		const rme::protobuf::appearances::Appearance& appearance,
 		int spriteSpaceId,
 		wxString& error,
-		wxArrayString& warnings
+		wxArrayString& warnings,
+		const rme::protobuf::appearances::FrameGroup* explicitGroup = nullptr,
+		GameSprite** outSprite = nullptr
 	);
-	bool materializeAppearanceVisual(uint16_t id, bool distanceEffect);
 
 	typedef std::map<int, Sprite*> SpriteMap;
 	SpriteMap sprite_space;
+	typedef std::map<int, GameSprite*> MovingCreatureMap;
+	MovingCreatureMap moving_creature_space;
 	typedef std::map<uint64_t, GameSprite::Image*> ImageMap;
 	ImageMap image_space;
 	std::deque<GameSprite*> cleanup_list;
@@ -492,11 +479,6 @@ private:
 	DatFormat dat_format;
 	uint16_t item_count;
 	uint16_t creature_count;
-	uint16_t effect_count;
-	uint16_t distance_count;
-	std::unordered_map<uint16_t, std::shared_ptr<const rme::protobuf::appearances::Appearance>> deferredEffectAppearances;
-	std::unordered_map<uint16_t, std::shared_ptr<const rme::protobuf::appearances::Appearance>> deferredMissileAppearances;
-	std::size_t materializedAppearanceVisuals = 0;
 	bool otfi_found;
 	bool is_extended;
 	bool has_transparency;

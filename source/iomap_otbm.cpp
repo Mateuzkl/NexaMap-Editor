@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include "profiling.h"
+#include "profiling_perf.h"
 
 #include <wx/file.h>
 
@@ -241,7 +242,18 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 		*itemType = &iType;
 	}
 
-	const SpecialItemAttributeHints specialAttributes = inspectSpecialAttributes ? inspectSpecialItemAttributes(stream, maphandle.version, iType) : SpecialItemAttributeHints {};
+	// When conversion is active (inspectSpecialAttributes == true), do not exclude
+	// ordinary classifications (ground, border, bottom) from special attribute inspection.
+	// Converted items carrying authoritative teleport destination, house door ID, or
+	// depot ID must instantiate their corresponding dynamic derived types (Teleport, Door, Depot).
+	const bool canHaveSpecialAttributes = inspectSpecialAttributes
+		&& !iType.isTeleport()
+		&& !iType.isDoor()
+		&& !iType.isDepot();
+
+	const SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
+		? inspectSpecialItemAttributes(stream, maphandle.version, iType)
+		: SpecialItemAttributeHints {};
 
 	uint16_t _count = 0;
 
@@ -1149,6 +1161,9 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 		// warning("Failed to load waypoints.");
 		map.waypointfile = nstr(filename.GetName()) + "-waypoint.xml";
 	}
+	if (!loadWaypointGroups(map, filename)) {
+		warning("Failed to load waypoint groups.");
+	}
 	return true;
 }
 
@@ -1275,7 +1290,7 @@ void IOMapOTBM::readWaypoints(BinaryNode* mapNode, Map& map) {
 		wp.pos.y = y;
 		wp.pos.z = z;
 
-		map.waypoints.addWaypoint(newd Waypoint(wp));
+		map.waypoints.addWaypoint(std::make_unique<Waypoint>(wp));
 	}
 }
 
@@ -1477,6 +1492,7 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 }
 
 bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
+	NexaPerfScope perfTotal("OTBM parsing total");
 	// `f` outlives this call in none of the callers, and loadMap has many early
 	// returns, so the borrow is scoped rather than cleared by hand at each one.
 	struct ProgressSourceBorrow {
@@ -1775,6 +1791,61 @@ bool IOMapOTBM::loadWaypoints(Map& map, pugi::xml_document& doc) {
 	return true;
 };
 
+namespace {
+	std::string waypointGroupsFilename(const FileName& dir) {
+		return nstr(dir.GetName()) + "-waypoint-groups.xml";
+	}
+} // namespace
+
+bool IOMapOTBM::loadWaypointGroups(Map& map, const FileName& dir) {
+	const std::string fn = (const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8)) + waypointGroupsFilename(dir);
+	if (!wxFileExists(wxstr(fn))) {
+		return true;
+	}
+
+	pugi::xml_document doc;
+	const pugi::xml_parse_result result = doc.load_file(fn.c_str());
+	if (!result) {
+		return false;
+	}
+
+	pugi::xml_node root = doc.child("waypointgroups");
+	if (!root) {
+		return true;
+	}
+
+	std::vector<std::string> categories;
+	std::vector<std::string> uncategorizedOrder;
+	std::map<std::string, std::vector<std::string>> categoryOrders;
+	std::map<std::string, std::string> waypointCategories;
+	for (pugi::xml_node node = root.first_child(); node; node = node.next_sibling()) {
+		const std::string nodeName = as_lower_str(node.name());
+		if (nodeName == "category") {
+			const std::string name = node.attribute("name").as_string();
+			categories.push_back(name);
+			categoryOrders[name];
+		} else if (nodeName == "waypoint") {
+			const std::string name = node.attribute("name").as_string();
+			const std::string category = node.attribute("category").as_string();
+			const Waypoint* waypoint = map.waypoints.getWaypoint(name);
+			if (!waypoint || !waypointCategories.emplace(waypoint->name, category).second) {
+				warnings.push_back("Invalid waypoint group sidecar: duplicate or unknown waypoint '" + name + "'.");
+				return false;
+			}
+			if (category.empty()) {
+				uncategorizedOrder.push_back(waypoint->name);
+			} else {
+				categoryOrders[category].push_back(waypoint->name);
+			}
+		}
+	}
+	if (!map.waypoints.applyOrderingFromMetadata(categories, uncategorizedOrder, categoryOrders, waypointCategories)) {
+		warnings.push_back("Invalid waypoint group sidecar: ordering/category invariants failed. Default grouping was kept.");
+		return false;
+	}
+	return true;
+}
+
 bool IOMapOTBM::loadZones(Map& map, const FileName& dir) {
 	if (map.zonefile.empty()) {
 		return true;
@@ -1844,22 +1915,33 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 		return false;
 	}
 	const std::filesystem::path mapFile(nstr(identifier.GetFullPath()));
+	FileSaveTransaction transaction;
+	const std::filesystem::path stagedMapFile = transaction.Stage(mapFile);
 	DiskNodeFileWriteHandle file(
-		mapFile.string(),
+		stagedMapFile.string(),
 		(g_settings.getInteger(Config::SAVE_WITH_OTB_MAGIC_NUMBER) ? "OTBM" : std::string(4, '\0'))
 	);
 	if (!file.isOk()) {
-		error("Can not open file %s for writing", mapFile.string().c_str());
+		error("Cannot open OTBM file %s for writing: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
 		return false;
 	}
 	if (!saveMap(map, file) || !file.isOk()) {
 		if (errorstr.empty()) {
-			error("Could not write OTBM file %s", mapFile.string().c_str());
+			error("Could not serialize OTBM file %s: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
 		}
 		return false;
 	}
 	file.close();
+	if (file.error_code != FILE_NO_ERROR) {
+		error("Could not finalize OTBM file %s: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
+		return false;
+	}
 	if (!checkMemoryBudget("after serializing the OTBM")) {
+		return false;
+	}
+	std::string commitError;
+	if (!transaction.Commit(commitError)) {
+		error("Could not commit OTBM file %s: %s", mapFile.string().c_str(), commitError.c_str());
 		return false;
 	}
 
@@ -1867,27 +1949,52 @@ bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
 }
 
 bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
+	NexaPerfScope perfTotal("save total");
+	errorstr.clear();
+	auto failStage = [&](const wxString& stage, const wxString& fallback) {
+		const wxString reason = errorstr.empty() ? fallback : errorstr;
+		errorstr = "Stage: " + stage + "\nReason: " + reason;
+		return false;
+	};
+
 	if (map.zonefile.empty()) {
 		map.zonefile = nstr(identifier.GetName()) + "-zones.xml";
 	}
 
 	// Write OTBM file using saveMapData
-	if (!saveMapData(map, identifier)) {
-		return false;
+	{
+		NexaPerfScope perf("saveMapData");
+		if (!saveMapData(map, identifier)) {
+			return failStage("saveMapData", "The OTBM file could not be written.");
+		}
 	}
 
 	g_gui.SetLoadDone(99, "Saving spawns...");
-	if (!saveSpawns(map, identifier)) {
-		return false;
+	{
+		NexaPerfScope perf("saveSpawns");
+		if (!saveSpawns(map, identifier)) {
+			return failStage("saveSpawns", "The spawn XML file could not be written.");
+		}
 	}
 
 	g_gui.SetLoadDone(99, "Saving houses...");
-	if (!saveHouses(map, identifier)) {
-		return false;
+	{
+		NexaPerfScope perf("saveHouses");
+		if (!saveHouses(map, identifier)) {
+			return failStage("saveHouses", "The house XML file could not be written.");
+		}
 	}
 
 	g_gui.SetLoadDone(99, "Saving zones...");
-	if (!saveZones(map, identifier)) {
+	{
+		NexaPerfScope perf("saveZones");
+		if (!saveZones(map, identifier)) {
+			return failStage("saveZones", "The zone XML file could not be written.");
+		}
+	}
+
+	g_gui.SetLoadDone(99, "Saving waypoint groups...");
+	if (!saveWaypointGroups(map, identifier)) {
 		return false;
 	}
 
@@ -2033,14 +2140,14 @@ void IOMapOTBM::writeTowns(Map& map, NodeFileWriteHandle& f) {
 
 void IOMapOTBM::writeWaypoints(Map& map, NodeFileWriteHandle& f, bool& waypointsWarning) {
 	bool supportWaypoints = version.otbm >= MAP_OTBM_3;
-	if (supportWaypoints || map.waypoints.waypoints.size() > 0) {
+	if (supportWaypoints || !map.waypoints.empty()) {
 		if (!supportWaypoints) {
 			waypointsWarning = true;
 		}
 
 		f.addNode(OTBM_WAYPOINTS);
 		for (const auto& waypointEntry : map.waypoints) {
-			Waypoint* waypoint = waypointEntry.second;
+			const Waypoint* waypoint = waypointEntry.second.get();
 			f.addNode(OTBM_WAYPOINT);
 			f.addString(waypoint->name);
 			f.addU16(waypoint->pos.x);
@@ -2207,31 +2314,35 @@ static bool fileMatchesXmlContent(const wxString& filepath, const std::string& c
 	return contentMatchesIgnoringLineEndings(existingContent, content);
 }
 
-static bool writeContentToFile(const wxString& filepath, const std::string& content) {
+static bool writeContentToFile(const wxString& filepath, const std::string& content, std::string& error) {
+	error.clear();
 	FileSaveTransaction transaction;
 	const std::filesystem::path destination(filepath.ToStdWstring());
 	const std::filesystem::path staged = transaction.Stage(destination);
 
 	wxFile file(wxString(staged.wstring()), wxFile::write);
 	if (!file.IsOpened()) {
+		error = "Could not open staged file for writing: " + staged.string();
 		return false;
 	}
 
 	if (!content.empty()) {
 		const auto bytesWritten = file.Write(content.data(), content.size());
 		if (static_cast<size_t>(bytesWritten) != content.size()) {
+			error = "Short write while saving staged file: " + staged.string();
 			return false;
 		}
 	}
 	if (!file.Close()) {
+		error = "Could not flush and close staged file: " + staged.string();
 		return false;
 	}
 
-	std::string error;
 	return transaction.Commit(error);
 }
 
-static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath) {
+static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath, std::string& error) {
+	error.clear();
 	std::ostringstream stream;
 	doc.save(stream, "\t", pugi::format_default, pugi::encoding_utf8);
 	const std::string content = stream.str();
@@ -2242,21 +2353,26 @@ static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& 
 
 	const wxString backupPath = filepath + "~";
 	if (!wxFileExists(filepath) && fileMatchesXmlContent(backupPath, content)) {
-		return wxRenameFile(backupPath, filepath, false);
+		if (wxRenameFile(backupPath, filepath, false)) {
+			return true;
+		}
+		error = "Could not restore unchanged XML backup to " + nstr(filepath);
+		return false;
 	}
 
-	return writeContentToFile(filepath, content);
+	return writeContentToFile(filepath, content, error);
 }
 
 template <typename FillFn>
-static bool saveSidecarXml(const FileName& dir, const std::string& filename, FillFn fill) {
+static bool saveSidecarXml(const FileName& dir, const std::string& filename, std::string& error, FillFn fill) {
 	wxString filepath = dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
 	filepath += wxString(filename.c_str(), wxConvUTF8);
 
 	pugi::xml_document doc;
 	if (fill(doc)) {
-		return saveXmlFileIfChanged(doc, filepath);
+		return saveXmlFileIfChanged(doc, filepath, error);
 	}
+	error = "Could not build XML document for " + nstr(filepath);
 	return false;
 }
 
@@ -2272,6 +2388,9 @@ bool IOMapOTBM::prependXmlDeclaration(pugi::xml_document& doc) {
 bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	const std::filesystem::path directory(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
 	const std::string mapName = nstr(dir.GetName());
+
+	// Keep full-map validation out of the save hot path. Capture already walks
+	// every registered spawn needed to produce the sidecar and must run once.
 	const SpawnDocument document = SpawnMapAdapter::Capture(map);
 	SpawnWriteResult result;
 
@@ -2297,15 +2416,21 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	}
 	if (!result.success) {
 		warnings.push_back(wxstr("IOMapOTBM::saveSpawns: " + result.error));
+		error("%s", wxstr(result.error));
 		return false;
 	}
 	return true;
 }
 
 bool IOMapOTBM::saveHouses(Map& map, const FileName& dir) {
-	return saveSidecarXml(dir, map.housefile, [&](pugi::xml_document& doc) {
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, map.housefile, saveError, [&](pugi::xml_document& doc) {
 		return saveHouses(map, doc);
 	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
 }
 
 bool IOMapOTBM::saveHouses(Map& map, pugi::xml_document& doc) {
@@ -2344,9 +2469,14 @@ bool IOMapOTBM::saveHouses(Map& map, pugi::xml_document& doc) {
 }
 
 bool IOMapOTBM::saveWaypoints(Map& map, const FileName& dir) {
-	return saveSidecarXml(dir, map.waypointfile, [&](pugi::xml_document& doc) {
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, map.waypointfile, saveError, [&](pugi::xml_document& doc) {
 		return saveWaypoints(map, doc);
 	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
 }
 
 bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
@@ -2373,6 +2503,57 @@ bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
 	return true;
 }
 
+bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
+	if (!map.waypoints.hasGroups()) {
+		const std::string fn = (const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8)) + waypointGroupsFilename(dir);
+		if (wxFileExists(wxstr(fn)) && !wxRemoveFile(wxstr(fn))) {
+			warnings.push_back("Could not remove stale waypoint group sidecar: " + fn);
+		}
+		return true;
+	}
+	std::string invariantError;
+	if (!map.waypoints.validateInvariants(&invariantError)) {
+		warnings.push_back("Could not save waypoint groups: " + invariantError);
+		return false;
+	}
+
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, waypointGroupsFilename(dir), saveError, [&](pugi::xml_document& doc) {
+		if (!prependXmlDeclaration(doc)) {
+			return false;
+		}
+
+		pugi::xml_node root = doc.append_child("waypointgroups");
+		for (const auto& category : map.waypoints.categories()) {
+			pugi::xml_node categoryNode = root.append_child("category");
+			categoryNode.append_attribute("name") = category.c_str();
+			const auto& categoryOrders = map.waypoints.categoryWaypointOrders();
+			const auto found = categoryOrders.find(category);
+			if (found != categoryOrders.end()) {
+				for (const auto& waypointName : found->second) {
+					if (const Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
+						pugi::xml_node waypointNode = root.append_child("waypoint");
+						waypointNode.append_attribute("name") = waypoint->name.c_str();
+						waypointNode.append_attribute("category") = category.c_str();
+					}
+				}
+			}
+		}
+		for (const auto& waypointName : map.waypoints.uncategorizedOrder()) {
+			if (const Waypoint* waypoint = map.waypoints.getWaypoint(waypointName)) {
+				pugi::xml_node waypointNode = root.append_child("waypoint");
+				waypointNode.append_attribute("name") = waypoint->name.c_str();
+				waypointNode.append_attribute("category") = "";
+			}
+		}
+		return true;
+	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
+}
+
 bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 	if (map.zonefile.empty()) {
 		map.zonefile = nstr(dir.GetName()) + "-zones.xml";
@@ -2393,9 +2574,14 @@ bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 		return true;
 	}
 
-	return saveSidecarXml(dir, map.zonefile, [&](pugi::xml_document& doc) {
+	std::string saveError;
+	const bool saved = saveSidecarXml(dir, map.zonefile, saveError, [&](pugi::xml_document& doc) {
 		return saveZones(map, doc);
 	});
+	if (!saved) {
+		error("%s", wxstr(saveError));
+	}
+	return saved;
 }
 
 bool IOMapOTBM::saveZones(Map& map, pugi::xml_document& doc) {

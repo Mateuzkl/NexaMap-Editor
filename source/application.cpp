@@ -27,13 +27,13 @@
 #include "theme.h"
 #include "client_assets.h"
 #include "workspace_session.h"
+#include "mcp/mcp_window.h"
 
 #include "materials.h"
 #include "map.h"
 #include "map_tab.h"
 
 #include <atomic>
-#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -163,26 +163,6 @@ namespace {
 	std::streambuf* originalOutputBuffer = nullptr;
 	std::streambuf* originalErrorBuffer = nullptr;
 
-#ifdef __WINDOWS__
-	bool StartDiagnosticConsole() {
-		if (GetConsoleWindow() == nullptr && !AttachConsole(ATTACH_PARENT_PROCESS) && !AllocConsole()) {
-			return false;
-		}
-
-		FILE* consoleStream = nullptr;
-		freopen_s(&consoleStream, "CONOUT$", "w", stdout);
-		freopen_s(&consoleStream, "CONOUT$", "w", stderr);
-		freopen_s(&consoleStream, "CONIN$", "r", stdin);
-		std::ios::sync_with_stdio(true);
-		std::cout.clear();
-		std::cerr.clear();
-		SetConsoleOutputCP(CP_UTF8);
-		SetConsoleCP(CP_UTF8);
-		SetConsoleTitleW(L"NexaMap - Diagnostic Console");
-		return true;
-	}
-#endif
-
 	std::string DiagnosticPath(const std::filesystem::path& path) {
 		const auto utf8 = path.u8string();
 		return std::string(utf8.begin(), utf8.end());
@@ -305,6 +285,10 @@ namespace {
 	int RunApplication(EntryPoint&& entryPoint) {
 		std::cout << std::unitbuf;
 		std::cerr << std::unitbuf;
+#ifdef __WINDOWS__
+		SetConsoleOutputCP(CP_UTF8);
+		SetConsoleTitleW(L"NexaMap - Diagnostic Console");
+#endif
 		std::set_terminate(ReportTerminatedException);
 		try {
 			const int applicationExitCode = std::forward<EntryPoint>(entryPoint)();
@@ -360,19 +344,13 @@ bool Application::OnInit() {
 #if defined __DEBUG_MODE__ && defined __WINDOWS__
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
-	// Load persisted startup options before creating any windows.
+	// Load the persisted theme before creating any windows.
+	std::cerr << "[startup] Loading settings" << std::endl;
 	g_settings.load();
 	wxString forceDiagnostics;
 	if (wxGetEnv("NEXAMAP_DIAGNOSTICS", &forceDiagnostics) && forceDiagnostics == "1") {
 		g_settings.setInteger(Config::ENABLE_DIAGNOSTIC_LOG, 1);
-		g_settings.setInteger(Config::SHOW_DIAGNOSTIC_CONSOLE, 1);
 	}
-#ifdef __WINDOWS__
-	// Keep the live diagnostic terminal available in Windows builds so startup,
-	// converter and map errors are visible even when no preference was persisted.
-	g_settings.setInteger(Config::SHOW_DIAGNOSTIC_CONSOLE, 1);
-	StartDiagnosticConsole();
-#endif
 	if (g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG)) {
 #ifdef __WINDOWS__
 		const std::filesystem::path executablePath(wxStandardPaths::Get().GetExecutablePath().ToStdWstring());
@@ -385,7 +363,6 @@ bool Application::OnInit() {
 			new ConsoleLogTarget();
 		}
 	}
-	std::cerr << "[startup] Loading settings" << std::endl;
 #if wxUSE_ON_FATAL_EXCEPTION
 	// Install before resource discovery and window construction so startup
 	// failures are captured as well as crashes in the event loop.
@@ -491,6 +468,7 @@ bool Application::OnInit() {
 	g_gui.root = newd MainFrame(__W_RME_APPLICATION_NAME__, wxDefaultPosition, wxSize(700, 500));
 	SetTopWindow(g_gui.root);
 	g_gui.SetTitle("");
+	mcp::StartConfiguredServer();
 
 	g_hotkey_manager.DiscoverActions(g_gui.root->GetMainMenuBar());
 	g_hotkey_manager.RebuildAccelerators(g_gui.root);
@@ -517,47 +495,75 @@ bool Application::OnInit() {
 	if (save_failed_file.FileExists()) {
 		std::ifstream f(nstr(save_failed_file.GetFullPath()).c_str(), std::ios::in);
 
-		std::string backup_otbm, backup_house, backup_spawn;
-
-		getline(f, backup_otbm);
-		getline(f, backup_house);
-		getline(f, backup_spawn);
+		std::vector<std::string> backups;
+		std::string line;
+		while (std::getline(f, line)) {
+			backups.push_back(line);
+		}
 
 		// Remove the file
 		f.close();
 		std::remove(nstr(save_failed_file.GetFullPath()).c_str());
 
 		// Query file retrieval if possible
-		if (!backup_otbm.empty()) {
+		if (!backups.empty() && !backups[0].empty()) {
+			wxString backupList;
+			for (const auto& backup : backups) {
+				if (!backup.empty()) {
+					backupList << wxstr(backup) << "\n";
+				}
+			}
 			long ret = g_gui.PopupDialog(
 				"Editor Crashed",
 				wxString(
 					"IMPORTANT! THE EDITOR CRASHED WHILE SAVING!\n\n"
 					"Do you want to recover the lost map? (it will be opened immediately):\n"
-				) << wxstr(backup_otbm)
-				  << "\n"
-				  << wxstr(backup_house) << "\n"
-				  << wxstr(backup_spawn) << "\n",
+				) << backupList,
 				wxYES | wxNO
 			);
 
 			if (ret == wxID_YES) {
-				// Recover if the user so wishes
-				std::remove(backup_otbm.substr(0, backup_otbm.size() - 1).c_str());
-				std::rename(backup_otbm.c_str(), backup_otbm.substr(0, backup_otbm.size() - 1).c_str());
-
-				if (!backup_house.empty()) {
-					std::remove(backup_house.substr(0, backup_house.size() - 1).c_str());
-					std::rename(backup_house.c_str(), backup_house.substr(0, backup_house.size() - 1).c_str());
+				auto restoreBackup = [](const std::string& backupPath) -> std::string {
+					if (backupPath.empty() || backupPath.back() != '~') {
+						wxLogWarning("Ignoring malformed crash-recovery path: %s", wxstr(backupPath));
+						return {};
+					}
+					const std::string destination = backupPath.substr(0, backupPath.size() - 1);
+					if (destination.empty()) {
+						wxLogWarning("Ignoring crash-recovery path with an empty destination: %s", wxstr(backupPath));
+						return {};
+					}
+					std::error_code error;
+					if (!std::filesystem::exists(backupPath, error) || error) {
+						wxLogWarning("Crash-recovery backup does not exist: %s", wxstr(backupPath));
+						return {};
+					}
+					const bool destinationExists = std::filesystem::exists(destination, error);
+					if (error) {
+						wxLogWarning("Could not inspect crash-recovery destination %s: %s", wxstr(destination), wxstr(error.message()));
+						return {};
+					}
+					if (destinationExists && !std::filesystem::remove(destination, error)) {
+						wxLogWarning("Could not remove crash-recovery destination %s: %s", wxstr(destination), wxstr(error.message()));
+						return {};
+					}
+					error.clear();
+					std::filesystem::rename(backupPath, destination, error);
+					if (error) {
+						wxLogWarning("Could not restore backup %s: %s", wxstr(backupPath), wxstr(error.message()));
+						return {};
+					}
+					return destination;
+				};
+				const std::string primaryDestination = restoreBackup(backups[0]);
+				for (size_t index = 1; index < backups.size(); ++index) {
+					restoreBackup(backups[index]);
 				}
-				if (!backup_spawn.empty()) {
-					std::remove(backup_spawn.substr(0, backup_spawn.size() - 1).c_str());
-					std::rename(backup_spawn.c_str(), backup_spawn.substr(0, backup_spawn.size() - 1).c_str());
-				}
 
-				// Load the map
-				g_gui.LoadMap(wxstr(backup_otbm.substr(0, backup_otbm.size() - 1)));
-				return true;
+				if (!primaryDestination.empty()) {
+					g_gui.LoadMap(wxstr(primaryDestination));
+					return true;
+				}
 			}
 		}
 	}
@@ -671,6 +677,7 @@ int Application::OnRun() {
 }
 
 void Application::ShutdownServices() {
+	mcp::StopServer();
 	g_gui.DrainEditorDisposals();
 #ifdef _USE_PROCESS_COM
 	wxDELETE(m_proc_server);

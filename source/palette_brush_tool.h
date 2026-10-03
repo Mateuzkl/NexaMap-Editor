@@ -22,11 +22,14 @@
 
 class BrushButton : public ItemToggleButton {
 public:
-	BrushButton(wxWindow* parent, Brush* brush, RenderSize, uint32_t id = wxID_ANY);
+	BrushButton(wxWindow* parent, Brush* brush, RenderSize sz, uint32_t id = wxID_ANY, bool showLabel = false);
 	~BrushButton() override;
 
 	Brush* brush;
+	bool show_label;
 
+	void SetShowLabel(bool show);
+	void OnPaint(wxPaintEvent& event);
 	void OnKey(wxKeyEvent& event);
 
 	DECLARE_EVENT_TABLE()

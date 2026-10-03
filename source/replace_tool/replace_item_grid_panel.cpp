@@ -107,7 +107,7 @@ void ReplaceItemGridPanel::OnPaint(wxPaintEvent&) {
 		const ReplaceLibraryItem& item = items[index];
 		if (item.clientId != 0 && !g_gui.gfx.isUnloaded()) {
 			if (Sprite* sprite = g_gui.gfx.getSprite(item.clientId)) {
-				sprite->DrawTo(&dc, SPRITE_SIZE_32x32, cell.x + 6, cell.y + 10, cell.width, cell.height);
+				sprite->DrawTo(&dc, SPRITE_SIZE_32x32, cell.x + 6, cell.y + 10, 32, 32);
 			}
 		}
 
@@ -117,7 +117,7 @@ void ReplaceItemGridPanel::OnPaint(wxPaintEvent&) {
 		const wxString label = wxControl::Ellipsize(wxString::FromUTF8(item.name), dc, wxELLIPSIZE_END, textWidth, wxELLIPSIZE_FLAGS_NONE);
 		dc.DrawText(label, textX, cell.y + 9);
 		dc.SetTextForeground(selected ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::TextSubtle));
-		dc.DrawText(wxString::Format("SID %u  CID %u", item.serverId.value, item.clientId), textX, cell.y + 30);
+		dc.DrawText(runtimeIdLabels ? wxString::Format("ID %u  Sprite %u", item.serverId.value, item.clientId) : wxString::Format("SID %u  CID %u", item.serverId.value, item.clientId), textX, cell.y + 30);
 	}
 }
 

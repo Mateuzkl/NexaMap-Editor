@@ -23,6 +23,7 @@
 #include <stdexcept>
 #include <string>
 #include <stack>
+#include <vector>
 #include <stdio.h>
 #include <cstring>
 

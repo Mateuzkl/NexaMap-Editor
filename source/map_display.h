@@ -80,6 +80,7 @@ public:
 	void OnBrowseTile(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);
 	void OnDelete(wxCommandEvent& event);
+	void OnQuickReplaceSelection(wxCommandEvent& event);
 	// ----
 	void OnGotoDestination(wxCommandEvent& event);
 	void OnCopyDestination(wxCommandEvent& event);
@@ -90,6 +91,7 @@ public:
 	void OnSelectGroundBrush(wxCommandEvent& event);
 	void OnOpenBorderWorkspace(wxCommandEvent& event);
 	void OnLearnBorderSelection(wxCommandEvent& event);
+	void OnCaptureAIStyleReference(wxCommandEvent& event);
 	void OnSaveTerrain(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSelectDoodadBrush(wxCommandEvent& event);
@@ -98,9 +100,10 @@ public:
 	void OnSelectCarpetBrush(wxCommandEvent& event);
 	void OnSelectTableBrush(wxCommandEvent& event);
 	void OnSelectCreatureBrush(wxCommandEvent& event);
-	void OnEditMonster(wxCommandEvent& event);
 	void OnSelectSpawnBrush(wxCommandEvent& event);
 	void OnSelectHouseBrush(wxCommandEvent& event);
+	void OnWaypointRename(wxCommandEvent& event);
+	void OnWaypointDelete(wxCommandEvent& event);
 	void OnSelectCollectionBrush(wxCommandEvent& event);
 	void OnSelectMoveTo(wxCommandEvent& event);
 	// ---
@@ -141,6 +144,7 @@ public:
 		return ingamePreview;
 	}
 	void SetZoom(double value);
+	bool ZoomTo(double targetZoom, int anchorScreenX = -1, int anchorScreenY = -1);
 	void SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame);
 	Position GetIngamePreviewDrawTile() const;
 	void SetIngamePreviewLighting(bool enabled);
@@ -177,6 +181,11 @@ private:
 	static bool processed[BLOCK_SIZE * BLOCK_SIZE];
 
 	void EditTileProperties(Position position, bool browse, bool topItem);
+	Waypoint* getWaypointAt(int map_x, int map_y, int map_z) const;
+	void beginWaypointDrag(Waypoint* waypoint, const Position& previewPosition);
+	void updateWaypointDrag(const Position& previewPosition);
+	void finishWaypointDrag(bool commit, bool releaseCapture = true);
+	void showWaypointContextMenu(const std::string& waypointName);
 	Editor& editor;
 	MapDrawer* drawer;
 	std::shared_ptr<const MinimapImportDocument> minimap_import_overlay;
@@ -211,6 +220,12 @@ private:
 	bool drawing;
 	bool dragging_draw;
 	bool replace_dragging;
+	bool dragging_waypoint;
+	std::string waypoint_drag_name_;
+	Position waypoint_drag_origin_pos_;
+	Position waypoint_drag_preview_pos_;
+	std::string context_waypoint_name_;
+	bool skip_properties_release_ = false;
 
 	uint8_t* screenshot_buffer;
 	bool screenshot_captured = false;

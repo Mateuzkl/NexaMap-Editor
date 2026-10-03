@@ -11,7 +11,6 @@
 #include "settings.h"
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 
 WorkspaceSession g_workspace;
@@ -46,29 +45,7 @@ namespace {
 	}
 
 	bool SameServerWorkspace(const ServerWorkspace& left, const ServerWorkspace& right) {
-		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.mountsXmlPath == right.mountsXmlPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.spellsDirectory == right.spellsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.mountsXmlFingerprint == right.mountsXmlFingerprint && left.itemIdMode == right.itemIdMode && left.serverType == right.serverType && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
-	}
-
-	bool SameContentRoots(const ServerWorkspace& left, const ServerWorkspace& right) {
-		return left.rootPath == right.rootPath
-			&& left.monstersDirectory == right.monstersDirectory
-			&& left.npcsDirectory == right.npcsDirectory
-			&& left.spellsDirectory == right.spellsDirectory
-			&& left.activeDataDirectory == right.activeDataDirectory
-			&& left.serverType == right.serverType;
-	}
-
-	bool IsLuaLibraryPath(const std::filesystem::path& path) {
-		for (const std::filesystem::path& component : path) {
-			std::string name = component.string();
-			std::transform(name.begin(), name.end(), name.begin(), [](unsigned char value) {
-				return static_cast<char>(std::tolower(value));
-			});
-			if (name == "lib") {
-				return true;
-			}
-		}
-		return false;
+		return left.rootPath == right.rootPath && left.itemsOtbPath == right.itemsOtbPath && left.itemsXmlPath == right.itemsXmlPath && left.appearancesPath == right.appearancesPath && left.activeDataDirectory == right.activeDataDirectory && left.mapsDirectory == right.mapsDirectory && left.primaryMapPath == right.primaryMapPath && left.monstersDirectory == right.monstersDirectory && left.npcsDirectory == right.npcsDirectory && left.itemsOtbFingerprint == right.itemsOtbFingerprint && left.itemsXmlFingerprint == right.itemsXmlFingerprint && left.appearancesFingerprint == right.appearancesFingerprint && left.itemIdMode == right.itemIdMode && left.serverType == right.serverType && left.serverProfile == right.serverProfile && left.protocol == right.protocol && SameDetectedMaps(left.maps, right.maps);
 	}
 
 	bool ApplyDetectedMapSelection(ServerWorkspace& workspace, const std::filesystem::path& path) {
@@ -80,9 +57,9 @@ namespace {
 		workspace.mapsDirectory = selected->path.parent_path();
 		workspace.serverType = selected->serverType;
 		workspace.serverProfile = ServerTypeName(selected->serverType);
-		workspace.itemIdMode = workspace.serverType == ServerType::CustomTfsAppearances
-			? ItemIdMode::ServerId
-			: (workspace.usesCanaryCrystalLoader() ? ItemIdMode::ClientId : (workspace.serverType == ServerType::Tfs ? ItemIdMode::ServerId : ItemIdMode::Unknown));
+		workspace.itemIdMode = workspace.usesCanaryCrystalLoader()
+			? ItemIdMode::ClientId
+			: (workspace.serverType == ServerType::Tfs ? ItemIdMode::ServerId : ItemIdMode::Unknown);
 		return true;
 	}
 }
@@ -120,16 +97,11 @@ void WorkspaceSession::swap(WorkspaceSession& other) noexcept {
 	using std::swap;
 	swap(client, other.client);
 	swap(server, other.server);
-	swap(serverContent, other.serverContent);
-	swap(spellAreaResolver, other.spellAreaResolver);
-	swap(visualCatalog, other.visualCatalog);
-	swap(vocationCatalog, other.vocationCatalog);
-	swap(metadataCacheStats, other.metadataCacheStats);
 	swap(selectedDetectedMapPath, other.selectedDetectedMapPath);
+	swap(validatedClientAssetsManifest, other.validatedClientAssetsManifest);
 	swap(serverError, other.serverError);
 	swap(idModePreference, other.idModePreference);
 	swap(generation, other.generation);
-	swap(contentGeneration, other.contentGeneration);
 	swap(persistenceEnabled, other.persistenceEnabled);
 }
 
@@ -140,42 +112,61 @@ void WorkspaceSession::setPersistenceEnabled(bool enabled) {
 bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist) {
 	error.clear();
 	warnings.clear();
-	WorkspaceClientSelection selection;
-	selection.rootPath = path;
 
 	const ClientAssetsValidationResult appearances = ClientAssetsManifestLoader::Validate(ToFilesystemPath(path));
 	if (appearances.valid) {
-		selection.mode = WorkspaceClientMode::Appearances;
-		selection.valid = true;
-		selection.versionName = wxstr(appearances.manifest.version);
-		selection.versionId = ClientVersion::getLatestVersion() ? ClientVersion::getLatestVersion()->getID() : CLIENT_VERSION_NONE;
-		for (const std::string& warning : appearances.manifest.warnings) {
-			warnings.push_back(wxstr(warning));
-		}
-		ClientAssets::setPath(path);
-		if (persist && persistenceEnabled) {
-			ClientAssets::saveConfiguredPath();
-		}
-	} else {
-		ClientVersion* version = ClientVersion::detectFromPath(FileName(path), error);
-		if (version == nullptr) {
-			client = std::move(selection);
-			++generation;
-			if (persist && persistenceEnabled) {
-				persistPaths();
-			}
-			return false;
-		}
-		selection.mode = WorkspaceClientMode::Classic;
-		selection.valid = true;
-		selection.versionName = wxstr(version->getName());
-		selection.versionId = version->getID();
-		if (persist && persistenceEnabled) {
-			g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, version->getID());
-			ClientVersion::saveVersions();
-		}
+		return configureValidatedAppearancesClient(path, appearances, warnings, persist);
 	}
 
+	validatedClientAssetsManifest.reset();
+	WorkspaceClientSelection selection;
+	selection.rootPath = path;
+	ClientVersion* version = ClientVersion::detectFromPath(FileName(path), error);
+	if (version == nullptr) {
+		client = std::move(selection);
+		++generation;
+		if (persist && persistenceEnabled) {
+			persistPaths();
+		}
+		return false;
+	}
+	selection.mode = WorkspaceClientMode::Classic;
+	selection.valid = true;
+	selection.versionName = wxstr(version->getName());
+	selection.versionId = version->getID();
+	if (persist && persistenceEnabled) {
+		g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, version->getID());
+		ClientVersion::saveVersions();
+	}
+	client = std::move(selection);
+	++generation;
+	if (persist && persistenceEnabled) {
+		persistPaths();
+		g_settings.save();
+	}
+	return true;
+}
+
+bool WorkspaceSession::configureValidatedAppearancesClient(
+	const wxString& path,
+	const ClientAssetsValidationResult& validation,
+	wxArrayString& warnings,
+	bool persist
+) {
+	WorkspaceClientSelection selection;
+	selection.rootPath = path;
+	selection.mode = WorkspaceClientMode::Appearances;
+	selection.valid = true;
+	selection.versionName = wxstr(validation.manifest.version);
+	selection.versionId = ClientVersion::getLatestVersion() ? ClientVersion::getLatestVersion()->getID() : CLIENT_VERSION_NONE;
+	for (const std::string& warning : validation.manifest.warnings) {
+		warnings.push_back(wxstr(warning));
+	}
+	validatedClientAssetsManifest = validation.manifest;
+	ClientAssets::setPath(path);
+	if (persist && persistenceEnabled) {
+		ClientAssets::saveConfiguredPath();
+	}
 	client = std::move(selection);
 	++generation;
 	if (persist && persistenceEnabled) {
@@ -204,23 +195,12 @@ bool WorkspaceSession::configureServer(const wxString& path, wxString& error, bo
 	if (!selectedDetectedMapPath.empty() && !ApplyDetectedMapSelection(detection.workspace, selectedDetectedMapPath)) {
 		selectedDetectedMapPath.clear();
 	}
-	std::string mountError;
-	mountIdResolver.load(detection.workspace.mountsXmlPath, mountError);
-	if (options.diagnosticLogging && !detection.workspace.mountsXmlPath.empty()) {
-		std::cerr << "[workspace] Loaded " << mountIdResolver.size() << " mounts from " << detection.workspace.mountsXmlPath << std::endl;
-	}
 	const bool changed = !SameServerWorkspace(server, detection.workspace) || serverError != wxstr(detection.error);
-	const bool contentWorkspaceChanged = !SameContentRoots(server, detection.workspace);
 	server = detection.workspace;
-	if (contentWorkspaceChanged) {
-		serverContent = {};
-		++contentGeneration;
-	}
 	serverError = wxstr(detection.error);
 	error = serverError;
 	if (changed) {
 		++generation;
-		invalidateServerMetadata();
 	}
 	if (persist && persistenceEnabled) {
 		if (options.diagnosticLogging) {
@@ -274,52 +254,7 @@ bool WorkspaceSession::rescanServer(wxString& error) {
 		error = "Select the OT server root folder first.";
 		return false;
 	}
-	const bool configured = configureServer(FromFilesystemPath(server.rootPath), error, persistenceEnabled);
-	if (!configured) {
-		return false;
-	}
-	const ServerContentIndex* previous = serverContent.matchesWorkspace(server) ? &serverContent : nullptr;
-	ServerContentIndex refreshed = ServerContentIndex::Build(server, previous);
-	const bool contentChanged = !serverContent.sameContentAs(refreshed);
-	serverContent = std::move(refreshed);
-	if (contentChanged) {
-		++contentGeneration;
-	}
-	return true;
-}
-
-bool WorkspaceSession::ensureServerContent(wxString& error) {
-	if (server.rootPath.empty()) {
-		error = "Select the OT server root folder first.";
-		return false;
-	}
-	if (serverContent.initialized() && serverContent.matchesWorkspace(server)) {
-		error.clear();
-		return true;
-	}
-	ServerContentIndex builtIndex = ServerContentIndex::Build(server);
-	const bool contentChanged = !serverContent.sameContentAs(builtIndex);
-	serverContent = std::move(builtIndex);
-	if (contentChanged) {
-		++contentGeneration;
-	}
-	error.clear();
-	return true;
-}
-
-bool WorkspaceSession::refreshServerContentPaths(const std::vector<std::filesystem::path>& changedPaths, wxString& error) {
-	if (!ensureServerContent(error)) {
-		return false;
-	}
-	ServerContentIndex refreshed = ServerContentIndex::RefreshPaths(server, serverContent, changedPaths);
-	const bool contentChanged = !serverContent.sameContentAs(refreshed);
-	serverContent = std::move(refreshed);
-	if (contentChanged) {
-		++contentGeneration;
-	}
-	invalidateServerMetadataForPaths(changedPaths);
-	error.clear();
-	return true;
+	return configureServer(FromFilesystemPath(server.rootPath), error, persistenceEnabled);
 }
 
 bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& warnings, bool persist) {
@@ -328,7 +263,7 @@ bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& w
 	if (hasCompatibleServerResources()) {
 		return true;
 	}
-	if (server.usesAppearanceAssetsLoader()) {
+	if (server.usesCanaryCrystalLoader()) {
 		const wxString savedPath = wxstr(g_settings.getString(Config::CANARY_CRYSTAL_ASSETS_DIRECTORY));
 		if (savedPath.empty()) {
 			error = "This Canary/Crystal server requires a compatible Assets client. Select one once; NexaMap will remember it for detected maps.";
@@ -339,7 +274,7 @@ bool WorkspaceSession::restoreCompatibleClient(wxString& error, wxArrayString& w
 			error = wxString("The saved Canary/Crystal client is no longer valid: ") + wxstr(validation.error);
 			return false;
 		}
-		return configureClient(savedPath, error, warnings, persist);
+		return configureValidatedAppearancesClient(savedPath, validation, warnings, persist);
 	}
 
 	// TFS and unknown/generic workspaces must never inherit the dedicated
@@ -388,7 +323,7 @@ ItemIdMode WorkspaceSession::getEffectiveItemIdMode() const {
 	// attribute; appearances catalogs are keyed by ClientID. Map-name evidence
 	// is useful before a client is selected, but must never override that fact.
 	const ItemIdMode clientAssetMode = client.mode == WorkspaceClientMode::Appearances
-		? (server.serverType == ServerType::CustomTfsAppearances ? ItemIdMode::ServerId : ItemIdMode::ClientId)
+		? ItemIdMode::ClientId
 		: (client.mode == WorkspaceClientMode::Classic ? ItemIdMode::ServerId : ItemIdMode::Unknown);
 	return ResolveEffectiveItemIdMode(idModePreference, clientAssetMode, server.itemIdMode);
 }
@@ -399,10 +334,6 @@ const WorkspaceClientSelection& WorkspaceSession::getClient() const {
 
 const ServerWorkspace& WorkspaceSession::getServer() const {
 	return server;
-}
-
-const ServerContentIndex& WorkspaceSession::getServerContent() const {
-	return serverContent;
 }
 
 const wxString& WorkspaceSession::getServerError() const {
@@ -417,7 +348,7 @@ bool WorkspaceSession::hasCompatibleServerResources() const {
 	if (!client.valid) {
 		return false;
 	}
-	if (server.usesAppearanceAssetsLoader()) {
+	if (server.usesCanaryCrystalLoader()) {
 		return client.mode == WorkspaceClientMode::Appearances && server.hasRequiredResources();
 	}
 	return client.mode == WorkspaceClientMode::Classic && server.hasItemsOtb();
@@ -452,8 +383,10 @@ uint64_t WorkspaceSession::getGeneration() const {
 	return generation;
 }
 
-uint64_t WorkspaceSession::getContentGeneration() const {
-	return contentGeneration;
+std::optional<ClientAssetsManifest> WorkspaceSession::takeValidatedClientAssetsManifest() {
+	std::optional<ClientAssetsManifest> manifest = std::move(validatedClientAssetsManifest);
+	validatedClientAssetsManifest.reset();
+	return manifest;
 }
 
 void WorkspaceSession::persistPaths() {
@@ -463,65 +396,4 @@ void WorkspaceSession::persistPaths() {
 	g_settings.setString(Config::WORKSPACE_ITEMS_XML_PATH, server.itemsXmlPath.empty() ? std::string() : nstr(FromFilesystemPath(server.itemsXmlPath)));
 	g_settings.setString(Config::WORKSPACE_APPEARANCES_PATH, server.appearancesPath.empty() ? std::string() : nstr(FromFilesystemPath(server.appearancesPath)));
 	g_settings.setInteger(Config::WORKSPACE_ITEM_ID_MODE, static_cast<int>(idModePreference));
-}
-
-const MountIdResolver& WorkspaceSession::getMountIdResolver() const {
-	return mountIdResolver;
-}
-
-int WorkspaceSession::resolveMountClientId(int mountId) const {
-	return mountIdResolver.resolveClientId(mountId);
-}
-
-std::shared_ptr<const SpellAreaResolver> WorkspaceSession::getSpellAreaResolver() {
-	if (!spellAreaResolver) {
-		spellAreaResolver = std::make_shared<const SpellAreaResolver>(server);
-		++metadataCacheStats.spellAreaBuilds;
-	}
-	return spellAreaResolver;
-}
-
-std::shared_ptr<const ServerVisualCatalog> WorkspaceSession::getServerVisualCatalog() {
-	if (!visualCatalog) {
-		visualCatalog = std::make_shared<const ServerVisualCatalog>(ServerVisualCatalog::Build(server));
-		++metadataCacheStats.visualCatalogBuilds;
-	}
-	return visualCatalog;
-}
-
-std::shared_ptr<const std::vector<ServerVocation>> WorkspaceSession::getServerVocations() {
-	if (!vocationCatalog) {
-		vocationCatalog = std::make_shared<const std::vector<ServerVocation>>(LoadServerVocations(server));
-		++metadataCacheStats.vocationCatalogBuilds;
-	}
-	return vocationCatalog;
-}
-
-const WorkspaceMetadataCacheStats& WorkspaceSession::getMetadataCacheStats() const {
-	return metadataCacheStats;
-}
-
-void WorkspaceSession::invalidateServerMetadata() {
-	spellAreaResolver.reset();
-	visualCatalog.reset();
-	vocationCatalog.reset();
-}
-
-void WorkspaceSession::invalidateServerMetadataForPaths(const std::vector<std::filesystem::path>& changedPaths) {
-	for (const std::filesystem::path& path : changedPaths) {
-		std::string filename = path.filename().string();
-		std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char value) {
-			return static_cast<char>(std::tolower(value));
-		});
-		if (filename == "vocations.xml") {
-			vocationCatalog.reset();
-		}
-		if (IsLuaLibraryPath(path)) {
-			spellAreaResolver.reset();
-			visualCatalog.reset();
-		}
-		if (filename == "const.h" || filename == "const.hpp" || filename == "utils_definitions.hpp" || filename == "definitions.hpp") {
-			visualCatalog.reset();
-		}
-	}
 }

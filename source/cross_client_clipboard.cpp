@@ -411,6 +411,7 @@ bool CrossClientClipboard::capture(CopyBuffer& source, const std::shared_ptr<Edi
 
 	map = std::move(capturedMap);
 	copyPosition = source.getPosition();
+	spawnDependencies = source.getSpawnDependencies();
 	sourceSession = session;
 	const WorkspaceClientSelection& client = g_workspace.getClient();
 	sourceClient = client.rootPath.empty() ? wxString("Not configured") : client.rootPath;
@@ -428,6 +429,7 @@ void CrossClientClipboard::clear() {
 	sourceClient.clear();
 	sourceServer.clear();
 	items.clear();
+	spawnDependencies.clear();
 	if (++generation == 0) {
 		++generation;
 	}
@@ -703,6 +705,6 @@ bool CrossClientClipboard::apply(const CrossClientPasteAnalysis& analysis, CopyB
 		error = "The converted paste buffer is empty.";
 		return false;
 	}
-	destination.replace(std::move(converted), copyPosition);
+	destination.replace(std::move(converted), copyPosition, spawnDependencies);
 	return true;
 }

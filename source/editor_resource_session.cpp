@@ -9,6 +9,7 @@
 #include "gui.h"
 #include "items.h"
 #include "materials.h"
+#include "reference_style_store.h"
 #include "sprite_appearances.h"
 #include "sprite_preloader.h"
 #include "workspace_session.h"
@@ -33,6 +34,8 @@ struct EditorResourceSession::Storage {
 	SpriteAppearances spriteAppearances;
 	WorkspaceSession workspace;
 	CopyBuffer copyBuffer;
+	std::optional<ReferenceStyleSnapshot> referenceStyle;
+	std::optional<TargetAreaSnapshot> targetArea;
 };
 
 namespace {
@@ -58,6 +61,8 @@ void EditorResourceSession::swapWithGlobals() {
 	g_workspace.swap(storage->workspace);
 	g_gui.copybuffer.swap(storage->copyBuffer);
 	ClientAssets::swapState(clientAssetsState);
+	ReferenceStyleStore::Instance().swapWith(storage->referenceStyle);
+	ReferenceStyleStore::Instance().swapTargetWith(storage->targetArea);
 }
 
 EditorResourceSessionPtr GetActiveEditorResourceSession() {

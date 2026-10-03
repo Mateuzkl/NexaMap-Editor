@@ -43,8 +43,10 @@ ClientSpriteSize ClientSpriteSheet::getSpriteSize() const noexcept {
 		case ClientSpriteLayout::TwoByTwo:
 			return { 64, 64 };
 		case ClientSpriteLayout::ThreeByThree:
+		case ClientSpriteLayout::ThreeByThree_OTC:
 			return { 96, 96 };
 		case ClientSpriteLayout::FourByFour:
+		case ClientSpriteLayout::FourByFour_OTC:
 			return { 128, 128 };
 		case ClientSpriteLayout::FiveByFive:
 			return { 160, 160 };
@@ -96,7 +98,10 @@ bool SpriteAppearances::loadCatalog(const ClientAssetsManifest& manifest, wxStri
 		return false;
 	}
 	for (const std::string& warning : manifest.warnings) {
-		warnings.push_back(wxstr(warning));
+		const wxString warningString = wxstr(warning);
+		if (std::find(warnings.begin(), warnings.end(), warningString) == warnings.end()) {
+			warnings.push_back(warningString);
+		}
 	}
 	return true;
 }

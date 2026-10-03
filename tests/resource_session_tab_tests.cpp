@@ -38,12 +38,12 @@ class ResourceSessionTabTests {
 		g_items.items.set(id, type);
 	}
 
-	static void fillCopyBuffer(uint16_t id) {
+	static void fillCopyBuffer(uint16_t id, SpawnDependencyMap dependencies = {}) {
 		auto map = std::make_unique<BaseMap>();
 		auto* tile = map->allocator(map->createTileL({ 100, 100, 7 }));
 		tile->addItem(Item::Create(id));
 		map->setTile(tile);
-		g_gui.copybuffer.replace(std::move(map), { 100, 100, 7 });
+		g_gui.copybuffer.replace(std::move(map), { 100, 100, 7 }, std::move(dependencies));
 	}
 
 	static uint16_t copiedItemId() {
@@ -144,8 +144,16 @@ public:
 		CrossClientClipboard clipboard;
 		activateWithoutUi(sessionA);
 		tabs->SetFocusedTab(0);
-		fillCopyBuffer(101);
+		SpawnDependency externalDependency;
+		externalDependency.originalCenter = { 90, 90, 7 };
+		externalDependency.radius = 7;
+		externalDependency.hasMonsterSource = true;
+		externalDependency.monsterAttributes = { { "interval", "45" } };
+		SpawnDependencyMap externalDependencies;
+		externalDependencies.emplace(externalDependency.originalCenter, externalDependency);
+		fillCopyBuffer(101, externalDependencies);
 		remapClipboard(clipboard, sessionA, sessionB, 201);
+		check(g_gui.copybuffer.getSpawnDependencies().at(externalDependency.originalCenter).radius == 7, "Cross-client clipboard lost external spawn dependency metadata");
 		remapClipboard(clipboard, sessionB, sessionA, 101);
 
 		tabs->SetFocusedTab(1);

@@ -26,20 +26,16 @@ namespace {
 		return result;
 	}
 
-	bool IsPathInside(const std::filesystem::path& parent, const std::filesystem::path& child) {
+	bool IsPathInside(const std::filesystem::path& canonicalParent, const std::filesystem::path& child) {
 		std::error_code error;
-		const std::filesystem::path normalizedParent = std::filesystem::weakly_canonical(parent, error);
-		if (error) {
-			return false;
-		}
 		const std::filesystem::path normalizedChild = std::filesystem::weakly_canonical(child, error);
 		if (error) {
 			return false;
 		}
 
-		auto parentIt = normalizedParent.begin();
+		auto parentIt = canonicalParent.begin();
 		auto childIt = normalizedChild.begin();
-		for (; parentIt != normalizedParent.end(); ++parentIt, ++childIt) {
+		for (; parentIt != canonicalParent.end(); ++parentIt, ++childIt) {
 			if (childIt == normalizedChild.end() || *parentIt != *childIt) {
 				return false;
 			}
@@ -164,8 +160,15 @@ namespace {
 			return detected;
 		}
 
+		// Direct OTC version folder (e.g. data/things/1530).
+		if (HasCatalog(root)) {
+			detected.layout = ClientAssetsLayout::OtClient;
+			detected.assetsDirectory = root;
+			detected.otcVersion = root.filename().string();
+			return detected;
+		}
+
 		std::vector<std::filesystem::path> otcCandidates;
-		AddOtcCatalogDirectory(root, otcCandidates);
 		AddOtcCatalogDirectory(root / "data" / "things", otcCandidates);
 		AddOtcVersionDirectories(root / "data" / "things", otcCandidates);
 		AddOtcCatalogDirectory(root / "things", otcCandidates);
@@ -197,7 +200,7 @@ namespace {
 	}
 
 	bool IsSupportedSpriteType(uint32_t spriteType) {
-		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 || spriteType == 11 || spriteType == 16 || spriteType == 22;
+		return spriteType == 0 || spriteType == 1 || spriteType == 2 || spriteType == 3 || spriteType == 11 || spriteType == 14 || spriteType == 16 || spriteType == 21 || spriteType == 22;
 	}
 
 	uint32_t SpriteSheetCapacity(uint32_t spriteType) {
@@ -208,8 +211,10 @@ namespace {
 			case 3:
 				return 36;
 			case 11:
+			case 14:
 				return 16;
 			case 16:
+			case 21:
 				return 9;
 			case 22:
 				return 4;
@@ -240,7 +245,10 @@ ClientAssetsValidationResult ClientAssetsManifestLoader::Validate(const std::fil
 		);
 	}
 	manifest.layout = detected->layout;
-	manifest.assetsDirectory = detected->assetsDirectory;
+	manifest.assetsDirectory = std::filesystem::weakly_canonical(detected->assetsDirectory, filesystemError);
+	if (filesystemError) {
+		return Failure("Could not resolve the Canary/Crystal assets directory.");
+	}
 	manifest.packageFile = detected->packageFile;
 	manifest.assetsIndexFile = detected->assetsIndexFile;
 	manifest.catalogFile = manifest.assetsDirectory / "catalog-content.json";

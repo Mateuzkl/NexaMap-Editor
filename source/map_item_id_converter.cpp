@@ -824,9 +824,9 @@ namespace {
 			hash.add(position.z);
 		}
 
-		hash.add(static_cast<uint64_t>(map.waypoints.waypoints.size()));
+		hash.add(static_cast<uint64_t>(map.waypoints.size()));
 		for (const auto& waypointEntry : map.waypoints) {
-			Waypoint* waypoint = waypointEntry.second;
+			const Waypoint* waypoint = waypointEntry.second.get();
 			hash.addString(waypoint->name);
 			hash.add(waypoint->pos.x);
 			hash.add(waypoint->pos.y);

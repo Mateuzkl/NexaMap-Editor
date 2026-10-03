@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -133,7 +133,7 @@
       <GenerateMapFile>true</GenerateMapFile>
       <MapFileName>$(TargetName).map</MapFileName>
       <MapExports>true</MapExports>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>
       <IgnoreSpecificDefaultLibraries>wxscintillad.lib</IgnoreSpecificDefaultLibraries>
     </Link>
@@ -162,7 +162,7 @@
       <GenerateMapFile>true</GenerateMapFile>
       <MapFileName>$(TargetName).map</MapFileName>
       <MapExports>true</MapExports>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>wxscintillad.lib</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
@@ -189,7 +189,7 @@
     <Link>
       <AdditionalDependencies>comctl32.lib;WS2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <LargeAddressAware>true</LargeAddressAware>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -223,7 +223,7 @@
     <Link>
       <AdditionalDependencies>comctl32.lib;WS2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <LargeAddressAware>true</LargeAddressAware>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -258,6 +258,8 @@
     <ClCompile Include="..\..\source\light_drawer.cpp" />
     <ClCompile Include="..\..\source\replace_items_window.cpp" />
     <ClCompile Include="..\..\source\replace_tool\advanced_replace_window.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\quick_replace_selection_dialog.cpp" />
+    <ClCompile Include="..\..\source\replace_tool\quick_replace_selection_model.cpp" />
     <ClCompile Include="..\..\source\replace_tool\replace_engine.cpp" />
     <ClCompile Include="..\..\source\replace_tool\replace_execution_plan.cpp" />
     <ClCompile Include="..\..\source\replace_tool\replace_item_grid_panel.cpp" />
@@ -272,59 +274,15 @@
     <ClCompile Include="..\..\source\replace_tool\visual_similarity_index.cpp" />
     <ClCompile Include="..\..\source\tileset_window.cpp" />
 	<ClCompile Include="..\..\source\welcome_dialog.cpp" />
-	<ClCompile Include="..\..\source\server_content_index.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\source_compare_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\server_content_browser_dialog.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_definition.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_definition_creation.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_section_codec.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_editor_dialog.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_editor_sections.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_editor_attacks.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_spell_area.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	  <PrecompiledHeader>NotUsing</PrecompiledHeader>
-	</ClCompile>
-	<ClCompile Include="..\..\source\monster_spell_preview.cpp">
-	  <IncludeInUnityFile>false</IncludeInUnityFile>
-	</ClCompile>
-	<ClCompile Include="..\..\source\npc_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\npc_definition_creation.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\npc_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\outfit_color_picker.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\spell_definition.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\spell_area_library.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\spell_area_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\spell_area_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\spell_editor_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
-	<ClCompile Include="..\..\source\spell_visual_browser_dialog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile></ClCompile>
 	<ClCompile Include="..\..\source\server_workspace.cpp" />
-	<ClCompile Include="..\..\source\server_item_id_map.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\server_vocation_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\server_visual_catalog.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-	<ClCompile Include="..\..\source\mount_id_resolver.cpp"><IncludeInUnityFile>false</IncludeInUnityFile><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
 	<ClCompile Include="..\..\source\workspace_session.cpp" />
+	<ClCompile Include="..\..\source\unreachable_cleaner.cpp" />
+	<ClCompile Include="..\..\source\remove_unreachable_dialog.cpp" />
+	<ClCompile Include="..\..\source\map_backup.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
+    <ClInclude Include="..\..\source\unreachable_cleaner.h" />
+    <ClInclude Include="..\..\source\remove_unreachable_dialog.h" />
+    <ClInclude Include="..\..\source\map_backup.h" />
     <ClInclude Include="..\..\source\add_tileset_window.h" />
     <ClInclude Include="..\..\source\artprovider.h" />
     <ClInclude Include="..\..\source\autoborder_preview.h" />
@@ -347,6 +305,12 @@
     <ClCompile Include="..\..\source\materials_workbench_window.cpp">
       <IncludeInUnityFile>false</IncludeInUnityFile>
     </ClCompile>
+    <ClInclude Include="..\..\source\reference_style.h" />
+    <ClCompile Include="..\..\source\reference_style.cpp" />
+    <ClInclude Include="..\..\source\reference_style_store.h" />
+    <ClCompile Include="..\..\source\reference_style_store.cpp" />
+    <ClInclude Include="..\..\source\reference_style_window.h" />
+    <ClCompile Include="..\..\source\reference_style_window.cpp" />
     <ClInclude Include="..\..\source\map_item_id_converter_window.h" />
     <ClCompile Include="..\..\source\map_item_id_converter_window.cpp" />
     <ClInclude Include="..\..\source\map_item_id_converter.h" />
@@ -468,6 +432,8 @@
     <ClCompile Include="..\..\source\raw_brush.cpp" />
     <ClInclude Include="..\..\source\replace_items_window.h" />
     <ClInclude Include="..\..\source\replace_tool\advanced_replace_window.h" />
+    <ClInclude Include="..\..\source\replace_tool\quick_replace_selection_dialog.h" />
+    <ClInclude Include="..\..\source\replace_tool\quick_replace_selection_model.h" />
     <ClInclude Include="..\..\source\replace_tool\replace_engine.h" />
     <ClInclude Include="..\..\source\replace_tool\replace_execution_plan.h" />
     <ClInclude Include="..\..\source\replace_tool\replace_item_grid_panel.h" />
@@ -536,6 +502,111 @@
     <ClCompile Include="..\..\source\quick_command_palette.cpp" />
     <ClInclude Include="..\..\source\main_menubar.h" />
     <ClCompile Include="..\..\source\main_menubar.cpp" />
+    <ClInclude Include="..\..\source\mcp\mcp_common.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_context.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_gui_call.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_item_identity.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_protocol.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_registry.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_server.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tool_utils.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_brush.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_edit.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_editor.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_entities.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_import_export.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_map.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_orientation.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_reference.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_render.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_region.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_search.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_tools_validate.h" />
+    <ClInclude Include="..\..\source\mcp\mcp_window.h" />
+    <ClCompile Include="..\..\source\mcp\mcp_common.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_context.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_gui_call.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_item_identity.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_protocol.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_registry.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_server.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tool_utils.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_brush.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_edit.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_editor.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_entities.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_import_export.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_map.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_render.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_region.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_search.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_validate.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_orientation.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_tools_reference.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
+    <ClCompile Include="..\..\source\mcp\mcp_window.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+    </ClCompile>
     <ClInclude Include="..\..\source\map_diagnostics.h" />
     <ClInclude Include="..\..\source\map_diagnostics_scanner.h" />
     <ClInclude Include="..\..\source\map_diagnostics_window.h" />
@@ -566,6 +637,8 @@
     <ClCompile Include="..\..\source\palette_creature.cpp" />
     <ClInclude Include="..\..\source\palette_house.h" />
     <ClCompile Include="..\..\source\palette_house.cpp" />
+    <ClInclude Include="..\..\source\palette_model.h" />
+    <ClCompile Include="..\..\source\palette_model.cpp" />
     <ClInclude Include="..\..\source\palette_waypoints.h" />
     <ClCompile Include="..\..\source\palette_waypoints.cpp" />
     <ClInclude Include="..\..\source\palette_zones.h" />
@@ -594,6 +667,7 @@
     <ClInclude Include="..\..\source\map_overlay_text.h" />
     <ClCompile Include="..\..\source\map_drawer.cpp" />
     <ClInclude Include="..\..\source\map_window.h" />
+    <ClInclude Include="..\..\source\viewport_metrics.h" />
     <ClCompile Include="..\..\source\map_window.cpp" />
     <ClInclude Include="..\..\source\action.h" />
     <ClCompile Include="..\..\source\action.cpp" />
@@ -661,6 +735,14 @@
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="..\..\source\spawn_format_map.cpp" />
+    <ClInclude Include="..\..\source\creature_cache.h" />
+    <ClCompile Include="..\..\source\creature_cache.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClInclude Include="..\..\source\spawn_source_remap.h" />
+    <ClCompile Include="..\..\source\spawn_source_remap.cpp" />
+    <ClCompile Include="..\..\source\spawn_source_remap_core.cpp" />
     <ClInclude Include="..\..\source\spawn_export_window.h" />
     <ClCompile Include="..\..\source\spawn_export_window.cpp" />
     <ClInclude Include="..\..\source\spawn_converter_window.h" />
@@ -695,34 +777,7 @@
     <ClCompile Include="..\..\source\zones.cpp" />
     <ClInclude Include="..\..\source\find_item_window.h" />
 	<ClInclude Include="..\..\source\welcome_dialog.h" />
-	<ClInclude Include="..\..\source\server_content_index.h" />
-	<ClInclude Include="..\..\source\editor_source_monitor.h" />
-	<ClInclude Include="..\..\source\source_compare_dialog.h" />
-	<ClInclude Include="..\..\source\source_text_utils.h" />
-	<ClInclude Include="..\..\source\lua_source_scanner.h" />
-	<ClInclude Include="..\..\source\server_content_browser_dialog.h" />
-	<ClInclude Include="..\..\source\editor_autosave_state.h" />
-	<ClInclude Include="..\..\source\monster_definition.h" />
-	<ClInclude Include="..\..\source\monster_definition_creation.h" />
-	<ClInclude Include="..\..\source\monster_section_codec.h" />
-	<ClInclude Include="..\..\source\monster_editor_dialog.h" />
-	<ClInclude Include="..\..\source\monster_spell_area.h" />
-	<ClInclude Include="..\..\source\monster_spell_preview.h" />
-	<ClInclude Include="..\..\source\npc_definition.h" />
-	<ClInclude Include="..\..\source\npc_definition_creation.h" />
-	<ClInclude Include="..\..\source\npc_editor_dialog.h" />
-	<ClInclude Include="..\..\source\outfit_color_picker.h" />
-	<ClInclude Include="..\..\source\spell_definition.h" />
-	<ClInclude Include="..\..\source\spell_area_library.h" />
-	<ClInclude Include="..\..\source\spell_area_editor_dialog.h" />
-	<ClInclude Include="..\..\source\spell_area_resolver.h" />
-	<ClInclude Include="..\..\source\spell_editor_dialog.h" />
-	<ClInclude Include="..\..\source\spell_visual_browser_dialog.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />
-	<ClInclude Include="..\..\source\server_item_id_map.h" />
-	<ClInclude Include="..\..\source\server_vocation_catalog.h" />
-	<ClInclude Include="..\..\source\server_visual_catalog.h" />
-	<ClInclude Include="..\..\source\mount_id_resolver.h" />
 	<ClInclude Include="..\..\source\workspace_session.h" />
     <ClInclude Include="..\..\source\version_info.h" />
   </ItemGroup>

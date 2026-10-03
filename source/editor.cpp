@@ -35,6 +35,7 @@
 #include "spawn_format.h"
 #include "item_id_codec.h"
 #include "multiplayer_session.h"
+#include "spawn_source_remap.h"
 
 #include <filesystem>
 #include <optional>
@@ -382,7 +383,7 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 
 	// Make temporary backups
 	// converter.Assign(wxstr(savefile));
-	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones;
+	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones, backup_waypoint_groups, waypoint_groups_filename;
 
 	if (converter.GetExt() == "otgz") {
 		save_otgz = true;
@@ -434,6 +435,14 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::remove(backup_zones.c_str());
 			std::rename((map_path + map.zonefile).c_str(), backup_zones.c_str());
 		}
+
+		converter.Assign(wxstr(savefile));
+		waypoint_groups_filename = map_path + nstr(converter.GetName()) + "-waypoint-groups.xml";
+		if (wxFileExists(wxstr(waypoint_groups_filename))) {
+			backup_waypoint_groups = waypoint_groups_filename + "~";
+			std::remove(backup_waypoint_groups.c_str());
+			std::rename(waypoint_groups_filename.c_str(), backup_waypoint_groups.c_str());
+		}
 	}
 
 	// Save the map
@@ -445,7 +454,8 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		  << backup_spawn << '\n'
 		  << backup_spawn_npc << '\n'
 		  << backup_waypoint << '\n'
-		  << backup_zones << '\n';
+		  << backup_zones << '\n'
+		  << backup_waypoint_groups << '\n';
 	}
 
 	{
@@ -520,8 +530,20 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 				std::rename(backup_zones.c_str(), std::string(zones_filename + ".xml").c_str());
 			}
 
-			// Display the error
-			g_gui.PopupDialog("Error", "Could not save, unable to open target for writing.", wxOK);
+			if (!backup_waypoint_groups.empty()) {
+				std::remove(waypoint_groups_filename.c_str());
+				std::rename(backup_waypoint_groups.c_str(), waypoint_groups_filename.c_str());
+			}
+
+			// Display the stage and underlying reason instead of reporting every
+			// pipeline failure as an OTBM open error.
+			wxString message = "Could not save map.";
+			if (!mapsaver.getError().empty()) {
+				message += "\n\n" + mapsaver.getError();
+			} else {
+				message += "\n\nNo detailed error was reported.";
+			}
+			g_gui.PopupDialog("Error", message, wxOK);
 		}
 
 		// Remove temporary save runfile
@@ -591,6 +613,11 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 			std::string zones_filename = map_path + nstr(converter.GetName());
 			std::rename(backup_zones.c_str(), std::string(zones_filename + "." + date.str() + ".xml").c_str());
 		}
+
+		if (!backup_waypoint_groups.empty()) {
+			const std::string backup_filename = waypoint_groups_filename.substr(0, waypoint_groups_filename.size() - 4) + "." + date.str() + ".xml";
+			std::rename(backup_waypoint_groups.c_str(), backup_filename.c_str());
+		}
 	} else {
 		// Delete the temporary files
 		std::remove(backup_otbm.c_str());
@@ -599,6 +626,7 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 		std::remove(backup_spawn_npc.c_str());
 		std::remove(backup_waypoint.c_str());
 		std::remove(backup_zones.c_str());
+		std::remove(backup_waypoint_groups.c_str());
 	}
 
 	map.clearChanges();
@@ -822,13 +850,7 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 		}
 	}
 
-	// Plain merge of waypoints, very simple! :)
-	for (auto iter = imported_map.waypoints.begin(); iter != imported_map.waypoints.end(); ++iter) {
-		iter->second->pos += offset;
-	}
-
-	map.waypoints.waypoints.insert(imported_map.waypoints.begin(), imported_map.waypoints.end());
-	imported_map.waypoints.waypoints.clear();
+	map.waypoints.importWaypointsFrom(imported_map.waypoints, offset);
 
 	uint64_t tiles_merged = 0;
 	uint64_t tiles_to_import = imported_map.tilecount;
@@ -1084,6 +1106,81 @@ void Editor::clearInvalidHouseTiles(bool showdialog) {
 	}
 }
 
+size_t Editor::removeEmptySpawns(bool showdialog) {
+	if (showdialog) {
+		g_gui.CreateLoadBar("Searching map for empty spawns to remove...");
+	}
+
+	selection.clear();
+
+	CreatureVector creatures;
+	TileVector toDeleteSpawns;
+	for (const auto& spawnPosition : map.spawns) {
+		Tile* tile = map.getTile(spawnPosition);
+		if (!tile || !tile->spawn) {
+			continue;
+		}
+
+		const int32_t radius = tile->spawn->getSize();
+
+		bool empty = true;
+		for (int32_t y = -radius; y <= radius; ++y) {
+			for (int32_t x = -radius; x <= radius; ++x) {
+				Tile* creature_tile = map.getTile(spawnPosition + Position(x, y, 0));
+				if (creature_tile && creature_tile->creature && !creature_tile->creature->isSaved()) {
+					if (creature_tile->creature->hasSpawnSource() && creature_tile->creature->getSpawnSource() != spawnPosition) {
+						continue;
+					}
+					creature_tile->creature->save();
+					creatures.push_back(creature_tile->creature);
+					empty = false;
+				}
+			}
+		}
+
+		if (empty) {
+			toDeleteSpawns.push_back(tile);
+		}
+	}
+
+	for (Creature* creature : creatures) {
+		creature->reset();
+	}
+
+	const size_t count = toDeleteSpawns.size();
+	if (count == 0) {
+		if (showdialog) {
+			g_gui.DestroyLoadBar();
+		}
+		return 0;
+	}
+
+	BatchAction* batch = actionQueue->createBatch(ACTION_DELETE_TILES);
+	Action* action = actionQueue->createAction(batch);
+
+	size_t removed = 0;
+	for (const auto& tile : toDeleteSpawns) {
+		Tile* newtile = tile->deepCopy(map);
+		delete newtile->spawn;
+		newtile->spawn = nullptr;
+		++removed;
+		if (showdialog && count > 0 && removed % 5 == 0) {
+			g_gui.SetLoadDone(static_cast<int32_t>(100 * removed / count));
+		}
+		action->addChange(newd Change(newtile));
+	}
+
+	batch->addAndCommitAction(action);
+	addBatch(batch);
+
+	if (showdialog) {
+		g_gui.DestroyLoadBar();
+	}
+
+	map.doChange();
+	return removed;
+}
+
 void Editor::clearModifiedTileState(bool showdialog) {
 	if (showdialog) {
 		g_gui.CreateLoadBar("Clearing modified state from all tiles...");
@@ -1114,11 +1211,15 @@ void Editor::moveSelection(Position offset) {
 	action = actionQueue->createAction(batchAction); // Our action!
 	bool doborders = false;
 	TileSet tmp_storage;
+	std::set<Position> movedSpawnCenters;
 
 	// Update the tiles with the newd positions
 	for (auto it = selection.begin(); it != selection.end(); ++it) {
 		// First we get the old tile and it's position
 		Tile* tile = (*it);
+		if (tile->spawn && tile->spawn->isSelected()) {
+			movedSpawnCenters.insert(tile->getPosition());
+		}
 		// const Position pos = tile->getPosition();
 
 		// Create the duplicate source tile, which will replace the old one later
@@ -1164,7 +1265,15 @@ void Editor::moveSelection(Position offset) {
 		action->addChange(newd Change(new_src_tile));
 	}
 	// Commit changes to map
-	batchAction->addAndCommitAction(action);
+	if (!batchAction->addAndCommitAction(action)) {
+		for (Tile* tile : tmp_storage) {
+			delete tile;
+		}
+		batchAction->rollback();
+		delete batchAction;
+		g_gui.SetStatusText("Move cancelled: unable to remove the source tiles.");
+		return;
+	}
 
 	// Remove old borders (and create some newd?)
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_DRAG) && selection.size() < size_t(g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD))) {
@@ -1231,7 +1340,17 @@ void Editor::moveSelection(Position offset) {
 			action->addChange(newd Change(new_tile));
 		}
 		// Commit changes to map
-		batchAction->addAndCommitAction(action);
+		if (action->size() == 0) {
+			delete action;
+		} else if (!batchAction->addAndCommitAction(action)) {
+			for (Tile* tile : tmp_storage) {
+				delete tile;
+			}
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Move cancelled: unable to update source borders.");
+			return;
+		}
 	}
 
 	// New action for adding the destination tiles
@@ -1243,7 +1362,7 @@ void Editor::moveSelection(Position offset) {
 
 		new_pos = old_pos - offset;
 
-		if (new_pos.z < 0 && new_pos.z > MAP_MAX_LAYER) {
+		if (!new_pos.isValid()) {
 			delete tile;
 			continue;
 		}
@@ -1252,10 +1371,27 @@ void Editor::moveSelection(Position offset) {
 		Tile* old_dest_tile = location->get();
 		Tile* new_dest_tile = nullptr;
 
+		Creature* transferredCreature = tile->creature;
+		if (transferredCreature && transferredCreature->hasSpawnSource()) {
+			const Position origSource = transferredCreature->getSpawnSource();
+			if (movedSpawnCenters.contains(origSource)) {
+				transferredCreature->setSpawnSource(origSource - offset);
+			}
+		}
+
 		if (g_settings.getInteger(Config::MERGE_MOVE) || !tile->ground) {
 			// Move items
 			if (old_dest_tile) {
 				new_dest_tile = old_dest_tile->deepCopy(map);
+				if (new_dest_tile->spawn && tile->spawn) {
+					auto* mergedSpawn = new_dest_tile->spawn->deepCopy();
+					MergeSpawnMetadata(*mergedSpawn, *tile->spawn);
+					if (tile->spawn->isSelected()) {
+						mergedSpawn->select();
+					}
+					delete tile->spawn;
+					tile->spawn = mergedSpawn;
+				}
 			} else {
 				new_dest_tile = map.allocator(location);
 			}
@@ -1271,7 +1407,14 @@ void Editor::moveSelection(Position offset) {
 	}
 
 	// Commit changes to the map
-	batchAction->addAndCommitAction(action);
+	if (action->size() == 0) {
+		delete action;
+	} else if (!batchAction->addAndCommitAction(action)) {
+		batchAction->rollback();
+		delete batchAction;
+		g_gui.SetStatusText("Move cancelled: unable to commit destination tiles.");
+		return;
+	}
 
 	// Create borders
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_DRAG) && selection.size() < size_t(g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD))) {
@@ -1283,11 +1426,6 @@ void Editor::moveSelection(Position offset) {
 			Position pos = (*it)->getPosition();
 			// Go through all neighbours
 			Tile* t;
-			t = map.getTile(pos.x - 1, pos.y - 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
 			t = map.getTile(pos.x - 1, pos.y - 1, pos.z);
 			if (t && !t->isSelected()) {
 				borderize_tiles.push_back(t);
@@ -1358,7 +1496,14 @@ void Editor::moveSelection(Position offset) {
 			}
 		}
 		// Commit changes to map
-		batchAction->addAndCommitAction(action);
+		if (action->size() == 0) {
+			delete action;
+		} else if (!batchAction->addAndCommitAction(action)) {
+			batchAction->rollback();
+			delete batchAction;
+			g_gui.SetStatusText("Move cancelled: unable to update destination borders.");
+			return;
+		}
 	}
 
 	// Store the action for undo
@@ -1479,6 +1624,102 @@ void removeDuplicateWalls(Tile* buffer, Tile* tile) {
 	}
 }
 
+bool Editor::applyDoodadPositions(const PositionVector& positions, bool alt, bool dodraw, ActionIdentifier identifier) {
+	Brush* brush = g_gui.GetCurrentBrush();
+	if (!brush || !brush->isDoodad() || positions.empty()) {
+		return false;
+	}
+
+	std::unique_ptr<BatchAction> batch(actionQueue->createBatch(identifier));
+	PositionList tilestoborder;
+	try {
+		if (dodraw) {
+			BaseMap* bufferMap = g_gui.doodad_buffer_map.get();
+			DoodadBrush* doodadBrush = brush->asDoodad();
+			for (const Position& offset : positions) {
+				std::unique_ptr<Action> action(actionQueue->createAction(batch.get()));
+				const Position deltaPosition = offset - Position(0x8000, 0x8000, 0x8);
+				for (MapIterator iterator = bufferMap->begin(); iterator != bufferMap->end(); ++iterator) {
+					Tile* bufferTile = (*iterator)->get();
+					const Position position = bufferTile->getPosition() + deltaPosition;
+					if (!position.isValid()) {
+						continue;
+					}
+
+					TileLocation* location = map.createTileL(position);
+					Tile* tile = location->get();
+					const bool canPlace = doodadBrush->placeOnBlocking() || alt || (tile && !tile->isBlocking());
+					if (!canPlace) {
+						continue;
+					}
+					if (tile && !doodadBrush->placeOnDuplicate() && !alt) {
+						const bool duplicate = std::any_of(tile->items.begin(), tile->items.end(), [doodadBrush](const Item* item) { return item && doodadBrush->ownsItem(item); });
+						if (duplicate) {
+							continue;
+						}
+					}
+
+					std::unique_ptr<Tile> changed(tile ? tile->deepCopy(map) : map.allocator(location));
+					removeDuplicateWalls(bufferTile, changed.get());
+					doSurroundingBorders(doodadBrush, tilestoborder, bufferTile, changed.get());
+					changed->merge(bufferTile);
+					action->addChange(newd Change(changed.release()));
+				}
+				if (action->size() != 0 && !batch->addAndCommitAction(action.release())) {
+					batch->rollback();
+					throw std::runtime_error("could not commit doodad placement action");
+				}
+			}
+		} else {
+			std::unique_ptr<Action> action(actionQueue->createAction(batch.get()));
+			for (const Position& position : positions) {
+				Tile* tile = map.getTile(position);
+				if (!tile) {
+					continue;
+				}
+				std::unique_ptr<Tile> changed(tile->deepCopy(map));
+				brush->undraw(&map, changed.get());
+				action->addChange(newd Change(changed.release()));
+			}
+			if (action->size() != 0 && !batch->addAndCommitAction(action.release())) {
+				batch->rollback();
+				throw std::runtime_error("could not commit doodad erase action");
+			}
+		}
+
+		if (!tilestoborder.empty()) {
+			tilestoborder.sort();
+			tilestoborder.unique();
+			std::unique_ptr<Action> borderAction(actionQueue->createAction(batch.get()));
+			for (const Position& position : tilestoborder) {
+				Tile* tile = map.getTile(position);
+				if (!tile) {
+					continue;
+				}
+				std::unique_ptr<Tile> changed(tile->deepCopy(map));
+				changed->borderize(&map);
+				changed->wallize(&map);
+				borderAction->addChange(newd Change(changed.release()));
+			}
+			if (borderAction->size() != 0 && !batch->addAndCommitAction(borderAction.release())) {
+				batch->rollback();
+				throw std::runtime_error("could not commit doodad border action");
+			}
+		}
+	} catch (...) {
+		batch->rollback();
+		throw;
+	}
+
+	if (batch->size() == 0) {
+		return false;
+	}
+	actionQueue->resetTimer();
+	addBatch(batch.release(), 0);
+	actionQueue->resetTimer();
+	return true;
+}
+
 void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 	Brush* brush = g_gui.GetCurrentBrush();
 	if (!brush) {
@@ -1589,7 +1830,7 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 		addBatch(batch, 2);
 	} else if (brush->isWaypoint()) {
 		WaypointBrush* waypoint_brush = brush->asWaypoint();
-		if (!waypoint_brush->canDraw(&map, offset)) {
+		if (waypoint_brush->getWaypoint().empty()) {
 			return;
 		}
 
@@ -1600,6 +1841,10 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 
 		BatchAction* batch = actionQueue->createBatch(ACTION_DRAW);
 		Action* action = actionQueue->createAction(batch);
+		if (!waypoint_brush->canDraw(&map, offset) && !map.getTile(offset)) {
+			Tile* new_tile = map.allocator(map.createTileL(offset));
+			action->addChange(newd Change(new_tile));
+		}
 		action->addChange(Change::Create(waypoint, offset));
 		batch->addAndCommitAction(action);
 		addBatch(batch, 2);

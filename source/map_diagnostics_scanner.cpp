@@ -484,7 +484,7 @@ private:
 
 	void CheckWaypoint(const WaypointMap::value_type& entry) {
 		const std::string& key = entry.first;
-		const Waypoint* waypoint = entry.second;
+		const Waypoint* waypoint = entry.second.get();
 		if (!waypoint) {
 			AddIssue(MakeIssue(MapDiagnosticSeverity::Error, MapDiagnosticCategory::Waypoints, MapDiagnosticKind::InvalidWaypoint, Position(), "Waypoint registry contains an empty entry", "Waypoint key '" + key + "' has no waypoint object."));
 			return;
@@ -593,7 +593,7 @@ private:
 	bool actualHouseStarted_ = false;
 	std::set<Position>::const_iterator actualHouseTileIterator_;
 	SpawnPositionList::iterator spawnIterator_;
-	WaypointMap::iterator waypointIterator_;
+	WaypointMap::const_iterator waypointIterator_;
 	std::map<DoorKey, std::vector<MapDiagnosticOccurrence>> doorsByHouseId_;
 	std::map<DoorKey, std::vector<MapDiagnosticOccurrence>>::iterator doorIterator_;
 	MapDiagnosticOccurrences lockedDoorsByActionId_;

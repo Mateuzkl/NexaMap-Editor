@@ -34,6 +34,10 @@ public:
 	void SetDraggable(bool draggable) {
 		this->draggable = draggable;
 	}
+	void SetRuntimeIdLabels(bool enabled) {
+		runtimeIdLabels = enabled;
+		Refresh();
+	}
 
 	[[nodiscard]] const ReplaceLibraryItem* GetSelectedItem() const;
 
@@ -54,6 +58,7 @@ private:
 	SelectionHandler selectionHandler;
 	size_t selectedIndex = static_cast<size_t>(-1);
 	bool draggable = false;
+	bool runtimeIdLabels = false;
 	bool dragInProgress = false;
 };
 

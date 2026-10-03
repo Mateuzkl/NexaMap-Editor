@@ -391,6 +391,7 @@ bool Map::hasChanged() const {
 bool Map::doChange() {
 	bool doupdate = !has_changed;
 	has_changed = true;
+	++changeGeneration;
 	return doupdate;
 }
 

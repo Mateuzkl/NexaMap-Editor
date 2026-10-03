@@ -76,3 +76,6 @@ cmake-build-debug/
 
 # Notepad++
 *.bak
+
+# AI prompts
+NexaMap_AI_STYLE_REFERENCE_FULL_PROMPT.md

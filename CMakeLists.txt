@@ -43,7 +43,9 @@ find_package(wxWidgets COMPONENTS html aui gl adv core net base REQUIRED)
 
 find_package(ZLIB REQUIRED)
 
-include(${wxWidgets_USE_FILE})
+if(wxWidgets_USE_FILE)
+	include(${wxWidgets_USE_FILE})
+endif()
 add_subdirectory(source/protobuf)
 include(source/CMakeLists.txt)
 if(WIN32)
@@ -58,8 +60,8 @@ if(MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8)
 endif()
 if(WIN32)
-	# The diagnostic console is allocated at runtime when enabled in Preferences.
-	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+	# Keep a console in Release too, as in RME Redux, for startup/crash output.
+	set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 endif()
 if(ENABLE_UNITY_BUILD)
 	if(CMAKE_VERSION VERSION_LESS 3.16)
@@ -98,7 +100,14 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+install(DIRECTORY data DESTINATION .)
 if(WIN32)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${CMAKE_CURRENT_SOURCE_DIR}/data"
+		"$<TARGET_FILE_DIR:${PROJECT_NAME}>/data"
+		COMMENT "Copying data directory to build output directory"
+	)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE "_WIN32_WINNT=0x0601")
 	target_link_libraries(${PROJECT_NAME} bcrypt ws2_32)
 else()
@@ -110,6 +119,65 @@ if(BUILD_TESTING)
 	target_include_directories(playtest_controller_tests PRIVATE source)
 	target_compile_features(playtest_controller_tests PRIVATE cxx_std_20)
 	add_test(NAME playtest_controller_tests COMMAND playtest_controller_tests)
+
+	add_executable(mcp_protocol_tests
+		tests/mcp_protocol_tests.cpp
+		source/mcp/mcp_common.cpp
+		source/mcp/mcp_protocol.cpp
+		source/mcp/mcp_registry.cpp
+	)
+	target_include_directories(mcp_protocol_tests PRIVATE source)
+	target_link_libraries(mcp_protocol_tests PRIVATE nlohmann_json::nlohmann_json)
+	target_compile_features(mcp_protocol_tests PRIVATE cxx_std_20)
+	if(MSVC)
+		target_compile_options(mcp_protocol_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME mcp_protocol_tests COMMAND mcp_protocol_tests)
+
+	add_executable(mcp_security_tests
+		tests/mcp_security_tests.cpp
+		source/mcp/mcp_common.cpp
+	)
+	target_include_directories(mcp_security_tests PRIVATE source)
+	target_link_libraries(mcp_security_tests PRIVATE nlohmann_json::nlohmann_json)
+	target_compile_features(mcp_security_tests PRIVATE cxx_std_20)
+	if(MSVC)
+		target_compile_options(mcp_security_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME mcp_security_tests COMMAND mcp_security_tests)
+
+	add_executable(quick_replace_selection_tests tests/quick_replace_selection_test_main.cpp tests/quick_replace_selection_tests.cpp ${rme_SRC})
+	target_include_directories(quick_replace_selection_tests PRIVATE source)
+	target_compile_features(quick_replace_selection_tests PRIVATE cxx_std_20)
+	target_compile_definitions(quick_replace_selection_tests PRIVATE NEXAMAP_MULTIPLAYER_TESTS)
+	target_link_libraries(quick_replace_selection_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+	set_target_properties(quick_replace_selection_tests PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
+	if(MSVC)
+		target_compile_options(quick_replace_selection_tests PRIVATE /bigobj /utf-8)
+		target_compile_definitions(quick_replace_selection_tests PRIVATE "_WIN32_WINNT=0x0601")
+		target_link_libraries(quick_replace_selection_tests PRIVATE bcrypt iphlpapi ws2_32)
+	else()
+		target_link_libraries(quick_replace_selection_tests PRIVATE OpenSSL::Crypto)
+	endif()
+	add_test(NAME quick_replace_selection_tests COMMAND quick_replace_selection_tests)
+	set_tests_properties(quick_replace_selection_tests PROPERTIES TIMEOUT 30)
+
+	add_executable(waypoint_groups_tests tests/waypoint_groups_tests.cpp ${rme_SRC})
+	target_include_directories(waypoint_groups_tests PRIVATE source)
+	target_compile_features(waypoint_groups_tests PRIVATE cxx_std_20)
+	target_compile_definitions(waypoint_groups_tests PRIVATE NEXAMAP_MULTIPLAYER_TESTS)
+	target_link_libraries(waypoint_groups_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+	set_target_properties(waypoint_groups_tests PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
+	if(MSVC)
+		target_compile_options(waypoint_groups_tests PRIVATE /bigobj /utf-8)
+		target_compile_definitions(waypoint_groups_tests PRIVATE "_WIN32_WINNT=0x0601")
+		target_link_libraries(waypoint_groups_tests PRIVATE bcrypt iphlpapi ws2_32)
+	else()
+		target_link_libraries(waypoint_groups_tests PRIVATE OpenSSL::Crypto)
+	endif()
+	add_test(NAME waypoint_groups_tests COMMAND waypoint_groups_tests)
+	set_tests_properties(waypoint_groups_tests PROPERTIES TIMEOUT 30)
+
 	option(ENABLE_MULTIPLAYER_SESSION_TESTS "Build full editor wxSocket session integration tests (no visible windows)" OFF)
 	if(ENABLE_MULTIPLAYER_SESSION_TESTS)
 		add_executable(multiplayer_session_tests tests/multiplayer_session_tests.cpp tests/startup_validation_tests.cpp tests/playtest_integration_tests.cpp tests/collections_palette_tests.cpp tests/resource_session_tab_tests.cpp ${rme_SRC})
@@ -170,6 +238,11 @@ if(BUILD_TESTING)
 	target_include_directories(map_chunk_revision_tests PRIVATE source)
 	target_compile_features(map_chunk_revision_tests PRIVATE cxx_std_20)
 	add_test(NAME map_chunk_revision_tests COMMAND map_chunk_revision_tests)
+
+	add_executable(viewport_metrics_tests tests/viewport_metrics_tests.cpp)
+	target_include_directories(viewport_metrics_tests PRIVATE source)
+	target_compile_features(viewport_metrics_tests PRIVATE cxx_std_20)
+	add_test(NAME viewport_metrics_tests COMMAND viewport_metrics_tests)
 
 	add_executable(favorites_manager_tests tests/favorites_manager_tests.cpp source/favorites_manager.cpp)
 	target_include_directories(favorites_manager_tests PRIVATE source)
@@ -234,6 +307,19 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/border_learning_tests"
 	)
 	add_test(NAME border_learning_tests COMMAND border_learning_tests)
+
+	add_executable(reference_style_tests
+		tests/reference_style_tests.cpp
+		source/reference_style_store.cpp
+	)
+	target_include_directories(reference_style_tests PRIVATE source)
+	set_target_properties(reference_style_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/reference_style_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/reference_style_tests"
+	)
+	add_test(NAME reference_style_tests COMMAND reference_style_tests)
 
 	add_executable(minimap_import_tests
 		tests/minimap_import_tests.cpp
@@ -305,11 +391,19 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME client_assets_manifest_tests COMMAND client_assets_manifest_tests)
 
+	add_executable(otml_tests
+		tests/otml_tests.cpp
+	)
+	target_include_directories(otml_tests PRIVATE source)
+	set_target_properties(otml_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME otml_tests COMMAND otml_tests)
+
 	add_executable(server_workspace_tests
 		tests/server_workspace_tests.cpp
-		source/mount_id_resolver.cpp
 		source/server_workspace.cpp
-		source/server_item_id_map.cpp
 	)
 	target_include_directories(server_workspace_tests PRIVATE source)
 	set_target_properties(server_workspace_tests PROPERTIES
@@ -317,93 +411,6 @@ if(BUILD_TESTING)
 		CXX_STANDARD_REQUIRED ON
 	)
 	add_test(NAME server_workspace_tests COMMAND server_workspace_tests)
-
-	add_executable(server_content_index_tests
-		tests/server_content_index_tests.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(server_content_index_tests PRIVATE source)
-	set_target_properties(server_content_index_tests PROPERTIES
-		CXX_STANDARD 20
-		CXX_STANDARD_REQUIRED ON
-	)
-	if(MSVC)
-		target_compile_options(server_content_index_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME server_content_index_tests COMMAND server_content_index_tests)
-
-	add_executable(monster_definition_provider_tests
-		tests/monster_definition_provider_tests.cpp
-		source/monster_definition.cpp
-		source/monster_definition_creation.cpp
-		source/monster_section_codec.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(monster_definition_provider_tests PRIVATE source)
-	set_target_properties(monster_definition_provider_tests PROPERTIES
-		CXX_STANDARD 20
-		CXX_STANDARD_REQUIRED ON
-	)
-	if(MSVC)
-		target_compile_options(monster_definition_provider_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME monster_definition_provider_tests COMMAND monster_definition_provider_tests)
-
-	add_executable(npc_definition_provider_tests
-		tests/npc_definition_provider_tests.cpp
-		source/npc_definition.cpp
-		source/npc_definition_creation.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(npc_definition_provider_tests PRIVATE source)
-	set_target_properties(npc_definition_provider_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-	if(MSVC)
-		target_compile_options(npc_definition_provider_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME npc_definition_provider_tests COMMAND npc_definition_provider_tests)
-
-	add_executable(spell_definition_provider_tests
-		tests/spell_definition_provider_tests.cpp
-		source/spell_definition.cpp
-		source/spell_area_resolver.cpp
-		source/spell_area_library.cpp
-		source/server_content_index.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(spell_definition_provider_tests PRIVATE source)
-	set_target_properties(spell_definition_provider_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-	if(MSVC)
-		target_compile_options(spell_definition_provider_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME spell_definition_provider_tests COMMAND spell_definition_provider_tests)
-
-	add_executable(server_visual_catalog_tests
-		tests/server_visual_catalog_tests.cpp
-		source/server_visual_catalog.cpp
-		source/server_workspace.cpp
-		source/server_item_id_map.cpp
-	)
-	target_include_directories(server_visual_catalog_tests PRIVATE source)
-	set_target_properties(server_visual_catalog_tests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-	if(MSVC)
-		target_compile_options(server_visual_catalog_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME server_visual_catalog_tests COMMAND server_visual_catalog_tests)
-
-	add_executable(monster_spell_area_tests
-		tests/monster_spell_area_tests.cpp
-		source/monster_spell_area.cpp
-	)
-	target_include_directories(monster_spell_area_tests PRIVATE source)
-	target_compile_features(monster_spell_area_tests PRIVATE cxx_std_20)
-	add_test(NAME monster_spell_area_tests COMMAND monster_spell_area_tests)
 
 	add_executable(editor_data_layout_tests
 		tests/editor_data_layout_tests.cpp
@@ -570,6 +577,50 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME spawn_format_tests COMMAND spawn_format_tests)
 
+	add_executable(filehandle_tests
+		tests/filehandle_tests.cpp
+		source/filehandle.cpp
+	)
+	target_include_directories(filehandle_tests PRIVATE source)
+	target_link_libraries(filehandle_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt)
+	set_target_properties(filehandle_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/filehandle_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/filehandle_tests"
+	)
+	add_test(NAME filehandle_tests COMMAND filehandle_tests)
+
+	add_executable(creature_cache_tests
+		tests/creature_cache_tests.cpp
+		source/creature_cache.cpp
+		source/ext/pugixml.cpp
+	)
+	target_include_directories(creature_cache_tests PRIVATE source)
+	target_link_libraries(creature_cache_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
+	set_target_properties(creature_cache_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/creature_cache_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/creature_cache_tests"
+	)
+	add_test(NAME creature_cache_tests COMMAND creature_cache_tests)
+
+	add_executable(spawn_persistence_tests
+		tests/spawn_persistence_tests.cpp
+		source/spawn_format.cpp
+		source/spawn_source_remap_core.cpp
+	)
+	target_include_directories(spawn_persistence_tests PRIVATE source)
+	target_link_libraries(spawn_persistence_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
+	set_target_properties(spawn_persistence_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/spawn_persistence_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/spawn_persistence_tests"
+	)
+	add_test(NAME spawn_persistence_tests COMMAND spawn_persistence_tests)
+
 	add_executable(spawn_xml_converter_tests
 		tests/spawn_xml_converter_tests.cpp
 		source/spawn_xml_converter.cpp
@@ -612,4 +663,34 @@ if(BUILD_TESTING)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/zones_tests"
 	)
 	add_test(NAME zones_tests COMMAND zones_tests)
+
+	add_executable(unreachable_cleaner_tests
+		tests/unreachable_cleaner_tests.cpp
+	)
+	target_include_directories(unreachable_cleaner_tests PRIVATE source)
+	if(MSVC)
+		target_compile_options(unreachable_cleaner_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(unreachable_cleaner_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/unreachable_cleaner_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/unreachable_cleaner_tests"
+	)
+	add_test(NAME unreachable_cleaner_tests COMMAND unreachable_cleaner_tests)
+
+	add_executable(palette_toolbar_tests
+		tests/palette_toolbar_tests.cpp
+	)
+	target_include_directories(palette_toolbar_tests PRIVATE source)
+	if(MSVC)
+		target_compile_options(palette_toolbar_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(palette_toolbar_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/palette_toolbar_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/palette_toolbar_tests"
+	)
+	add_test(NAME palette_toolbar_tests COMMAND palette_toolbar_tests)
 endif()

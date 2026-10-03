@@ -121,6 +121,7 @@ namespace MenuBar {
 		SHOW_GRID,
 		SHOW_EXTRA,
 		SHOW_CREATURES,
+		SHOW_CREATURE_NAMES,
 		SHOW_SPAWNS,
 		SHOW_SPECIAL,
 		SHOW_ZONES,
@@ -144,6 +145,8 @@ namespace MenuBar {
 		MATERIALS_WORKBENCH,
 		BORDER_WORKSPACE,
 		LEARN_BORDER_SELECTION,
+		CAPTURE_AI_STYLE_REFERENCE,
+		SHOW_AI_STYLE_REFERENCE,
 		SELECT_TERRAIN,
 		SELECT_DOODAD,
 		SELECT_ITEM,
@@ -189,16 +192,12 @@ namespace MenuBar {
 		MULTIPLAYER_LOCK_SELECTION,
 		MULTIPLAYER_UNLOCK,
 		COMMAND_PALETTE,
+		MCP_SERVER,
 		SHOW_FAVORITES,
 		USE_CPU_GEOMETRY_CACHE,
 		USE_GPU_GROUND_CACHE,
 		MAP_DIAGNOSTICS,
 		SHOW_CONTAINER_PREVIEW,
-		SERVER_NEW_MONSTER_EDITOR,
-		SERVER_MONSTER_EDITOR,
-		SERVER_NEW_NPC_EDITOR,
-		SERVER_NPC_EDITOR,
-		SERVER_SPELL_EDITOR,
 	};
 }
 
@@ -248,11 +247,6 @@ public:
 	void OnMapItemIdConverter(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSpawnNpcConverter(wxCommandEvent& event);
-	void OnServerNewMonsterEditor(wxCommandEvent& event);
-	void OnServerMonsterEditor(wxCommandEvent& event);
-	void OnServerNewNpcEditor(wxCommandEvent& event);
-	void OnServerNpcEditor(wxCommandEvent& event);
-	void OnServerSpellEditor(wxCommandEvent& event);
 	void OnImportMonsterData(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);
 	void OnExportTilesets(wxCommandEvent& event);
@@ -344,6 +338,8 @@ public:
 	void OnMaterialsWorkbench(wxCommandEvent& event);
 	void OnBorderWorkspace(wxCommandEvent& event);
 	void OnLearnBorderSelection(wxCommandEvent& event);
+	void OnCaptureAIStyleReference(wxCommandEvent& event);
+	void OnShowAIStyleReference(wxCommandEvent& event);
 	void OnSelectTerrainPalette(wxCommandEvent& event);
 	void OnSelectDoodadPalette(wxCommandEvent& event);
 	void OnSelectItemPalette(wxCommandEvent& event);
@@ -365,6 +361,7 @@ public:
 	void OnAbout(wxCommandEvent& event);
 	void OnShowHotkeys(wxCommandEvent& event);
 	void OnCommandPalette(wxCommandEvent& event);
+	void OnMcpServer(wxCommandEvent& event);
 	void OnShowFavorites(wxCommandEvent& event);
 
 	// Access actions map for hotkey discovery

@@ -7,9 +7,12 @@
 #include "multiplayer_session.h"
 #include "multiplayer_codec.h"
 #include "multiplayer_crypto.h"
+#include "welcome_dialog.h"
 #include <wx/evtloop.h>
 #include <chrono>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
 
 Editor::Editor(CopyBuffer& buffer, std::nullptr_t) :
 	actionQueue(new ActionQueue(*this)), selection(*this), copybuffer(buffer), replace_brush(nullptr) {
@@ -255,6 +258,163 @@ public:
 			delete batch;
 			pumpUntil([&] { return f.host().players().size() == 1; });
 			std::cout << "PASS session destruction before metadata guard/action batch\n";
+		}
+		// Scenario 1: Options defaults
+		{
+			MultiplayerSession::Options opts;
+			check(opts.autosaveMinutes == 0, "Options::autosaveMinutes must default to 0");
+			check(opts.maxBackupSets == 10, "Options::maxBackupSets must default to 10");
+			std::cout << "PASS multiplayer backup Options defaults (0 min, 10 sets)\n";
+		}
+		// Scenario 8: Retention logic, remnant cleanup, and safe isolation
+		{
+			auto tempDir = std::filesystem::temp_directory_path() / ("nexamap_retention_test_" + std::to_string(Clock::now().time_since_epoch().count()));
+			std::filesystem::create_directories(tempDir);
+			const std::string stem = "world";
+
+			// Create 12 backup sets (stamp 1000..1011) with various sidecars and .complete markers
+			for (uint64_t i = 0; i < 12; ++i) {
+				std::string base = stem + "-r1-" + std::to_string(1000 + i);
+				std::ofstream(tempDir / (base + ".otbm")) << "test";
+				std::ofstream(tempDir / (base + "-spawn.xml")) << "test";
+				std::ofstream(tempDir / (base + "-house.xml")) << "test";
+				std::ofstream(tempDir / (base + "-zones.xml")) << "test";
+				std::ofstream(tempDir / (base + ".complete")) << "done";
+			}
+
+			// Create an incomplete remnant lacking .otbm (must be purged without consuming a retention slot)
+			auto remnantSpawn = tempDir / (stem + "-r1-999-spawn.xml");
+			std::ofstream(remnantSpawn) << "remnant";
+
+			// Create an uncommitted crash-partial set having .otbm and sidecars but missing .complete
+			auto uncommittedOtbm = tempDir / (stem + "-r1-1002_1.otbm");
+			auto uncommittedSpawn = tempDir / (stem + "-r1-1002_1-spawn.xml");
+			std::ofstream(uncommittedOtbm) << "crash";
+			std::ofstream(uncommittedSpawn) << "crash";
+
+			// Create unrelated files in the same directory that MUST NOT be touched
+			auto unrelated1 = tempDir / "world.otbm";
+			auto unrelated2 = tempDir / "world-r1-notabackup.txt";
+			auto unrelated3 = tempDir / "othermap-r1-1005.otbm";
+			std::ofstream(unrelated1) << "keep";
+			std::ofstream(unrelated2) << "keep";
+			std::ofstream(unrelated3) << "keep";
+
+			Fixture f;
+			f.host().pruneOldBackups(tempDir, stem, 10);
+
+			// Incomplete remnant must be removed
+			check(!std::filesystem::exists(remnantSpawn), "Retention failed to purge incomplete remnant lacking .otbm");
+
+			// Uncommitted crash-partial set must be removed
+			check(!std::filesystem::exists(uncommittedOtbm), "Retention failed to purge uncommitted crash-partial .otbm lacking .complete");
+			check(!std::filesystem::exists(uncommittedSpawn), "Retention failed to purge uncommitted crash-partial sidecar");
+
+			// Unrelated files must still exist
+			check(std::filesystem::exists(unrelated1), "Retention deleted unrelated file world.otbm");
+			check(std::filesystem::exists(unrelated2), "Retention deleted unrelated file world-r1-notabackup.txt");
+			check(std::filesystem::exists(unrelated3), "Retention deleted other map backup");
+
+			// Oldest 2 sets (1000 and 1001) should be removed completely, including .complete
+			for (uint64_t i = 0; i < 2; ++i) {
+				std::string base = stem + "-r1-" + std::to_string(1000 + i);
+				check(!std::filesystem::exists(tempDir / (base + ".otbm")), "Oldest otbm was not pruned");
+				check(!std::filesystem::exists(tempDir / (base + "-spawn.xml")), "Oldest spawn was not pruned");
+				check(!std::filesystem::exists(tempDir / (base + "-house.xml")), "Oldest house was not pruned");
+				check(!std::filesystem::exists(tempDir / (base + "-zones.xml")), "Oldest zones was not pruned");
+				check(!std::filesystem::exists(tempDir / (base + ".complete")), "Oldest .complete was not pruned");
+			}
+
+			// Newer 10 sets (1002..1011) must remain, including .complete
+			for (uint64_t i = 2; i < 12; ++i) {
+				std::string base = stem + "-r1-" + std::to_string(1000 + i);
+				check(std::filesystem::exists(tempDir / (base + ".otbm")), "Retained otbm was erroneously pruned");
+				check(std::filesystem::exists(tempDir / (base + "-spawn.xml")), "Retained spawn was erroneously pruned");
+				check(std::filesystem::exists(tempDir / (base + ".complete")), "Retained .complete was erroneously pruned");
+			}
+
+			std::filesystem::remove_all(tempDir);
+			std::cout << "PASS multiplayer backup retention, remnant cleanup, and safe isolation\n";
+		}
+		// Scenarios 2, 3, 4, 5, 6, 7, 9, 10: Full Session & Backup Lifecycle
+		{
+			auto tempDir = std::filesystem::temp_directory_path() / ("nexamap_session_backup_test_" + std::to_string(Clock::now().time_since_epoch().count()));
+			std::filesystem::create_directories(tempDir);
+			auto mapPath = tempDir / "testworld.otbm";
+
+			Fixture f;
+			f.connected();
+
+			// Scenario 9: Client cannot invoke host backup action
+			check(!f.client().saveBackup(MultiplayerSession::BackupReason::Manual), "Client must not execute manual backup");
+			check(hasMessage(f.client(), "Manual backup is only available to the host"), "Missing client rejection log");
+
+			// Map has no file yet
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Manual), "Manual backup on unnamed map must fail");
+			check(hasMessage(f.host(), "map must be saved to a file first"), "Missing no-file log");
+
+			// Set a file on host map
+			f.hostEditor.map.setFilename(mapPath.string());
+			f.hostEditor.map.setSpawnFilename("testworld-spawn.xml");
+			f.hostEditor.map.setHouseFilename("testworld-house.xml");
+
+			// Scenario 6: Manual backup works even when autosaveMinutes == 0
+			check(f.host().settings().autosaveMinutes == 0, "Fixture should have autosaveMinutes == 0");
+			check(f.host().saveBackup(MultiplayerSession::BackupReason::Manual), "Manual backup failed");
+			check(f.host().lastBackedUpRevision.has_value() && *f.host().lastBackedUpRevision == 0, "Revision 0 not marked as backed up");
+			check(hasMessage(f.host(), "Manual multiplayer backup saved"), "Missing manual backup success log");
+
+			auto backupDir = tempDir / "multiplayer-backups";
+			check(std::filesystem::exists(backupDir), "multiplayer-backups dir was not created");
+
+			// Rapid manual backup within same revision creates unique collision-resistant file without overwriting
+			check(f.host().saveBackup(MultiplayerSession::BackupReason::Manual), "Second rapid manual backup failed");
+			size_t otbmCount = 0;
+			size_t completeCount = 0;
+			for (const auto& entry : std::filesystem::directory_iterator(backupDir)) {
+				if (entry.path().extension() == ".otbm") {
+					++otbmCount;
+				} else if (entry.path().extension() == ".complete") {
+					++completeCount;
+				}
+			}
+			check(otbmCount == 2, "Second manual backup must not overwrite earlier backup set");
+			check(completeCount == 2, "Each completed backup set must produce a .complete marker");
+			check(WELCOME_DIALOG_MULTIPLAYER_JOIN == wxID_HIGHEST + 7003, "WELCOME_DIALOG_MULTIPLAYER_JOIN action ID mismatch");
+
+			// Scenario 7: Verify sidecar paths are preserved exactly
+			check(f.hostEditor.map.getSpawnFilename() == "testworld-spawn.xml", "Spawn filename was corrupted by backup");
+			check(f.hostEditor.map.getHouseFilename() == "testworld-house.xml", "House filename was corrupted by backup");
+			check(!f.host().backupInProgress, "backupInProgress stuck at true");
+
+			// Automatic backup skips when neither revision nor generation changed
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup should skip same revision and generation");
+
+			// Host mutation via doChange() advances generation and allows automatic backup
+			f.hostEditor.map.doChange();
+			check(f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup failed after host doChange mutation");
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup should skip when generation already backed up");
+
+			// Scenario 5: New accepted revision allows next automatic backup
+			const Position position(100, 100, 7);
+			changeTile(f.client(), position, TILESTATE_NOPVP);
+			pumpUntil([&] { return f.host().revision() == 1; });
+			check(f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup failed for new revision");
+			check(*f.host().lastBackedUpRevision == 1, "lastBackedUpRevision not updated to 1");
+			check(hasMessage(f.host(), "Automatic multiplayer backup saved"), "Missing automatic backup log");
+
+			// Scenario 4 again: unchanged revision 1 now skipped
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Automatic), "Automatic backup should skip unchanged revision 1");
+
+			// Scenario 10: Disconnect / session reset
+			f.host().disconnect("Test finished");
+			check(!f.host().lastBackedUpRevision.has_value(), "lastBackedUpRevision leaked after disconnect");
+			check(!f.host().backupInProgress, "backupInProgress leaked after disconnect");
+			check(!f.host().saveBackup(MultiplayerSession::BackupReason::Manual), "Disconnected host must not be allowed to backup");
+			check(hasMessage(f.host(), "Manual backup is only available to the host"), "Missing disconnected host rejection log");
+
+			std::filesystem::remove_all(tempDir);
+			std::cout << "PASS multiplayer manual and automatic backup control, deduplication, and session reset\n";
 		}
 		// Drain independent closing handlers and delayed socket destruction.
 		const auto end = Clock::now() + std::chrono::milliseconds(2200);

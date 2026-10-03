@@ -33,256 +33,312 @@
 
 namespace {
 
-constexpr int kWorkerTimerIntervalMs = 75;
+	constexpr int kWorkerTimerIntervalMs = 75;
 
-wxSpinCtrl* AddSpin(wxWindow* parent, wxFlexGridSizer* grid, const wxString& label, int value, int minimum, int maximum, const wxString& help = {}) {
-	grid->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-	auto* control = new wxSpinCtrl(parent, wxID_ANY);
-	control->SetRange(minimum, maximum);
-	control->SetValue(value);
-	if (!help.empty()) control->SetToolTip(help);
-	grid->Add(control, 1, wxEXPAND);
-	return control;
-}
+	wxSpinCtrl* AddSpin(wxWindow* parent, wxFlexGridSizer* grid, const wxString& label, int value, int minimum, int maximum, const wxString& help = {}) {
+		grid->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+		auto* control = new wxSpinCtrl(parent, wxID_ANY);
+		control->SetRange(minimum, maximum);
+		control->SetValue(value);
+		if (!help.empty()) {
+			control->SetToolTip(help);
+		}
+		grid->Add(control, 1, wxEXPAND);
+		return control;
+	}
 
-wxSpinCtrlDouble* AddDoubleSpin(wxWindow* parent, wxFlexGridSizer* grid, const wxString& label, double value, double minimum, double maximum, double increment) {
-	grid->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-	auto* control = new wxSpinCtrlDouble(parent, wxID_ANY);
-	control->SetRange(minimum, maximum);
-	control->SetIncrement(increment);
-	control->SetDigits(2);
-	control->SetValue(value);
-	grid->Add(control, 1, wxEXPAND);
-	return control;
-}
+	wxSpinCtrlDouble* AddDoubleSpin(wxWindow* parent, wxFlexGridSizer* grid, const wxString& label, double value, double minimum, double maximum, double increment) {
+		grid->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+		auto* control = new wxSpinCtrlDouble(parent, wxID_ANY);
+		control->SetRange(minimum, maximum);
+		control->SetIncrement(increment);
+		control->SetDigits(2);
+		control->SetValue(value);
+		grid->Add(control, 1, wxEXPAND);
+		return control;
+	}
 
-void SelectByKeywords(wxChoice* choice, const std::vector<wxString>& keywords) {
-	if (!choice || choice->GetCount() <= 1) return;
-	for (const auto& keyword : keywords) {
-		const wxString wanted = keyword.Lower();
-		for (unsigned int index = 1; index < choice->GetCount(); ++index) {
-			if (choice->GetString(index).Lower() == wanted) {
-				choice->SetSelection(static_cast<int>(index));
-				return;
+	void SelectByKeywords(wxChoice* choice, const std::vector<wxString>& keywords) {
+		if (!choice || choice->GetCount() <= 1) {
+			return;
+		}
+		for (const auto& keyword : keywords) {
+			const wxString wanted = keyword.Lower();
+			for (unsigned int index = 1; index < choice->GetCount(); ++index) {
+				if (choice->GetString(index).Lower() == wanted) {
+					choice->SetSelection(static_cast<int>(index));
+					return;
+				}
+			}
+			for (unsigned int index = 1; index < choice->GetCount(); ++index) {
+				const wxString name = choice->GetString(index).Lower();
+				if (name.StartsWith(wanted + " ") || name.StartsWith(wanted + " (") || name.StartsWith(wanted + "-")) {
+					choice->SetSelection(static_cast<int>(index));
+					return;
+				}
+			}
+			for (unsigned int index = 1; index < choice->GetCount(); ++index) {
+				if (choice->GetString(index).Lower().Find(wanted) != wxNOT_FOUND) {
+					choice->SetSelection(static_cast<int>(index));
+					return;
+				}
 			}
 		}
-		for (unsigned int index = 1; index < choice->GetCount(); ++index) {
-			const wxString name = choice->GetString(index).Lower();
-			if (name.StartsWith(wanted + " ") || name.StartsWith(wanted + " (") || name.StartsWith(wanted + "-")) {
-				choice->SetSelection(static_cast<int>(index));
-				return;
+		// An arbitrary fallback could silently mix an unrelated material into the
+		// profile. Keep it unresolved and require an explicit active-client choice.
+		choice->SetSelection(0);
+	}
+
+	uint64_t MixApplyHash(uint64_t value) noexcept {
+		value += 0x9E3779B97F4A7C15ULL;
+		value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ULL;
+		value = (value ^ (value >> 27)) * 0x94D049BB133111EBULL;
+		return value ^ (value >> 31);
+	}
+
+	uint64_t PositionKey(int x, int y, int z) noexcept {
+		return (static_cast<uint64_t>(static_cast<uint16_t>(x)) << 24) | (static_cast<uint64_t>(static_cast<uint16_t>(y)) << 8) | static_cast<uint8_t>(z);
+	}
+
+	bool RequestsEquivalent(const ProceduralMap::GenerationRequest& lhs, const ProceduralMap::GenerationRequest& rhs) {
+		const auto& a = lhs.parameters;
+		const auto& b = rhs.parameters;
+		return lhs.minX == rhs.minX && lhs.minY == rhs.minY && lhs.minZ == rhs.minZ && lhs.maxX == rhs.maxX && lhs.maxY == rhs.maxY && lhs.maxZ == rhs.maxZ && lhs.allowedCells == rhs.allowedCells && lhs.protectedCells == rhs.protectedCells && lhs.seed == rhs.seed && lhs.preset == rhs.preset && lhs.replacementMode == rhs.replacementMode && lhs.edgeBlending == rhs.edgeBlending && a.noiseScale == b.noiseScale && a.octaves == b.octaves && a.persistence == b.persistence && a.lacunarity == b.lacunarity && a.waterLevel == b.waterLevel && a.irregularity == b.irregularity && a.smoothingPasses == b.smoothingPasses && a.decorationDensity == b.decorationDensity && a.pathWidth == b.pathWidth && a.roomCount == b.roomCount && a.roomMinSize == b.roomMinSize && a.roomMaxSize == b.roomMaxSize && a.loops == b.loops && a.secondaryRoadSpacing == b.secondaryRoadSpacing && a.edgeMargin == b.edgeMargin && a.autoFixConnectivity == b.autoFixConnectivity;
+	}
+
+	struct ProtectionSummary {
+		size_t tiles = 0;
+		size_t houses = 0;
+		size_t doors = 0;
+		size_t teleports = 0;
+		size_t depots = 0;
+		size_t spawns = 0;
+		size_t creatures = 0;
+		size_t waypointsOrTowns = 0;
+		size_t uniqueOrActionItems = 0;
+		size_t customizedItems = 0;
+		size_t containers = 0;
+		size_t zonesOrFlags = 0;
+	};
+
+	void InspectProtectedItem(const Item* item, bool& protectedTile, ProtectionSummary* summary) {
+		if (!item) {
+			return;
+		}
+		if (dynamic_cast<const Teleport*>(item)) {
+			protectedTile = true;
+			if (summary) {
+				++summary->teleports;
 			}
 		}
-		for (unsigned int index = 1; index < choice->GetCount(); ++index) {
-			if (choice->GetString(index).Lower().Find(wanted) != wxNOT_FOUND) {
-				choice->SetSelection(static_cast<int>(index));
-				return;
+		if (dynamic_cast<const Depot*>(item)) {
+			protectedTile = true;
+			if (summary) {
+				++summary->depots;
+			}
+		}
+		if (item->isDoor()) {
+			protectedTile = true;
+			if (summary) {
+				++summary->doors;
+			}
+		}
+		if (item->getUniqueID() != 0 || item->getActionID() != 0) {
+			protectedTile = true;
+			if (summary) {
+				++summary->uniqueOrActionItems;
+			}
+		}
+		if (item->isComplex()) {
+			protectedTile = true;
+			if (summary) {
+				++summary->customizedItems;
+			}
+		}
+		if (const auto* container = dynamic_cast<const Container*>(item); container && container->getItemCount() != 0) {
+			protectedTile = true;
+			if (summary) {
+				++summary->containers;
 			}
 		}
 	}
-	// An arbitrary fallback could silently mix an unrelated material into the
-	// profile. Keep it unresolved and require an explicit active-client choice.
-	choice->SetSelection(0);
-}
 
-uint64_t MixApplyHash(uint64_t value) noexcept {
-	value += 0x9E3779B97F4A7C15ULL;
-	value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ULL;
-	value = (value ^ (value >> 27)) * 0x94D049BB133111EBULL;
-	return value ^ (value >> 31);
-}
-
-uint64_t PositionKey(int x, int y, int z) noexcept {
-	return (static_cast<uint64_t>(static_cast<uint16_t>(x)) << 24) |
-		(static_cast<uint64_t>(static_cast<uint16_t>(y)) << 8) |
-		static_cast<uint8_t>(z);
-}
-
-bool RequestsEquivalent(const ProceduralMap::GenerationRequest& lhs, const ProceduralMap::GenerationRequest& rhs) {
-	const auto& a = lhs.parameters;
-	const auto& b = rhs.parameters;
-	return lhs.minX == rhs.minX && lhs.minY == rhs.minY && lhs.minZ == rhs.minZ && lhs.maxX == rhs.maxX && lhs.maxY == rhs.maxY && lhs.maxZ == rhs.maxZ &&
-		lhs.allowedCells == rhs.allowedCells && lhs.protectedCells == rhs.protectedCells && lhs.seed == rhs.seed && lhs.preset == rhs.preset && lhs.replacementMode == rhs.replacementMode && lhs.edgeBlending == rhs.edgeBlending &&
-		a.noiseScale == b.noiseScale && a.octaves == b.octaves && a.persistence == b.persistence && a.lacunarity == b.lacunarity && a.waterLevel == b.waterLevel &&
-		a.irregularity == b.irregularity && a.smoothingPasses == b.smoothingPasses && a.decorationDensity == b.decorationDensity && a.pathWidth == b.pathWidth &&
-		a.roomCount == b.roomCount && a.roomMinSize == b.roomMinSize && a.roomMaxSize == b.roomMaxSize && a.loops == b.loops &&
-		a.secondaryRoadSpacing == b.secondaryRoadSpacing && a.edgeMargin == b.edgeMargin && a.autoFixConnectivity == b.autoFixConnectivity;
-}
-
-struct ProtectionSummary {
-	size_t tiles = 0;
-	size_t houses = 0;
-	size_t doors = 0;
-	size_t teleports = 0;
-	size_t depots = 0;
-	size_t spawns = 0;
-	size_t creatures = 0;
-	size_t waypointsOrTowns = 0;
-	size_t uniqueOrActionItems = 0;
-	size_t customizedItems = 0;
-	size_t containers = 0;
-	size_t zonesOrFlags = 0;
-};
-
-void InspectProtectedItem(const Item* item, bool& protectedTile, ProtectionSummary* summary) {
-	if (!item) return;
-	if (dynamic_cast<const Teleport*>(item)) {
-		protectedTile = true;
-		if (summary) ++summary->teleports;
-	}
-	if (dynamic_cast<const Depot*>(item)) {
-		protectedTile = true;
-		if (summary) ++summary->depots;
-	}
-	if (item->isDoor()) {
-		protectedTile = true;
-		if (summary) ++summary->doors;
-	}
-	if (item->getUniqueID() != 0 || item->getActionID() != 0) {
-		protectedTile = true;
-		if (summary) ++summary->uniqueOrActionItems;
-	}
-	if (item->isComplex()) {
-		protectedTile = true;
-		if (summary) ++summary->customizedItems;
-	}
-	if (const auto* container = dynamic_cast<const Container*>(item); container && container->getItemCount() != 0) {
-		protectedTile = true;
-		if (summary) ++summary->containers;
-	}
-}
-
-bool IsProtectedTile(const Tile* tile, ProtectionSummary* summary = nullptr) {
-	if (!tile) return false;
-	bool protectedTile = false;
-	if (tile->isHouseTile() || tile->isHouseExit()) {
-		protectedTile = true;
-		if (summary) ++summary->houses;
-	}
-	if (tile->spawn || (tile->getLocation() && tile->getLocation()->getSpawnCount() != 0)) {
-		protectedTile = true;
-		if (summary) ++summary->spawns;
-	}
-	if (tile->creature) {
-		protectedTile = true;
-		if (summary) ++summary->creatures;
-	}
-	if (tile->getLocation() && (tile->getLocation()->getWaypointCount() != 0 || tile->getLocation()->getTownCount() != 0)) {
-		protectedTile = true;
-		if (summary) ++summary->waypointsOrTowns;
-	}
-	if (tile->getMapFlags() != 0 || tile->hasZone()) {
-		protectedTile = true;
-		if (summary) ++summary->zonesOrFlags;
-	}
-	InspectProtectedItem(tile->ground, protectedTile, summary);
-	for (const auto* item : tile->items) InspectProtectedItem(item, protectedTile, summary);
-	if (protectedTile && summary) ++summary->tiles;
-	return protectedTile;
-}
-
-bool IsProtectedItem(const Item* item) {
-	bool protectedItem = false;
-	InspectProtectedItem(item, protectedItem, nullptr);
-	return protectedItem;
-}
-
-bool UsesSmartLayerReplacement(ProceduralMap::ReplacementMode mode) noexcept {
-	return mode == ProceduralMap::ReplacementMode::ReplaceTerrainAndBorders || mode == ProceduralMap::ReplacementMode::BlendWithExisting;
-}
-
-bool RequiresClearSurface(const ProceduralMap::GeneratedCell& cell) noexcept {
-	constexpr uint16_t clearFeatures = ProceduralMap::FeatureWall | ProceduralMap::FeatureDecoration | ProceduralMap::FeatureTransition | ProceduralMap::FeaturePointOfInterest;
-	return !cell.walkable || cell.material == ProceduralMap::MaterialRole::Path || cell.material == ProceduralMap::MaterialRole::Water ||
-		cell.material == ProceduralMap::MaterialRole::Rock || (cell.features & clearFeatures) != 0;
-}
-
-bool ShouldRemoveExistingItem(const Item* item, const ProceduralMap::GeneratedCell& cell, ProceduralMap::ReplacementMode mode) {
-	if (!item || IsProtectedItem(item)) return false;
-	if (mode == ProceduralMap::ReplacementMode::ReplaceEverything) return true;
-	if (!UsesSmartLayerReplacement(mode)) return false;
-	// Borders and walls are generated layers and must never survive a new
-	// terrain topology. Other unprotected objects are removed only where the
-	// plan needs a clear path, liquid/rock, wall, transition, POI or doodad.
-	return item->isBorder() || item->isWall() || item->isBlocking() || RequiresClearSurface(cell);
-}
-
-bool IsApplyEligible(const ProceduralMap::GenerationPlan& plan, const ProceduralMap::GeneratedCell& cell, const Tile* tile) {
-	if (cell.material == ProceduralMap::MaterialRole::None || IsProtectedTile(tile)) return false;
-	if (plan.request.replacementMode == ProceduralMap::ReplacementMode::EmptyTilesOnly && tile && !tile->empty()) return false;
-	if (plan.request.replacementMode == ProceduralMap::ReplacementMode::BlendWithExisting) {
-		const uint64_t roll = MixApplyHash(plan.request.seed ^ PositionKey(cell.x, cell.y, cell.z)) % 255U;
-		if (roll >= cell.blendWeight) return false;
-	}
-	return true;
-}
-
-struct ApplyImpactSummary {
-	size_t eligibleTiles = 0;
-	size_t skippedProtectedTiles = 0;
-	size_t skippedByPolicyTiles = 0;
-	size_t groundsReplaced = 0;
-	size_t bordersRemoved = 0;
-	size_t wallsRemoved = 0;
-	size_t objectsRemoved = 0;
-	size_t blockingObjectsRemoved = 0;
-	size_t objectsPreserved = 0;
-};
-
-ApplyImpactSummary ComputeApplyImpact(Editor& editor, const ProceduralMap::GenerationPlan& plan) {
-	ApplyImpactSummary impact;
-	impact.skippedProtectedTiles = plan.statistics.protectedTiles;
-	for (const auto& cell : plan.cells) {
-		if (cell.material == ProceduralMap::MaterialRole::None) continue;
-		const Tile* tile = editor.map.getTile(cell.x, cell.y, cell.z);
-		if (!IsApplyEligible(plan, cell, tile)) {
-			if (IsProtectedTile(tile)) ++impact.skippedProtectedTiles;
-			else ++impact.skippedByPolicyTiles;
-			continue;
+	bool IsProtectedTile(const Tile* tile, ProtectionSummary* summary = nullptr) {
+		if (!tile) {
+			return false;
 		}
-		++impact.eligibleTiles;
-		if (!tile) continue;
-		if (tile->ground) ++impact.groundsReplaced;
-		for (const Item* item : tile->items) {
-			if (!ShouldRemoveExistingItem(item, cell, plan.request.replacementMode)) {
-				++impact.objectsPreserved;
+		bool protectedTile = false;
+		if (tile->isHouseTile() || tile->isHouseExit()) {
+			protectedTile = true;
+			if (summary) {
+				++summary->houses;
+			}
+		}
+		if (tile->spawn || (tile->getLocation() && tile->getLocation()->getSpawnCount() != 0)) {
+			protectedTile = true;
+			if (summary) {
+				++summary->spawns;
+			}
+		}
+		if (tile->creature) {
+			protectedTile = true;
+			if (summary) {
+				++summary->creatures;
+			}
+		}
+		if (tile->getLocation() && (tile->getLocation()->getWaypointCount() != 0 || tile->getLocation()->getTownCount() != 0)) {
+			protectedTile = true;
+			if (summary) {
+				++summary->waypointsOrTowns;
+			}
+		}
+		if (tile->getMapFlags() != 0 || tile->hasZone()) {
+			protectedTile = true;
+			if (summary) {
+				++summary->zonesOrFlags;
+			}
+		}
+		InspectProtectedItem(tile->ground, protectedTile, summary);
+		for (const auto* item : tile->items) {
+			InspectProtectedItem(item, protectedTile, summary);
+		}
+		if (protectedTile && summary) {
+			++summary->tiles;
+		}
+		return protectedTile;
+	}
+
+	bool IsProtectedItem(const Item* item) {
+		bool protectedItem = false;
+		InspectProtectedItem(item, protectedItem, nullptr);
+		return protectedItem;
+	}
+
+	bool UsesSmartLayerReplacement(ProceduralMap::ReplacementMode mode) noexcept {
+		return mode == ProceduralMap::ReplacementMode::ReplaceTerrainAndBorders || mode == ProceduralMap::ReplacementMode::BlendWithExisting;
+	}
+
+	bool RequiresClearSurface(const ProceduralMap::GeneratedCell& cell) noexcept {
+		constexpr uint16_t clearFeatures = ProceduralMap::FeatureWall | ProceduralMap::FeatureDecoration | ProceduralMap::FeatureTransition | ProceduralMap::FeaturePointOfInterest;
+		return !cell.walkable || cell.material == ProceduralMap::MaterialRole::Path || cell.material == ProceduralMap::MaterialRole::Water || cell.material == ProceduralMap::MaterialRole::Rock || (cell.features & clearFeatures) != 0;
+	}
+
+	bool ShouldRemoveExistingItem(const Item* item, const ProceduralMap::GeneratedCell& cell, ProceduralMap::ReplacementMode mode) {
+		if (!item || IsProtectedItem(item)) {
+			return false;
+		}
+		if (mode == ProceduralMap::ReplacementMode::ReplaceEverything) {
+			return true;
+		}
+		if (!UsesSmartLayerReplacement(mode)) {
+			return false;
+		}
+		// Borders and walls are generated layers and must never survive a new
+		// terrain topology. Other unprotected objects are removed only where the
+		// plan needs a clear path, liquid/rock, wall, transition, POI or doodad.
+		return item->isBorder() || item->isWall() || item->isBlocking() || RequiresClearSurface(cell);
+	}
+
+	bool IsApplyEligible(const ProceduralMap::GenerationPlan& plan, const ProceduralMap::GeneratedCell& cell, const Tile* tile) {
+		if (cell.material == ProceduralMap::MaterialRole::None || IsProtectedTile(tile)) {
+			return false;
+		}
+		if (plan.request.replacementMode == ProceduralMap::ReplacementMode::EmptyTilesOnly && tile && !tile->empty()) {
+			return false;
+		}
+		if (plan.request.replacementMode == ProceduralMap::ReplacementMode::BlendWithExisting) {
+			const uint64_t roll = MixApplyHash(plan.request.seed ^ PositionKey(cell.x, cell.y, cell.z)) % 255U;
+			if (roll >= cell.blendWeight) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	struct ApplyImpactSummary {
+		size_t eligibleTiles = 0;
+		size_t skippedProtectedTiles = 0;
+		size_t skippedByPolicyTiles = 0;
+		size_t groundsReplaced = 0;
+		size_t bordersRemoved = 0;
+		size_t wallsRemoved = 0;
+		size_t objectsRemoved = 0;
+		size_t blockingObjectsRemoved = 0;
+		size_t objectsPreserved = 0;
+	};
+
+	ApplyImpactSummary ComputeApplyImpact(Editor& editor, const ProceduralMap::GenerationPlan& plan) {
+		ApplyImpactSummary impact;
+		impact.skippedProtectedTiles = plan.statistics.protectedTiles;
+		for (const auto& cell : plan.cells) {
+			if (cell.material == ProceduralMap::MaterialRole::None) {
 				continue;
 			}
-			if (item->isBorder()) ++impact.bordersRemoved;
-			else if (item->isWall()) ++impact.wallsRemoved;
-			else ++impact.objectsRemoved;
-			if (item->isBlocking()) ++impact.blockingObjectsRemoved;
+			const Tile* tile = editor.map.getTile(cell.x, cell.y, cell.z);
+			if (!IsApplyEligible(plan, cell, tile)) {
+				if (IsProtectedTile(tile)) {
+					++impact.skippedProtectedTiles;
+				} else {
+					++impact.skippedByPolicyTiles;
+				}
+				continue;
+			}
+			++impact.eligibleTiles;
+			if (!tile) {
+				continue;
+			}
+			if (tile->ground) {
+				++impact.groundsReplaced;
+			}
+			for (const Item* item : tile->items) {
+				if (!ShouldRemoveExistingItem(item, cell, plan.request.replacementMode)) {
+					++impact.objectsPreserved;
+					continue;
+				}
+				if (item->isBorder()) {
+					++impact.bordersRemoved;
+				} else if (item->isWall()) {
+					++impact.wallsRemoved;
+				} else {
+					++impact.objectsRemoved;
+				}
+				if (item->isBlocking()) {
+					++impact.blockingObjectsRemoved;
+				}
+			}
+		}
+		return impact;
+	}
+
+	void RemoveConflictingItems(Tile& tile, const ProceduralMap::GeneratedCell& cell, ProceduralMap::ReplacementMode mode) {
+		for (auto iterator = tile.items.begin(); iterator != tile.items.end();) {
+			Item* item = *iterator;
+			if (ShouldRemoveExistingItem(item, cell, mode)) {
+				delete item;
+				iterator = tile.items.erase(iterator);
+			} else {
+				++iterator;
+			}
 		}
 	}
-	return impact;
-}
 
-void RemoveConflictingItems(Tile& tile, const ProceduralMap::GeneratedCell& cell, ProceduralMap::ReplacementMode mode) {
-	for (auto iterator = tile.items.begin(); iterator != tile.items.end();) {
-		Item* item = *iterator;
-		if (ShouldRemoveExistingItem(item, cell, mode)) {
-			delete item;
-			iterator = tile.items.erase(iterator);
-		} else {
-			++iterator;
+	wxString JoinWords(const std::vector<std::string>& words) {
+		wxString result;
+		for (size_t index = 0; index < words.size(); ++index) {
+			if (index != 0) {
+				result += ", ";
+			}
+			result += wxstr(words[index]);
 		}
+		return result;
 	}
-}
-
-wxString JoinWords(const std::vector<std::string>& words) {
-	wxString result;
-	for (size_t index = 0; index < words.size(); ++index) {
-		if (index != 0) result += ", ";
-		result += wxstr(words[index]);
-	}
-	return result;
-}
 
 } // namespace
 
 class ProceduralPreviewPanel final : public wxScrolledWindow {
 public:
-	explicit ProceduralPreviewPanel(wxWindow* parent) : wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxSize(640, 420), wxBORDER_SIMPLE | wxHSCROLL | wxVSCROLL) {
+	explicit ProceduralPreviewPanel(wxWindow* parent) :
+		wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxSize(640, 420), wxBORDER_SIMPLE | wxHSCROLL | wxVSCROLL) {
 		SetBackgroundStyle(wxBG_STYLE_PAINT);
 		SetScrollRate(16, 16);
 		Bind(wxEVT_PAINT, &ProceduralPreviewPanel::OnPaint, this);
@@ -311,13 +367,20 @@ public:
 private:
 	wxColour RoleColour(ProceduralMap::MaterialRole role) const {
 		switch (role) {
-			case ProceduralMap::MaterialRole::Base: return wxColour(67, 124, 63);
-			case ProceduralMap::MaterialRole::Secondary: return wxColour(176, 146, 88);
-			case ProceduralMap::MaterialRole::Water: return wxColour(49, 102, 170);
-			case ProceduralMap::MaterialRole::Path: return wxColour(133, 116, 91);
-			case ProceduralMap::MaterialRole::Rock: return wxColour(84, 86, 91);
-			case ProceduralMap::MaterialRole::Accent: return wxColour(205, 210, 212);
-			default: return wxColour(35, 38, 43);
+			case ProceduralMap::MaterialRole::Base:
+				return wxColour(67, 124, 63);
+			case ProceduralMap::MaterialRole::Secondary:
+				return wxColour(176, 146, 88);
+			case ProceduralMap::MaterialRole::Water:
+				return wxColour(49, 102, 170);
+			case ProceduralMap::MaterialRole::Path:
+				return wxColour(133, 116, 91);
+			case ProceduralMap::MaterialRole::Rock:
+				return wxColour(84, 86, 91);
+			case ProceduralMap::MaterialRole::Accent:
+				return wxColour(205, 210, 212);
+			default:
+				return wxColour(35, 38, 43);
 		}
 	}
 
@@ -343,7 +406,9 @@ private:
 			dc.DrawText(plan ? "The current settings did not produce a drawable plan. Review Validation." : "Generate a preview to inspect the plan. The map is not modified.", 18, 18);
 			return;
 		}
-		if (floor < plan->request.minZ || floor > plan->request.maxZ) return;
+		if (floor < plan->request.minZ || floor > plan->request.maxZ) {
+			return;
+		}
 		int viewX = 0;
 		int viewY = 0;
 		int pixelsPerUnitX = 0;
@@ -369,7 +434,9 @@ private:
 					dc.DrawLine(px + tileSize - 1, py + 1, px + 1, py + tileSize - 1);
 					continue;
 				}
-				if (cell.material == ProceduralMap::MaterialRole::None) continue;
+				if (cell.material == ProceduralMap::MaterialRole::None) {
+					continue;
+				}
 				bool spriteDrawn = false;
 				const int lookId = lookIds[static_cast<size_t>(cell.material)];
 				if (tileSize >= 8 && lookId != 0 && !g_gui.gfx.isUnloaded()) {
@@ -407,7 +474,7 @@ private:
 	int tileSize = 12;
 };
 
-ProceduralGeneratorDialog::ProceduralGeneratorDialog(wxWindow* parent, Editor& editor, int currentFloor) :
+ProceduralGeneratorDialog::ProceduralGeneratorDialog(wxWindow* parent, Editor& editor, int currentFloor, const std::string& initialBrief, int initialWidth, int initialHeight) :
 	wxDialog(parent, wxID_ANY, "Procedural Map Generator", wxDefaultPosition, wxSize(1120, 780), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	editor(editor), launchFloor(std::clamp(currentFloor, 0, 15)), workerTimer(std::make_unique<wxTimer>(this)), brushTimer(std::make_unique<wxTimer>(this)) {
 	if (editor.selection.size() > ProceduralMap::MaximumPlanCells) {
@@ -415,7 +482,9 @@ ProceduralGeneratorDialog::ProceduralGeneratorDialog(wxWindow* parent, Editor& e
 	}
 	selectedPositions.reserve(editor.selection.size());
 	for (Tile* tile : editor.selection.getTiles()) {
-		if (!tile) continue;
+		if (!tile) {
+			continue;
+		}
 		const Position position = tile->getPosition();
 		selectedPositions.emplace_back(position.x, position.y, position.z);
 	}
@@ -434,6 +503,17 @@ ProceduralGeneratorDialog::ProceduralGeneratorDialog(wxWindow* parent, Editor& e
 		}
 	}
 	BuildLayout();
+	if (!capturedSelection && initialWidth > 0 && initialHeight > 0) {
+		startX->SetValue(1);
+		startY->SetValue(1);
+		endX->SetValue(std::min<int>(editor.getMapWidth(), initialWidth));
+		endY->SetValue(std::min<int>(editor.getMapHeight(), initialHeight));
+	}
+	if (!initialBrief.empty()) {
+		briefText->SetValue(wxString::FromUTF8(initialBrief));
+		interpretedText->SetLabel("Prompt received from the connected AI client. Choose Interpret Brief, review the settings, then generate a preview.");
+		interpretedText->Wrap(760);
+	}
 	UpdateAreaSummary();
 	Bind(wxEVT_TIMER, &ProceduralGeneratorDialog::OnWorkerTimer, this, workerTimer->GetId());
 	Bind(wxEVT_TIMER, &ProceduralGeneratorDialog::OnBrushTimer, this, brushTimer->GetId());
@@ -446,7 +526,9 @@ ProceduralGeneratorDialog::ProceduralGeneratorDialog(wxWindow* parent, Editor& e
 
 ProceduralGeneratorDialog::~ProceduralGeneratorDialog() {
 	closing = true;
-	if (brushTimer) brushTimer->Stop();
+	if (brushTimer) {
+		brushTimer->Stop();
+	}
 	StopWorker();
 }
 
@@ -507,7 +589,9 @@ void ProceduralGeneratorDialog::BuildPresetPage(wxNotebook* parentNotebook) {
 	grid->AddGrowableCol(1, 1);
 	grid->Add(new wxStaticText(page, wxID_ANY, "Preset:"), 0, wxALIGN_CENTER_VERTICAL);
 	presetChoice = new wxChoice(page, wxID_ANY);
-	for (int preset = 0; preset < static_cast<int>(ProceduralMap::Preset::Count); ++preset) presetChoice->Append(ProceduralMap::PresetName(static_cast<ProceduralMap::Preset>(preset)));
+	for (int preset = 0; preset < static_cast<int>(ProceduralMap::Preset::Count); ++preset) {
+		presetChoice->Append(ProceduralMap::PresetName(static_cast<ProceduralMap::Preset>(preset)));
+	}
 	presetChoice->SetSelection(0);
 	grid->Add(presetChoice, 1, wxEXPAND);
 	grid->Add(new wxStaticText(page, wxID_ANY, "Seed:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -587,13 +671,14 @@ void ProceduralGeneratorDialog::BuildAreaPage(wxNotebook* parentNotebook) {
 	policy->Add(edgeChoice, 1, wxEXPAND);
 	edgeMargin = AddSpin(page, policy, "Blend margin:", 2, 1, 12, "The margin is clipped to the selected mask; tiles outside it are never changed.");
 	root->Add(policy, 0, wxEXPAND | wxALL, 12);
-	auto* protectionHelp = new wxStaticText(page, wxID_ANY,
-		"Smart replacement removes stale generated layers, blocking objects from planned walkable ground, and unprotected objects that conflict with paths, water, rock, walls, transitions, POIs or new decorations. Gameplay-critical content is always excluded and generation routes around it.");
+	auto* protectionHelp = new wxStaticText(page, wxID_ANY, "Smart replacement removes stale generated layers, blocking objects from planned walkable ground, and unprotected objects that conflict with paths, water, rock, walls, transitions, POIs or new decorations. Gameplay-critical content is always excluded and generation routes around it.");
 	protectionHelp->Wrap(800);
 	root->Add(protectionHelp, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
 	page->SetSizer(root);
 	parentNotebook->AddPage(page, "Area");
-	for (auto* control : { startX, startY, startZ, endX, endY, endZ }) control->Bind(wxEVT_SPINCTRL, &ProceduralGeneratorDialog::OnAreaChanged, this);
+	for (auto* control : { startX, startY, startZ, endX, endY, endZ }) {
+		control->Bind(wxEVT_SPINCTRL, &ProceduralGeneratorDialog::OnAreaChanged, this);
+	}
 }
 
 void ProceduralGeneratorDialog::BuildTerrainPage(wxNotebook* parentNotebook) {
@@ -706,7 +791,9 @@ void ProceduralGeneratorDialog::PrepareBrushCatalog() {
 	wallBrushNames.reserve(brushCount);
 	doodadBrushNames.reserve(brushCount);
 	for (const auto& [name, brush] : g_brushes.getMap()) {
-		if (!brush || name.empty() || !seen.insert(brush).second) continue;
+		if (!brush || name.empty() || !seen.insert(brush).second) {
+			continue;
+		}
 		if (brush->isGround()) {
 			groundBrushes.push_back(brush);
 			groundBrushNames.push_back(wxstr(brush->getName()));
@@ -729,7 +816,9 @@ void ProceduralGeneratorDialog::PrepareBrushCatalog() {
 }
 
 void ProceduralGeneratorDialog::PopulateBrushChoice(wxChoice* choice, const std::vector<Brush*>& brushes, const std::vector<wxString>& names) {
-	if (brushes.size() != names.size()) throw std::logic_error("The brush catalog names and pointers are inconsistent.");
+	if (brushes.size() != names.size()) {
+		throw std::logic_error("The brush catalog names and pointers are inconsistent.");
+	}
 	wxArrayString labels;
 	labels.Alloc(names.size() + 1);
 	std::vector<void*> clientData;
@@ -754,7 +843,9 @@ void ProceduralGeneratorDialog::PopulateBrushChoice(wxChoice* choice, const std:
 
 void ProceduralGeneratorDialog::FinishBrushInitialization() {
 	auto invalidateMaterialPreview = [this](wxCommandEvent&) {
-		if (!plan) return;
+		if (!plan) {
+			return;
+		}
 		plan.reset();
 		applyButton->Enable(false);
 		regenerateButton->Enable(false);
@@ -763,7 +854,9 @@ void ProceduralGeneratorDialog::FinishBrushInitialization() {
 		validationText->SetValue("Material profile changed. Generate a new preview so sprites and validation match the selected active-client brushes.");
 		statusText->SetLabel("Material profile changed; preview invalidated.");
 	};
-	for (size_t role = static_cast<size_t>(ProceduralMap::MaterialRole::Base); role < static_cast<size_t>(ProceduralMap::MaterialRole::Count); ++role) groundChoices[role]->Bind(wxEVT_CHOICE, invalidateMaterialPreview);
+	for (size_t role = static_cast<size_t>(ProceduralMap::MaterialRole::Base); role < static_cast<size_t>(ProceduralMap::MaterialRole::Count); ++role) {
+		groundChoices[role]->Bind(wxEVT_CHOICE, invalidateMaterialPreview);
+	}
 	wallChoice->Bind(wxEVT_CHOICE, invalidateMaterialPreview);
 	doodadChoice->Bind(wxEVT_CHOICE, invalidateMaterialPreview);
 	transitionChoice->Bind(wxEVT_CHOICE, invalidateMaterialPreview);
@@ -840,20 +933,65 @@ void ProceduralGeneratorDialog::UpdatePresetDefaults(bool force) {
 	int passes = 3;
 	double scale = 48.0;
 	switch (preset) {
-		case ProceduralMap::Preset::Forest: density = 42; scale = 34.0; break;
-		case ProceduralMap::Preset::Mountain: density = 12; scale = 58.0; width = 2; break;
-		case ProceduralMap::Preset::Cave: density = 13; passes = 4; width = 2; break;
-		case ProceduralMap::Preset::Dungeon: density = 8; rooms = 16; width = 2; break;
-		case ProceduralMap::Preset::HuntingArea: density = 16; rooms = 10; width = 3; break;
-		case ProceduralMap::Preset::City: density = 8; width = 3; break;
-		case ProceduralMap::Preset::Village: density = 16; width = 2; break;
-		case ProceduralMap::Preset::Desert: density = 7; scale = 54.0; break;
-		case ProceduralMap::Preset::SnowArea: density = 12; scale = 52.0; break;
-		case ProceduralMap::Preset::Swamp: density = 28; scale = 30.0; break;
-		case ProceduralMap::Preset::Island: density = 24; scale = 44.0; break;
-		case ProceduralMap::Preset::River: density = 14; width = 4; break;
-		case ProceduralMap::Preset::Ruins: density = 18; rooms = 10; width = 2; break;
-		default: break;
+		case ProceduralMap::Preset::Forest:
+			density = 42;
+			scale = 34.0;
+			break;
+		case ProceduralMap::Preset::Mountain:
+			density = 12;
+			scale = 58.0;
+			width = 2;
+			break;
+		case ProceduralMap::Preset::Cave:
+			density = 13;
+			passes = 4;
+			width = 2;
+			break;
+		case ProceduralMap::Preset::Dungeon:
+			density = 8;
+			rooms = 16;
+			width = 2;
+			break;
+		case ProceduralMap::Preset::HuntingArea:
+			density = 16;
+			rooms = 10;
+			width = 3;
+			break;
+		case ProceduralMap::Preset::City:
+			density = 8;
+			width = 3;
+			break;
+		case ProceduralMap::Preset::Village:
+			density = 16;
+			width = 2;
+			break;
+		case ProceduralMap::Preset::Desert:
+			density = 7;
+			scale = 54.0;
+			break;
+		case ProceduralMap::Preset::SnowArea:
+			density = 12;
+			scale = 52.0;
+			break;
+		case ProceduralMap::Preset::Swamp:
+			density = 28;
+			scale = 30.0;
+			break;
+		case ProceduralMap::Preset::Island:
+			density = 24;
+			scale = 44.0;
+			break;
+		case ProceduralMap::Preset::River:
+			density = 14;
+			width = 4;
+			break;
+		case ProceduralMap::Preset::Ruins:
+			density = 18;
+			rooms = 10;
+			width = 2;
+			break;
+		default:
+			break;
 	}
 	decorationDensity->SetValue(density);
 	pathWidth->SetValue(width);
@@ -878,12 +1016,18 @@ void ProceduralGeneratorDialog::BuildAllowedMask(ProceduralMap::GenerationReques
 		for (const auto& position : selectedPositions) {
 			const int x = std::get<0>(position);
 			const int y = std::get<1>(position);
-			if (x < request.minX || x > request.maxX || y < request.minY || y > request.maxY) continue;
-			for (int z = request.minZ; z <= request.maxZ; ++z) request.allowedCells[index(x, y, z)] = 1;
+			if (x < request.minX || x > request.maxX || y < request.minY || y > request.maxY) {
+				continue;
+			}
+			for (int z = request.minZ; z <= request.maxZ; ++z) {
+				request.allowedCells[index(x, y, z)] = 1;
+			}
 		}
 	} else {
 		for (const auto& [x, y, z] : selectedPositions) {
-			if (x >= request.minX && x <= request.maxX && y >= request.minY && y <= request.maxY && z >= request.minZ && z <= request.maxZ) request.allowedCells[index(x, y, z)] = 1;
+			if (x >= request.minX && x <= request.maxX && y >= request.minY && y <= request.maxY && z >= request.minZ && z <= request.maxZ) {
+				request.allowedCells[index(x, y, z)] = 1;
+			}
 		}
 	}
 }
@@ -896,7 +1040,9 @@ void ProceduralGeneratorDialog::BuildProtectedMask(ProceduralMap::GenerationRequ
 		for (int y = request.minY; y <= request.maxY; ++y) {
 			for (int x = request.minX; x <= request.maxX; ++x) {
 				const size_t index = (static_cast<size_t>(z - request.minZ) * height + static_cast<size_t>(y - request.minY)) * width + static_cast<size_t>(x - request.minX);
-				if (request.allowedCells[index] != 0 && IsProtectedTile(editor.map.getTile(x, y, z))) request.protectedCells[index] = 1;
+				if (request.allowedCells[index] != 0 && IsProtectedTile(editor.map.getTile(x, y, z))) {
+					request.protectedCells[index] = 1;
+				}
 			}
 		}
 	}
@@ -927,7 +1073,9 @@ ProceduralMap::GenerationRequest ProceduralGeneratorDialog::ReadRequest(wxString
 		size_t parsed = 0;
 		const std::string seedValue = seedText->GetValue().ToStdString();
 		request.seed = std::stoull(seedValue, &parsed, 10);
-		if (parsed != seedValue.size()) throw std::invalid_argument("seed");
+		if (parsed != seedValue.size()) {
+			throw std::invalid_argument("seed");
+		}
 	} catch (...) {
 		error = "Seed must be an unsigned integer.";
 		return request;
@@ -1032,7 +1180,9 @@ void ProceduralGeneratorDialog::StartGeneration(bool randomizeSeed) {
 }
 
 void ProceduralGeneratorDialog::OnBrushTimer(wxTimerEvent&) {
-	if (closing || brushesReady) return;
+	if (closing || brushesReady) {
+		return;
+	}
 	try {
 		if (!brushCatalogPrepared) {
 			PrepareBrushCatalog();
@@ -1072,7 +1222,9 @@ void ProceduralGeneratorDialog::OnBrushTimer(wxTimerEvent&) {
 }
 
 void ProceduralGeneratorDialog::StopWorker() {
-	if (workerTimer) workerTimer->Stop();
+	if (workerTimer) {
+		workerTimer->Stop();
+	}
 	if (worker.joinable()) {
 		worker.request_stop();
 		worker.join();
@@ -1082,9 +1234,15 @@ void ProceduralGeneratorDialog::StopWorker() {
 void ProceduralGeneratorDialog::OnWorkerTimer(wxTimerEvent&) {
 	progressGauge->SetValue(workerProgress.load(std::memory_order_relaxed));
 	statusText->SetLabel(wxString::Format("%d%% - %s", workerProgress.load(std::memory_order_relaxed), wxString::FromUTF8(ProceduralMap::GenerationStageName(workerStage.load(std::memory_order_relaxed)))));
-	if (!workerDone.load(std::memory_order_acquire)) return;
-	if (workerTimer) workerTimer->Stop();
-	if (worker.joinable()) worker.join();
+	if (!workerDone.load(std::memory_order_acquire)) {
+		return;
+	}
+	if (workerTimer) {
+		workerTimer->Stop();
+	}
+	if (worker.joinable()) {
+		worker.join();
+	}
 	std::optional<ProceduralMap::GenerationPlan> generated;
 	std::string error;
 	{
@@ -1097,7 +1255,9 @@ void ProceduralGeneratorDialog::OnWorkerTimer(wxTimerEvent&) {
 	if (!error.empty()) {
 		statusText->SetLabel(wxstr(error));
 		SetGeneratingState(false);
-		if (error != "Generation cancelled." && !closing) wxMessageBox(wxstr(error), "Procedural Map Generator", wxOK | wxICON_ERROR, this);
+		if (error != "Generation cancelled." && !closing) {
+			wxMessageBox(wxstr(error), "Procedural Map Generator", wxOK | wxICON_ERROR, this);
+		}
 		return;
 	}
 	if (!generated) {
@@ -1106,7 +1266,9 @@ void ProceduralGeneratorDialog::OnWorkerTimer(wxTimerEvent&) {
 		return;
 	}
 	try {
-		if (plan) ProceduralMap::MergeLockedParts(*generated, *plan, lockTerrain->GetValue(), lockStructures->GetValue(), lockDecorations->GetValue());
+		if (plan) {
+			ProceduralMap::MergeLockedParts(*generated, *plan, lockTerrain->GetValue(), lockStructures->GetValue(), lockDecorations->GetValue());
+		}
 		plan = std::move(generated);
 		std::vector<ProceduralMap::ValidationIssue> materialIssues;
 		ValidateMaterials(materialIssues);
@@ -1114,7 +1276,9 @@ void ProceduralGeneratorDialog::OnWorkerTimer(wxTimerEvent&) {
 		UpdatePreviewFloorChoice();
 		std::array<int, static_cast<size_t>(ProceduralMap::MaterialRole::Count)> lookIds {};
 		for (size_t role = static_cast<size_t>(ProceduralMap::MaterialRole::Base); role < static_cast<size_t>(ProceduralMap::MaterialRole::Count); ++role) {
-			if (auto* brush = SelectedGround(static_cast<ProceduralMap::MaterialRole>(role))) lookIds[role] = brush->getLookID();
+			if (auto* brush = SelectedGround(static_cast<ProceduralMap::MaterialRole>(role))) {
+				lookIds[role] = brush->getLookID();
+			}
 		}
 		const int previewFloor = previewFloorChoice->GetSelection() == wxNOT_FOUND ? plan->request.minZ : plan->request.minZ + previewFloorChoice->GetSelection();
 		previewPanel->SetPlan(&*plan, lookIds, previewFloor);
@@ -1142,47 +1306,58 @@ void ProceduralGeneratorDialog::OnWorkerTimer(wxTimerEvent&) {
 
 void ProceduralGeneratorDialog::UpdatePreviewFloorChoice() {
 	previewFloorChoice->Clear();
-	if (!plan) return;
-	for (int z = plan->request.minZ; z <= plan->request.maxZ; ++z) previewFloorChoice->Append(wxString::Format("Z %d", z));
+	if (!plan) {
+		return;
+	}
+	for (int z = plan->request.minZ; z <= plan->request.maxZ; ++z) {
+		previewFloorChoice->Append(wxString::Format("Z %d", z));
+	}
 	previewFloorChoice->SetSelection(0);
 }
 
 void ProceduralGeneratorDialog::UpdateValidationReport() {
-	if (!plan) return;
+	if (!plan) {
+		return;
+	}
 	wxString report;
 	report << wxString::Format("Preset: %s\nSeed: %llu\nPlan hash: %016llX\n\n", wxString::FromUTF8(ProceduralMap::PresetName(plan->request.preset)), static_cast<unsigned long long>(plan->request.seed), static_cast<unsigned long long>(plan->stableHash));
-	report << wxString::Format("Selected cells: %zu\nProtected cells excluded from planning: %zu\nPlanned tiles: %zu\nWalkable tiles: %zu\nWall positions: %zu\nDecoration positions: %zu\nPoints of interest: %zu\nRooms / chambers placed: %zu\nDetected walkable regions: %zu\nConnectivity repairs: %zu\nApproximate plan memory: %.2f MiB\n\n",
-		plan->statistics.allowedTiles, plan->statistics.protectedTiles, plan->statistics.plannedTiles, plan->statistics.walkableTiles, plan->statistics.wallTiles, plan->statistics.decorationTiles,
-		plan->statistics.pointOfInterestTiles, plan->statistics.roomsPlaced, plan->statistics.connectedRegions, plan->statistics.repairedConnections, plan->statistics.approximateBytes / (1024.0 * 1024.0));
+	report << wxString::Format("Selected cells: %zu\nProtected cells excluded from planning: %zu\nPlanned tiles: %zu\nWalkable tiles: %zu\nWall positions: %zu\nDecoration positions: %zu\nPoints of interest: %zu\nRooms / chambers placed: %zu\nDetected walkable regions: %zu\nConnectivity repairs: %zu\nApproximate plan memory: %.2f MiB\n\n", plan->statistics.allowedTiles, plan->statistics.protectedTiles, plan->statistics.plannedTiles, plan->statistics.walkableTiles, plan->statistics.wallTiles, plan->statistics.decorationTiles, plan->statistics.pointOfInterestTiles, plan->statistics.roomsPlaced, plan->statistics.connectedRegions, plan->statistics.repairedConnections, plan->statistics.approximateBytes / (1024.0 * 1024.0));
 	ProtectionSummary protection;
 	for (int z = plan->request.minZ; z <= plan->request.maxZ; ++z) {
 		for (int y = plan->request.minY; y <= plan->request.maxY; ++y) {
 			for (int x = plan->request.minX; x <= plan->request.maxX; ++x) {
-				if (plan->request.isProtected(x, y, z)) IsProtectedTile(editor.map.getTile(x, y, z), &protection);
+				if (plan->request.isProtected(x, y, z)) {
+					IsProtectedTile(editor.map.getTile(x, y, z), &protection);
+				}
 			}
 		}
 	}
-	report << wxString::Format("Protected tiles (always excluded): %zu\n  Houses/exits: %zu\n  Doors: %zu\n  Teleports: %zu\n  Depots: %zu\n  Spawns: %zu\n  Creatures/NPCs: %zu\n  Waypoints/towns: %zu\n  Unique/Action items: %zu\n  Customized item attributes: %zu\n  Non-empty containers: %zu\n  Zones/flags: %zu\n\n",
-		protection.tiles, protection.houses, protection.doors, protection.teleports, protection.depots, protection.spawns, protection.creatures, protection.waypointsOrTowns, protection.uniqueOrActionItems, protection.customizedItems, protection.containers, protection.zonesOrFlags);
+	report << wxString::Format("Protected tiles (always excluded): %zu\n  Houses/exits: %zu\n  Doors: %zu\n  Teleports: %zu\n  Depots: %zu\n  Spawns: %zu\n  Creatures/NPCs: %zu\n  Waypoints/towns: %zu\n  Unique/Action items: %zu\n  Customized item attributes: %zu\n  Non-empty containers: %zu\n  Zones/flags: %zu\n\n", protection.tiles, protection.houses, protection.doors, protection.teleports, protection.depots, protection.spawns, protection.creatures, protection.waypointsOrTowns, protection.uniqueOrActionItems, protection.customizedItems, protection.containers, protection.zonesOrFlags);
 	const ApplyImpactSummary impact = ComputeApplyImpact(editor, *plan);
-	report << wxString::Format("Apply impact for the selected replacement mode:\n  Eligible tiles: %zu\n  Skipped by policy/blending: %zu\n  Existing grounds replaced: %zu\n  Stale borders removed: %zu\n  Existing walls replaced/removed: %zu\n  Conflicting unprotected objects removed: %zu (%zu blocking)\n  Non-conflicting objects preserved: %zu\n\n",
-		impact.eligibleTiles, impact.skippedByPolicyTiles, impact.groundsReplaced, impact.bordersRemoved, impact.wallsRemoved, impact.objectsRemoved, impact.blockingObjectsRemoved, impact.objectsPreserved);
+	report << wxString::Format("Apply impact for the selected replacement mode:\n  Eligible tiles: %zu\n  Skipped by policy/blending: %zu\n  Existing grounds replaced: %zu\n  Stale borders removed: %zu\n  Existing walls replaced/removed: %zu\n  Conflicting unprotected objects removed: %zu (%zu blocking)\n  Non-conflicting objects preserved: %zu\n\n", impact.eligibleTiles, impact.skippedByPolicyTiles, impact.groundsReplaced, impact.bordersRemoved, impact.wallsRemoved, impact.objectsRemoved, impact.blockingObjectsRemoved, impact.objectsPreserved);
 	if (plan->issues.empty()) {
 		report << "Validation: no problems found.\n";
 	} else {
 		report << "Validation findings:\n";
 		for (const auto& issue : plan->issues) {
-			const char* severity = issue.severity == ProceduralMap::IssueSeverity::Error ? "ERROR" : issue.severity == ProceduralMap::IssueSeverity::Warning ? "WARNING" : "INFO";
+			const char* severity = issue.severity == ProceduralMap::IssueSeverity::Error ? "ERROR" : issue.severity == ProceduralMap::IssueSeverity::Warning ? "WARNING"
+																																							 : "INFO";
 			report << wxString::Format("- [%s] %s", wxString::FromUTF8(severity), wxstr(issue.message));
-			if (issue.x >= 0) report << wxString::Format(" (%d,%d,%d)", issue.x, issue.y, issue.z);
+			if (issue.x >= 0) {
+				report << wxString::Format(" (%d,%d,%d)", issue.x, issue.y, issue.z);
+			}
 			report << "\n";
 		}
 	}
 	validationText->SetValue(report);
 }
 
-void ProceduralGeneratorDialog::OnGenerate(wxCommandEvent&) { StartGeneration(false); }
-void ProceduralGeneratorDialog::OnRegenerate(wxCommandEvent&) { StartGeneration(true); }
+void ProceduralGeneratorDialog::OnGenerate(wxCommandEvent&) {
+	StartGeneration(false);
+}
+void ProceduralGeneratorDialog::OnRegenerate(wxCommandEvent&) {
+	StartGeneration(true);
+}
 
 void ProceduralGeneratorDialog::OnRandomize(wxCommandEvent&) {
 	std::random_device device;
@@ -1190,11 +1365,17 @@ void ProceduralGeneratorDialog::OnRandomize(wxCommandEvent&) {
 	seedText->SetValue(wxString::Format("%llu", static_cast<unsigned long long>(value)));
 }
 
-void ProceduralGeneratorDialog::OnPresetChanged(wxCommandEvent&) { UpdatePresetDefaults(true); }
-void ProceduralGeneratorDialog::OnAreaChanged(wxCommandEvent&) { UpdateAreaSummary(); }
+void ProceduralGeneratorDialog::OnPresetChanged(wxCommandEvent&) {
+	UpdatePresetDefaults(true);
+}
+void ProceduralGeneratorDialog::OnAreaChanged(wxCommandEvent&) {
+	UpdateAreaSummary();
+}
 
 void ProceduralGeneratorDialog::OnPreviewFloorChanged(wxCommandEvent&) {
-	if (plan && previewFloorChoice->GetSelection() != wxNOT_FOUND) previewPanel->SetFloor(plan->request.minZ + previewFloorChoice->GetSelection());
+	if (plan && previewFloorChoice->GetSelection() != wxNOT_FOUND) {
+		previewPanel->SetFloor(plan->request.minZ + previewFloorChoice->GetSelection());
+	}
 }
 
 void ProceduralGeneratorDialog::OnInterpretBrief(wxCommandEvent&) {
@@ -1204,11 +1385,15 @@ void ProceduralGeneratorDialog::OnInterpretBrief(wxCommandEvent&) {
 		return;
 	}
 	wxString summary = wxString::Format("Preset: %s\nRecognized: %s", wxString::FromUTF8(ProceduralMap::PresetName(interpreted.preset)), JoinWords(interpreted.recognized));
-	if (!interpreted.unknown.empty()) summary += "\nUnknown (ignored): " + JoinWords(interpreted.unknown);
+	if (!interpreted.unknown.empty()) {
+		summary += "\nUnknown (ignored): " + JoinWords(interpreted.unknown);
+	}
 	const int answer = wxMessageBox("Interpreted configuration:\n\n" + summary + "\n\nApply this interpretation to the structured controls?", "Confirm Generation Brief", wxYES_NO | wxICON_QUESTION, this);
 	interpretedText->SetLabel("Interpreted configuration:\n" + summary);
 	interpretedText->Wrap(760);
-	if (answer != wxYES) return;
+	if (answer != wxYES) {
+		return;
+	}
 	presetChoice->SetSelection(static_cast<int>(interpreted.preset));
 	UpdatePresetDefaults(true);
 	pathWidth->SetValue(interpreted.parameters.pathWidth);
@@ -1216,13 +1401,17 @@ void ProceduralGeneratorDialog::OnInterpretBrief(wxCommandEvent&) {
 }
 
 Brush* ProceduralGeneratorDialog::SelectedBrush(const wxChoice* choice) const {
-	if (!choice || choice->GetSelection() == wxNOT_FOUND) return nullptr;
+	if (!choice || choice->GetSelection() == wxNOT_FOUND) {
+		return nullptr;
+	}
 	return static_cast<Brush*>(choice->GetClientData(static_cast<unsigned int>(choice->GetSelection())));
 }
 
 GroundBrush* ProceduralGeneratorDialog::SelectedGround(ProceduralMap::MaterialRole role) const {
 	const size_t index = static_cast<size_t>(role);
-	if (index >= groundChoices.size()) return nullptr;
+	if (index >= groundChoices.size()) {
+		return nullptr;
+	}
 	auto* brush = SelectedBrush(groundChoices[index]);
 	return brush && brush->isGround() ? brush->asGround() : nullptr;
 }
@@ -1238,14 +1427,18 @@ DoodadBrush* ProceduralGeneratorDialog::SelectedDoodad(const wxChoice* choice) c
 }
 
 bool ProceduralGeneratorDialog::ValidateMaterials(std::vector<ProceduralMap::ValidationIssue>& issues) const {
-	if (!plan) return false;
+	if (!plan) {
+		return false;
+	}
 	std::array<bool, static_cast<size_t>(ProceduralMap::MaterialRole::Count)> usedRoles {};
 	const bool appliesObjects = plan->request.replacementMode != ProceduralMap::ReplacementMode::ReplaceGroundOnly;
 	bool needsWall = false;
 	bool needsDecoration = false;
 	bool needsTransition = false;
 	for (const auto& cell : plan->cells) {
-		if (cell.material != ProceduralMap::MaterialRole::None) usedRoles[static_cast<size_t>(cell.material)] = true;
+		if (cell.material != ProceduralMap::MaterialRole::None) {
+			usedRoles[static_cast<size_t>(cell.material)] = true;
+		}
 		needsWall = needsWall || (appliesObjects && (cell.features & ProceduralMap::FeatureWall) != 0);
 		needsDecoration = needsDecoration || (appliesObjects && (cell.features & ProceduralMap::FeatureDecoration) != 0);
 		needsTransition = needsTransition || (appliesObjects && (cell.features & ProceduralMap::FeatureTransition) != 0);
@@ -1255,17 +1448,27 @@ bool ProceduralGeneratorDialog::ValidateMaterials(std::vector<ProceduralMap::Val
 			issues.push_back({ ProceduralMap::IssueSeverity::Error, std::string("Select an active-client ground brush for the ") + ProceduralMap::MaterialRoleName(static_cast<ProceduralMap::MaterialRole>(role)) + " material role." });
 		}
 	}
-	if (needsWall && !SelectedWall()) issues.push_back({ ProceduralMap::IssueSeverity::Error, "The plan contains walls, but no active-client WallBrush is selected." });
-	if (needsDecoration && !SelectedDoodad(doodadChoice)) issues.push_back({ ProceduralMap::IssueSeverity::Error, "The plan contains decorations, but no compatible active-client DoodadBrush is selected." });
-	if (needsTransition && !SelectedDoodad(transitionChoice)) issues.push_back({ ProceduralMap::IssueSeverity::Error, "The multi-floor plan requires an explicitly selected stair/ramp/transition DoodadBrush." });
+	if (needsWall && !SelectedWall()) {
+		issues.push_back({ ProceduralMap::IssueSeverity::Error, "The plan contains walls, but no active-client WallBrush is selected." });
+	}
+	if (needsDecoration && !SelectedDoodad(doodadChoice)) {
+		issues.push_back({ ProceduralMap::IssueSeverity::Error, "The plan contains decorations, but no compatible active-client DoodadBrush is selected." });
+	}
+	if (needsTransition && !SelectedDoodad(transitionChoice)) {
+		issues.push_back({ ProceduralMap::IssueSeverity::Error, "The multi-floor plan requires an explicitly selected stair/ramp/transition DoodadBrush." });
+	}
 	return std::none_of(issues.begin(), issues.end(), [](const auto& issue) { return issue.severity == ProceduralMap::IssueSeverity::Error; });
 }
 
 bool ProceduralGeneratorDialog::ConfirmDestructiveApply() const {
-	if (!plan) return false;
+	if (!plan) {
+		return false;
+	}
 	const ApplyImpactSummary impact = ComputeApplyImpact(editor, *plan);
 	const bool replaceEverything = plan->request.replacementMode == ProceduralMap::ReplacementMode::ReplaceEverything;
-	if (!replaceEverything && impact.objectsRemoved == 0) return true;
+	if (!replaceEverything && impact.objectsRemoved == 0) {
+		return true;
+	}
 	const wxString modeText = replaceEverything ? "Replace everything" : "Smart replacement";
 	const wxString message = wxString::Format(
 		"%s will modify %zu eligible tiles.\n\nExisting layers to remove:\n- %zu grounds\n- %zu borders\n- %zu walls\n- %zu conflicting unprotected objects (%zu blocking)\n\n%zu protected tiles and %zu non-conflicting objects remain untouched.\n\nContinue?",
@@ -1293,7 +1496,9 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 		affected.reserve(plan->cells.size());
 		for (const auto& cell : plan->cells) {
 			Tile* oldTile = editor.map.getTile(cell.x, cell.y, cell.z);
-			if (IsApplyEligible(*plan, cell, oldTile)) affected.push_back(&cell);
+			if (IsApplyEligible(*plan, cell, oldTile)) {
+				affected.push_back(&cell);
+			}
 		}
 		if (affected.empty()) {
 			error = "No eligible tile remains after replacement policy and protected-content checks.";
@@ -1315,12 +1520,20 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 			}
 			delete newTile->ground;
 			newTile->ground = nullptr;
-			if (plan->request.replacementMode != ProceduralMap::ReplacementMode::ReplaceEverything) RemoveConflictingItems(*newTile, *cell, plan->request.replacementMode);
+			if (plan->request.replacementMode != ProceduralMap::ReplacementMode::ReplaceEverything) {
+				RemoveConflictingItems(*newTile, *cell, plan->request.replacementMode);
+			}
 			GroundBrush* ground = SelectedGround(cell->material);
-			if (!ground) throw std::runtime_error(std::string("Missing ground brush for ") + ProceduralMap::MaterialRoleName(cell->material) + ".");
+			if (!ground) {
+				throw std::runtime_error(std::string("Missing ground brush for ") + ProceduralMap::MaterialRoleName(cell->material) + ".");
+			}
 			ground->draw(&editor.map, newTile.get(), nullptr);
-			if (!newTile->ground) throw std::runtime_error(std::string("The selected ground brush '") + ground->getName() + "' did not create a valid ground item.");
-			if (wasSelected) newTile->select();
+			if (!newTile->ground) {
+				throw std::runtime_error(std::string("The selected ground brush '") + ground->getName() + "' did not create a valid ground item.");
+			}
+			if (wasSelected) {
+				newTile->select();
+			}
 			newTile->update();
 			groundAction->addChange(newd Change(newTile.release()));
 		}
@@ -1331,7 +1544,9 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 			auto borderAction = std::unique_ptr<Action>(editor.actionQueue->createAction(batch.get()));
 			for (const auto* cell : affected) {
 				Tile* current = editor.map.getTile(cell->x, cell->y, cell->z);
-				if (!current) continue;
+				if (!current) {
+					continue;
+				}
 				auto newTile = std::unique_ptr<Tile>(current->deepCopy(editor.map));
 				newTile->cleanBorders();
 				newTile->borderize(&editor.map);
@@ -1346,22 +1561,32 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 			if (WallBrush* wall = SelectedWall()) {
 				auto wallAction = std::unique_ptr<Action>(editor.actionQueue->createAction(batch.get()));
 				for (const auto* cell : affected) {
-					if ((cell->features & ProceduralMap::FeatureWall) == 0) continue;
+					if ((cell->features & ProceduralMap::FeatureWall) == 0) {
+						continue;
+					}
 					Tile* current = editor.map.getTile(cell->x, cell->y, cell->z);
-					if (!current) continue;
+					if (!current) {
+						continue;
+					}
 					auto newTile = std::unique_ptr<Tile>(current->deepCopy(editor.map));
 					newTile->cleanWalls();
 					wall->draw(&editor.map, newTile.get(), nullptr);
-					if (!newTile->hasWall()) throw std::runtime_error(std::string("The selected wall brush '") + wall->getName() + "' did not create a valid wall item.");
+					if (!newTile->hasWall()) {
+						throw std::runtime_error(std::string("The selected wall brush '") + wall->getName() + "' did not create a valid wall item.");
+					}
 					newTile->update();
 					wallAction->addChange(newd Change(newTile.release()));
 				}
 				batch->addAndCommitAction(wallAction.release());
 				auto wallizeAction = std::unique_ptr<Action>(editor.actionQueue->createAction(batch.get()));
 				for (const auto* cell : affected) {
-					if ((cell->features & ProceduralMap::FeatureWall) == 0) continue;
+					if ((cell->features & ProceduralMap::FeatureWall) == 0) {
+						continue;
+					}
 					Tile* current = editor.map.getTile(cell->x, cell->y, cell->z);
-					if (!current || !current->hasWall()) continue;
+					if (!current || !current->hasWall()) {
+						continue;
+					}
 					auto newTile = std::unique_ptr<Tile>(current->deepCopy(editor.map));
 					newTile->wallize(&editor.map);
 					newTile->update();
@@ -1376,19 +1601,27 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 			std::set<std::tuple<int, int, int>> objectBorderPositions;
 			std::unordered_set<uint64_t> affectedPositions;
 			affectedPositions.reserve(affected.size());
-			for (const auto* cell : affected) affectedPositions.insert(PositionKey(cell->x, cell->y, cell->z));
+			for (const auto* cell : affected) {
+				affectedPositions.insert(PositionKey(cell->x, cell->y, cell->z));
+			}
 			for (const auto* cell : affected) {
 				DoodadBrush* brush = (cell->features & ProceduralMap::FeatureTransition) != 0 ? transition : ((cell->features & ProceduralMap::FeatureDecoration) != 0 ? decoration : nullptr);
-				if (!brush) continue;
+				if (!brush) {
+					continue;
+				}
 				Tile* current = editor.map.getTile(cell->x, cell->y, cell->z);
-				if (!current || (current->isBlocking() && !brush->placeOnBlocking())) continue;
+				if (!current || (current->isBlocking() && !brush->placeOnBlocking())) {
+					continue;
+				}
 				auto newTile = std::unique_ptr<Tile>(current->deepCopy(editor.map));
 				const int before = newTile->size();
 				const uint16_t beforeGround = newTile->ground ? newTile->ground->getID() : 0;
 				int variation = static_cast<int>(MixApplyHash(plan->request.seed ^ PositionKey(cell->x, cell->y, cell->z) ^ 0xD00DULL) % static_cast<uint64_t>(std::max(1, brush->getMaxVariation())));
 				brush->draw(&editor.map, newTile.get(), &variation);
 				const uint16_t afterGround = newTile->ground ? newTile->ground->getID() : 0;
-				if (newTile->size() == before && beforeGround == afterGround) throw std::runtime_error(std::string("The selected doodad brush '") + brush->getName() + "' did not create an item.");
+				if (newTile->size() == before && beforeGround == afterGround) {
+					throw std::runtime_error(std::string("The selected doodad brush '") + brush->getName() + "' did not create an item.");
+				}
 				newTile->update();
 				objectAction->addChange(newd Change(newTile.release()));
 				if (updateBorders && brush->doNewBorders()) {
@@ -1396,7 +1629,9 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 						for (int offsetX = -1; offsetX <= 1; ++offsetX) {
 							const int x = cell->x + offsetX;
 							const int y = cell->y + offsetY;
-							if (plan->request.isAllowed(x, y, cell->z) && affectedPositions.contains(PositionKey(x, y, cell->z))) objectBorderPositions.emplace(x, y, cell->z);
+							if (plan->request.isAllowed(x, y, cell->z) && affectedPositions.contains(PositionKey(x, y, cell->z))) {
+								objectBorderPositions.emplace(x, y, cell->z);
+							}
 						}
 					}
 				}
@@ -1406,7 +1641,9 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 				auto objectBorderAction = std::unique_ptr<Action>(editor.actionQueue->createAction(batch.get()));
 				for (const auto& [x, y, z] : objectBorderPositions) {
 					Tile* current = editor.map.getTile(x, y, z);
-					if (!current) continue;
+					if (!current) {
+						continue;
+					}
 					auto newTile = std::unique_ptr<Tile>(current->deepCopy(editor.map));
 					newTile->borderize(&editor.map);
 					newTile->wallize(&editor.map);
@@ -1424,13 +1661,19 @@ bool ProceduralGeneratorDialog::ApplyPlan(wxString& error) {
 		editor.actionQueue->addBatch(batch.release());
 		return true;
 	} catch (const std::bad_alloc&) {
-		if (batch) batch->rollback();
+		if (batch) {
+			batch->rollback();
+		}
 		error = "Not enough memory to apply the generated area. All committed phases were rolled back.";
 	} catch (const std::exception& exception) {
-		if (batch) batch->rollback();
+		if (batch) {
+			batch->rollback();
+		}
 		error = wxString::FromUTF8(exception.what()) + " All committed phases were rolled back.";
 	} catch (...) {
-		if (batch) batch->rollback();
+		if (batch) {
+			batch->rollback();
+		}
 		error = "Unexpected apply failure. All committed phases were rolled back.";
 	}
 	return false;
@@ -1444,7 +1687,9 @@ void ProceduralGeneratorDialog::OnApply(wxCommandEvent&) {
 		wxMessageBox(message, "Procedural Map Generator", wxOK | wxICON_INFORMATION, this);
 		return;
 	}
-	if (!ConfirmDestructiveApply()) return;
+	if (!ConfirmDestructiveApply()) {
+		return;
+	}
 	statusText->SetLabel("Applying with active-client brushes and one Undo transaction...");
 	wxString error;
 	if (!ApplyPlan(error)) {
@@ -1466,7 +1711,9 @@ void ProceduralGeneratorDialog::OnSavePreset(wxCommandEvent&) {
 		return;
 	}
 	wxFileDialog dialog(this, "Save procedural preset", wxEmptyString, "procedural-preset.json", "JSON preset (*.json)|*.json", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
-	if (dialog.ShowModal() != wxID_OK) return;
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
 	try {
 		nlohmann::json json;
 		json["format"] = "rme-procedural-preset";
@@ -1477,25 +1724,32 @@ void ProceduralGeneratorDialog::OnSavePreset(wxCommandEvent&) {
 		json["replacementMode"] = static_cast<int>(request.replacementMode);
 		json["edgeBlending"] = static_cast<int>(request.edgeBlending);
 		json["parameters"] = {
-			{ "noiseScale", request.parameters.noiseScale }, { "octaves", request.parameters.octaves }, { "persistence", request.parameters.persistence },
-			{ "lacunarity", request.parameters.lacunarity }, { "waterLevel", request.parameters.waterLevel }, { "irregularity", request.parameters.irregularity },
-			{ "smoothingPasses", request.parameters.smoothingPasses }, { "decorationDensity", request.parameters.decorationDensity }, { "pathWidth", request.parameters.pathWidth },
-			{ "roomCount", request.parameters.roomCount }, { "roomMinSize", request.parameters.roomMinSize }, { "roomMaxSize", request.parameters.roomMaxSize },
-			{ "loops", request.parameters.loops }, { "secondaryRoadSpacing", request.parameters.secondaryRoadSpacing }, { "edgeMargin", request.parameters.edgeMargin },
-			{ "autoFixConnectivity", request.parameters.autoFixConnectivity }
+			{ "noiseScale", request.parameters.noiseScale }, { "octaves", request.parameters.octaves }, { "persistence", request.parameters.persistence }, { "lacunarity", request.parameters.lacunarity }, { "waterLevel", request.parameters.waterLevel }, { "irregularity", request.parameters.irregularity }, { "smoothingPasses", request.parameters.smoothingPasses }, { "decorationDensity", request.parameters.decorationDensity }, { "pathWidth", request.parameters.pathWidth }, { "roomCount", request.parameters.roomCount }, { "roomMinSize", request.parameters.roomMinSize }, { "roomMaxSize", request.parameters.roomMaxSize }, { "loops", request.parameters.loops }, { "secondaryRoadSpacing", request.parameters.secondaryRoadSpacing }, { "edgeMargin", request.parameters.edgeMargin }, { "autoFixConnectivity", request.parameters.autoFixConnectivity }
 		};
 		nlohmann::json brushes;
 		for (size_t role = static_cast<size_t>(ProceduralMap::MaterialRole::Base); role < static_cast<size_t>(ProceduralMap::MaterialRole::Count); ++role) {
-			if (auto* brush = SelectedGround(static_cast<ProceduralMap::MaterialRole>(role))) brushes[ProceduralMap::MaterialRoleName(static_cast<ProceduralMap::MaterialRole>(role))] = brush->getName();
+			if (auto* brush = SelectedGround(static_cast<ProceduralMap::MaterialRole>(role))) {
+				brushes[ProceduralMap::MaterialRoleName(static_cast<ProceduralMap::MaterialRole>(role))] = brush->getName();
+			}
 		}
-		if (auto* brush = SelectedWall()) brushes["Wall"] = brush->getName();
-		if (auto* brush = SelectedDoodad(doodadChoice)) brushes["Decoration"] = brush->getName();
-		if (auto* brush = SelectedDoodad(transitionChoice)) brushes["Transition"] = brush->getName();
+		if (auto* brush = SelectedWall()) {
+			brushes["Wall"] = brush->getName();
+		}
+		if (auto* brush = SelectedDoodad(doodadChoice)) {
+			brushes["Decoration"] = brush->getName();
+		}
+		if (auto* brush = SelectedDoodad(transitionChoice)) {
+			brushes["Transition"] = brush->getName();
+		}
 		json["brushes"] = std::move(brushes);
 		std::ofstream output(dialog.GetPath().ToStdString(), std::ios::binary | std::ios::trunc);
-		if (!output) throw std::runtime_error("Could not create the preset file.");
+		if (!output) {
+			throw std::runtime_error("Could not create the preset file.");
+		}
 		output << json.dump(2);
-		if (!output) throw std::runtime_error("Could not finish writing the preset file.");
+		if (!output) {
+			throw std::runtime_error("Could not finish writing the preset file.");
+		}
 	} catch (const std::exception& exception) {
 		wxMessageBox(wxString::FromUTF8(exception.what()), "Save Preset", wxOK | wxICON_ERROR, this);
 	}
@@ -1503,13 +1757,19 @@ void ProceduralGeneratorDialog::OnSavePreset(wxCommandEvent&) {
 
 void ProceduralGeneratorDialog::OnLoadPreset(wxCommandEvent&) {
 	wxFileDialog dialog(this, "Load procedural preset", wxEmptyString, wxEmptyString, "JSON preset (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
-	if (dialog.ShowModal() != wxID_OK) return;
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
 	try {
 		std::ifstream input(dialog.GetPath().ToStdString(), std::ios::binary);
-		if (!input) throw std::runtime_error("Could not open the preset file.");
+		if (!input) {
+			throw std::runtime_error("Could not open the preset file.");
+		}
 		nlohmann::json json;
 		input >> json;
-		if (json.value("format", std::string {}) != "rme-procedural-preset" || json.value("version", 0) != 1) throw std::runtime_error("Unsupported procedural preset format.");
+		if (json.value("format", std::string {}) != "rme-procedural-preset" || json.value("version", 0) != 1) {
+			throw std::runtime_error("Unsupported procedural preset format.");
+		}
 		const int savedClient = json.value("clientVersion", -1);
 		if (savedClient != g_gui.GetCurrentVersionID()) {
 			wxMessageBox("This preset was saved for a different client version. Brush names will be validated against the currently active client; missing brushes will remain unselected.", "Client version changed", wxOK | wxICON_WARNING, this);
@@ -1539,23 +1799,35 @@ void ProceduralGeneratorDialog::OnLoadPreset(wxCommandEvent&) {
 		const auto selectExact = [&missingBrushes](wxChoice* choice, const std::string& name) {
 			const int index = choice->FindString(wxstr(name), true);
 			choice->SetSelection(index == wxNOT_FOUND ? 0 : index);
-			if (index == wxNOT_FOUND) missingBrushes.push_back(name);
+			if (index == wxNOT_FOUND) {
+				missingBrushes.push_back(name);
+			}
 		};
 		if (json.contains("brushes")) {
 			const auto& brushes = json["brushes"];
 			for (size_t role = static_cast<size_t>(ProceduralMap::MaterialRole::Base); role < static_cast<size_t>(ProceduralMap::MaterialRole::Count); ++role) {
 				const char* key = ProceduralMap::MaterialRoleName(static_cast<ProceduralMap::MaterialRole>(role));
-				if (brushes.contains(key)) selectExact(groundChoices[role], brushes[key].get<std::string>());
+				if (brushes.contains(key)) {
+					selectExact(groundChoices[role], brushes[key].get<std::string>());
+				}
 			}
-			if (brushes.contains("Wall")) selectExact(wallChoice, brushes["Wall"].get<std::string>());
-			if (brushes.contains("Decoration")) selectExact(doodadChoice, brushes["Decoration"].get<std::string>());
-			if (brushes.contains("Transition")) selectExact(transitionChoice, brushes["Transition"].get<std::string>());
+			if (brushes.contains("Wall")) {
+				selectExact(wallChoice, brushes["Wall"].get<std::string>());
+			}
+			if (brushes.contains("Decoration")) {
+				selectExact(doodadChoice, brushes["Decoration"].get<std::string>());
+			}
+			if (brushes.contains("Transition")) {
+				selectExact(transitionChoice, brushes["Transition"].get<std::string>());
+			}
 		}
 		if (!missingBrushes.empty()) {
 			std::sort(missingBrushes.begin(), missingBrushes.end());
 			missingBrushes.erase(std::unique(missingBrushes.begin(), missingBrushes.end()), missingBrushes.end());
 			wxString message = "The active client does not provide these saved brushes:\n";
-			for (const auto& name : missingBrushes) message += "\n- " + wxstr(name);
+			for (const auto& name : missingBrushes) {
+				message += "\n- " + wxstr(name);
+			}
 			message += "\n\nThey were left unselected. Choose compatible brushes from the active client before generating.";
 			wxMessageBox(message, "Missing active-client brushes", wxOK | wxICON_WARNING, this);
 		}
@@ -1584,9 +1856,9 @@ void ProceduralGeneratorDialog::OnClose(wxCloseEvent&) {
 	EndModal(wxID_CANCEL);
 }
 
-bool RunProceduralMapGenerator(wxWindow* parent, Editor& editor, int currentFloor) {
+bool RunProceduralMapGenerator(wxWindow* parent, Editor& editor, int currentFloor, const std::string& initialBrief, int initialWidth, int initialHeight) {
 	try {
-		ProceduralGeneratorDialog dialog(parent, editor, currentFloor);
+		ProceduralGeneratorDialog dialog(parent, editor, currentFloor, initialBrief, initialWidth, initialHeight);
 		return dialog.ShowModal() == wxID_OK;
 	} catch (const std::bad_alloc&) {
 		wxMessageBox("Not enough memory to open the Procedural Map Generator for this selection.", "Procedural Map Generator", wxOK | wxICON_ERROR, parent);

@@ -4,8 +4,6 @@
 
 #include "server_workspace.h"
 
-#include "server_item_id_map.h"
-
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -17,6 +15,7 @@
 #include <regex>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace {
@@ -139,20 +138,49 @@ namespace {
 		return files;
 	}
 
-	std::optional<std::string> ReadLuaStringAssignment(const std::filesystem::path& file, const std::string& setting) {
-		std::ifstream stream(file);
-		if (!stream.is_open()) {
-			return std::nullopt;
+	struct ServerConfigSnapshot {
+		std::filesystem::path file;
+		std::optional<std::string> mapName;
+		std::optional<std::string> dataPackDirectory;
+	};
+
+	using ServerConfigCache = std::unordered_map<std::filesystem::path, ServerConfigSnapshot>;
+
+	const ServerConfigSnapshot& ReadServerConfig(const std::filesystem::path& root, ServerConfigCache& cache) {
+		const std::filesystem::path normalizedRoot = Normalize(root);
+		auto [iterator, inserted] = cache.try_emplace(normalizedRoot);
+		if (!inserted) {
+			return iterator->second;
 		}
-		const std::regex assignment("^\\s*" + setting + "\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']");
+
+		ServerConfigSnapshot& snapshot = iterator->second;
+		snapshot.file = normalizedRoot / "config.lua";
+		if (!IsServerWorkspaceFile(snapshot.file)) {
+			snapshot.file = normalizedRoot / "config.lua.dist";
+		}
+		if (!IsServerWorkspaceFile(snapshot.file)) {
+			snapshot.file.clear();
+			return snapshot;
+		}
+
+		std::ifstream stream(snapshot.file);
+		if (!stream.is_open()) {
+			snapshot.file.clear();
+			return snapshot;
+		}
+		const std::regex mapAssignment("^\\s*mapName\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']");
+		const std::regex dataPackAssignment("^\\s*dataPackDirectory\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']");
 		std::string line;
 		std::smatch match;
-		while (std::getline(stream, line)) {
-			if (std::regex_search(line, match, assignment) && match.size() == 2) {
-				return match[1].str();
+		while (std::getline(stream, line) && (!snapshot.mapName || !snapshot.dataPackDirectory)) {
+			if (!snapshot.mapName && std::regex_search(line, match, mapAssignment) && match.size() == 2) {
+				snapshot.mapName = match[1].str();
+			}
+			if (!snapshot.dataPackDirectory && std::regex_search(line, match, dataPackAssignment) && match.size() == 2) {
+				snapshot.dataPackDirectory = match[1].str();
 			}
 		}
-		return std::nullopt;
+		return snapshot;
 	}
 
 	bool IsSafeRelativePath(const std::filesystem::path& path) {
@@ -200,24 +228,19 @@ namespace {
 		int score = 0;
 	};
 
-	ProfileEvidence DetectProfileEvidence(const std::filesystem::path& root, const std::filesystem::path& mapPath = {}) {
+	ProfileEvidence DetectProfileEvidence(const std::filesystem::path& root, ServerConfigCache& configCache, const std::filesystem::path& mapPath = {}) {
 		const bool hasClassicItemsOtb = IsServerWorkspaceFile(root / "data/items/items.otb");
 		const bool hasAlternateItemsOtb = HasFile(root, { "data/items.otb", "items/items.otb", "items.otb" });
 		const bool hasItemsOtb = hasClassicItemsOtb || hasAlternateItemsOtb;
 		const bool hasClassicItemsXml = IsServerWorkspaceFile(root / "data/items/items.xml");
 		const bool hasAlternateItemsXml = HasFile(root, { "data/items.xml", "items/items.xml", "items.xml" });
 		const bool hasAppearances = HasFile(root, { "data/items/appearances.dat", "data/appearances.dat", "items/appearances.dat", "appearances.dat" });
-		const bool hasConfig = IsServerWorkspaceFile(root / "config.lua") || IsServerWorkspaceFile(root / "config.lua.dist");
+		const ServerConfigSnapshot& config = ReadServerConfig(root, configCache);
+		const bool hasConfig = !config.file.empty();
 		const bool hasMonsters = HasDirectory(root, { "data/monster", "data/monsters", "monster", "monsters" });
 		const bool hasNpcs = HasDirectory(root, { "data/npc", "data/npcs", "npc", "npcs" });
 		const bool mapInDataWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "data/world");
 		const bool mapInRootWorld = !mapPath.empty() && IsPathWithin(mapPath, root / "world");
-		const KnownItemFiles itemFiles = FindKnownItems(root);
-		const bool hasCustomPairTable = hasItemsOtb && (hasClassicItemsXml || hasAlternateItemsXml) && hasAppearances
-			&& ProbeServerItemIdMap(itemFiles.otb).valid;
-		if (hasCustomPairTable) {
-			return { ServerType::CustomTfsAppearances, 240 };
-		}
 
 		int tfsScore = 0;
 		if (hasClassicItemsOtb) {
@@ -246,20 +269,13 @@ namespace {
 
 		int modernScore = hasAppearances ? 30 : 0;
 		ServerType modernType = ServerType::CanaryCrystal;
-		std::filesystem::path config = root / "config.lua";
-		if (!IsServerWorkspaceFile(config)) {
-			config = root / "config.lua.dist";
-		}
-		if (IsServerWorkspaceFile(config)) {
-			const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
-			if (configuredDataPack) {
-				const std::filesystem::path relativeDataPack(*configuredDataPack);
-				if (IsSafeRelativePath(relativeDataPack)) {
-					const std::filesystem::path configuredWorld = root / relativeDataPack / "world";
-					if (mapPath.empty() || IsPathWithin(mapPath, configuredWorld)) {
-						modernScore += 170;
-						modernType = ModernTypeFromName(ServerPathUtf8(relativeDataPack.filename()));
-					}
+		if (config.dataPackDirectory) {
+			const std::filesystem::path relativeDataPack(*config.dataPackDirectory);
+			if (IsSafeRelativePath(relativeDataPack)) {
+				const std::filesystem::path configuredWorld = root / relativeDataPack / "world";
+				if (mapPath.empty() || IsPathWithin(mapPath, configuredWorld)) {
+					modernScore += 170;
+					modernType = ModernTypeFromName(ServerPathUtf8(relativeDataPack.filename()));
 				}
 			}
 		}
@@ -307,12 +323,12 @@ namespace {
 		int score = 0;
 	};
 
-	DetectedMapContext DetectMapContext(const std::filesystem::path& mapPath, const std::filesystem::path& boundaryRoot) {
+	DetectedMapContext DetectMapContext(const std::filesystem::path& mapPath, const std::filesystem::path& boundaryRoot, ServerConfigCache& configCache) {
 		DetectedMapContext best { Normalize(boundaryRoot), ServerType::UnknownGeneric, 0 };
 		std::filesystem::path candidate = Normalize(mapPath).parent_path();
 		const std::filesystem::path boundary = Normalize(boundaryRoot);
 		while (!candidate.empty() && IsPathWithin(candidate, boundary)) {
-			const ProfileEvidence evidence = DetectProfileEvidence(candidate, mapPath);
+			const ProfileEvidence evidence = DetectProfileEvidence(candidate, configCache, mapPath);
 			if (evidence.score > best.score) {
 				best = { candidate, evidence.type, evidence.score };
 			}
@@ -339,19 +355,15 @@ namespace {
 		});
 	}
 
-	void DetectConfiguredMap(ServerWorkspace& workspace, const ServerDetectionOptions& options) {
-		std::filesystem::path config = workspace.rootPath / "config.lua";
-		if (!IsServerWorkspaceFile(config)) {
-			config = workspace.rootPath / "config.lua.dist";
-		}
-		if (!IsServerWorkspaceFile(config)) {
+	void DetectConfiguredMap(ServerWorkspace& workspace, const ServerDetectionOptions& options, ServerConfigCache& configCache) {
+		const ServerConfigSnapshot& config = ReadServerConfig(workspace.rootPath, configCache);
+		if (config.file.empty()) {
 			return;
 		}
 
-		TraceServerScan(options, "Reading mapName", config);
-		const std::optional<std::string> configuredMap = ReadLuaStringAssignment(config, "mapName");
-		TraceServerScan(options, "Reading dataPackDirectory", config);
-		const std::optional<std::string> configuredDataPack = ReadLuaStringAssignment(config, "dataPackDirectory");
+		TraceServerScan(options, "Using server configuration", config.file);
+		const std::optional<std::string>& configuredMap = config.mapName;
+		const std::optional<std::string>& configuredDataPack = config.dataPackDirectory;
 		TraceServerScan(options, "Resolving configured map and data pack");
 		if (!configuredMap && !configuredDataPack) {
 			return;
@@ -555,16 +567,8 @@ bool ServerWorkspace::hasAppearances() const {
 	return appearancesFingerprint.exists;
 }
 
-bool ServerWorkspace::hasMountsXml() const {
-	return mountsXmlFingerprint.exists;
-}
-
 bool ServerWorkspace::usesCanaryCrystalLoader() const {
 	return UsesCanaryCrystalLoader(serverType);
-}
-
-bool ServerWorkspace::usesAppearanceAssetsLoader() const {
-	return UsesAppearanceAssetsLoader(serverType);
 }
 
 bool ServerWorkspace::containsMap(const std::filesystem::path& path) const {
@@ -589,9 +593,6 @@ bool ServerWorkspace::trackedResourcesChanged() const {
 	if (!appearancesPath.empty() && !appearancesFingerprint.MatchesCurrentFile()) {
 		return true;
 	}
-	if (!mountsXmlPath.empty() && !mountsXmlFingerprint.MatchesCurrentFile()) {
-		return true;
-	}
 	return std::any_of(maps.begin(), maps.end(), [](const DetectedMap& map) {
 		return !map.fingerprint.MatchesCurrentFile();
 	});
@@ -613,6 +614,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 
 	result.validRoot = true;
 	ServerWorkspace& workspace = result.workspace;
+	ServerConfigCache configCache;
 	workspace.rootPath = root;
 	TraceServerScan(options, "Finding known item files", root);
 	const KnownItemFiles knownItems = FindKnownItems(root);
@@ -620,7 +622,7 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	workspace.itemsXmlPath = knownItems.xml;
 	workspace.appearancesPath = knownItems.appearances;
 	TraceServerScan(options, "Finding server configuration", root);
-	DetectConfiguredMap(workspace, options);
+	DetectConfiguredMap(workspace, options, configCache);
 	if (!workspace.activeDataDirectory.empty()) {
 		const KnownItemFiles activeItems = FindKnownItems(workspace.activeDataDirectory);
 		if (!activeItems.otb.empty()) {
@@ -631,33 +633,6 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		}
 		if (!activeItems.appearances.empty()) {
 			workspace.appearancesPath = activeItems.appearances;
-		}
-	}
-
-	static constexpr std::array<const char*, 6> mountXmlCandidates {
-		"data/XML/mounts.xml",
-		"data/xml/mounts.xml",
-		"data/mounts.xml",
-		"XML/mounts.xml",
-		"xml/mounts.xml",
-		"mounts.xml",
-	};
-	if (!workspace.activeDataDirectory.empty()) {
-		for (const char* candidate : mountXmlCandidates) {
-			const std::filesystem::path path = workspace.activeDataDirectory / candidate;
-			if (IsServerWorkspaceFile(path)) {
-				workspace.mountsXmlPath = Normalize(path);
-				break;
-			}
-		}
-	}
-	if (workspace.mountsXmlPath.empty()) {
-		for (const char* candidate : mountXmlCandidates) {
-			const std::filesystem::path path = root / candidate;
-			if (IsServerWorkspaceFile(path)) {
-				workspace.mountsXmlPath = Normalize(path);
-				break;
-			}
 		}
 	}
 
@@ -673,26 +648,18 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	};
 	static constexpr std::array<const char*, 4> monsterDirectories { "data/monster", "data/monsters", "monster", "monsters" };
 	static constexpr std::array<const char*, 4> npcDirectories { "data/npc", "data/npcs", "npc", "npcs" };
-	// Prefer the legacy registry root when both layouts exist. Some XML servers
-	// also carry a data/scripts/spells example directory that is not their
-	// active spell registry.
-	static constexpr std::array<const char*, 4> spellDirectories { "data/spells", "data/scripts/spells", "spells", "scripts/spells" };
 	if (workspace.mapsDirectory.empty()) {
 		workspace.mapsDirectory = FirstExistingDirectory(root, mapDirectories);
 	}
 	if (!workspace.activeDataDirectory.empty()) {
 		workspace.monstersDirectory = FirstExistingDirectory(workspace.activeDataDirectory, monsterDirectories);
 		workspace.npcsDirectory = FirstExistingDirectory(workspace.activeDataDirectory, npcDirectories);
-		workspace.spellsDirectory = FirstExistingDirectory(workspace.activeDataDirectory, spellDirectories);
 	}
 	if (workspace.monstersDirectory.empty()) {
 		workspace.monstersDirectory = FirstExistingDirectory(root, monsterDirectories);
 	}
 	if (workspace.npcsDirectory.empty()) {
 		workspace.npcsDirectory = FirstExistingDirectory(root, npcDirectories);
-	}
-	if (workspace.spellsDirectory.empty()) {
-		workspace.spellsDirectory = FirstExistingDirectory(root, spellDirectories);
 	}
 
 	std::deque<QueueEntry> queue;
@@ -714,8 +681,6 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 					workspace.itemsXmlPath = Normalize(entry.path());
 				} else if (workspace.appearancesPath.empty() && fileName == "appearances.dat") {
 					workspace.appearancesPath = Normalize(entry.path());
-				} else if (workspace.mountsXmlPath.empty() && fileName == "mounts.xml") {
-					workspace.mountsXmlPath = Normalize(entry.path());
 				}
 				const std::string extension = Lower(ServerPathUtf8(entry.path().extension()));
 				if (workspace.activeDataDirectory.empty() && (extension == ".otbm" || extension == ".otgz")) {
@@ -737,9 +702,6 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 			if (workspace.npcsDirectory.empty() && (directoryName == "npc" || directoryName == "npcs")) {
 				workspace.npcsDirectory = Normalize(entry.path());
 			}
-			if (workspace.spellsDirectory.empty() && directoryName == "spells") {
-				workspace.spellsDirectory = Normalize(entry.path());
-			}
 			queue.push_back({ entry.path(), current.depth + 1 });
 		}
 	}
@@ -757,9 +719,25 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	}
 	TraceServerScan(options, "Selecting primary map");
 	SelectFallbackPrimaryMap(workspace);
+	std::optional<DetectedMapContext> activeDataContext;
+	if (!workspace.activeDataDirectory.empty()) {
+		const ProfileEvidence evidence = DetectProfileEvidence(root, configCache);
+		activeDataContext = DetectedMapContext { root, evidence.type, evidence.score };
+	}
+	std::unordered_map<std::filesystem::path, DetectedMapContext> mapContexts;
 	for (DetectedMap& map : workspace.maps) {
 		TraceServerScan(options, "Detecting map server profile", map.path);
-		const DetectedMapContext context = DetectMapContext(map.path, root);
+		DetectedMapContext context;
+		if (activeDataContext && IsPathWithin(map.path, workspace.mapsDirectory)) {
+			context = *activeDataContext;
+		} else {
+			const std::filesystem::path mapDirectory = map.path.parent_path();
+			auto [iterator, inserted] = mapContexts.try_emplace(mapDirectory);
+			if (inserted) {
+				iterator->second = DetectMapContext(map.path, root, configCache);
+			}
+			context = iterator->second;
+		}
 		map.serverRootPath = context.root;
 		map.serverType = context.type;
 	}
@@ -789,19 +767,17 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 	workspace.itemsXmlFingerprint = ResourceFingerprint::Read(workspace.itemsXmlPath);
 	TraceServerScan(options, "Reading appearances.dat metadata", workspace.appearancesPath);
 	workspace.appearancesFingerprint = ResourceFingerprint::Read(workspace.appearancesPath);
-	TraceServerScan(options, "Reading mounts.xml metadata", workspace.mountsXmlPath);
-	workspace.mountsXmlFingerprint = ResourceFingerprint::Read(workspace.mountsXmlPath);
 	TraceServerScan(options, "Finalizing server profile");
 	const DetectedMap* primaryMap = workspace.findMap(workspace.primaryMapPath);
 	if (primaryMap != nullptr) {
 		workspace.serverType = primaryMap->serverType;
 	} else {
-		workspace.serverType = DetectProfileEvidence(root).type;
+		workspace.serverType = DetectProfileEvidence(root, configCache).type;
 	}
 	workspace.serverProfile = ServerTypeName(workspace.serverType);
-	workspace.itemIdMode = workspace.serverType == ServerType::CustomTfsAppearances
-		? ItemIdMode::ServerId
-		: (workspace.usesCanaryCrystalLoader() ? ItemIdMode::ClientId : DetectModeFromMapNames(workspace.maps));
+	workspace.itemIdMode = workspace.usesCanaryCrystalLoader()
+		? ItemIdMode::ClientId
+		: DetectModeFromMapNames(workspace.maps);
 	if (!workspace.hasRequiredResources()) {
 		result.error = "Server folder selected, but neither items.otb nor appearances.dat was found.";
 	} else if (!workspace.itemsXmlFingerprint.exists) {
@@ -826,8 +802,6 @@ const char* ServerTypeName(ServerType type) {
 	switch (type) {
 		case ServerType::Tfs:
 			return "TFS";
-		case ServerType::CustomTfsAppearances:
-			return "TFS Custom (Appearances)";
 		case ServerType::Canary:
 			return "Canary";
 		case ServerType::Crystal:
@@ -841,10 +815,6 @@ const char* ServerTypeName(ServerType type) {
 
 bool UsesCanaryCrystalLoader(ServerType type) {
 	return type == ServerType::Canary || type == ServerType::Crystal || type == ServerType::CanaryCrystal;
-}
-
-bool UsesAppearanceAssetsLoader(ServerType type) {
-	return type == ServerType::CustomTfsAppearances || UsesCanaryCrystalLoader(type);
 }
 
 ItemIdMode ResolveEffectiveItemIdMode(ItemIdModePreference preference, ItemIdMode clientAssetMode, ItemIdMode serverEvidence) {

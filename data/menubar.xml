@@ -68,18 +68,13 @@
 	</menu>
 	<menu name="Tools">
 		<item name="Command Palette..." action="COMMAND_PALETTE" hotkey="Ctrl+Shift+P" help="Search and execute NexaMap commands."/>
-		<separator/>
-		<menu name="Server Content Editors">
-			<item name="New Monster..." action="SERVER_NEW_MONSTER_EDITOR" help="Create a new XML or Lua monster in the active Server Workspace."/>
-			<item name="Browse Monsters..." action="SERVER_MONSTER_EDITOR" help="Browse and edit monster definitions from the active Server Workspace."/>
-			<item name="New NPC..." action="SERVER_NEW_NPC_EDITOR" help="Create a new XML or Lua NPC in the active Server Workspace."/>
-			<item name="Browse NPCs..." action="SERVER_NPC_EDITOR" help="Browse and edit NPC definitions from the active Server Workspace."/>
-			<item name="Browse Spells..." action="SERVER_SPELL_EDITOR" help="Browse and safely edit global spell registrations and implementations from the active Server Workspace."/>
-		</menu>
+		<item name="MCP Server..." action="MCP_SERVER" help="Connect AI clients to the active NexaMap workspace through a loopback-only MCP server."/>
 		<separator/>
 		<item name="Spawn / NPC Converter..." action="SPAWN_NPC_CONVERTER" help="Convert spawn XML between Canary/Crystal and TFS without opening or changing a map."/>
 		<item name="Advanced Replace..." action="ADVANCED_REPLACE" help="Build, save, and run advanced replacement rules using the item and brush library."/>
 		<item name="Learn Border from Selection..." action="LEARN_BORDER_SELECTION" help="Analyze selected map tiles and infer an autoborder draft without changing the map."/>
+		<separator/>
+		<item name="AI Style Reference..." action="SHOW_AI_STYLE_REFERENCE" help="Inspect and manage the active AI style reference."/>
 	</menu>
 	<menu name="Edit">
 		<item name="Undo" hotkey="Ctrl+Z" action="UNDO" help="Undo last action."/>
@@ -138,12 +133,15 @@
 		<item name="Edit Towns" hotkey="Ctrl+T" action="EDIT_TOWNS" help="Edit towns."/>
 		<separator/>
 		<item name="Cleanup..." action="MAP_CLEANUP" help="Removes all items that do not exist in the OTB file (red tiles the server can't load)."/>
+		<item name="Remove All Empty Respawns" action="MAP_REMOVE_EMPTY_SPAWNS" help="Removes all empty spawns from the map."/>
 		<item name="Remove Duplicated Items..." action="REMOVE_ON_MAP_DUPLICATED_ITEMS" help="Removes duplicated items from the map."/>
 		<item name="Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
 		<item name="Map Diagnostics..." action="MAP_DIAGNOSTICS" help="Scan the active map for invalid items, duplicate IDs, broken teleports, and structural problems."/>
 		<item name="Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
 	</menu>
 	<menu name="Selection">
+		<item name="Capture as AI Style Reference..." action="CAPTURE_AI_STYLE_REFERENCE" help="Capture selected area visual vocabulary as an AI style reference snapshot."/>
+		<separator/>
 		<item name="Replace Items on Selection" action="REPLACE_ON_SELECTION_ITEMS" help="Replace items on selected area."/>
 		<item name="Find Item on Selection" action="SEARCH_ON_SELECTION_ITEM" help="Find items on selected area."/>
 		<item name="Remove Item on Selection" action="REMOVE_ON_SELECTION_ITEM" help="Remove item on selected area."/>
@@ -204,6 +202,7 @@
 		<separator/>
 		<item name="Show zones" hotkey="Shift+N" action="SHOW_ZONES" help="Show zones on the map."/>
 		<item name="Show creatures" hotkey="F" action="SHOW_CREATURES" help="Show creatures on the map."/>
+		<item name="Show creature names" hotkey="Shift+F" action="SHOW_CREATURE_NAMES" help="Show creature names above monsters and NPCs."/>
 		<item name="Show spawns" hotkey="S" action="SHOW_SPAWNS" help="Show spawns on the map."/>
 		<item name="Show special" hotkey="E" action="SHOW_SPECIAL" help="Show special tiles on the map, like PZ."/>
 		<item name="Show houses" hotkey="Ctrl+H" action="SHOW_HOUSES" help="Show houses on the map."/>

@@ -19,11 +19,8 @@
 
 #include <wx/display.h>
 #include <wx/dir.h>
-#include <wx/choicdlg.h>
-#include <wx/dirdlg.h>
 
 #include <utility>
-#include <tuple>
 
 #include "gui.h"
 #include "favorites_manager.h"
@@ -31,6 +28,7 @@
 #include "autoborder_preview.h"
 #include "main_menubar.h"
 #include "multiplayer_session.h"
+#include "multiplayer_window.h"
 
 #include "editor.h"
 #include "editor_disposal.h"
@@ -60,12 +58,7 @@
 #include "new_map_tab_dialog.h"
 #include "cross_client_clipboard.h"
 #include "cross_client_paste_dialog.h"
-#include "monster_definition_creation.h"
-#include "monster_editor_dialog.h"
-#include "npc_definition_creation.h"
-#include "npc_editor_dialog.h"
-#include "server_content_browser_dialog.h"
-#include "spell_editor_dialog.h"
+#include "creature_cache.h"
 
 #ifdef __WXOSX__
 	#include <AGL/agl.h>
@@ -75,6 +68,76 @@ const wxEventType EVT_UPDATE_MENUS = wxNewEventType();
 
 namespace {
 	constexpr const char* CANARY_CRYSTAL_DATA_DIRECTORY = "canary-crystal";
+
+	/// Build a CreatureCache::WorkspaceKey from the current workspace.
+	CreatureCache::WorkspaceKey buildCacheKey(const ServerWorkspace& workspace) {
+		CreatureCache::WorkspaceKey key;
+		key.serverRoot = workspace.rootPath;
+		key.monstersDir = workspace.monstersDirectory;
+		key.npcsDir = workspace.npcsDirectory;
+		key.clientProfile = workspace.serverProfile;
+		return key;
+	}
+
+	/// Import monsters/NPCs from Lua or cache.
+	void importCreaturesWithCache(
+		const ServerWorkspace& workspace,
+		const wxString& luaDirectory,
+		const std::string& kind,
+		bool isNpc,
+		wxArrayString& warnings,
+		const CreatureDatabase::ImportProgress& creatureProgress
+	) {
+		if (luaDirectory.empty() || !wxDir::Exists(luaDirectory)) {
+			return;
+		}
+		const auto cacheKey = buildCacheKey(workspace);
+		const auto cacheDir = CreatureCache::GetCacheDirectory(cacheKey);
+		const auto luaPath = std::filesystem::u8path(luaDirectory.ToStdString(wxConvUTF8));
+
+		const auto progress = [&](const std::string& msg) {
+			if (creatureProgress) {
+				creatureProgress(wxString::FromUTF8(msg));
+			}
+		};
+
+		bool cacheValid = false;
+		try {
+			cacheValid = CreatureCache::ValidateManifest(cacheDir, luaPath, kind);
+		} catch (...) {
+			cacheValid = false;
+		}
+
+		if (cacheValid) {
+			size_t loadedCount = 0;
+			bool cacheLoaded = false;
+			try {
+				cacheLoaded = CreatureCache::LoadCached(g_creatures, cacheDir, luaPath, kind, &loadedCount, progress);
+			} catch (...) {
+				cacheLoaded = false;
+			}
+			if (cacheLoaded) {
+				return; // Cache hit.
+			}
+			// Cache load failed — fall through to full import.
+		}
+
+		// Full Lua import.
+		wxString importError;
+		CreatureDatabase::ImportedCreatureList importedRecords;
+		bool ok;
+		if (isNpc) {
+			ok = g_creatures.importNpcsFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false, &importedRecords);
+		} else {
+			ok = g_creatures.importMonstersFromLuaDir(luaDirectory, importError, warnings, creatureProgress, false, &importedRecords);
+		}
+		if (!ok) {
+			warnings.push_back(wxString::Format("Couldn't import %s from the Server Workspace: %s", wxString::FromUTF8(kind), importError));
+			return;
+		}
+		// Save cache for next startup.
+		CreatureCache::SaveCache(cacheDir, luaPath, kind, importedRecords, progress);
+	}
 
 	wxString GetCanaryCrystalBundledDataDirectory() {
 		wxString dataDirectory = GUI::GetDataDirectory();
@@ -99,178 +162,6 @@ namespace {
 #endif
 	}
 
-	class NewMonsterDialog final : public wxDialog {
-	public:
-		NewMonsterDialog(wxWindow* parent, const ServerWorkspace& workspace, const ServerContentCapabilities& capabilities) :
-			wxDialog(parent, wxID_ANY, "Create New Monster", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
-			monsterRoot(workspace.monstersDirectory) {
-			SetBackgroundColour(Theme::Get(Theme::Role::Surface));
-			auto* top = newd wxBoxSizer(wxVERTICAL);
-			auto* heading = newd wxStaticText(this, wxID_ANY, "Create a monster definition in the active Server Workspace.");
-			heading->SetForegroundColour(Theme::Get(Theme::Role::Text));
-			top->Add(heading, wxSizerFlags().Expand().Border(wxALL, 12));
-
-			auto* form = newd wxFlexGridSizer(2, 8, 10);
-			form->AddGrowableCol(1, 1);
-			form->Add(newd wxStaticText(this, wxID_ANY, "Monster name:"), wxSizerFlags().CenterVertical());
-			name = newd wxTextCtrl(this, wxID_ANY);
-			form->Add(name, wxSizerFlags().Expand());
-
-			form->Add(newd wxStaticText(this, wxID_ANY, "Source format:"), wxSizerFlags().CenterVertical());
-			format = newd wxChoice(this, wxID_ANY);
-			if (capabilities.monsters.xmlDefinitions) {
-				formats.push_back(ServerContentFormat::Xml);
-				format->Append("TFS XML");
-			}
-			if (capabilities.monsters.luaDefinitions) {
-				formats.push_back(ServerContentFormat::Lua);
-				format->Append("Lua / revscriptsys");
-			}
-			if (formats.empty()) {
-				formats.push_back(workspace.serverType == ServerType::Tfs ? ServerContentFormat::Xml : ServerContentFormat::Lua);
-				format->Append(formats.front() == ServerContentFormat::Xml ? "TFS XML" : "Lua / revscriptsys");
-			}
-			format->SetSelection(0);
-			form->Add(format, wxSizerFlags().Expand());
-
-			form->Add(newd wxStaticText(this, wxID_ANY, "Destination folder:"), wxSizerFlags().CenterVertical());
-			auto* folderRow = newd wxBoxSizer(wxHORIZONTAL);
-			directory = newd wxTextCtrl(this, wxID_ANY, WorkspacePath(monsterRoot), wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
-			folderRow->Add(directory, wxSizerFlags(1).Expand());
-			auto* browse = newd wxButton(this, wxID_ANY, "Browse...");
-			folderRow->Add(browse, wxSizerFlags().Border(wxLEFT, 8));
-			form->Add(folderRow, wxSizerFlags().Expand());
-			top->Add(form, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 12));
-
-			auto* note = newd wxStaticText(
-				this,
-				wxID_ANY,
-				"NexaMap creates a starter definition, registers XML monsters automatically, and opens the visual editor."
-			);
-			note->SetForegroundColour(Theme::Get(Theme::Role::TextSubtle));
-			top->Add(note, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 12));
-			auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
-			if (auto* create = wxDynamicCast(FindWindow(wxID_OK), wxButton)) {
-				create->SetLabel("Create and Edit");
-			}
-			top->Add(buttons, wxSizerFlags().Expand().Border(wxALL, 12));
-			SetSizerAndFit(top);
-			SetMinSize(FromDIP(wxSize(620, 260)));
-			SetSize(FromDIP(wxSize(720, 300)));
-			CentreOnParent();
-			name->SetFocus();
-
-			browse->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-				wxDirDialog chooser(
-					this,
-					"Choose a folder inside the workspace monster directory",
-					directory->GetValue(),
-					wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST | wxDD_NEW_DIR_BUTTON
-				);
-				if (chooser.ShowModal() == wxID_OK) {
-					directory->ChangeValue(chooser.GetPath());
-				}
-			});
-		}
-
-		[[nodiscard]] std::string monsterName() const {
-			return nstr(name->GetValue());
-		}
-
-		[[nodiscard]] ServerContentFormat sourceFormat() const {
-			const int selection = format->GetSelection();
-			return selection >= 0 && static_cast<std::size_t>(selection) < formats.size()
-				? formats[static_cast<std::size_t>(selection)]
-				: ServerContentFormat::Unknown;
-		}
-
-		[[nodiscard]] std::filesystem::path destinationDirectory() const {
-#ifdef __WINDOWS__
-			return std::filesystem::path(directory->GetValue().ToStdWstring());
-#else
-			return std::filesystem::path(directory->GetValue().ToStdString());
-#endif
-		}
-
-	private:
-		std::filesystem::path monsterRoot;
-		wxTextCtrl* name = nullptr;
-		wxChoice* format = nullptr;
-		wxTextCtrl* directory = nullptr;
-		std::vector<ServerContentFormat> formats;
-	};
-
-	class NewNpcDialog final : public wxDialog {
-	public:
-		NewNpcDialog(wxWindow* parent, const ServerWorkspace& workspace, const ServerContentCapabilities& capabilities) :
-			wxDialog(parent, wxID_ANY, "Create New NPC", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
-			SetBackgroundColour(Theme::Get(Theme::Role::Surface));
-			auto* top = newd wxBoxSizer(wxVERTICAL);
-			top->Add(newd wxStaticText(this, wxID_ANY, "Create an NPC in the active Server Workspace."), 0, wxEXPAND | wxALL, FromDIP(12));
-			auto* form = newd wxFlexGridSizer(2, 8, 10);
-			form->AddGrowableCol(1, 1);
-			form->Add(newd wxStaticText(this, wxID_ANY, "NPC name:"), 0, wxALIGN_CENTER_VERTICAL);
-			name = newd wxTextCtrl(this, wxID_ANY);
-			form->Add(name, 1, wxEXPAND);
-			form->Add(newd wxStaticText(this, wxID_ANY, "Source format:"), 0, wxALIGN_CENTER_VERTICAL);
-			format = newd wxChoice(this, wxID_ANY);
-			if (capabilities.npcs.xmlDefinitions) {
-				formats.push_back(ServerContentFormat::Xml);
-				format->Append("TFS XML + behavior script");
-			}
-			if (capabilities.npcs.luaDefinitions) {
-				formats.push_back(ServerContentFormat::Lua);
-				format->Append("Lua / revscriptsys");
-			}
-			if (formats.empty()) {
-				formats.push_back(workspace.serverType == ServerType::Tfs ? ServerContentFormat::Xml : ServerContentFormat::Lua);
-				format->Append(formats.front() == ServerContentFormat::Xml ? "TFS XML + behavior script" : "Lua / revscriptsys");
-			}
-			format->SetSelection(0);
-			form->Add(format, 1, wxEXPAND);
-			form->Add(newd wxStaticText(this, wxID_ANY, "Destination folder:"), 0, wxALIGN_CENTER_VERTICAL);
-			auto* row = newd wxBoxSizer(wxHORIZONTAL);
-			directory = newd wxTextCtrl(this, wxID_ANY, WorkspacePath(workspace.npcsDirectory), wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
-			row->Add(directory, 1, wxEXPAND);
-			auto* browse = newd wxButton(this, wxID_ANY, "Browse...");
-			row->Add(browse, 0, wxLEFT, FromDIP(8));
-			form->Add(row, 1, wxEXPAND);
-			top->Add(form, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
-			top->Add(newd wxStaticText(this, wxID_ANY, "The generated source is validated, indexed and opened in the visual editor."), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
-			auto* buttons = CreateSeparatedButtonSizer(wxOK | wxCANCEL);
-			if (auto* create = FindWindow(wxID_OK)) {
-				create->SetLabel("Create and Edit");
-			}
-			top->Add(buttons, 0, wxEXPAND | wxALL, FromDIP(12));
-			SetSizerAndFit(top);
-			SetMinSize(FromDIP(wxSize(620, 260)));
-			CentreOnParent();
-			name->SetFocus();
-			browse->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { wxDirDialog chooser(this, "Choose a folder inside the workspace NPC directory", directory->GetValue(), wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST | wxDD_NEW_DIR_BUTTON); if (chooser.ShowModal() == wxID_OK){ directory->ChangeValue(chooser.GetPath());
-} });
-		}
-		std::string npcName() const {
-			return nstr(name->GetValue());
-		}
-		ServerContentFormat sourceFormat() const {
-			const int selection = format->GetSelection();
-			return selection >= 0 && static_cast<std::size_t>(selection) < formats.size() ? formats[static_cast<std::size_t>(selection)] : ServerContentFormat::Unknown;
-		}
-		std::filesystem::path destinationDirectory() const {
-#ifdef __WINDOWS__
-			return std::filesystem::path(directory->GetValue().ToStdWstring());
-#else
-			return std::filesystem::path(directory->GetValue().ToStdString());
-#endif
-		}
-
-	private:
-		wxTextCtrl* name = nullptr;
-		wxChoice* format = nullptr;
-		wxTextCtrl* directory = nullptr;
-		std::vector<ServerContentFormat> formats;
-	};
-
 	bool RefreshRequiredServerWorkspace(wxString& error, bool& changed, WorkspaceClientMode expectedClientMode) {
 		changed = false;
 		if (!g_workspace.hasServerSelection()) {
@@ -279,12 +170,15 @@ namespace {
 		}
 
 		const uint64_t previousGeneration = g_workspace.getGeneration();
-		if (!g_workspace.rescanServer(error)) {
+		const ServerWorkspace& currentWorkspace = g_workspace.getServer();
+		const bool needsRescan = !currentWorkspace.hasRequiredResources() || currentWorkspace.trackedResourcesChanged();
+		if (needsRescan && !g_workspace.rescanServer(error)) {
 			if (error.empty()) {
 				error = "Server Workspace is configured, but neither items.otb nor appearances.dat was found.";
 			}
 			return false;
 		}
+		error.clear();
 		const ServerWorkspace& workspace = g_workspace.getServer();
 		if (expectedClientMode == WorkspaceClientMode::Classic && !workspace.hasItemsOtb()) {
 			error = "This classic DAT/SPR client requires items.otb in the selected Server Workspace. appearances.dat is supported by Canary/Crystal clients.";
@@ -292,28 +186,6 @@ namespace {
 		}
 		changed = g_workspace.getGeneration() != previousGeneration;
 		return true;
-	}
-
-	bool EnsureServerContentIndex(wxWindow* parent, const wxString& title) {
-		wxString error;
-		if (g_workspace.ensureServerContent(error)) {
-			return true;
-		}
-		wxMessageBox(error.empty() ? wxString("The active Server Workspace could not be indexed.") : error, title, wxOK | wxICON_ERROR, parent);
-		return false;
-	}
-
-	std::vector<std::filesystem::path> SourcePaths(const ServerContentSource& source) {
-		std::vector<std::filesystem::path> paths;
-		paths.reserve(3);
-		paths.push_back(source.declarationPath);
-		if (source.registrationPath) {
-			paths.push_back(*source.registrationPath);
-		}
-		if (source.relatedScriptPath) {
-			paths.push_back(*source.relatedScriptPath);
-		}
-		return paths;
 	}
 
 	bool IsInapplicableMaterialItemWarning(const wxString& warning) {
@@ -591,13 +463,13 @@ void GUI::discoverDataDirectory(const wxString& existentFile) {
 	}
 }
 
-bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& warnings, bool force) {
+bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& warnings, bool force, bool workspaceAlreadyRefreshed) {
 	if (ClientVersion::get(version) == nullptr) {
 		error = wxString::Format("Unsupported client version! (%d)", version);
 		return false;
 	}
 	bool serverResourcesChanged = false;
-	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Classic)) {
+	if (!workspaceAlreadyRefreshed && !RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Classic)) {
 		return false;
 	}
 	force = force || serverResourcesChanged;
@@ -640,7 +512,7 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 	return true;
 }
 
-bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force) {
+bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force, bool workspaceAlreadyRefreshed) {
 	ClientVersion* compatibilityProfile = ClientVersion::getLatestVersion();
 	if (compatibilityProfile == nullptr) {
 		error = "No client compatibility profile is available for the Canary/Crystal Assets loader.";
@@ -651,7 +523,7 @@ bool GUI::LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool
 		return false;
 	}
 	bool serverResourcesChanged = false;
-	if (!RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Appearances)) {
+	if (!workspaceAlreadyRefreshed && !RefreshRequiredServerWorkspace(error, serverResourcesChanged, WorkspaceClientMode::Appearances)) {
 		return false;
 	}
 	force = force || serverResourcesChanged;
@@ -700,10 +572,10 @@ bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
 	const uint64_t generation = g_workspace.getGeneration();
 	force = force || serverResourcesChanged || generation != loaded_workspace_generation;
 	bool loaded = false;
-	if (g_workspace.getServer().usesAppearanceAssetsLoader()) {
-		loaded = LoadCanaryCrystalAssets(error, warnings, force);
+	if (g_workspace.getServer().usesCanaryCrystalLoader()) {
+		loaded = LoadCanaryCrystalAssets(error, warnings, force, true);
 	} else {
-		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force);
+		loaded = LoadVersion(g_workspace.getClient().versionId, error, warnings, force, true);
 	}
 	if (loaded) {
 		loaded_workspace_generation = generation;
@@ -988,18 +860,16 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		g_creatures.loadFromXML(cdb, false, nerr, nwarn, creatureProgress);
 	}
 
-	if (!workspace.monstersDirectory.empty()) {
-		wxString importError;
-		if (!g_creatures.importMonstersFromLuaDir(WorkspacePath(workspace.monstersDirectory), importError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import monsters from the Server Workspace: " + importError);
-		}
-	}
-	if (!workspace.npcsDirectory.empty()) {
-		wxString importError;
-		if (!g_creatures.importNpcsFromLuaDir(WorkspacePath(workspace.npcsDirectory), importError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import NPCs from the Server Workspace: " + importError);
-		}
-	}
+	importCreaturesWithCache(
+		workspace,
+		!workspace.monstersDirectory.empty() ? WorkspacePath(workspace.monstersDirectory) : wxString {},
+		"monsters", false, warnings, creatureProgress
+	);
+	importCreaturesWithCache(
+		workspace,
+		!workspace.npcsDirectory.empty() ? WorkspacePath(workspace.npcsDirectory) : wxString {},
+		"npcs", true, warnings, creatureProgress
+	);
 
 	g_gui.SetLoadIndeterminate("Loading materials.xml ...");
 	wxArrayString materialWarnings;
@@ -1037,14 +907,11 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	SetLoadIndeterminate("Validating package and catalog...");
 	wxLogMessage("Canary/Crystal: validating client package and catalog.");
 
-	const ServerWorkspace& workspace = g_workspace.getServer();
-	const bool customTfs = workspace.serverType == ServerType::CustomTfsAppearances;
-	if (!ClientAssets::load(error, warnings, customTfs ? workspace.appearancesPath : std::filesystem::path {})) {
-		DestroyLoadBar();
-		UnloadVersion();
-		return false;
-	}
-	if (customTfs && !g_items.remapAppearancesToServerIds(workspace.itemsOtbPath, error, warnings)) {
+	std::optional<ClientAssetsManifest> validatedManifest = g_workspace.takeValidatedClientAssetsManifest();
+	const bool assetsLoaded = validatedManifest
+		? ClientAssets::load(*validatedManifest, error, warnings)
+		: ClientAssets::load(error, warnings);
+	if (!assetsLoaded) {
 		DestroyLoadBar();
 		UnloadVersion();
 		return false;
@@ -1053,9 +920,10 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	SetLoadIndeterminate("Loading item metadata...");
 	wxLogMessage("Canary/Crystal: loading dedicated item metadata.");
 	wxString supplementalError;
+	const ServerWorkspace& workspace = g_workspace.getServer();
 	if (workspace.hasItemsXml()) {
 		const wxString serverItemsXml = WorkspacePath(workspace.itemsXmlPath);
-		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, !customTfs)) {
+		if (!g_items.loadFromGameXml(serverItemsXml, supplementalError, warnings, true)) {
 			warnings.push_back("Couldn't enrich Canary/Crystal items from the server items.xml: " + supplementalError);
 		}
 	} else {
@@ -1090,21 +958,11 @@ bool GUI::LoadCanaryCrystalDataFiles(wxString& error, wxArrayString& warnings) {
 	const wxString monstersDirectory = !workspace.monstersDirectory.empty()
 		? WorkspacePath(workspace.monstersDirectory)
 		: wxstr(g_settings.getString(Config::MONSTERS_LUA_DIRECTORY));
-	if (!monstersDirectory.empty() && wxDir::Exists(monstersDirectory)) {
-		wxString luaError;
-		if (!g_creatures.importMonstersFromLuaDir(monstersDirectory, luaError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import the configured monsters Lua directory: " + luaError);
-		}
-	}
 	const wxString npcsDirectory = !workspace.npcsDirectory.empty()
 		? WorkspacePath(workspace.npcsDirectory)
 		: wxstr(g_settings.getString(Config::NPCS_LUA_DIRECTORY));
-	if (!npcsDirectory.empty() && wxDir::Exists(npcsDirectory)) {
-		wxString luaError;
-		if (!g_creatures.importNpcsFromLuaDir(npcsDirectory, luaError, warnings, creatureProgress, false)) {
-			warnings.push_back("Couldn't import the configured NPCs Lua directory: " + luaError);
-		}
-	}
+	importCreaturesWithCache(workspace, monstersDirectory, "monsters", false, warnings, creatureProgress);
+	importCreaturesWithCache(workspace, npcsDirectory, "npcs", true, warnings, creatureProgress);
 
 	SetLoadIndeterminate("Loading materials...");
 	wxLogMessage("Canary/Crystal: loading dedicated materials and borders.");
@@ -2210,6 +2068,64 @@ void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
 		RunConvertersChooser(welcomeDialog);
 	} else if (event.GetId() == WELCOME_DIALOG_SPAWN_CONVERTER) {
 		static_cast<void>(RunSpawnConverter(welcomeDialog));
+	} else if (event.GetId() == WELCOME_DIALOG_MULTIPLAYER_JOIN) {
+		JoinMultiplayerSession(welcomeDialog);
+	}
+}
+
+bool GUI::JoinMultiplayerSession(wxWindow* parent) {
+	if (closingApplication || MultiplayerSession::current()) {
+		return false;
+	}
+
+	wxWindow* dialogParent = parent ? parent : (welcomeDialog ? static_cast<wxWindow*>(welcomeDialog) : static_cast<wxWindow*>(root));
+	MultiplayerSession::Options options;
+	if (!MultiplayerWindow::configure(dialogParent, false, options) || MultiplayerSession::current() || closingApplication) {
+		return false;
+	}
+
+	// If joining from the startup / welcome screen, automatically validate and load workspace resources
+	if (welcomeDialog != nullptr) {
+		wxString error;
+		wxArrayString warnings;
+		if (!LoadWorkspace(error, warnings)) {
+			PopupDialog(dialogParent, "Workspace not ready", error, wxOK);
+			return false;
+		}
+		if (!warnings.empty()) {
+			ListDialog("Workspace warnings", warnings);
+		}
+	}
+
+	// Joining requires a clean empty map
+	Editor* editor = GetCurrentEditor();
+	if (!editor || editor->map.hasFile() || editor->map.getTileCount() > 0) {
+		if (!NewMap()) {
+			return false;
+		}
+		editor = GetCurrentEditor();
+	}
+	if (!editor || MultiplayerSession::current() || closingApplication) {
+		return false;
+	}
+
+	try {
+		editor->multiplayer = std::make_unique<MultiplayerSession>(*editor);
+		std::string error;
+		if (!editor->multiplayer->join(options, error)) {
+			editor->multiplayer.reset();
+			PopupDialog("Multiplayer", wxstr(error), wxOK);
+			return false;
+		}
+		editor->multiplayer->showWindow();
+		UpdateMenus();
+		return true;
+	} catch (const std::exception& e) {
+		if (editor) {
+			editor->multiplayer.reset();
+		}
+		PopupDialog("Multiplayer", wxString::FromUTF8(e.what()), wxOK);
+		return false;
 	}
 }
 
@@ -3040,370 +2956,6 @@ void GUI::ShowTextBox(wxWindow* parent, const wxString& title, const wxString& c
 	dlg.SetSizerAndFit(topsizer);
 
 	dlg.ShowModal();
-}
-
-void GUI::ShowMonsterEditor(const std::string& monsterName) {
-	if (!IsEditorOpen() || monsterName.empty()) {
-		return;
-	}
-	if (!EnsureServerContentIndex(root, "Monster Editor")) {
-		return;
-	}
-	ServerContentLookupResult lookup = g_workspace.getServerContent().findExact(ServerContentKind::Monster, monsterName);
-	if (lookup.empty()) {
-		lookup = g_workspace.getServerContent().findCaseInsensitive(ServerContentKind::Monster, monsterName);
-	}
-	if (lookup.empty()) {
-		wxMessageBox(
-			"NexaMap could not locate the source definition for " + wxString::FromUTF8(monsterName) + " in the active Server Workspace.",
-			"Monster source not found",
-			wxOK | wxICON_INFORMATION,
-			root
-		);
-		return;
-	}
-	const ServerContentSource* resolvedSource = lookup.value();
-	if (!resolvedSource) {
-		resolvedSource = lookup.uniqueRegisteredValue();
-	}
-	if (!resolvedSource) {
-		wxString message = "More than one source defines " + wxString::FromUTF8(monsterName) + ". NexaMap will not choose one automatically:\n\n";
-		for (const ServerContentSource* source : lookup.matches) {
-			message += WorkspacePath(source->declarationPath) + "\n";
-		}
-		wxMessageBox(message, "Ambiguous monster source", wxOK | wxICON_WARNING, root);
-		return;
-	}
-	ShowMonsterEditor(*resolvedSource);
-}
-
-void GUI::ShowMonsterEditorBrowser() {
-	if (!IsEditorOpen()) {
-		return;
-	}
-	if (!EnsureServerContentIndex(root, "Monster Editor")) {
-		return;
-	}
-	const ServerContentIndex& index = g_workspace.getServerContent();
-	ServerContentBrowserDialog chooser(root, "Monster Editor", "monster", g_workspace.getServer().monstersDirectory, index.snapshot(), index.indicesForKind(ServerContentKind::Monster));
-	if (chooser.ShowModal() == wxID_OK) {
-		if (chooser.wantsCreate()) {
-			ShowNewMonsterEditor();
-		} else if (const auto source = chooser.selectedSource()) {
-			ShowMonsterEditor(*source);
-		}
-	}
-}
-
-void GUI::ShowNewMonsterEditor() {
-	if (!IsEditorOpen()) {
-		return;
-	}
-	if (!EnsureServerContentIndex(root, "Create New Monster")) {
-		return;
-	}
-	const ServerWorkspace& workspace = g_workspace.getServer();
-	if (workspace.monstersDirectory.empty()) {
-		wxMessageBox("The active Server Workspace has no detected monster directory.", "Create New Monster", wxOK | wxICON_INFORMATION, root);
-		return;
-	}
-
-	NewMonsterDialog dialog(root, workspace, g_workspace.getServerContent().capabilities());
-	if (dialog.ShowModal() != wxID_OK) {
-		return;
-	}
-	MonsterCreationRequest request;
-	request.name = dialog.monsterName();
-	request.format = dialog.sourceFormat();
-	request.destinationDirectory = dialog.destinationDirectory();
-	MonsterCreationResult created;
-	std::string creationError;
-	if (!CreateMonsterDefinition(workspace, g_workspace.getServerContent(), request, created, creationError)) {
-		wxMessageBox(wxString::FromUTF8(creationError), "Could not create monster", wxOK | wxICON_ERROR, root);
-		return;
-	}
-
-	wxString scanError;
-	if (!g_workspace.refreshServerContentPaths(SourcePaths(created.source), scanError)) {
-		wxMessageBox("The monster was created, but the Server Workspace index could not be refreshed:\n" + scanError, "Monster created", wxOK | wxICON_WARNING, root);
-		return;
-	}
-	const auto found = std::find_if(g_workspace.getServerContent().entries().begin(), g_workspace.getServerContent().entries().end(), [&created](const ServerContentSource& source) {
-		return source.kind == ServerContentKind::Monster
-			&& source.declarationPath.lexically_normal() == created.source.declarationPath.lexically_normal();
-	});
-	const ServerContentSource source = found == g_workspace.getServerContent().entries().end() ? created.source : *found;
-	SetStatusText("Created monster " + wxString::FromUTF8(source.name));
-	ShowMonsterEditor(source);
-}
-
-void GUI::ShowMonsterEditor(const ServerContentSource& selectedSource) {
-	if (!IsEditorOpen() || selectedSource.kind != ServerContentKind::Monster) {
-		return;
-	}
-	const ServerContentSource source = selectedSource;
-
-	const std::filesystem::path workspaceRoot = g_workspace.getServer().rootPath;
-	std::string error;
-	auto document = MonsterDefinitionDocument::Load(source, error);
-	if (!document) {
-		wxMessageBox(wxString::FromUTF8(error), "Could not open monster", wxOK | wxICON_ERROR, root);
-		return;
-	}
-
-	MonsterEditorDialog dialog(root, std::move(document));
-	dialog.ShowModal();
-	const bool browse = dialog.wantsBrowse();
-	const auto browseNext = [this, browse, workspaceRoot]() {
-		if (browse && g_workspace.getServer().rootPath == workspaceRoot) {
-			wxTheApp->CallAfter([this]() { ShowMonsterEditorBrowser(); });
-		}
-	};
-	if (!dialog.wasSaved()) {
-		browseNext();
-		return;
-	}
-	if (g_workspace.getServer().rootPath != workspaceRoot) {
-		wxMessageBox("The active workspace changed while the editor was open. The source was saved, but the current palette was not refreshed.", "Monster saved", wxOK | wxICON_WARNING, root);
-		return;
-	}
-
-	wxString scanError;
-	if (!g_workspace.refreshServerContentPaths(SourcePaths(source), scanError)) {
-		wxMessageBox("The monster was saved, but the Server Workspace index could not be refreshed:\n" + scanError, "Monster saved", wxOK | wxICON_WARNING, root);
-		browseNext();
-		return;
-	}
-	wxString importError;
-	wxArrayString warnings;
-	const FileName filename(WorkspacePath(source.declarationPath));
-	const bool imported = source.format == ServerContentFormat::Xml
-		? g_creatures.importXMLFromOT(filename, importError, warnings)
-		: g_creatures.importLuaFromOT(filename, importError, warnings);
-	if (!imported) {
-		wxMessageBox("The source was saved, but the creature palette could not reload it:\n" + importError, "Monster saved", wxOK | wxICON_WARNING, root);
-		browseNext();
-		return;
-	}
-	g_materials.createOtherTileset();
-	RefreshPalettes(nullptr, true, false);
-	RefreshView();
-	if (!warnings.empty()) {
-		ListDialog(root, "Monster reload warnings", warnings);
-	}
-	SetStatusText("Saved monster " + wxString::FromUTF8(dialog.savedDefinition().name));
-	browseNext();
-}
-
-void GUI::ShowNpcEditor(const std::string& npcName) {
-	if (!IsEditorOpen() || npcName.empty()) {
-		return;
-	}
-	if (!EnsureServerContentIndex(root, "NPC Editor")) {
-		return;
-	}
-	ServerContentLookupResult lookup = g_workspace.getServerContent().findExact(ServerContentKind::Npc, npcName);
-	if (lookup.empty()) {
-		lookup = g_workspace.getServerContent().findCaseInsensitive(ServerContentKind::Npc, npcName);
-	}
-	if (lookup.empty()) {
-		wxMessageBox("NexaMap could not locate this NPC in the active Server Workspace.", "NPC source", wxOK | wxICON_INFORMATION, root);
-		return;
-	}
-	const ServerContentSource* source = lookup.value();
-	if (!source) {
-		source = lookup.uniqueRegisteredValue();
-	}
-	if (!source) {
-		// Multiple sources define this NPC - let the user pick the right one.
-		std::vector<ServerContentSource> ambiguous;
-		for (const ServerContentSource* match : lookup.matches) {
-			if (match->declarationExists) {
-				ambiguous.push_back(*match);
-			}
-		}
-		if (ambiguous.empty()) {
-			wxMessageBox("NexaMap found multiple references for this NPC, but none have a valid source file.", "NPC source", wxOK | wxICON_INFORMATION, root);
-			return;
-		}
-		if (ambiguous.size() == 1) {
-			ShowNpcEditor(ambiguous.front());
-			return;
-		}
-		ServerContentBrowserDialog chooser(root, "Choose NPC Source", "NPC", g_workspace.getServer().npcsDirectory, std::move(ambiguous), false);
-		if (chooser.ShowModal() != wxID_OK) {
-			return;
-		}
-		if (const auto chosen = chooser.selectedSource()) {
-			ShowNpcEditor(*chosen);
-		}
-		return;
-	}
-	ShowNpcEditor(*source);
-}
-
-void GUI::ShowNpcEditorBrowser() {
-	if (!IsEditorOpen()) {
-		return;
-	}
-	if (!EnsureServerContentIndex(root, "NPC Editor")) {
-		return;
-	}
-	const ServerContentIndex& index = g_workspace.getServerContent();
-	ServerContentBrowserDialog chooser(root, "NPC Editor", "NPC", g_workspace.getServer().npcsDirectory, index.snapshot(), index.indicesForKind(ServerContentKind::Npc));
-	if (chooser.ShowModal() != wxID_OK) {
-		return;
-	}
-	if (chooser.wantsCreate()) {
-		ShowNewNpcEditor();
-	} else if (const auto source = chooser.selectedSource()) {
-		ShowNpcEditor(*source);
-	}
-}
-
-void GUI::ShowNewNpcEditor() {
-	if (!IsEditorOpen()) {
-		return;
-	}
-	if (!EnsureServerContentIndex(root, "Create New NPC")) {
-		return;
-	}
-	const ServerWorkspace& workspace = g_workspace.getServer();
-	if (workspace.npcsDirectory.empty()) {
-		wxMessageBox("The active Server Workspace has no detected NPC directory.", "Create New NPC", wxOK | wxICON_INFORMATION, root);
-		return;
-	}
-	NewNpcDialog dialog(root, workspace, g_workspace.getServerContent().capabilities());
-	if (dialog.ShowModal() != wxID_OK) {
-		return;
-	}
-	NpcCreationRequest request { dialog.npcName(), dialog.sourceFormat(), dialog.destinationDirectory() };
-	NpcCreationResult created;
-	std::string error;
-	if (!CreateNpcDefinition(workspace, g_workspace.getServerContent(), request, created, error)) {
-		wxMessageBox(wxString::FromUTF8(error), "Could not create NPC", wxOK | wxICON_ERROR, root);
-		return;
-	}
-	wxString scanError;
-	if (!g_workspace.refreshServerContentPaths(SourcePaths(created.source), scanError)) {
-		wxMessageBox("The NPC was created, but the workspace index could not be refreshed:\n" + scanError, "NPC created", wxOK | wxICON_WARNING, root);
-		return;
-	}
-	const auto found = std::find_if(g_workspace.getServerContent().entries().begin(), g_workspace.getServerContent().entries().end(), [&created](const ServerContentSource& source) { return source.kind == ServerContentKind::Npc && source.declarationPath.lexically_normal() == created.source.declarationPath.lexically_normal(); });
-	ShowNpcEditor(found == g_workspace.getServerContent().entries().end() ? created.source : *found);
-}
-
-void GUI::ShowNpcEditor(const ServerContentSource& selectedSource) {
-	if (!IsEditorOpen() || selectedSource.kind != ServerContentKind::Npc) {
-		return;
-	}
-	const ServerContentSource source = selectedSource;
-	const auto workspaceRoot = g_workspace.getServer().rootPath;
-	std::string error;
-	auto document = NpcDefinitionDocument::Load(source, error);
-	if (!document) {
-		wxMessageBox(wxString::FromUTF8(error), "Could not open NPC", wxOK | wxICON_ERROR, root);
-		return;
-	}
-	NpcEditorDialog dialog(root, std::move(document));
-	dialog.ShowModal();
-	const bool browse = dialog.wantsBrowse();
-	const auto browseNext = [this, browse, workspaceRoot]() {
-		if (browse && g_workspace.getServer().rootPath == workspaceRoot) {
-			wxTheApp->CallAfter([this]() { ShowNpcEditorBrowser(); });
-		}
-	};
-	if (!dialog.wasSaved()) {
-		browseNext();
-		return;
-	}
-	if (g_workspace.getServer().rootPath != workspaceRoot) {
-		wxMessageBox("The active workspace changed while the NPC editor was open. The source was saved, but the palette was not refreshed.", "NPC saved", wxOK | wxICON_WARNING, root);
-		return;
-	}
-	wxString scanError;
-	if (!g_workspace.refreshServerContentPaths(SourcePaths(source), scanError)) {
-		wxMessageBox("The NPC was saved, but the workspace index could not be refreshed:\n" + scanError, "NPC saved", wxOK | wxICON_WARNING, root);
-		browseNext();
-		return;
-	}
-	wxString importError;
-	wxArrayString warnings;
-	const FileName filename(WorkspacePath(source.declarationPath));
-	const bool imported = source.format == ServerContentFormat::Xml ? g_creatures.importXMLFromOT(filename, importError, warnings) : g_creatures.importLuaFromOT(filename, importError, warnings);
-	if (!imported) {
-		wxMessageBox("The NPC source was saved, but the creature palette could not reload it:\n" + importError, "NPC saved", wxOK | wxICON_WARNING, root);
-		browseNext();
-		return;
-	}
-	g_materials.createOtherTileset();
-	RefreshPalettes(nullptr, true, false);
-	RefreshView();
-	if (!warnings.empty()) {
-		ListDialog(root, "NPC reload warnings", warnings);
-	}
-	SetStatusText("Saved NPC " + wxString::FromUTF8(source.name));
-	browseNext();
-}
-
-void GUI::ShowSpellEditorBrowser() {
-	if (!IsEditorOpen()) {
-		return;
-	}
-	if (!EnsureServerContentIndex(root, "Spell Editor")) {
-		return;
-	}
-	const ServerContentIndex& index = g_workspace.getServerContent();
-	std::vector<std::size_t> spells = index.indicesForKind(ServerContentKind::Spell);
-	if (spells.empty()) {
-		wxMessageBox("No spell definitions were detected in the active Server Workspace.", "Spell Editor", wxOK | wxICON_INFORMATION, root);
-		return;
-	}
-	ServerContentBrowserDialog chooser(root, "Spell Editor", "spell", g_workspace.getServer().spellsDirectory, index.snapshot(), std::move(spells), false);
-	if (chooser.ShowModal() == wxID_OK) {
-		if (const auto source = chooser.selectedSource()) {
-			ShowSpellEditor(*source);
-		}
-	}
-}
-
-void GUI::ShowSpellEditor(const ServerContentSource& selectedSource) {
-	if (!IsEditorOpen() || selectedSource.kind != ServerContentKind::Spell) {
-		return;
-	}
-	const ServerContentSource source = selectedSource;
-	const auto workspaceRoot = g_workspace.getServer().rootPath;
-	std::string error;
-	auto document = SpellDefinitionDocument::Load(source, error, &g_workspace.getServer(), g_workspace.getSpellAreaResolver());
-	if (!document) {
-		wxMessageBox(wxString::FromUTF8(error), "Could not open spell", wxOK | wxICON_ERROR, root);
-		return;
-	}
-	SpellEditorDialog dialog(root, std::move(document));
-	dialog.ShowModal();
-	const bool browse = dialog.wantsBrowse();
-	const auto browseNext = [this, browse, workspaceRoot]() {
-		if (browse && g_workspace.getServer().rootPath == workspaceRoot) {
-			wxTheApp->CallAfter([this]() { ShowSpellEditorBrowser(); });
-		}
-	};
-	if (!dialog.wasSaved()) {
-		browseNext();
-		return;
-	}
-	if (g_workspace.getServer().rootPath != workspaceRoot) {
-		wxMessageBox("The active workspace changed while the Spell Editor was open. The source was saved, but this workspace was not reindexed.", "Spell saved", wxOK | wxICON_WARNING, root);
-		return;
-	}
-	wxString scanError;
-	if (!g_workspace.refreshServerContentPaths(SourcePaths(source), scanError)) {
-		wxMessageBox("The spell was saved, but the Server Workspace index could not be refreshed:\n" + scanError, "Spell saved", wxOK | wxICON_WARNING, root);
-		browseNext();
-		return;
-	}
-	RefreshView();
-	SetStatusText("Saved spell " + wxString::FromUTF8(dialog.savedDefinition().name));
-	browseNext();
 }
 
 void GUI::SetHotkey(int index, Hotkey& hotkey) {

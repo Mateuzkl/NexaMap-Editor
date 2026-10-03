@@ -40,6 +40,7 @@
 #include "application.h"
 #include "border_workspace_window.h"
 #include "border_learning_window.h"
+#include "reference_style_window.h"
 #include "procedural_map_generator_window.h"
 #include "palette_saved_terrain.h"
 #include "browse_tile_window.h"
@@ -53,9 +54,12 @@
 #include "creature_brush.h"
 #include "ground_brush.h"
 #include "waypoint_brush.h"
+#include "waypoints.h"
+#include "palette_window.h"
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
+#include "replace_tool/quick_replace_selection_dialog.h"
 
 namespace {
 	bool PopupContextIsCurrent(Editor& editor) {
@@ -194,6 +198,7 @@ EVT_MENU(MAP_POPUP_MENU_COPY, MapCanvas::OnCopy)
 EVT_MENU(MAP_POPUP_MENU_COPY_POSITION, MapCanvas::OnCopyPosition)
 EVT_MENU(MAP_POPUP_MENU_PASTE, MapCanvas::OnPaste)
 EVT_MENU(MAP_POPUP_MENU_DELETE, MapCanvas::OnDelete)
+EVT_MENU(MAP_POPUP_MENU_QUICK_REPLACE_SELECTION, MapCanvas::OnQuickReplaceSelection)
 //----
 EVT_MENU(MAP_POPUP_MENU_COPY_SERVER_ID, MapCanvas::OnCopyServerId)
 EVT_MENU(MAP_POPUP_MENU_COPY_CLIENT_ID, MapCanvas::OnCopyClientId)
@@ -208,6 +213,7 @@ EVT_MENU(MAP_POPUP_MENU_SELECT_RAW_BRUSH, MapCanvas::OnSelectRAWBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_GROUND_BRUSH, MapCanvas::OnSelectGroundBrush)
 EVT_MENU(MAP_POPUP_MENU_OPEN_BORDER_WORKSPACE, MapCanvas::OnOpenBorderWorkspace)
 EVT_MENU(MAP_POPUP_MENU_LEARN_BORDER_SELECTION, MapCanvas::OnLearnBorderSelection)
+EVT_MENU(MAP_POPUP_MENU_CAPTURE_AI_STYLE_REFERENCE, MapCanvas::OnCaptureAIStyleReference)
 EVT_MENU(MAP_POPUP_MENU_SAVE_TERRAIN, MapCanvas::OnSaveTerrain)
 EVT_MENU(MAP_POPUP_MENU_PROCEDURAL_GENERATOR, MapCanvas::OnProceduralMapGenerator)
 EVT_MENU(MAP_POPUP_MENU_SELECT_DOODAD_BRUSH, MapCanvas::OnSelectDoodadBrush)
@@ -217,9 +223,10 @@ EVT_MENU(MAP_POPUP_MENU_SELECT_WALL_BRUSH, MapCanvas::OnSelectWallBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_CARPET_BRUSH, MapCanvas::OnSelectCarpetBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_TABLE_BRUSH, MapCanvas::OnSelectTableBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, MapCanvas::OnSelectCreatureBrush)
-EVT_MENU(MAP_POPUP_MENU_EDIT_MONSTER, MapCanvas::OnEditMonster)
 EVT_MENU(MAP_POPUP_MENU_SELECT_SPAWN_BRUSH, MapCanvas::OnSelectSpawnBrush)
 EVT_MENU(MAP_POPUP_MENU_SELECT_HOUSE_BRUSH, MapCanvas::OnSelectHouseBrush)
+EVT_MENU(MAP_POPUP_MENU_WAYPOINT_RENAME, MapCanvas::OnWaypointRename)
+EVT_MENU(MAP_POPUP_MENU_WAYPOINT_DELETE, MapCanvas::OnWaypointDelete)
 EVT_MENU(MAP_POPUP_MENU_MOVE_TO_TILESET, MapCanvas::OnSelectMoveTo)
 // ----
 EVT_MENU(MAP_POPUP_MENU_PROPERTIES, MapCanvas::OnProperties)
@@ -246,6 +253,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool in
 	drawing(false),
 	dragging_draw(false),
 	replace_dragging(false),
+	dragging_waypoint(false),
 
 	screenshot_buffer(nullptr),
 
@@ -325,26 +333,51 @@ void MapCanvas::RefreshWithoutDirty() {
 	wxGLCanvas::Refresh();
 }
 
+bool MapCanvas::ZoomTo(double targetZoom, int anchorScreenX, int anchorScreenY) {
+	targetZoom = std::clamp(targetZoom, 0.125, 25.0);
+	if (std::abs(zoom - targetZoom) < 1e-6) {
+		return false;
+	}
+
+	auto* parent = static_cast<MapWindow*>(GetParent());
+	int currentScrollX = 0;
+	int currentScrollY = 0;
+	parent->GetViewStart(&currentScrollX, &currentScrollY);
+
+	int viewW = 0;
+	int viewH = 0;
+	GetSize(&viewW, &viewH);
+
+	if (anchorScreenX < 0 || anchorScreenY < 0) {
+		anchorScreenX = viewW / 2;
+		anchorScreenY = viewH / 2;
+	}
+
+	const double scale = GetContentScaleFactor();
+	const double oldZoom = zoom;
+	zoom = targetZoom;
+
+	parent->UpdateScrollbars();
+
+	const ViewportMetrics metrics = parent->GetViewportMetrics();
+	const int newScrollX = ViewportMetrics::ComputeZoomedScroll(currentScrollX, anchorScreenX, scale, oldZoom, targetZoom, metrics.maxScrollX);
+	const int newScrollY = ViewportMetrics::ComputeZoomedScroll(currentScrollY, anchorScreenY, scale, oldZoom, targetZoom, metrics.maxScrollY);
+
+	parent->hScroll->SetThumbPosition(newScrollX);
+	parent->vScroll->SetThumbPosition(newScrollY);
+
+	if (!ingamePreview) {
+		g_gui.UpdateMinimap();
+	}
+
+	UpdatePositionStatus();
+	UpdateZoomStatus();
+	RefreshViewport();
+	return true;
+}
+
 void MapCanvas::SetZoom(double value) {
-	if (value < 0.125) {
-		value = 0.125;
-	}
-
-	if (value > 25.00) {
-		value = 25.0;
-	}
-
-	if (zoom != value) {
-		int center_x, center_y;
-		GetScreenCenter(&center_x, &center_y);
-
-		zoom = value;
-		static_cast<MapWindow*>(GetParent())->SetScreenCenterPosition(Position(center_x, center_y, floor));
-
-		UpdatePositionStatus();
-		UpdateZoomStatus();
-		RefreshViewport();
-	}
+	ZoomTo(value);
 }
 
 void MapCanvas::SetIngamePreviewPlayer(const Position& position, Direction direction, int walkOffsetX, int walkOffsetY, int animationFrame) {
@@ -416,6 +449,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			options.ingame = !g_settings.getBoolean(Config::SHOW_EXTRA);
 			options.show_all_floors = g_settings.getBoolean(Config::SHOW_ALL_FLOORS);
 			options.show_creatures = g_settings.getBoolean(Config::SHOW_CREATURES);
+			options.show_creature_names = g_settings.getBoolean(Config::SHOW_CREATURE_NAMES);
 			options.show_spawns = g_settings.getBoolean(Config::SHOW_SPAWNS);
 			options.show_houses = g_settings.getBoolean(Config::SHOW_HOUSES);
 			options.show_shade = g_settings.getBoolean(Config::SHOW_SHADE);
@@ -448,7 +482,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		options.dragging = boundbox_selection;
 
 		const bool animate_position_indicator = drawer->GetPositionIndicatorTime() != 0;
-		const bool animate_preview = !ingamePreview && options.show_preview && zoom <= 2.0;
+		const bool animate_preview = !ingamePreview && options.show_preview && zoom <= 3.0;
 		if (animate_preview && !drawer->isViewportInteractionActive()) {
 			// Mark dirty so the FBO cache is refreshed for the new animation frame
 			drawer->markDirty();
@@ -621,9 +655,10 @@ void MapCanvas::ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y) 
 }
 
 void MapCanvas::GetScreenCenter(int* map_x, int* map_y) {
-	int width, height;
-	static_cast<MapWindow*>(GetParent())->GetViewSize(&width, &height);
-	return ScreenToMap(width / 2, height / 2, map_x, map_y);
+	int width = 0;
+	int height = 0;
+	GetSize(&width, &height);
+	ScreenToMap(width / 2, height / 2, map_x, map_y);
 }
 
 Position MapCanvas::GetCursorPosition() const {
@@ -736,6 +771,10 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 		cursor_x = event.GetX();
 		cursor_y = event.GetY();
 		RefreshViewport();
+		return;
+	}
+	if (dragging_waypoint && !event.LeftIsDown()) {
+		finishWaypointDrag(false);
 		return;
 	}
 	if (space_held && !wxGetKeyState(WXK_SPACE)) {
@@ -873,6 +912,13 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 			UpdateAutoborderPreview(event.AltDown());
 
 			g_gui.RefreshView();
+		} else if (dragging_waypoint) {
+			Brush* brush = g_gui.GetCurrentBrush();
+			if (brush && brush->isWaypoint()) {
+				const Position pos(mouse_map_x, mouse_map_y, floor);
+				updateWaypointDrag(pos);
+			}
+			g_gui.RefreshView();
 		} else if (dragging_draw) {
 			g_gui.RefreshView();
 		} else if (map_update && brush) {
@@ -906,11 +952,13 @@ void MapCanvas::CancelSpacePan() {
 
 void MapCanvas::OnCanvasKillFocus(wxFocusEvent& event) {
 	CancelSpacePan();
+	finishWaypointDrag(false);
 	event.Skip();
 }
 
 void MapCanvas::OnPanCaptureLost(wxMouseCaptureLostEvent&) {
 	CancelSpacePan();
+	finishWaypointDrag(false, false);
 }
 
 void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
@@ -919,6 +967,17 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event) {
 	}
 	if (space_dragging) {
 		EndSpaceDrag();
+		return;
+	}
+	if (dragging_waypoint) {
+		int mapX = 0;
+		int mapY = 0;
+		ScreenToMap(event.GetX(), event.GetY(), &mapX, &mapY);
+		updateWaypointDrag(Position(mapX, mapY, floor));
+		finishWaypointDrag(true);
+		editor.actionQueue->resetTimer();
+		g_gui.RefreshView();
+		g_gui.UpdateMinimap();
 		return;
 	}
 	OnMouseActionRelease(event);
@@ -1293,7 +1352,24 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event) {
 					}
 				} else if (brush->oneSizeFitsAll()) {
 					if (brush->isHouseExit() || brush->isWaypoint()) {
-						editor.draw(Position(mouse_map_x, mouse_map_y, floor), event.AltDown());
+						const Position pos(mouse_map_x, mouse_map_y, floor);
+						if (brush->isWaypoint()) {
+							Waypoint* selected = editor.map.waypoints.getWaypoint(g_gui.waypoint_brush->getWaypoint());
+							Waypoint* atClick = getWaypointAt(mouse_map_x, mouse_map_y, floor);
+
+							if (atClick && (!selected || atClick != selected)) {
+								g_gui.waypoint_brush->setWaypoint(atClick);
+								g_gui.SelectBrushInternal(g_gui.waypoint_brush);
+								if (PaletteWindow* palette = g_gui.GetPalette()) {
+									palette->SelectWaypoint(atClick);
+								}
+								beginWaypointDrag(atClick, pos);
+							} else if (selected) {
+								beginWaypointDrag(selected, pos);
+							}
+						} else {
+							editor.draw(pos, event.AltDown());
+						}
 					} else {
 						PositionVector tilestodraw;
 						tilestodraw.push_back(Position(mouse_map_x, mouse_map_y, floor));
@@ -1611,6 +1687,7 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 			}
 		}
 		editor.actionQueue->resetTimer();
+		finishWaypointDrag(false);
 		drawing = false;
 		dragging_draw = false;
 		replace_dragging = false;
@@ -1630,12 +1707,7 @@ void MapCanvas::OnMouseCameraClick(wxMouseEvent& event) {
 	last_mmb_click_x = event.GetX();
 	last_mmb_click_y = event.GetY();
 	if (event.ControlDown()) {
-		int screensize_x, screensize_y;
-		static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-		static_cast<MapWindow*>(GetParent())->ScrollRelative(int(-screensize_x * (1.0 - zoom) * (std::max(cursor_x, 1) / double(screensize_x))), int(-screensize_y * (1.0 - zoom) * (std::max(cursor_y, 1) / double(screensize_y))));
-		zoom = 1.0;
-		RefreshViewport();
+		ZoomTo(1.0, cursor_x, cursor_y);
 	} else {
 		screendragging = true;
 	}
@@ -1660,6 +1732,19 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event) {
 
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
+
+	if (Brush* brush = g_gui.GetCurrentBrush(); g_gui.IsDrawingMode() && brush && brush->isWaypoint()) {
+		if (Waypoint* wp = getWaypointAt(mouse_map_x, mouse_map_y, floor)) {
+			g_gui.waypoint_brush->setWaypoint(wp);
+			g_gui.SelectBrushInternal(g_gui.waypoint_brush);
+			if (PaletteWindow* palette = g_gui.GetPalette()) {
+				palette->SelectWaypoint(wp);
+			}
+			showWaypointContextMenu(wp->name);
+			return;
+		}
+	}
+
 	Tile* tile = editor.map.getTile(mouse_map_x, mouse_map_y, floor);
 
 	if (g_gui.IsDrawingMode()) {
@@ -1716,9 +1801,106 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event) {
 	g_gui.RefreshView();
 }
 
+Waypoint* MapCanvas::getWaypointAt(int map_x, int map_y, int map_z) const {
+	Tile* tile = editor.map.getTile(map_x, map_y, map_z);
+	if (!tile || tile->getLocation()->getWaypointCount() <= 0) {
+		return nullptr;
+	}
+	return editor.map.waypoints.getWaypoint(tile->getLocation());
+}
+
+void MapCanvas::beginWaypointDrag(Waypoint* waypoint, const Position& previewPosition) {
+	if (!waypoint) {
+		return;
+	}
+	dragging_waypoint = true;
+	waypoint_drag_name_ = waypoint->name;
+	waypoint_drag_origin_pos_ = waypoint->pos;
+	waypoint_drag_preview_pos_ = previewPosition;
+	if (!HasCapture()) {
+		CaptureMouse();
+	}
+}
+
+void MapCanvas::updateWaypointDrag(const Position& previewPosition) {
+	if (dragging_waypoint && previewPosition.isValid()) {
+		waypoint_drag_preview_pos_ = previewPosition;
+	}
+}
+
+void MapCanvas::finishWaypointDrag(bool commit, bool releaseCapture) {
+	if (!dragging_waypoint) {
+		return;
+	}
+	const std::string waypointName = waypoint_drag_name_;
+	const Position origin = waypoint_drag_origin_pos_;
+	const Position destination = waypoint_drag_preview_pos_;
+	dragging_waypoint = false;
+	waypoint_drag_name_.clear();
+	waypoint_drag_origin_pos_ = Position();
+	waypoint_drag_preview_pos_ = Position();
+	if (releaseCapture && HasCapture()) {
+		ReleaseMouse();
+	}
+	if (commit && destination.isValid() && destination != origin) {
+		Waypoint* waypoint = editor.map.waypoints.getWaypoint(waypointName);
+		if (waypoint && waypoint->pos == origin) {
+			editor.draw(destination, false);
+		}
+	}
+}
+
+void MapCanvas::showWaypointContextMenu(const std::string& waypointName) {
+	context_waypoint_name_ = waypointName;
+	skip_properties_release_ = true;
+	wxMenu menu;
+	menu.Append(MAP_POPUP_MENU_WAYPOINT_RENAME, "Rename");
+	menu.Append(MAP_POPUP_MENU_WAYPOINT_DELETE, "Delete");
+	PopupMenu(&menu);
+	if (context_waypoint_name_ == waypointName) {
+		context_waypoint_name_.clear();
+	}
+}
+
+void MapCanvas::OnWaypointRename(wxCommandEvent& WXUNUSED(event)) {
+	if (context_waypoint_name_.empty()) {
+		return;
+	}
+	const std::string oldName = context_waypoint_name_;
+	context_waypoint_name_.clear();
+	Waypoint* wp = editor.map.waypoints.getWaypoint(oldName);
+	if (!wp) {
+		return;
+	}
+	const wxString newName = wxGetTextFromUser("Waypoint name", "Rename waypoint", wxstr(wp->name), this);
+	if (newName.empty()) {
+		return;
+	}
+	if (PaletteWindow* palette = g_gui.GetPalette()) {
+		palette->RenameWaypointFromMap(oldName, nstr(newName));
+	}
+	g_gui.RefreshView();
+}
+
+void MapCanvas::OnWaypointDelete(wxCommandEvent& WXUNUSED(event)) {
+	if (context_waypoint_name_.empty()) {
+		return;
+	}
+	const std::string name = context_waypoint_name_;
+	context_waypoint_name_.clear();
+	if (PaletteWindow* palette = g_gui.GetPalette()) {
+		palette->DeleteWaypointFromMap(name);
+	}
+}
+
 void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event) {
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
+
+	if (skip_properties_release_) {
+		skip_properties_release_ = false;
+		return;
+	}
 
 	if (g_gui.IsDrawingMode()) {
 		g_gui.SetSelectionMode();
@@ -1901,34 +2083,11 @@ void MapCanvas::OnWheel(wxMouseEvent& event) {
 		}
 	} else {
 		viewport_only = true;
-		double diff = -event.GetWheelRotation() * g_settings.getFloat(Config::ZOOM_SPEED) / 640.0;
-		double oldzoom = zoom;
-		zoom += diff;
-
-		if (zoom < 0.125) {
-			diff = 0.125 - oldzoom;
-			zoom = 0.125;
-		}
-		if (zoom > 25.00) {
-			diff = 25.00 - oldzoom;
-			zoom = 25.0;
-		}
-
-		UpdateZoomStatus();
-
-		int screensize_x, screensize_y;
-		static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-		// This took a day to figure out!
-		int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x))) * GetContentScaleFactor();
-		int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y))) * GetContentScaleFactor();
-
-		static_cast<MapWindow*>(GetParent())->ScrollRelative(-scroll_x, -scroll_y);
+		const double diff = -event.GetWheelRotation() * g_settings.getFloat(Config::ZOOM_SPEED) / 640.0;
+		ZoomTo(zoom + diff, cursor_x, cursor_y);
 	}
 
-	if (viewport_only) {
-		RefreshViewport();
-	} else {
+	if (!viewport_only) {
 		Refresh();
 	}
 }
@@ -1999,52 +2158,11 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 			break;
 		}
 		case WXK_NUMPAD_MULTIPLY: {
-			double diff = -0.3;
-
-			double oldzoom = zoom;
-			zoom += diff;
-
-			if (zoom < 0.125) {
-				diff = 0.125 - oldzoom;
-				zoom = 0.125;
-			}
-
-			int screensize_x, screensize_y;
-			static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x)));
-			int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y)));
-
-			static_cast<MapWindow*>(GetParent())->ScrollRelative(-scroll_x, -scroll_y);
-
-			UpdatePositionStatus();
-			UpdateZoomStatus();
-			RefreshViewport();
+			ZoomTo(zoom - 0.3, cursor_x, cursor_y);
 			break;
 		}
 		case WXK_NUMPAD_DIVIDE: {
-			double diff = 0.3;
-			double oldzoom = zoom;
-			zoom += diff;
-
-			if (zoom > 25.00) {
-				diff = 25.00 - oldzoom;
-				zoom = 25.0;
-			}
-
-			int screensize_x, screensize_y;
-			static_cast<MapWindow*>(GetParent())->GetViewSize(&screensize_x, &screensize_y);
-
-			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x)));
-			int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y)));
-
-			static_cast<MapWindow*>(GetParent())->ScrollRelative(-scroll_x, -scroll_y);
-
-			UpdatePositionStatus();
-			UpdateZoomStatus();
-			RefreshViewport();
+			ZoomTo(zoom + 0.3, cursor_x, cursor_y);
 			break;
 		}
 		// This will work like crap with non-us layouts, well, sucks for them until there is another solution.
@@ -2340,6 +2458,26 @@ void MapCanvas::OnDelete(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.RefreshView();
 }
 
+void MapCanvas::OnQuickReplaceSelection(wxCommandEvent& WXUNUSED(event)) {
+	if (IsBeingDeleted() || !PopupCanEdit(editor) || editor.selection.size() == 0) {
+		return;
+	}
+
+	PositionVector selectedPositions;
+	selectedPositions.reserve(editor.selection.size());
+	for (Tile* tile : editor.selection.getTiles()) {
+		if (tile) {
+			selectedPositions.push_back(tile->getPosition());
+		}
+	}
+	if (selectedPositions.empty()) {
+		return;
+	}
+
+	QuickReplaceSelectionDialog dialog(this, editor, std::move(selectedPositions));
+	dialog.ShowModal();
+}
+
 std::string MapCanvas::getPositionString(const Position& position) const {
 	std::ostringstream clip;
 	switch (g_settings.getInteger(Config::COPY_POSITION_FORMAT)) {
@@ -2627,6 +2765,13 @@ void MapCanvas::OnLearnBorderSelection(wxCommandEvent& WXUNUSED(event)) {
 	BorderLearningWindow::Open(this, editor, GetFloor());
 }
 
+void MapCanvas::OnCaptureAIStyleReference(wxCommandEvent& WXUNUSED(event)) {
+	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
+		return;
+	}
+	ReferenceStyleWindow::CaptureAndOpen(this);
+}
+
 void MapCanvas::OnSaveTerrain(wxCommandEvent& WXUNUSED(event)) {
 	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
 		return;
@@ -2818,20 +2963,6 @@ void MapCanvas::OnSelectCreatureBrush(wxCommandEvent& WXUNUSED(event)) {
 	}
 }
 
-void MapCanvas::OnEditMonster(wxCommandEvent& WXUNUSED(event)) {
-	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
-		return;
-	}
-	Tile* tile = PopupSelectedTile(editor);
-	if (tile && tile->creature) {
-		if (tile->creature->isNpc()) {
-			g_gui.ShowNpcEditor(tile->creature->getName());
-		} else {
-			g_gui.ShowMonsterEditor(tile->creature->getName());
-		}
-	}
-}
-
 void MapCanvas::OnSelectSpawnBrush(wxCommandEvent& WXUNUSED(event)) {
 	if (IsBeingDeleted() || !PopupContextIsCurrent(editor)) {
 		return;
@@ -2910,6 +3041,7 @@ void MapCanvas::ChangeFloor(int new_floor) {
 void MapCanvas::EnterDrawingMode() {
 	dragging = false;
 	boundbox_selection = false;
+	finishWaypointDrag(false);
 	EndPasting();
 	Refresh();
 }
@@ -2917,6 +3049,7 @@ void MapCanvas::EnterDrawingMode() {
 void MapCanvas::EnterSelectionMode() {
 	drawing = false;
 	dragging_draw = false;
+	finishWaypointDrag(false);
 	replace_dragging = false;
 	editor.replace_brush = nullptr;
 	Refresh();
@@ -2949,6 +3082,7 @@ void MapCanvas::Reset() {
 	screendragging = false;
 	drawing = false;
 	dragging_draw = false;
+	finishWaypointDrag(false);
 
 	replace_dragging = false;
 	editor.replace_brush = nullptr;
@@ -3000,6 +3134,14 @@ void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 
 	wxMenuItem* deleteItem = Append(MAP_POPUP_MENU_DELETE, "&Delete\tDEL", "Removes all seleceted items");
 	deleteItem->Enable(anything_selected);
+	if (anything_selected) {
+		AppendSeparator();
+		Append(
+			MAP_POPUP_MENU_QUICK_REPLACE_SELECTION,
+			"Quick Replace Items...",
+			"Automatically replace visible items found in the selected area"
+		);
+	}
 	if (cursorTile && !FavoriteResources::ActiveContext().empty()) {
 		auto favoritesMenu = std::make_unique<wxMenu>();
 		const auto appendItem = [&](Item* item, const wxString& position) {
@@ -3121,7 +3263,6 @@ void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 
 				if (topCreature) {
 					Append(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, "Select Creature", "Uses the current creature as a creature brush");
-					Append(MAP_POPUP_MENU_EDIT_MONSTER, topCreature->isNpc() ? "Edit NPC..." : "Edit Monster...", "Open the source definition from the active Server Workspace");
 				}
 
 				if (topSpawn) {
@@ -3218,6 +3359,11 @@ void MapPopupMenu::Update(Tile* cursorTile, wxWindow* canvas) {
 			MAP_POPUP_MENU_LEARN_BORDER_SELECTION,
 			"Learn Border from Selection...",
 			"Analyze selected terrain and collect border sprite candidates"
+		);
+		Append(
+			MAP_POPUP_MENU_CAPTURE_AI_STYLE_REFERENCE,
+			"Capture as AI Style Reference",
+			"Capture selected area visual vocabulary as an AI style reference"
 		);
 		wxMenuItem* saveTerrain = Append(
 			MAP_POPUP_MENU_SAVE_TERRAIN,

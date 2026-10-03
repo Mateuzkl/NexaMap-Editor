@@ -22,6 +22,8 @@
 #include "position.h"
 #include "spawn_format.h"
 
+#include <algorithm>
+
 enum Direction {
 	NORTH = 0,
 	EAST = 1,
@@ -171,7 +173,7 @@ inline bool Creature::isNpc() const {
 	if (spawn_type_override) {
 		return spawn_is_npc;
 	}
-	CreatureType const* type = g_creatures[type_name];
+	const CreatureType* type = g_creatures[type_name];
 	if (type) {
 		return type->isNpc;
 	}
@@ -179,14 +181,14 @@ inline bool Creature::isNpc() const {
 }
 
 inline std::string Creature::getName() const {
-	CreatureType const* type = g_creatures[type_name];
+	const CreatureType* type = g_creatures[type_name];
 	if (type) {
 		return type->name;
 	}
 	return "";
 }
 inline CreatureBrush* Creature::getBrush() const {
-	CreatureType const* type = g_creatures[type_name];
+	const CreatureType* type = g_creatures[type_name];
 	if (type) {
 		return type->brush;
 	}
