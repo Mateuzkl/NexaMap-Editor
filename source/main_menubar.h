@@ -35,6 +35,7 @@ namespace MenuBar {
 		CLEAR_MINIMAP_OVERLAY,
 		MAP_ITEM_ID_CONVERTER,
 		PROCEDURAL_MAP_GENERATOR,
+		LUA_EXTENSIONS,
 		SPAWN_NPC_CONVERTER,
 		IMPORT_MONSTERS,
 		EXPORT_MINIMAP,
@@ -246,6 +247,7 @@ public:
 	void OnClearMinimapOverlay(wxCommandEvent& event);
 	void OnMapItemIdConverter(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
+	void OnLuaExtensions(wxCommandEvent& event);
 	void OnSpawnNpcConverter(wxCommandEvent& event);
 	void OnImportMonsterData(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);

@@ -11,6 +11,7 @@ project(rme)
 include(CTest)
 
 option(ENABLE_UNITY_BUILD "Enable unity build for faster compilation" ON)
+option(NEXAMAP_ENABLE_LUA_EXTENSIONS "Enable the sandboxed Lua extension SDK" ON)
 
 if(MSVC AND VCPKG_TARGET_TRIPLET MATCHES "-windows-static$")
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -42,12 +43,39 @@ endif()
 find_package(wxWidgets COMPONENTS html aui gl adv core net base REQUIRED)
 
 find_package(ZLIB REQUIRED)
+if(NEXAMAP_ENABLE_LUA_EXTENSIONS)
+	find_package(Lua 5.4 QUIET)
+	if(NOT LUA_FOUND AND NOT Lua_FOUND)
+		message(WARNING "Lua was not found; building without Lua extensions")
+		set(NEXAMAP_ENABLE_LUA_EXTENSIONS OFF)
+	endif()
+endif()
 
 if(wxWidgets_USE_FILE)
 	include(${wxWidgets_USE_FILE})
 endif()
 add_subdirectory(source/protobuf)
 include(source/CMakeLists.txt)
+if(NEXAMAP_ENABLE_LUA_EXTENSIONS)
+	list(APPEND rme_H "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_runtime.h")
+	list(APPEND rme_SRC "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_runtime.cpp")
+	list(APPEND rme_H "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_editor.h")
+	list(APPEND rme_SRC "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_editor.cpp")
+	list(APPEND rme_H "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_registry.h" "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_window.h")
+	list(APPEND rme_SRC "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_registry.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_window.cpp")
+	list(APPEND rme_H "${CMAKE_CURRENT_SOURCE_DIR}/source/mcp/mcp_tools_lua.h")
+	list(APPEND rme_SRC "${CMAKE_CURRENT_SOURCE_DIR}/source/mcp/mcp_tools_lua.cpp")
+	set_source_files_properties(
+		"${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_runtime.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_editor.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_registry.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/source/lua_extension_window.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/source/mcp/mcp_tools_lua.cpp"
+		PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+	)
+	include_directories(${LUA_INCLUDE_DIR})
+	add_compile_definitions(NEXAMAP_ENABLE_LUA_EXTENSIONS=1)
+endif()
 if(WIN32)
 	list(APPEND rme_SRC "${CMAKE_CURRENT_SOURCE_DIR}/vcproj/Project/Editor.rc")
 endif()
@@ -97,10 +125,20 @@ target_link_libraries(${PROJECT_NAME}
 	nlohmann_json::nlohmann_json
 	liblzma::liblzma
 	nexamap_protobuf
+	${LUA_LIBRARIES}
 )
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
 install(DIRECTORY data DESTINATION .)
+if(NEXAMAP_ENABLE_LUA_EXTENSIONS)
+	install(DIRECTORY extensions/lua DESTINATION extensions)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${CMAKE_CURRENT_SOURCE_DIR}/extensions/lua"
+		"$<TARGET_FILE_DIR:${PROJECT_NAME}>/extensions/lua"
+		COMMENT "Copying bundled Lua extensions"
+	)
+endif()
 if(WIN32)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -115,6 +153,17 @@ else()
 endif()
 
 if(BUILD_TESTING)
+	if(NEXAMAP_ENABLE_LUA_EXTENSIONS)
+		add_executable(lua_extension_runtime_tests tests/lua_extension_runtime_tests.cpp source/lua_extension_runtime.cpp)
+		target_include_directories(lua_extension_runtime_tests PRIVATE source ${LUA_INCLUDE_DIR})
+		target_compile_features(lua_extension_runtime_tests PRIVATE cxx_std_20)
+		target_compile_definitions(lua_extension_runtime_tests PRIVATE NEXAMAP_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+		target_link_libraries(lua_extension_runtime_tests PRIVATE ${LUA_LIBRARIES} nlohmann_json::nlohmann_json)
+		if(MSVC)
+			target_compile_options(lua_extension_runtime_tests PRIVATE /utf-8)
+		endif()
+		add_test(NAME lua_extension_runtime_tests COMMAND lua_extension_runtime_tests)
+	endif()
 	add_executable(playtest_controller_tests tests/playtest_controller_tests.cpp source/ingame_preview/playtest_controller.cpp source/ingame_preview/playtest_weather.cpp)
 	target_include_directories(playtest_controller_tests PRIVATE source)
 	target_compile_features(playtest_controller_tests PRIVATE cxx_std_20)
@@ -150,7 +199,7 @@ if(BUILD_TESTING)
 	target_include_directories(quick_replace_selection_tests PRIVATE source)
 	target_compile_features(quick_replace_selection_tests PRIVATE cxx_std_20)
 	target_compile_definitions(quick_replace_selection_tests PRIVATE NEXAMAP_MULTIPLAYER_TESTS)
-	target_link_libraries(quick_replace_selection_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+	target_link_libraries(quick_replace_selection_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf ${LUA_LIBRARIES})
 	set_target_properties(quick_replace_selection_tests PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
 	if(MSVC)
 		target_compile_options(quick_replace_selection_tests PRIVATE /bigobj /utf-8)
@@ -166,7 +215,7 @@ if(BUILD_TESTING)
 	target_include_directories(waypoint_groups_tests PRIVATE source)
 	target_compile_features(waypoint_groups_tests PRIVATE cxx_std_20)
 	target_compile_definitions(waypoint_groups_tests PRIVATE NEXAMAP_MULTIPLAYER_TESTS)
-	target_link_libraries(waypoint_groups_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+	target_link_libraries(waypoint_groups_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf ${LUA_LIBRARIES})
 	set_target_properties(waypoint_groups_tests PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
 	if(MSVC)
 		target_compile_options(waypoint_groups_tests PRIVATE /bigobj /utf-8)
@@ -184,7 +233,7 @@ if(BUILD_TESTING)
 		target_include_directories(multiplayer_session_tests PRIVATE source)
 		target_compile_features(multiplayer_session_tests PRIVATE cxx_std_20)
 		target_compile_definitions(multiplayer_session_tests PRIVATE NEXAMAP_MULTIPLAYER_TESTS)
-		target_link_libraries(multiplayer_session_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+		target_link_libraries(multiplayer_session_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf ${LUA_LIBRARIES})
 		set_target_properties(multiplayer_session_tests PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
 		if(MSVC)
 			target_compile_options(multiplayer_session_tests PRIVATE /bigobj /utf-8)

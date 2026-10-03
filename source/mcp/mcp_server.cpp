@@ -24,6 +24,9 @@
 #include "mcp_tools_region.h"
 #include "mcp_tools_search.h"
 #include "mcp_tools_validate.h"
+#ifdef NEXAMAP_ENABLE_LUA_EXTENSIONS
+#include "mcp_tools_lua.h"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -124,6 +127,9 @@ namespace mcp {
 		RegisterRegionTools();
 		RegisterSearchTools();
 		RegisterValidationTools();
+#ifdef NEXAMAP_ENABLE_LUA_EXTENSIONS
+		RegisterLuaExtensionTools();
+#endif
 	}
 
 	Server::~Server() {

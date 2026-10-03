@@ -39,6 +39,9 @@
 #include "map_display.h"
 #include "map_tab.h"
 #include "procedural_map_generator_window.h"
+#ifdef NEXAMAP_ENABLE_LUA_EXTENSIONS
+#include "lua_extension_window.h"
+#endif
 #include "settings.h"
 #include "spawn_export_window.h"
 #include "spawn_converter_window.h"
@@ -83,6 +86,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(CLEAR_MINIMAP_OVERLAY, wxITEM_NORMAL, OnClearMinimapOverlay);
 	MAKE_ACTION(MAP_ITEM_ID_CONVERTER, wxITEM_NORMAL, OnMapItemIdConverter);
 	MAKE_ACTION(PROCEDURAL_MAP_GENERATOR, wxITEM_NORMAL, OnProceduralMapGenerator);
+	MAKE_ACTION(LUA_EXTENSIONS, wxITEM_NORMAL, OnLuaExtensions);
 	MAKE_ACTION(SPAWN_NPC_CONVERTER, wxITEM_NORMAL, OnSpawnNpcConverter);
 	MAKE_ACTION(IMPORT_MONSTERS, wxITEM_NORMAL, OnImportMonsterData);
 	MAKE_ACTION(EXPORT_MINIMAP, wxITEM_NORMAL, OnExportMinimap);
@@ -451,6 +455,11 @@ void MainMenuBar::Update() {
 	EnableItem(CLEAR_MINIMAP_OVERLAY, has_map && g_gui.GetCurrentMapTab()->GetCanvas()->HasMinimapImportOverlay());
 	EnableItem(MAP_ITEM_ID_CONVERTER, loaded);
 	EnableItem(PROCEDURAL_MAP_GENERATOR, loaded && has_map);
+#ifdef NEXAMAP_ENABLE_LUA_EXTENSIONS
+	EnableItem(LUA_EXTENSIONS, loaded && is_local);
+#else
+	EnableItem(LUA_EXTENSIONS, false);
+#endif
 	EnableItem(SPAWN_NPC_CONVERTER, true);
 	EnableItem(IMPORT_MONSTERS, is_local);
 	EnableItem(EXPORT_MINIMAP, is_local);
@@ -999,6 +1008,14 @@ void MainMenuBar::OnProceduralMapGenerator(wxCommandEvent& WXUNUSED(event)) {
 		return;
 	}
 	static_cast<void>(RunProceduralMapGenerator(frame, *editor, g_gui.GetCurrentFloor()));
+}
+
+void MainMenuBar::OnLuaExtensions(wxCommandEvent& WXUNUSED(event)) {
+#ifdef NEXAMAP_ENABLE_LUA_EXTENSIONS
+	ShowLuaExtensionsDialog(frame);
+#else
+	wxMessageBox("Lua extensions are unavailable in this build.", "Lua Extensions", wxOK | wxICON_INFORMATION, frame);
+#endif
 }
 
 void MainMenuBar::OnSpawnNpcConverter(wxCommandEvent& WXUNUSED(event)) {
