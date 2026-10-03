@@ -20,8 +20,11 @@
 #include "properties_window.h"
 
 #include "gui_ids.h"
+#include "gui.h"
 #include "complexitem.h"
 #include "container_properties_window.h"
+#include "map.h"
+#include "numbertextctrl.h"
 
 BEGIN_EVENT_TABLE(PropertiesWindow, wxDialog)
 EVT_BUTTON(wxID_OK, PropertiesWindow::OnClickOK)
@@ -30,14 +33,11 @@ EVT_BUTTON(wxID_CANCEL, PropertiesWindow::OnClickCancel)
 EVT_BUTTON(ITEM_PROPERTIES_ADD_ATTRIBUTE, PropertiesWindow::OnClickAddAttribute)
 EVT_BUTTON(ITEM_PROPERTIES_REMOVE_ATTRIBUTE, PropertiesWindow::OnClickRemoveAttribute)
 
-EVT_NOTEBOOK_PAGE_CHANGED(wxID_ANY, PropertiesWindow::OnNotebookPageChanged)
-
 EVT_GRID_CELL_CHANGED(PropertiesWindow::OnGridValueChanged)
 END_EVENT_TABLE()
 
 PropertiesWindow::PropertiesWindow(wxWindow* parent, const Map* map, const Tile* tile_parent, Item* item, wxPoint pos) :
-	ObjectPropertiesWindowBase(parent, "Item Properties", map, tile_parent, item, pos),
-	currentPanel(nullptr) {
+	ObjectPropertiesWindowBase(parent, "Item Properties", map, tile_parent, item, pos) {
 	ASSERT(edit_item);
 	notebook = newd wxNotebook(this, wxID_ANY, wxDefaultPosition, wxSize(600, 300));
 
@@ -59,12 +59,10 @@ PropertiesWindow::PropertiesWindow(wxWindow* parent, const Map* map, const Tile*
 	Centre(wxBOTH);
 }
 
-PropertiesWindow::~PropertiesWindow() {
-	;
-}
+PropertiesWindow::~PropertiesWindow() = default;
 
 void PropertiesWindow::Update() {
-	Container const* container = dynamic_cast<Container*>(edit_item);
+	const Container* container = dynamic_cast<Container*>(edit_item);
 	if (container) {
 		for (uint32_t i = 0; i < container->getVolume(); ++i) {
 			container_items[i]->setItem(container->getItem(i));
@@ -75,6 +73,7 @@ void PropertiesWindow::Update() {
 
 wxWindow* PropertiesWindow::createGeneralPanel(wxWindow* parent) {
 	auto* panel = newd wxPanel(parent, ITEM_PROPERTIES_GENERAL_TAB);
+	auto* topSizer = newd wxBoxSizer(wxVERTICAL);
 	auto* gridsizer = newd wxFlexGridSizer(2, 10, 10);
 	gridsizer->AddGrowableCol(1);
 
@@ -82,26 +81,119 @@ wxWindow* PropertiesWindow::createGeneralPanel(wxWindow* parent) {
 	gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "\"" + wxstr(edit_item->getName()) + "\""));
 
 	gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "Action ID"));
-	auto* action_id_field = newd wxSpinCtrl(panel, wxID_ANY, i2ws(edit_item->getActionID()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getActionID());
+	action_id_field = newd wxSpinCtrl(panel, ITEM_PROPERTIES_ACTION_ID, i2ws(edit_item->getActionID()), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getActionID());
 	gridsizer->Add(action_id_field, wxSizerFlags(1).Expand());
 
 	gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "Unique ID"));
-	auto* unique_id_field = newd wxSpinCtrl(panel, wxID_ANY, i2ws(edit_item->getUniqueID()), wxDefaultPosition, wxSize(-1, 20), wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getUniqueID());
+	unique_id_field = newd wxSpinCtrl(panel, ITEM_PROPERTIES_UNIQUE_ID, i2ws(edit_item->getUniqueID()), wxDefaultPosition, wxSize(-1, 20), wxSP_ARROW_KEYS, 0, 0xFFFF, edit_item->getUniqueID());
 	gridsizer->Add(unique_id_field, wxSizerFlags(1).Expand());
 
-	panel->SetSizerAndFit(gridsizer);
+	if (auto* teleport = dynamic_cast<Teleport*>(edit_item)) {
+		gridsizer->Add(newd wxStaticText(panel, wxID_ANY, "Destination"));
+
+		auto* destinationSizer = newd wxBoxSizer(wxHORIZONTAL);
+		const int maxX = edit_map ? edit_map->getWidth() : 0xFFFF;
+		const int maxY = edit_map ? edit_map->getHeight() : 0xFFFF;
+		teleport_x_field = newd NumberTextCtrl(panel, ITEM_PROPERTIES_TELEPORT_X, teleport->getX(), 0, maxX, wxTE_PROCESS_ENTER);
+		teleport_y_field = newd NumberTextCtrl(panel, ITEM_PROPERTIES_TELEPORT_Y, teleport->getY(), 0, maxY, wxTE_PROCESS_ENTER);
+		teleport_z_field = newd NumberTextCtrl(panel, ITEM_PROPERTIES_TELEPORT_Z, teleport->getZ(), 0, MAP_MAX_LAYER, wxTE_PROCESS_ENTER);
+		teleport_x_field->Bind(wxEVT_TEXT_PASTE, &PropertiesWindow::OnTeleportPositionPaste, this);
+		teleport_y_field->Bind(wxEVT_TEXT_PASTE, &PropertiesWindow::OnTeleportPositionPaste, this);
+		teleport_z_field->Bind(wxEVT_TEXT_PASTE, &PropertiesWindow::OnTeleportPositionPaste, this);
+		teleport_x_field->SetToolTip("Destination X");
+		teleport_y_field->SetToolTip("Destination Y");
+		teleport_z_field->SetToolTip("Destination Z");
+		destinationSizer->Add(teleport_x_field, wxSizerFlags(3).Expand());
+		destinationSizer->Add(teleport_y_field, wxSizerFlags(3).Expand().Border(wxLEFT, 5));
+		destinationSizer->Add(teleport_z_field, wxSizerFlags(2).Expand().Border(wxLEFT, 5));
+		gridsizer->Add(destinationSizer, wxSizerFlags(1).Expand());
+	}
+
+	topSizer->Add(gridsizer, wxSizerFlags(0).Expand().Border(wxALL, 10));
+	if (edit_item->canHoldText()) {
+		topSizer->Add(newd wxStaticText(panel, wxID_ANY, "Text"), wxSizerFlags(0).Expand().Border(wxLEFT | wxRIGHT, 10));
+		text_field = newd wxTextCtrl(panel, ITEM_PROPERTIES_TEXT, wxstr(edit_item->getText()), wxDefaultPosition, wxSize(-1, 90), wxTE_MULTILINE);
+		text_field->SetEditable(edit_item->canWriteText());
+		topSizer->Add(text_field, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 10));
+	}
+	if (edit_item->canHoldDescription()) {
+		topSizer->Add(newd wxStaticText(panel, wxID_ANY, "Description"), wxSizerFlags(0).Expand().Border(wxLEFT | wxRIGHT, 10));
+		description_field = newd wxTextCtrl(panel, ITEM_PROPERTIES_DESCRIPTION, wxstr(edit_item->getDescription()), wxDefaultPosition, wxSize(-1, 70), wxTE_MULTILINE);
+		topSizer->Add(description_field, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 10));
+	}
+
+	panel->SetSizer(topSizer);
 
 	return panel;
 }
 
+void PropertiesWindow::saveGeneralPanel() {
+	edit_item->setActionID(static_cast<uint16_t>(action_id_field->GetValue()));
+	edit_item->setUniqueID(static_cast<uint16_t>(unique_id_field->GetValue()));
+	if (text_field) {
+		edit_item->setText(nstr(text_field->GetValue()));
+	}
+	if (description_field) {
+		edit_item->setDescription(nstr(description_field->GetValue()));
+	}
+	if (auto* teleport = dynamic_cast<Teleport*>(edit_item); teleport && teleport_x_field && teleport_y_field && teleport_z_field) {
+		teleport->setDestination(Position(teleport_x_field->GetIntValue(), teleport_y_field->GetIntValue(), teleport_z_field->GetIntValue()));
+	}
+}
+
+bool PropertiesWindow::validateGeneralPanel() const {
+	const int actionId = action_id_field->GetValue();
+	if (actionId != 0 && actionId < 100) {
+		g_gui.PopupDialog(const_cast<PropertiesWindow*>(this), "Invalid Action ID", "Action ID must be 0 or between 100 and 65535.", wxOK);
+		return false;
+	}
+	const int uniqueId = unique_id_field->GetValue();
+	if (uniqueId != 0 && uniqueId < 1000) {
+		g_gui.PopupDialog(const_cast<PropertiesWindow*>(this), "Invalid Unique ID", "Unique ID must be 0 or between 1000 and 65535.", wxOK);
+		return false;
+	}
+	if (text_field && edit_item->canWriteText()) {
+		if (!IsTextLengthValid(text_field->GetValue(), 0)) {
+			g_gui.PopupDialog(const_cast<PropertiesWindow*>(this), "Text too long", "Text must be shorter than 65535 UTF-8 bytes.", wxOK);
+			return false;
+		}
+		const uint32_t maximum = edit_item->getMaxWriteLength();
+		if (!IsTextLengthValid(text_field->GetValue(), maximum)) {
+			g_gui.PopupDialog(const_cast<PropertiesWindow*>(this), "Text too long", wxString::Format("This item accepts at most %u UTF-8 bytes.", maximum), wxOK);
+			return false;
+		}
+	}
+	if (description_field && !IsTextLengthValid(description_field->GetValue(), 0)) {
+		g_gui.PopupDialog(const_cast<PropertiesWindow*>(this), "Description too long", "Description must be shorter than 65535 UTF-8 bytes.", wxOK);
+		return false;
+	}
+	return true;
+}
+
+bool PropertiesWindow::IsTextLengthValid(const wxString& value, uint32_t maximumLength) {
+	const size_t utf8Bytes = nstr(value).size();
+	return utf8Bytes < std::numeric_limits<uint16_t>::max() && (maximumLength == 0 || utf8Bytes <= maximumLength);
+}
+
+void PropertiesWindow::OnTeleportPositionPaste(wxClipboardTextEvent&) {
+	Position position;
+	const int maxX = edit_map ? edit_map->getWidth() : MAP_MAX_WIDTH;
+	const int maxY = edit_map ? edit_map->getHeight() : MAP_MAX_HEIGHT;
+	if (posFromClipboard(position, maxX, maxY)) {
+		teleport_x_field->SetIntValue(position.x);
+		teleport_y_field->SetIntValue(position.y);
+		teleport_z_field->SetIntValue(position.z);
+	}
+}
+
 wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
-	auto const* container = static_cast<const Container*>(edit_item);
+	const auto* container = static_cast<const Container*>(edit_item);
 	auto* panel = newd wxPanel(parent, ITEM_PROPERTIES_CONTAINER_TAB);
 	wxSizer* topSizer = newd wxBoxSizer(wxVERTICAL);
 
 	wxSizer* gridSizer = newd wxGridSizer(6, 5, 5);
 
-	bool const use_large_sprites = g_settings.getBoolean(Config::USE_LARGE_CONTAINER_ICONS);
+	const bool use_large_sprites = g_settings.getBoolean(Config::USE_LARGE_CONTAINER_ICONS);
 	for (uint32_t i = 0; i < container->getVolume(); ++i) {
 		Item* item = container->getItem(i);
 		auto* containerItemButton = newd ContainerItemButton(panel, use_large_sprites, i, edit_map, item);
@@ -111,13 +203,6 @@ wxWindow* PropertiesWindow::createContainerPanel(wxWindow* parent) {
 	}
 
 	topSizer->Add(gridSizer, wxSizerFlags(1).Expand());
-
-	/*
-	wxSizer* optSizer = newd wxBoxSizer(wxHORIZONTAL);
-	optSizer->Add(newd wxButton(panel, ITEM_PROPERTIES_ADD_ATTRIBUTE, "Add Item"), wxSizerFlags(0).Center());
-	// optSizer->Add(newd wxButton(panel, ITEM_PROPERTIES_REMOVE_ATTRIBUTE, "Remove Attribute"), wxSizerFlags(0).Center());
-	topSizer->Add(optSizer, wxSizerFlags(0).Center().DoubleBorder());
-	*/
 
 	panel->SetSizer(topSizer);
 	return panel;
@@ -130,7 +215,7 @@ wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
 	attributesGrid = newd wxGrid(panel, ITEM_PROPERTIES_ADVANCED_TAB, wxDefaultPosition, wxSize(-1, 160));
 	topSizer->Add(attributesGrid, wxSizerFlags(1).Expand());
 
-	wxFont const time_font(*wxSWISS_FONT);
+	const wxFont time_font(*wxSWISS_FONT);
 	attributesGrid->SetDefaultCellFont(time_font);
 	attributesGrid->CreateGrid(0, 3);
 	attributesGrid->DisableDragRowSize();
@@ -150,6 +235,14 @@ wxWindow* PropertiesWindow::createAttributesPanel(wxWindow* parent) {
 
 	// contents
 	ItemAttributeMap attrs = edit_item->getAttributes();
+	attrs.erase("aid");
+	attrs.erase("uid");
+	if (text_field) {
+		attrs.erase("text");
+	}
+	if (description_field) {
+		attrs.erase("desc");
+	}
 	attributesGrid->AppendRows(static_cast<int>(attrs.size()));
 	int i = 0;
 	for (auto aiter = attrs.begin(); aiter != attrs.end(); ++aiter, ++i) {
@@ -214,30 +307,11 @@ void PropertiesWindow::SetGridValue(wxGrid* grid, int rowIndex, const std::strin
 	grid->SetCellEditor(rowIndex, 1, new wxGridCellChoiceEditor(types));
 }
 
-void PropertiesWindow::OnNotebookPageChanged(wxNotebookEvent& evt) {
-	wxWindow const* page = notebook->GetCurrentPage();
-
-	// TODO: Save
-
-	switch (page->GetId()) {
-		case ITEM_PROPERTIES_GENERAL_TAB: {
-			// currentPanel = createGeneralPanel(page);
-			break;
-		}
-		case ITEM_PROPERTIES_ADVANCED_TAB: {
-			// currentPanel = createAttributesPanel(page);
-			break;
-		}
-		default:
-			break;
-	}
-}
-
 void PropertiesWindow::saveAttributesPanel() {
 	edit_item->clearAllAttributes();
 	for (int32_t rowIndex = 0; rowIndex < attributesGrid->GetNumberRows(); ++rowIndex) {
 		ItemAttribute attr;
-		wxString const type = attributesGrid->GetCellValue(rowIndex, 1);
+		const wxString type = attributesGrid->GetCellValue(rowIndex, 1);
 		if (type == "String") {
 			attr.set(nstr(attributesGrid->GetCellValue(rowIndex, 2)));
 		} else if (type == "Float") {
@@ -261,7 +335,7 @@ void PropertiesWindow::saveAttributesPanel() {
 
 void PropertiesWindow::OnGridValueChanged(wxGridEvent& event) {
 	if (event.GetCol() == 1) {
-		wxString const newType = attributesGrid->GetCellValue(event.GetRow(), 1);
+		const wxString newType = attributesGrid->GetCellValue(event.GetRow(), 1);
 		if (newType == event.GetString()) {
 			return;
 		}
@@ -281,13 +355,24 @@ void PropertiesWindow::OnGridValueChanged(wxGridEvent& event) {
 }
 
 void PropertiesWindow::OnClickOK(wxCommandEvent&) {
-	saveAttributesPanel();
+	if (!TransferDataFromWindow()) {
+		return;
+	}
 	EndModal(1);
+}
+
+bool PropertiesWindow::TransferDataFromWindow() {
+	if (!validateGeneralPanel()) {
+		return false;
+	}
+	saveAttributesPanel();
+	saveGeneralPanel();
+	return true;
 }
 
 void PropertiesWindow::OnClickAddAttribute(wxCommandEvent&) {
 	attributesGrid->AppendRows(1);
-	ItemAttribute const attr(0);
+	const ItemAttribute attr(0);
 	SetGridValue(attributesGrid, attributesGrid->GetNumberRows() - 1, "", attr);
 }
 
@@ -297,7 +382,7 @@ void PropertiesWindow::OnClickRemoveAttribute(wxCommandEvent&) {
 		return;
 	}
 
-	int const rowIndex = rowIndexes[0];
+	const int rowIndex = rowIndexes[0];
 	attributesGrid->DeleteRows(rowIndex, 1);
 }
 

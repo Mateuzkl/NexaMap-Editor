@@ -29,12 +29,12 @@
 #include <vector>
 
 namespace {
-thread_local std::mt19937* scopedRandomGenerator = nullptr;
+	thread_local std::mt19937* scopedRandomGenerator = nullptr;
 
-std::mt19937 MakeScopedGenerator(uint64_t seed) {
-	std::seed_seq sequence { static_cast<uint32_t>(seed), static_cast<uint32_t>(seed >> 32), 0x524D4505U };
-	return std::mt19937(sequence);
-}
+	std::mt19937 MakeScopedGenerator(uint64_t seed) {
+		std::seed_seq sequence { static_cast<uint32_t>(seed), static_cast<uint32_t>(seed >> 32), 0x524D4505U };
+		return std::mt19937(sequence);
+	}
 }
 
 // random generator
@@ -112,8 +112,8 @@ double ws2f(const wxString& s) {
 void replaceString(std::string& str, const std::string& sought, const std::string& replacement) {
 	size_t pos = 0;
 	size_t start = 0;
-	size_t const soughtLen = sought.length();
-	size_t const replaceLen = replacement.length();
+	const size_t soughtLen = sought.length();
+	const size_t replaceLen = replacement.length();
 	while ((pos = str.find(sought, start)) != std::string::npos) {
 		str.replace(pos, soughtLen, replacement);
 		start = pos + replaceLen;
@@ -122,11 +122,12 @@ void replaceString(std::string& str, const std::string& sought, const std::strin
 
 void trim(std::string& str) {
 	str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
-		return !std::isspace(ch);
-	}));
+				  return !std::isspace(ch);
+			  }));
 	str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) {
-		return !std::isspace(ch);
-	}).base(), str.end());
+				  return !std::isspace(ch);
+			  }).base(),
+			  str.end());
 }
 
 void trim_right(std::string& source, const std::string& t) {
@@ -180,9 +181,9 @@ int random(int low, int high) {
 		return std::uniform_int_distribution<int>(low, high)(*scopedRandomGenerator);
 	}
 
-	int const range = high - low;
+	const int range = high - low;
 
-	double const dist = double(mt_randi()) / 0xFFFFFFFF;
+	const double dist = double(mt_randi()) / 0xFFFFFFFF;
 	return low + min(range, int((1 + range) * dist));
 }
 
@@ -201,12 +202,12 @@ ScopedRandomSeed::~ScopedRandomSeed() {
 }
 
 std::wstring string2wstring(const std::string& utf8string) {
-	wxString const s(utf8string.c_str(), wxConvUTF8);
+	const wxString s(utf8string.c_str(), wxConvUTF8);
 	return std::wstring(static_cast<const wchar_t*>(s.c_str()));
 }
 
 std::string wstring2string(const std::wstring& widestring) {
-	wxString const s(widestring.c_str());
+	const wxString s(widestring.c_str());
 	return std::string(static_cast<const char*>(s.mb_str(wxConvUTF8)));
 }
 
@@ -223,84 +224,54 @@ bool posFromClipboard(Position& position, const int mapWidth /* = MAP_MAX_WIDTH 
 	wxTextDataObject data;
 	wxTheClipboard->GetData(data);
 
-	std::string const input = data.GetText().ToStdString();
-	if (input.empty()) {
-		wxTheClipboard->Close();
-		return false;
-	}
-
-	bool done = false;
-	std::smatch matches;
-	static const std::regex expression = std::regex(R"(.*?(\d+).*?(\d+).*?(\d+).*?)", std::regex_constants::ECMAScript);
-	if (std::regex_match(input, matches, expression)) {
-		try {
-			const int tmpX = std::stoi(matches.str(1));
-			const int tmpY = std::stoi(matches.str(2));
-			const int tmpZ = std::stoi(matches.str(3));
-
-			const Position pastedPos = Position(tmpX, tmpY, tmpZ);
-			if (pastedPos.isValid() && tmpX <= mapWidth && tmpY <= mapHeight) {
-				position.x = tmpX;
-				position.y = tmpY;
-				position.z = tmpZ;
-				done = true;
-			}
-		} catch (const std::out_of_range&) { }
-	}
-
+	const bool done = parsePositionText(data.GetText().ToStdString(), position, mapWidth, mapHeight);
 	wxTheClipboard->Close();
 	return done;
 }
 
-bool posFromClipboard(int& x, int& y, int& z) {
-	bool done = false;
+bool parsePositionText(const std::string& text, Position& position, const int mapWidth, const int mapHeight) {
+	static const std::regex formats[] = {
+		std::regex(R"(^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$)"),
+		std::regex(R"(^\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)\s*$)"),
+		std::regex(R"(^\s*Position\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)\s*$)", std::regex_constants::icase),
+		std::regex(R"(^\s*\{\s*x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)\s*,\s*z\s*=\s*(\d+)\s*\}\s*$)", std::regex_constants::icase),
+		std::regex(R"(^\s*\{\s*"x"\s*:\s*(\d+)\s*,\s*"y"\s*:\s*(\d+)\s*,\s*"z"\s*:\s*(\d+)\s*\}\s*$)", std::regex_constants::icase),
+	};
 
-	if (wxTheClipboard->Open()) {
-		if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
-			std::vector<int> values;
-			wxTextDataObject data;
-			wxTheClipboard->GetData(data);
-			auto text = data.GetText().ToStdString();
-
-			if (text.size() < 50) {
-				bool readingNumber = false;
-				wxString valueText;
-
-				for (size_t index = 0; index < text.size(); ++index) {
-					if (text[index] >= '0' && text[index] <= '9') {
-						valueText << text[index];
-						readingNumber = true;
-
-						if (index + 1 == text.size()) {
-							values.emplace_back(ws2i(valueText));
-						}
-					} else if (readingNumber) {
-						values.emplace_back(ws2i(valueText));
-						valueText.Clear();
-						readingNumber = false;
-
-						if (values.size() >= 3) {
-							break;
-						}
-					}
-				}
-			}
-
-			if (values.size() == 3) {
-				x = values[0];
-				y = values[1];
-				z = values[2];
-				done = true;
-			}
+	for (const auto& format : formats) {
+		std::smatch matches;
+		if (!std::regex_match(text, matches, format)) {
+			continue;
 		}
-		wxTheClipboard->Close();
+		try {
+			const int x = std::stoi(matches.str(1));
+			const int y = std::stoi(matches.str(2));
+			const int z = std::stoi(matches.str(3));
+			const Position parsed(x, y, z);
+			if (parsed.isValid() && x <= mapWidth && y <= mapHeight) {
+				position = parsed;
+				return true;
+			}
+		} catch (const std::out_of_range&) { }
+		return false;
 	}
-	return done;
+	return false;
+}
+
+bool posFromClipboard(int& x, int& y, int& z) {
+	Position position;
+	if (!posFromClipboard(position)) {
+		return false;
+	}
+	x = position.x;
+	y = position.y;
+	z = position.z;
+	return true;
 }
 
 bool clipboardPositionToFields(NumberTextCtrl* xField, NumberTextCtrl* yField, NumberTextCtrl* zField) {
 	Position position;
-	if (posFromClipboard(position.x, position.y, position.z)) {
+	if (posFromClipboard(position)) {
 		xField->SetIntValue(position.x);
 		yField->SetIntValue(position.y);
 		zField->SetIntValue(position.z);
