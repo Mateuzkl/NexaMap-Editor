@@ -79,9 +79,8 @@ namespace {
 CustomServerConverterWindow::CustomServerConverterWindow(wxWindow* parent) :
 	wxDialog(parent, wxID_ANY, "Custom Server -> ClientID", wxDefaultPosition, wxSize(820, 680), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
 	auto* topSizer = newd wxBoxSizer(wxVERTICAL);
-	auto* intro = newd wxStaticText(this, wxID_ANY,
-		"Convert maps, items.xml, and a normalized items.otb with the selected server's own read-only mapping. "
-		"The source server and its original items.otb are never modified.");
+	auto* intro = newd wxStaticText(this, wxID_ANY, "Convert maps, items.xml, and a normalized items.otb with the selected server's own read-only mapping. "
+													"The source server and its original items.otb are never modified.");
 	intro->Wrap(760);
 	topSizer->Add(intro, 0, wxEXPAND | wxALL, 14);
 

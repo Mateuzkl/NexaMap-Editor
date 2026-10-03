@@ -152,7 +152,7 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(pugi::xml_document& document,
 				if (allowDestinationCollisions) {
 					std::ostringstream message;
 					message << "Invalid source range fromid='" << fromAttribute.value() << "' toid='" << toAttribute.value()
-						<< "' was preserved unchanged by the compatibility override.";
+							<< "' was preserved unchanged by the compatibility override.";
 					report.issues.push_back({ 0, "item range", message.str() });
 					item = next;
 					continue;

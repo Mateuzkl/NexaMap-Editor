@@ -76,7 +76,8 @@ namespace {
 
 	class StagingDirectory final {
 	public:
-		explicit StagingDirectory(const std::filesystem::path& destination) : destination(destination) {
+		explicit StagingDirectory(const std::filesystem::path& destination) :
+			destination(destination) {
 			const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
 			staging = destination.parent_path() / ("." + destination.filename().string() + ".nexamap-staging-" + std::to_string(nonce));
 		}

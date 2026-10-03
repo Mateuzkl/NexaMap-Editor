@@ -29,8 +29,7 @@ namespace {
 	}
 
 	uint16_t ReadU16(const std::string& data, std::size_t offset) {
-		return static_cast<uint16_t>(static_cast<uint8_t>(data[offset])) |
-			(static_cast<uint16_t>(static_cast<uint8_t>(data[offset + 1])) << 8);
+		return static_cast<uint16_t>(static_cast<uint8_t>(data[offset])) | (static_cast<uint16_t>(static_cast<uint8_t>(data[offset + 1])) << 8);
 	}
 
 	void WriteU16(std::string& data, std::size_t offset, uint16_t value) {
@@ -177,8 +176,7 @@ ItemsOtbIdConversionReport ConvertItemsOtbToClientIds(const std::filesystem::pat
 	const std::filesystem::path staged = transaction.Stage(destination);
 	{
 		DiskNodeFileWriteHandle output(PrintablePath(staged), "OTBI");
-		if (!output.isOk() || !output.addNode(static_cast<uint8_t>(rootData[0])) ||
-			(rootData.size() > 1 && !output.addRAW(reinterpret_cast<const uint8_t*>(rootData.data() + 1), rootData.size() - 1))) {
+		if (!output.isOk() || !output.addNode(static_cast<uint8_t>(rootData[0])) || (rootData.size() > 1 && !output.addRAW(reinterpret_cast<const uint8_t*>(rootData.data() + 1), rootData.size() - 1))) {
 			report.error = "Could not write the staged items.otb root node.";
 			return report;
 		}
