@@ -236,12 +236,12 @@ namespace {
 			}
 		}
 
-		void finish(ItemIdMapping::Direction direction) {
+		void finish(const ItemIdMappingProvider& provider, ItemIdMapping::Direction direction) {
 			for (std::size_t id = 0; id < occurrences.size(); ++id) {
 				if (occurrences[id] == 0) {
 					continue;
 				}
-				const auto result = ItemIdMapping::convert(static_cast<uint16_t>(id), direction);
+				const auto result = provider.convert(static_cast<uint16_t>(id), direction);
 				if (result.found && !result.ambiguous) {
 					continue;
 				}
@@ -277,12 +277,13 @@ namespace {
 
 	class MappingCodec final : public ItemIdCodec {
 	public:
-		MappingCodec(ItemIdMapping::Direction direction, ReportBuilder* reportBuilder = nullptr) :
+		MappingCodec(const ItemIdMappingProvider& provider, ItemIdMapping::Direction direction, ReportBuilder* reportBuilder = nullptr) :
+			provider(provider),
 			direction(direction),
 			reportBuilder(reportBuilder) { }
 
 		bool Decode(uint16_t storedId, uint16_t& serverId) const override {
-			const auto result = ItemIdMapping::convert(storedId, direction);
+			const auto result = provider.convert(storedId, direction);
 			if (reportBuilder) {
 				reportBuilder->observe(result);
 			}
@@ -291,7 +292,7 @@ namespace {
 		}
 
 		bool Encode(uint16_t serverId, uint16_t& storedId) const override {
-			const auto result = ItemIdMapping::convert(serverId, direction);
+			const auto result = provider.convert(serverId, direction);
 			if (reportBuilder) {
 				reportBuilder->observe(result);
 			}
@@ -300,6 +301,7 @@ namespace {
 		}
 
 	private:
+		const ItemIdMappingProvider& provider;
 		ItemIdMapping::Direction direction;
 		ReportBuilder* reportBuilder;
 	};
@@ -342,6 +344,7 @@ namespace {
 	};
 
 	struct StreamingOtbmTransform {
+		const ItemIdMappingProvider& provider;
 		ItemIdMapping::Direction direction;
 		MapVersion targetVersion;
 		uint32_t targetItemMajorVersion;
@@ -381,7 +384,7 @@ namespace {
 			return false;
 		}
 
-		const auto result = ItemIdMapping::convert(ReadLittleEndianU16(data, offset), transform.direction);
+		const auto result = transform.provider.convert(ReadLittleEndianU16(data, offset), transform.direction);
 		transform.reportBuilder.observe(result);
 		WriteLittleEndianU16(data, offset, result.converted);
 		return true;
@@ -513,7 +516,7 @@ namespace {
 		return true;
 	}
 
-	StreamingConversionStatus ConvertMapItemIdsStreaming(const MapItemIdConversionOptions& options, const MapVersion& targetVersion, uint32_t targetItemMajorVersion, uint32_t targetItemMinorVersion, uint64_t memoryLimitBytes, MapItemIdConversionReport& report) {
+	StreamingConversionStatus ConvertMapItemIdsStreaming(const MapItemIdConversionOptions& options, const ItemIdMappingProvider& provider, const MapVersion& targetVersion, uint32_t targetItemMajorVersion, uint32_t targetItemMinorVersion, uint64_t memoryLimitBytes, MapItemIdConversionReport& report) {
 		std::ifstream sourceProbe(options.source, std::ios::binary);
 		std::array<char, 4> identifier {};
 		if (!sourceProbe.read(identifier.data(), identifier.size())) {
@@ -530,6 +533,34 @@ namespace {
 		}
 		sourceProbe.close();
 
+		if (options.preflightOnly) {
+			report.streamed = true;
+			report.threadsUsed = 1;
+			ReportBuilder reportBuilder(report);
+			StreamingOtbmTransform transform { provider, options.direction, targetVersion, targetItemMajorVersion, targetItemMinorVersion, reportBuilder };
+			StreamingOtbmSummary summary;
+			DiskNodeFileReadHandle input(PrintablePath(options.source), StringVector(1, "OTBM"));
+			if (!input.isOk()) {
+				report.error = "Could not open the regular OTBM source for preflight analysis.";
+				return StreamingConversionStatus::Failed;
+			}
+			BinaryNode* root = input.getRootNode();
+			if (!root || !StreamOtbmNode(root, input, nullptr, &transform, summary, memoryLimitBytes, true, report.error) || !input.isOk()) {
+				if (report.error.empty()) {
+					report.error = "The source OTBM node stream is invalid or truncated.";
+				}
+				return StreamingConversionStatus::Failed;
+			}
+			report.tileCount = summary.tileCount;
+			reportBuilder.finish(provider, options.direction);
+			if (options.strictMapping && (report.missingItems != 0 || report.ambiguousItems != 0)) {
+				report.error = "Strict mapping blocked conversion because the map contains missing or ambiguous item IDs.";
+				return StreamingConversionStatus::Failed;
+			}
+			report.success = true;
+			return StreamingConversionStatus::Succeeded;
+		}
+
 		std::error_code filesystemError;
 		const std::filesystem::path destinationDirectory = options.destination.parent_path();
 		if (!destinationDirectory.empty()) {
@@ -544,7 +575,7 @@ namespace {
 		report.streamed = true;
 		report.threadsUsed = 1;
 		ReportBuilder reportBuilder(report);
-		StreamingOtbmTransform transform { options.direction, targetVersion, targetItemMajorVersion, targetItemMinorVersion, reportBuilder };
+		StreamingOtbmTransform transform { provider, options.direction, targetVersion, targetItemMajorVersion, targetItemMinorVersion, reportBuilder };
 		StreamingOtbmSummary expected;
 		FileSaveTransaction transaction;
 		const std::filesystem::path stagedPath = transaction.Stage(options.destination);
@@ -574,7 +605,11 @@ namespace {
 		}
 		report.conversionSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - conversionStart).count();
 		report.tileCount = expected.tileCount;
-		reportBuilder.finish(options.direction);
+		reportBuilder.finish(provider, options.direction);
+		if (options.strictMapping && (report.missingItems != 0 || report.ambiguousItems != 0)) {
+			report.error = "Strict mapping blocked conversion because the map contains missing or ambiguous item IDs.";
+			return StreamingConversionStatus::Failed;
+		}
 
 		ScopedLoadingBar::SetLoadScale(72, 98);
 		if (!ScopedLoadingBar::SetLoadDone(1, "Validating streamed OTBM output...")) {
@@ -659,8 +694,8 @@ namespace {
 		uint8_t role;
 	};
 
-	uint16_t StoredIdForSummary(uint16_t serverId, bool encodeServerToClient) {
-		return encodeServerToClient ? ItemIdMapping::serverToClient(serverId).converted : serverId;
+	uint16_t StoredIdForSummary(const ItemIdMappingProvider& provider, uint16_t serverId, bool encodeServerToClient) {
+		return encodeServerToClient ? provider.convert(serverId, ItemIdMapping::Direction::ServerToClient).converted : serverId;
 	}
 
 	std::string StoredFilenameForSummary(const std::string& filename) {
@@ -678,12 +713,13 @@ namespace {
 	};
 
 	struct AnalysisWorkerContext {
-		AnalysisWorkerContext(const MapVersion& version, bool collectMapping) :
-			attributeSerializer(version), mapping(collectMapping) {
+		AnalysisWorkerContext(const MapVersion& version, const ItemIdMappingProvider& provider, bool collectMapping) :
+			attributeSerializer(version), provider(provider), mapping(collectMapping) {
 			pending.reserve(64);
 		}
 
 		IOMapOTBM attributeSerializer;
+		const ItemIdMappingProvider& provider;
 		MemoryNodeFileWriteHandle attributeStream;
 		std::vector<PendingItem> pending;
 		WorkerMappingStats mapping;
@@ -715,11 +751,11 @@ namespace {
 				}
 
 				const uint32_t currentOrdinal = itemOrdinal++;
-				const auto mapping = ItemIdMapping::serverToClient(current.item->getID());
+				const auto mapping = worker.provider.convert(current.item->getID(), ItemIdMapping::Direction::ServerToClient);
 				if (!worker.mapping.occurrences.empty()) {
 					worker.mapping.observe(mapping);
 				}
-				const uint16_t storedId = StoredIdForSummary(current.item->getID(), encodeServerToClient);
+				const uint16_t storedId = StoredIdForSummary(worker.provider, current.item->getID(), encodeServerToClient);
 				hash.add(current.role);
 				hash.add(current.depth);
 				hash.add(current.index);
@@ -787,7 +823,7 @@ namespace {
 		return result;
 	}
 
-	bool AnalyzeMap(Map& map, bool encodeServerToClient, ReportBuilder* reportBuilder, MapSummary& summary, uint32_t requestedThreads, uint64_t memoryLimitBytes, uint32_t& threadsUsed, std::string& analysisError) {
+	bool AnalyzeMap(Map& map, const ItemIdMappingProvider& provider, bool encodeServerToClient, ReportBuilder* reportBuilder, MapSummary& summary, uint32_t requestedThreads, uint64_t memoryLimitBytes, uint32_t& threadsUsed, std::string& analysisError) {
 		analysisError.clear();
 		if (!CheckMemoryLimit(memoryLimitBytes, "before map analysis", analysisError)) {
 			return false;
@@ -839,7 +875,7 @@ namespace {
 		std::vector<std::unique_ptr<AnalysisWorkerContext>> workers;
 		workers.reserve(workerCount);
 		for (uint32_t index = 0; index < workerCount; ++index) {
-			workers.push_back(std::make_unique<AnalysisWorkerContext>(mapVersion, reportBuilder != nullptr));
+			workers.push_back(std::make_unique<AnalysisWorkerContext>(mapVersion, provider, reportBuilder != nullptr));
 		}
 
 		const uint64_t budgetedBatch = std::max<uint64_t>(1024, memoryLimitBytes / 128);
@@ -1126,7 +1162,7 @@ std::string MapItemIdConversionReport::format(const MapItemIdConversionOptions& 
 		   << "Target map version: " << targetName << " (OTBM " << (static_cast<int>(options.targetVersion.otbm) + 1) << ", item major " << targetItemMajor << ", item minor " << options.targetVersion.client << ")\n"
 		   << "Source: " << PrintablePath(options.source) << '\n'
 		   << "Destination: " << PrintablePath(options.destination) << '\n'
-		   << "Mapping: " << ItemIdMapping::sourceVersion() << '\n'
+		   << "Mapping: " << (options.mappingProvider ? options.mappingProvider->description() : GetBuiltInItemIdMappingProvider()->description()) << '\n'
 		   << "Processing mode: " << (options.performance.mode == MapItemIdProcessingMode::Automatic ? "Automatic" : "Custom") << '\n'
 		   << "Conversion path: " << (streamed ? "Streaming (low memory)" : "Full map compatibility") << '\n'
 		   << "Threads used: " << threadsUsed << '\n'
@@ -1188,15 +1224,16 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 		return report;
 	};
 	try {
-		if (!ItemIdMapping::validateTables()) {
-			report.error = "Embedded item ID mapping tables failed validation.";
+		const std::shared_ptr<const ItemIdMappingProvider> provider = options.mappingProvider ? options.mappingProvider : GetBuiltInItemIdMappingProvider();
+		if (!provider || !provider->validate()) {
+			report.error = "The selected item ID mapping provider failed validation.";
 			return finish();
 		}
-		if (options.source.empty() || options.destination.empty()) {
-			report.error = "Source and destination paths are required.";
+		if (options.source.empty() || (!options.preflightOnly && options.destination.empty())) {
+			report.error = options.preflightOnly ? "A source path is required." : "Source and destination paths are required.";
 			return finish();
 		}
-		if (FileSaveTransaction::PathsReferToSameFile(options.source, options.destination)) {
+		if (!options.preflightOnly && FileSaveTransaction::PathsReferToSameFile(options.source, options.destination)) {
 			report.error = "Source and destination must be different files.";
 			return finish();
 		}
@@ -1226,31 +1263,37 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 			return finish();
 		}
 
-		ClientVersion* targetClient = ClientVersion::get(options.targetVersion.client);
-		if (!targetClient) {
-			report.error = "The selected target map version is not registered by this RME installation.";
-			return finish();
-		}
-		const MapVersion targetVersion(options.targetVersion.otbm, targetClient->getID());
-		if (targetVersion.otbm < MAP_OTBM_1 || targetVersion.otbm > MAP_OTBM_4) {
-			report.error = "The selected target OTBM version is not supported.";
-			return finish();
-		}
-		const OtbVersion targetOtb = targetClient->getOTBVersion();
-		const uint32_t targetItemMajorVersion = static_cast<uint32_t>(targetOtb.format_version);
-		const uint32_t targetItemMinorVersion = static_cast<uint32_t>(targetOtb.id);
-
 		MapVersion sourceVersion;
-		if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(options.source)), sourceVersion, nullptr, memoryBudgetCheck)) {
+		uint32_t sourceItemMajorVersion = 0;
+		if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(options.source)), sourceVersion, &sourceItemMajorVersion, memoryBudgetCheck)) {
 			if (report.error.empty()) {
 				report.error = "Source is not a valid supported OTBM file.";
 			}
 			return finish();
 		}
+		MapVersion targetVersion = sourceVersion;
+		uint32_t targetItemMajorVersion = sourceItemMajorVersion;
+		uint32_t targetItemMinorVersion = sourceVersion.client;
+		if (!options.preflightOnly && !options.preserveSourceVersion) {
+			ClientVersion* targetClient = ClientVersion::get(options.targetVersion.client);
+			if (!targetClient) {
+				report.error = "The selected target map version is not registered by this RME installation.";
+				return finish();
+			}
+			targetVersion = MapVersion(options.targetVersion.otbm, targetClient->getID());
+			const OtbVersion targetOtb = targetClient->getOTBVersion();
+			targetItemMajorVersion = static_cast<uint32_t>(targetOtb.format_version);
+			targetItemMinorVersion = static_cast<uint32_t>(targetOtb.id);
+		}
+		if (targetVersion.otbm < MAP_OTBM_1 || targetVersion.otbm > MAP_OTBM_4) {
+			report.error = "The selected target OTBM version is not supported.";
+			return finish();
+		}
 		const bool sameDirectory = FileSaveTransaction::PathsReferToSameFile(ParentDirectory(options.source), ParentDirectory(options.destination));
-		if (sourceVersion.otbm == targetVersion.otbm && sameDirectory) {
+		if (ShouldAttemptMapItemIdStreaming(sourceVersion.otbm == targetVersion.otbm, sameDirectory, options.allowCrossDirectoryStreaming, options.preflightOnly)) {
 			const StreamingConversionStatus streamingStatus = ConvertMapItemIdsStreaming(
 				options,
+				*provider,
 				targetVersion,
 				targetItemMajorVersion,
 				targetItemMinorVersion,
@@ -1264,12 +1307,20 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 				report.cancelled = report.error.find("cancelled") != std::string::npos;
 				return finish();
 			}
+			if (options.requireStreaming || options.preflightOnly) {
+				report.error = "This conversion requires an uncompressed OTBM supported by the isolated streaming path; OTGZ is not supported.";
+				return finish();
+			}
+		}
+		if (options.requireStreaming || options.preflightOnly) {
+			report.error = "This conversion requires the isolated streaming path and cannot use the native editor-resource fallback.";
+			return finish();
 		}
 
 		ScopedLoadingBar loading("Converting OTBM item IDs...", true);
 		ReportBuilder reportBuilder(report);
 		std::unique_ptr<Map> map = std::make_unique<Map>();
-		MappingCodec reverseReadCodec(ItemIdMapping::Direction::ClientToServer, &reportBuilder);
+		MappingCodec reverseReadCodec(*provider, ItemIdMapping::Direction::ClientToServer, &reportBuilder);
 		IOMapOTBM loader(sourceVersion);
 		loader.useMemoryBudgetCheck(memoryBudgetCheck);
 		if (options.direction == ItemIdMapping::Direction::ClientToServer) {
@@ -1324,22 +1375,26 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 		std::string analysisError;
 		const bool encodeOutputIds = options.direction == ItemIdMapping::Direction::ServerToClient;
 		ReportBuilder* analysisReport = encodeOutputIds ? &reportBuilder : nullptr;
-		if (!AnalyzeMap(*map, encodeOutputIds, analysisReport, sourceSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
+		if (!AnalyzeMap(*map, *provider, encodeOutputIds, analysisReport, sourceSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
 			report.conversionSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - conversionStart).count();
 			report.cancelled = analysisError.empty();
 			report.error = analysisError.empty() ? "Conversion cancelled during map analysis." : analysisError;
 			return finish();
 		}
 		report.tileCount = sourceSummary.tileCount;
-		reportBuilder.finish(options.direction);
+		reportBuilder.finish(*provider, options.direction);
 		report.conversionSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - conversionStart).count();
+		if (options.strictMapping && (report.missingItems != 0 || report.ambiguousItems != 0)) {
+			report.error = "Strict mapping blocked conversion because the map contains missing or ambiguous item IDs.";
+			return finish();
+		}
 		if (!CheckMemoryLimit(performance.memoryLimitBytes, "after conversion analysis", report.error)) {
 			return finish();
 		}
 
 		FileSaveTransaction transaction;
 		const std::filesystem::path stagedPath = transaction.Stage(options.destination);
-		MappingCodec forwardWriteCodec(ItemIdMapping::Direction::ServerToClient);
+		MappingCodec forwardWriteCodec(*provider, ItemIdMapping::Direction::ServerToClient);
 		IOMapOTBM saver(targetVersion);
 		saver.useMemoryBudgetCheck(memoryBudgetCheck);
 		saver.useItemVersionHeader(targetItemMajorVersion, targetItemMinorVersion);
@@ -1388,7 +1443,7 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 			return finish();
 		}
 		std::unique_ptr<Map> validationMap = std::make_unique<Map>();
-		MappingCodec validationReadCodec(ItemIdMapping::Direction::ClientToServer);
+		MappingCodec validationReadCodec(*provider, ItemIdMapping::Direction::ClientToServer);
 		IOMapOTBM validator(targetVersion);
 		validator.useMemoryBudgetCheck(memoryBudgetCheck);
 		if (encodeOutputIds) {
@@ -1414,7 +1469,7 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 		ScopedLoadingBar::SetLoadScale(90, 94);
 		MapSummary validationSummary;
 		analysisError.clear();
-		if (!AnalyzeMap(*validationMap, encodeOutputIds, nullptr, validationSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
+		if (!AnalyzeMap(*validationMap, *provider, encodeOutputIds, nullptr, validationSummary, performance.threads, performance.memoryLimitBytes, report.threadsUsed, analysisError)) {
 			report.cancelled = analysisError.empty();
 			report.error = analysisError.empty() ? "Conversion cancelled during output validation." : analysisError;
 			return finish();
@@ -1430,7 +1485,7 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 		ScopedLoadingBar::SetLoadScale(94, 98);
 		FileSaveTransaction roundTripTransaction;
 		const std::filesystem::path roundTripPath = roundTripTransaction.Stage(options.destination);
-		MappingCodec validationWriteCodec(ItemIdMapping::Direction::ServerToClient);
+		MappingCodec validationWriteCodec(*provider, ItemIdMapping::Direction::ServerToClient);
 		IOMapOTBM validationSaver(targetVersion);
 		validationSaver.useMemoryBudgetCheck(memoryBudgetCheck);
 		validationSaver.useItemVersionHeader(targetItemMajorVersion, targetItemMinorVersion);

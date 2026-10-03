@@ -450,6 +450,24 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME item_id_mapping_tests COMMAND item_id_mapping_tests)
 
+	add_executable(custom_server_converter_tests
+		tests/custom_server_converter_tests.cpp
+		source/filehandle.cpp
+		source/items_xml_id_converter.cpp
+		source/items_otb_id_converter.cpp
+		source/otb_item_id_mapping_provider.cpp
+	)
+	target_include_directories(custom_server_converter_tests PRIVATE source)
+	target_link_libraries(custom_server_converter_tests PRIVATE ${wxWidgets_LIBRARIES})
+	set_target_properties(custom_server_converter_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	if(MSVC)
+		target_compile_options(custom_server_converter_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME custom_server_converter_tests COMMAND custom_server_converter_tests)
+
 	add_executable(replace_rule_tests
 		tests/replace_rule_tests.cpp
 		source/replace_tool/replace_rule.cpp

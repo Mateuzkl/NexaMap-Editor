@@ -74,6 +74,10 @@ ${CMAKE_CURRENT_LIST_DIR}/png_map_import_window.h
 ${CMAKE_CURRENT_LIST_DIR}/item.h
 ${CMAKE_CURRENT_LIST_DIR}/item_id_codec.h
 ${CMAKE_CURRENT_LIST_DIR}/item_id_mapping.h
+${CMAKE_CURRENT_LIST_DIR}/item_id_mapping_provider.h
+${CMAKE_CURRENT_LIST_DIR}/otb_item_id_mapping_provider.h
+${CMAKE_CURRENT_LIST_DIR}/items_xml_id_converter.h
+${CMAKE_CURRENT_LIST_DIR}/items_otb_id_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/item_attributes.h
 ${CMAKE_CURRENT_LIST_DIR}/items.h
 ${CMAKE_CURRENT_LIST_DIR}/light_drawer.h
@@ -88,6 +92,8 @@ ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_format.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.h
+${CMAKE_CURRENT_LIST_DIR}/custom_server_converter.h
+${CMAKE_CURRENT_LIST_DIR}/custom_server_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_allocator.h
 ${CMAKE_CURRENT_LIST_DIR}/map_display.h
 ${CMAKE_CURRENT_LIST_DIR}/map_drawer.h
@@ -309,6 +315,10 @@ ${CMAKE_CURRENT_LIST_DIR}/item_attributes.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item_id_codec.cpp
 ${CMAKE_CURRENT_LIST_DIR}/item_id_mapping.cpp
+${CMAKE_CURRENT_LIST_DIR}/item_id_mapping_provider.cpp
+${CMAKE_CURRENT_LIST_DIR}/otb_item_id_mapping_provider.cpp
+${CMAKE_CURRENT_LIST_DIR}/items_xml_id_converter.cpp
+${CMAKE_CURRENT_LIST_DIR}/items_otb_id_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/items.cpp
 ${CMAKE_CURRENT_LIST_DIR}/light_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/main_menubar.cpp
@@ -320,6 +330,8 @@ ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/custom_server_converter.cpp
+${CMAKE_CURRENT_LIST_DIR}/custom_server_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_display.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_region.cpp

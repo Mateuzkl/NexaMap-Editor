@@ -467,6 +467,24 @@
     <ClInclude Include="..\..\source\item_id_mapping.h">
       <Filter>editor\io</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\item_id_mapping_provider.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\otb_item_id_mapping_provider.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\items_xml_id_converter.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\items_otb_id_converter.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\custom_server_converter.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\custom_server_converter_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\positionctrl.h">
       <Filter>gui\controls</Filter>
     </ClInclude>
@@ -978,6 +996,24 @@
     </ClCompile>
     <ClCompile Include="..\..\source\item_id_mapping.cpp">
       <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\item_id_mapping_provider.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\otb_item_id_mapping_provider.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\items_xml_id_converter.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\items_otb_id_converter.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\custom_server_converter.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\custom_server_converter_window.cpp">
+      <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\positionctrl.cpp">
       <Filter>gui\controls</Filter>
