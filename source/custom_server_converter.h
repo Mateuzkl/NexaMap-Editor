@@ -5,23 +5,60 @@
 #ifndef RME_CUSTOM_SERVER_CONVERTER_H_
 #define RME_CUSTOM_SERVER_CONVERTER_H_
 
-#include "items_xml_id_converter.h"
 #include "items_otb_id_converter.h"
+#include "items_xml_id_converter.h"
 #include "map_item_id_converter.h"
 #include "otb_item_id_mapping_provider.h"
 #include "server_workspace.h"
 
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
+struct CustomServerConversionScope {
+	bool maps = true;
+	bool itemsXml = true;
+	bool itemsOtb = true;
+
+	[[nodiscard]] bool any() const noexcept {
+		return maps || itemsXml || itemsOtb;
+	}
+};
+
+enum class CustomServerConversionPhase : uint8_t {
+	AfterAnalysis,
+	BeforeMaps,
+	BeforeItemsXml,
+	BeforeItemsOtb,
+	BeforeCommit,
+};
+
+struct CustomServerSourceDigest {
+	std::filesystem::path path;
+	uintmax_t size = 0;
+	uint64_t hash = 0;
+	bool valid = false;
+
+	friend bool operator==(const CustomServerSourceDigest&, const CustomServerSourceDigest&) = default;
+};
+
+struct CustomServerMapAnalysis {
+	std::filesystem::path source;
+	MapItemIdConversionReport preflight;
+};
+
 struct CustomServerAnalysis {
 	ServerWorkspace workspace;
+	CustomServerConversionScope scope;
 	std::shared_ptr<const OtbItemIdMappingProvider> mappingProvider;
 	OtbItemIdMappingStats mappingStats;
 	std::vector<OtbItemIdMappingIssue> mappingIssues;
 	ItemsXmlIdConversionReport itemsXml;
+	std::vector<CustomServerMapAnalysis> maps;
+	std::vector<CustomServerSourceDigest> sourceDigests;
 	bool duplicateClientIdsAllowed = false;
 	bool ready = false;
 	std::string error;
@@ -38,10 +75,10 @@ struct CustomServerMapConversionReport {
 struct CustomServerConversionOptions {
 	std::filesystem::path sourceRoot;
 	std::filesystem::path destinationRoot;
-	bool convertMaps = true;
-	bool convertItemsXml = true;
-	bool convertItemsOtb = true;
+	CustomServerConversionScope scope;
 	bool allowDuplicateClientIds = false;
+	// Invoked synchronously on the calling thread; useful for progress and deterministic tests.
+	std::function<void(CustomServerConversionPhase)> phaseCallback;
 };
 
 struct CustomServerConversionReport {
@@ -56,7 +93,11 @@ struct CustomServerConversionReport {
 	[[nodiscard]] std::string format(const CustomServerConversionOptions& options) const;
 };
 
-[[nodiscard]] CustomServerAnalysis AnalyzeCustomServer(const std::filesystem::path& sourceRoot, bool allowDuplicateClientIds = false);
+[[nodiscard]] CustomServerAnalysis AnalyzeCustomServer(
+	const std::filesystem::path& sourceRoot,
+	const CustomServerConversionScope& scope = {},
+	bool allowDuplicateClientIds = false
+);
 [[nodiscard]] CustomServerConversionReport ConvertCustomServer(const CustomServerConversionOptions& options);
 
 #endif // RME_CUSTOM_SERVER_CONVERTER_H_

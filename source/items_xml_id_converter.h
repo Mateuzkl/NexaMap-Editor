@@ -41,7 +41,8 @@ struct ItemsXmlIdConversionReport {
 	pugi::xml_document& document,
 	const ItemIdMappingProvider& provider,
 	bool strictMapping = true,
-	bool allowDestinationCollisions = false
+	bool allowDestinationCollisions = false,
+	bool allowMalformedRanges = false
 );
 
 [[nodiscard]] ItemsXmlIdConversionReport ConvertItemsXmlFile(
@@ -49,7 +50,8 @@ struct ItemsXmlIdConversionReport {
 	const std::filesystem::path& destination,
 	const ItemIdMappingProvider& provider,
 	bool strictMapping = true,
-	bool allowDestinationCollisions = false
+	bool allowDestinationCollisions = false,
+	bool allowMalformedRanges = false
 );
 
 #endif // RME_ITEMS_XML_ID_CONVERTER_H_

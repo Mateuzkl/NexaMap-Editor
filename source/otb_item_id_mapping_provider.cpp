@@ -78,7 +78,7 @@ namespace {
 			result.error = "items.otb mapping validation failed.";
 			return result;
 		}
-		result.provider = std::shared_ptr<const OtbItemIdMappingProvider>(new OtbItemIdMappingProvider(pairs, std::move(source), result.stats, allowDuplicateClientIds));
+		result.provider = std::make_shared<const OtbItemIdMappingProvider>(pairs, std::move(source), result.stats, allowDuplicateClientIds);
 		return result;
 	}
 }

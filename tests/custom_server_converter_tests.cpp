@@ -1,13 +1,18 @@
+#include <atomic>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "ext/pugixml.hpp"
+#include "custom_server_converter.h"
+#include "file_transaction.h"
 #include "filehandle.h"
-#include "items_xml_id_converter.h"
 #include "items_otb_id_converter.h"
+#include "items_xml_id_converter.h"
+#include "map_item_id_converter.h"
 #include "otb_item_id_mapping_provider.h"
 
 // filehandle.cpp normally gets these helpers from the application target.
@@ -29,9 +34,31 @@ namespace {
 		}
 	}
 
-	std::filesystem::path TempFile(const char* name) {
-		return std::filesystem::temp_directory_path() / name;
-	}
+	class TemporaryDirectory final {
+	public:
+		TemporaryDirectory() {
+			static std::atomic_uint64_t sequence = 0;
+			const std::filesystem::path root = std::filesystem::temp_directory_path();
+			for (unsigned int attempt = 0; attempt < 128; ++attempt) {
+				path = root / ("nexamap-custom-converter-test-" + std::to_string(sequence.fetch_add(1)));
+				std::error_code error;
+				if (std::filesystem::create_directory(path, error)) {
+					return;
+				}
+			}
+			throw std::runtime_error("Could not create a unique test directory.");
+		}
+
+		~TemporaryDirectory() {
+			std::error_code ignored;
+			std::filesystem::remove_all(path, ignored);
+		}
+
+		TemporaryDirectory(const TemporaryDirectory&) = delete;
+		TemporaryDirectory& operator=(const TemporaryDirectory&) = delete;
+
+		std::filesystem::path path;
+	};
 
 	void WriteOtb(const std::filesystem::path& path, bool corruptLength = false) {
 		DiskNodeFileWriteHandle output(path.string(), "OTBI");
@@ -113,15 +140,16 @@ namespace {
 		check(!OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 1, 11 } }).ready(), "duplicate ServerID blocks mapping");
 		check(!OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 10 } }).ready(), "duplicate ClientID blocks mapping");
 		auto aliases = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 10 } }, "allowed aliases", true);
-		check(aliases.ready(), "duplicate ClientID aliases can be explicitly allowed");
+		check(aliases.ready(), "ClientID aliases can be explicitly allowed for forward map conversion");
 		check(aliases.provider->convert(10, ItemIdMapping::Direction::ClientToServer).ambiguous, "allowed alias remains diagnostically ambiguous in reverse");
 		check(!OtbItemIdMappingProvider::FromPairs({ { 0, 10 } }).ready(), "zero ServerID blocks mapping");
 		check(!OtbItemIdMappingProvider::FromPairs({ { 1, 0 } }).ready(), "zero ClientID blocks mapping");
 	}
 
 	void TestOtbReader() {
-		const auto validPath = TempFile("nexamap_custom_mapping_valid.otb");
-		const auto invalidPath = TempFile("nexamap_custom_mapping_invalid.otb");
+		TemporaryDirectory temporary;
+		const auto validPath = temporary.path / "valid.otb";
+		const auto invalidPath = temporary.path / "invalid.otb";
 		WriteOtb(validPath);
 		WriteOtb(invalidPath, true);
 		const auto valid = OtbItemIdMappingProvider::Load(validPath);
@@ -129,14 +157,12 @@ namespace {
 		check(valid.provider && valid.provider->convert(1000, ItemIdMapping::Direction::ServerToClient).converted == 3000, "OTB reader extracts ServerID and ClientID");
 		const auto invalid = OtbItemIdMappingProvider::Load(invalidPath);
 		check(!invalid.ready(), "invalid OTB ID attribute length is rejected");
-		std::error_code ignored;
-		std::filesystem::remove(validPath, ignored);
-		std::filesystem::remove(invalidPath, ignored);
 	}
 
 	void TestOtbIdentityConversion() {
-		const auto source = TempFile("nexamap_custom_alias_source.otb");
-		const auto destination = TempFile("nexamap_custom_alias_clientid.otb");
+		TemporaryDirectory temporary;
+		const auto source = temporary.path / "alias-source.otb";
+		const auto destination = temporary.path / "alias-clientid.otb";
 		WriteAliasOtb(source);
 		const auto report = ConvertItemsOtbToClientIds(source, destination);
 		check(report.success && report.outputValidated, "items.otb identity conversion validates");
@@ -146,106 +172,231 @@ namespace {
 		check(converted.ready() && converted.stats.entries == 1, "converted items.otb reopens with one canonical item");
 		const auto identity = converted.provider->convert(3000, ItemIdMapping::Direction::ServerToClient);
 		check(identity.found && identity.converted == 3000, "converted items.otb writes ServerID equal to ClientID");
-		std::error_code ignored;
-		std::filesystem::remove(source, ignored);
-		std::filesystem::remove(destination, ignored);
 	}
 
-	void TestXmlConversion() {
+	pugi::xml_node FindAttribute(pugi::xml_node item, const char* key) {
+		return item.find_child_by_attribute("attribute", "key", key);
+	}
+
+	void TestXmlReferenceKeys() {
 		auto mapping = OtbItemIdMappingProvider::FromPairs({
-			{ 1000, 3000 }, { 1001, 8500 }, { 1002, 3001 }, { 1003, 3002 }, { 1004, 3003 }, { 4000, 4000 }
+			{ 1000, 3000 },
+			{ 1001, 3001 },
+			{ 1002, 3002 },
+			{ 1003, 3003 },
+			{ 1004, 3004 },
+			{ 1005, 3005 },
+			{ 1006, 3006 },
+			{ 1007, 3007 },
+			{ 1008, 3008 },
+			{ 1009, 3009 },
+			{ 1010, 3010 },
+			{ 1011, 3011 },
 		});
-		check(mapping.ready(), "XML test mapping validates");
+		check(mapping.ready(), "XML reference mapping validates");
 		pugi::xml_document document;
 		const char* xml = R"xml(<?xml version="1.0"?>
 <items>
-  <!-- preserved -->
-  <item id="1000" name="Custom">
+  <!-- comentário preservado -->
+  <item id="1000" name="Poção Mágica">
     <attribute key="rotateTo" value="1001"/>
     <attribute key="writeOnceItemId" value="1002"/>
     <attribute key="decayTo" value="-1"/>
     <attribute key="transformEquipTo" value="1003"/>
     <attribute key="transformDeEquipTo" value="1004"/>
+    <attribute key="maleTransformTo" value="1005"/>
+    <attribute key="maleSleeper" value="1006"/>
+    <attribute key="femaleTransformTo" value="1007"/>
+    <attribute key="femaleSleeper" value="1008"/>
+    <attribute key="transformTo" value="1009"/>
+    <attribute key="destroyTo" value="1010"/>
     <attribute key="attack" value="1001"/>
+    <attribute key="defense" value="1002"/>
+    <attribute key="armor" value="1003"/>
+    <attribute key="weight" value="1004"/>
+    <attribute key="duration" value="1005"/>
+    <attribute key="charges" value="1006"/>
+    <attribute key="speed" value="1007"/>
+    <attribute key="range" value="1008"/>
+    <attribute key="chance" value="1009"/>
+    <attribute key="leveldoor" value="1010"/>
     <custom value="unchanged"/>
   </item>
-  <item fromid="1001" toid="1003" article="a"><attribute key="decayTo" value="0"/></item>
-  <item id="4000"/>
+  <item fromid="1010" toid="1011" article="a"><attribute key="decayTo" value="0"/></item>
 </items>)xml";
-	check(document.load_buffer(xml, std::strlen(xml), pugi::parse_default | pugi::parse_comments, pugi::encoding_utf8), "XML fixture parses");
-	const auto report = ConvertItemsXmlDocument(document, *mapping.provider, true);
-	check(report.success, "semantic XML conversion succeeds");
-	check(report.expandedRanges == 1, "non-contiguous range expands");
-	check(report.declarations == 5 && report.mappedDeclarations == 5, "logical declaration count is preserved");
-	const pugi::xml_node first = document.child("items").child("item");
-	check(first.attribute("id").as_uint() == 3000, "single item ID is converted");
-	check(std::string(first.child("attribute").attribute("value").value()) == "8500", "rotateTo is converted case-insensitively");
-	check(std::string(first.find_child_by_attribute("attribute", "key", "attack").attribute("value").value()) == "1001", "ordinary numeric attributes are untouched");
-	check(std::string(first.find_child_by_attribute("attribute", "key", "decayTo").attribute("value").value()) == "-1", "negative sentinel is preserved");
-	check(first.child("custom"), "unknown child XML is preserved");
+		check(document.load_buffer(xml, std::strlen(xml), pugi::parse_full, pugi::encoding_utf8), "XML fixture parses");
+		const auto report = ConvertItemsXmlDocument(document, *mapping.provider, true);
+		check(report.success, "semantic XML conversion succeeds");
+		check(report.declarations == 3 && report.mappedDeclarations == 3, "logical declaration count is preserved");
+		const pugi::xml_node item = document.child("items").child("item");
+		check(item.attribute("id").as_uint() == 3000, "single item ID is converted");
+		const std::vector<std::pair<const char*, const char*>> references {
+			{ "rotateTo", "3001" },
+			{ "writeOnceItemId", "3002" },
+			{ "transformEquipTo", "3003" },
+			{ "transformDeEquipTo", "3004" },
+			{ "maleTransformTo", "3005" },
+			{ "maleSleeper", "3006" },
+			{ "femaleTransformTo", "3007" },
+			{ "femaleSleeper", "3008" },
+			{ "transformTo", "3009" },
+			{ "destroyTo", "3010" },
+		};
+		for (const auto& [key, value] : references) {
+			check(std::string(FindAttribute(item, key).attribute("value").value()) == value, key);
+		}
+		check(std::string(FindAttribute(item, "decayTo").attribute("value").value()) == "-1", "negative sentinel is preserved");
+		for (const char* key : { "attack", "defense", "armor", "weight", "duration", "charges", "speed", "range", "chance", "leveldoor" }) {
+			check(std::string(FindAttribute(item, key).attribute("value").value()).starts_with("10"), "ordinary numeric field is unchanged");
+		}
+		check(item.child("custom"), "unknown child XML is preserved");
+		check(std::string(item.attribute("name").value()) == "Poção Mágica", "Unicode text is preserved");
+	}
 
-		pugi::xml_document missingDocument;
-		constexpr auto missingXml = "<items><item id='999'/></items>";
-		missingDocument.load_buffer(missingXml, std::strlen(missingXml), pugi::parse_default | pugi::parse_comments, pugi::encoding_utf8);
-		const auto missing = ConvertItemsXmlDocument(missingDocument, *mapping.provider, true);
-		check(!missing.success && missing.missingDeclarations == 1, "strict XML conversion blocks a missing ID");
+	void TestXmlRangesAndCollisions() {
+		auto mapping = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 30 }, { 3, 31 }, { 4, 40 } });
+		pugi::xml_document expanded;
+		expanded.load("<items><item fromid='1' toid='3'/></items>");
+		const auto expandedReport = ConvertItemsXmlDocument(expanded, *mapping.provider, true);
+		check(expandedReport.success && expandedReport.expandedRanges == 1, "non-contiguous ranges expand deterministically");
 
-		auto aliases = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 10 } }, "XML aliases", true);
-		constexpr auto collisionXml = "<items><item id='1'/><item id='2'/></items>";
-		pugi::xml_document collisionDocument;
-		collisionDocument.load_buffer(collisionXml, std::strlen(collisionXml));
-		check(!ConvertItemsXmlDocument(collisionDocument, *aliases.provider, true).success, "XML ClientID collision blocks by default");
-		pugi::xml_document allowedCollisionDocument;
-		allowedCollisionDocument.load_buffer(collisionXml, std::strlen(collisionXml));
-		const auto allowedCollision = ConvertItemsXmlDocument(allowedCollisionDocument, *aliases.provider, true, true);
-		check(allowedCollision.success && allowedCollision.collisions == 1, "XML ClientID collision can be explicitly allowed");
+		pugi::xml_document malformed;
+		malformed.load("<items><item fromid='bad' toid='3'/></items>");
+		check(!ConvertItemsXmlDocument(malformed, *mapping.provider, true).success, "malformed range is blocked");
+		auto aliases = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 10 } }, "allowed aliases", true);
+		pugi::xml_document malformedWithAliases;
+		malformedWithAliases.load("<items><item fromid='bad' toid='2'/></items>");
+		check(!ConvertItemsXmlDocument(malformedWithAliases, *aliases.provider, true).success, "alias mode cannot permit a malformed range");
+		pugi::xml_document compatibleMalformed;
+		compatibleMalformed.load("<items><item fromid='bad' toid='2'/></items>");
+		check(ConvertItemsXmlDocument(compatibleMalformed, *aliases.provider, true, true, true).success, "explicit compatibility override preserves malformed ranges");
+
+		pugi::xml_document collision;
+		collision.load("<items><item id='1'/><item id='2'/></items>");
+		const auto collisionReport = ConvertItemsXmlDocument(collision, *aliases.provider, true);
+		check(!collisionReport.success && collisionReport.collisions == 1, "ClientID alias declarations remain blocking");
+		pugi::xml_document compatibleCollision;
+		compatibleCollision.load("<items><item id='1'/><item id='2'/></items>");
+		const auto compatibleCollisionReport = ConvertItemsXmlDocument(compatibleCollision, *aliases.provider, true, true, true);
+		check(compatibleCollisionReport.success && compatibleCollisionReport.collisions == 1, "explicit compatibility override allows ClientID alias declarations");
+
+		pugi::xml_document duplicateSource;
+		duplicateSource.load("<items><item id='4'/><item id='4'/></items>");
+		check(!ConvertItemsXmlDocument(duplicateSource, *mapping.provider, true).success, "duplicate destination IDs block even when source IDs are identical");
+	}
+
+	void TestXmlFileSemanticValidation() {
+		TemporaryDirectory temporary;
+		const auto source = temporary.path / std::filesystem::u8path(u8"itens-ação.xml");
+		const auto destination = temporary.path / std::filesystem::u8path(u8"saída-convertida.xml");
+		{
+			std::ofstream output(source, std::ios::binary);
+			output << "\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"UTF-8\"?><items><!--preserve--><item id=\"1\" name=\"Ação\"><attribute key=\"transformTo\" value=\"2\"/></item><item id=\"2\"/></items>";
+		}
+		auto mapping = OtbItemIdMappingProvider::FromPairs({ { 1, 101 }, { 2, 102 } });
+		const auto report = ConvertItemsXmlFile(source, destination, *mapping.provider, true);
+		check(report.success && report.outputValidated, "written items.xml passes semantic validation");
+		std::ifstream input(destination, std::ios::binary);
+		const std::string output { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+		check(output.starts_with("\xEF\xBB\xBF"), "UTF-8 BOM is preserved");
+		check(output.find("Ação") != std::string::npos, "accented text survives file conversion");
+	}
+
+	void TestXmlCompatibilityFileValidation() {
+		TemporaryDirectory temporary;
+		const auto source = temporary.path / "compatibility-items.xml";
+		const auto destination = temporary.path / "compatibility-items-converted.xml";
+		{
+			std::ofstream output(source, std::ios::binary);
+			output << R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<items>
+	<!-- formatting whitespace must not affect semantic validation -->
+	<item id="1" name="canonical">
+		&gt;
+	</item>
+	<item id="2" name="alias" />
+	<item fromid="98259825" toid="9828" name="preserved invalid range" />
+</items>)xml";
+		}
+		auto aliases = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 10 } }, "compatibility aliases", true);
+		const auto report = ConvertItemsXmlFile(source, destination, *aliases.provider, true, true, true);
+		check(report.success && report.outputValidated, "compatibility XML survives semantic file validation");
+		check(report.collisions == 1, "compatibility XML reports its allowed alias collision");
+	}
+
+	void TestPathSafety() {
+		TemporaryDirectory temporary;
+		const auto parent = temporary.path / std::filesystem::u8path(u8"Servidor Ação");
+		const auto child = parent / "data" / "world";
+		check(FileSaveTransaction::IsSameOrWithin(child / ".." / "items", parent), "relative dot segments cannot bypass containment");
+		check(FileSaveTransaction::PathsOverlap(parent, child), "parent and child paths overlap");
+		check(!FileSaveTransaction::PathsOverlap(parent, temporary.path / "other"), "separate sibling paths do not overlap");
+#ifdef _WIN32
+		check(FileSaveTransaction::IsSameOrWithin("c:\\dbo\\server\\output", "C:\\DBO\\Server"), "Windows containment is case-insensitive");
+		check(!FileSaveTransaction::PathsOverlap("C:\\DBO\\Server", "D:\\DBO\\Server"), "paths on different Windows drives do not overlap");
+#endif
+	}
+
+	void TestConversionScope() {
+		check(CustomServerConversionScope {}.any(), "default scope converts maps, items.xml, and items.otb");
+		check(!CustomServerConversionScope { false, false, false }.any(), "empty conversion scope is rejected by the core predicate");
+		check(CustomServerConversionScope { true, false, false }.any(), "map-only scope is valid");
+		check(CustomServerConversionScope { false, true, false }.any(), "XML-only scope is valid");
+		check(CustomServerConversionScope { false, false, true }.any(), "OTB-only scope is valid");
+	}
+
+	void TestStandardStreamingPolicy() {
+		check(ShouldAttemptMapItemIdStreaming(true, true, false, false), "standard converter retains same-directory streaming");
+		check(!ShouldAttemptMapItemIdStreaming(true, false, false, false), "standard converter retains cross-directory native fallback");
+		check(ShouldAttemptMapItemIdStreaming(true, false, true, false), "custom converter can explicitly request detached streaming");
+		check(ShouldAttemptMapItemIdStreaming(true, false, false, true), "preflight can inspect a map without a destination");
+		check(!ShouldAttemptMapItemIdStreaming(false, true, true, true), "version mismatch never uses raw streaming");
 	}
 }
 
 int main(int argc, char** argv) {
-	if (argc == 4 && std::string(argv[2]) == "--normalize-otb") {
-		const auto report = ConvertItemsOtbToClientIds(std::filesystem::u8path(argv[1]), std::filesystem::u8path(argv[3]));
-		std::cout << "sourceNodes=" << report.sourceNodes
-			<< " writtenItems=" << report.writtenItems
-			<< " aliasesMerged=" << report.aliasesMerged
-			<< " deprecatedPreserved=" << report.deprecatedItemsPreserved
-			<< " validated=" << report.outputValidated << '\n';
-		if (!report.success) {
-			std::cerr << report.error << '\n';
-			return 5;
-		}
-		return 0;
-	}
 	if (argc >= 2) {
 		const bool allowDuplicates = argc >= 3 && std::string(argv[2]) == "--allow-duplicates";
 		const auto loaded = OtbItemIdMappingProvider::Load(std::filesystem::u8path(argv[1]), allowDuplicates);
 		std::cout << "entries=" << loaded.stats.entries
-			<< " serverIds=" << loaded.stats.uniqueServerIds
-			<< " clientIds=" << loaded.stats.uniqueClientIds
-			<< " duplicateServerIds=" << loaded.stats.duplicateServerIds
-			<< " duplicateClientIds=" << loaded.stats.duplicateClientIds
-			<< " issues=" << loaded.issues.size() << '\n';
+				  << " serverIds=" << loaded.stats.uniqueServerIds
+				  << " clientIds=" << loaded.stats.uniqueClientIds
+				  << " duplicateServerIds=" << loaded.stats.duplicateServerIds
+				  << " duplicateClientIds=" << loaded.stats.duplicateClientIds
+				  << " issues=" << loaded.issues.size() << '\n';
 		if (!loaded.ready()) {
 			std::cerr << loaded.error << '\n';
-			for (std::size_t index = 0; index < std::min<std::size_t>(loaded.issues.size(), 12); ++index) {
-				std::cerr << loaded.issues[index].message << " server=" << loaded.issues[index].serverId << " client=" << loaded.issues[index].clientId << '\n';
-			}
 			return 2;
 		}
 		if (argc >= 4) {
 			pugi::xml_document document;
-			const auto parsed = document.load_file(argv[3], pugi::parse_default | pugi::parse_comments, pugi::encoding_utf8);
+			const auto parsed = document.load_file(argv[3], pugi::parse_full, pugi::encoding_auto);
 			if (!parsed) {
 				std::cerr << "Could not parse diagnostic items.xml: " << parsed.description() << '\n';
 				return 3;
 			}
-			const auto xml = ConvertItemsXmlDocument(document, *loaded.provider, true, allowDuplicates);
+			const auto xml = ConvertItemsXmlDocument(document, *loaded.provider, true, allowDuplicates, allowDuplicates);
 			std::cout << "xmlDeclarations=" << xml.declarations << " mapped=" << xml.mappedDeclarations
-				<< " missing=" << xml.missingDeclarations << " referencesMissing=" << xml.missingReferences
-				<< " collisions=" << xml.collisions << '\n';
+					  << " missing=" << xml.missingDeclarations << " referencesMissing=" << xml.missingReferences
+					  << " collisions=" << xml.collisions << '\n';
 			if (!xml.success) {
 				std::cerr << xml.error << '\n';
 				return 4;
+			}
+			if (argc >= 5) {
+				const auto converted = ConvertItemsXmlFile(
+					std::filesystem::u8path(argv[3]),
+					std::filesystem::u8path(argv[4]),
+					*loaded.provider,
+					true,
+					allowDuplicates,
+					allowDuplicates
+				);
+				std::cout << "xmlOutputValidated=" << converted.outputValidated << '\n';
+				if (!converted.success) {
+					std::cerr << converted.error << '\n';
+					return 5;
+				}
 			}
 		}
 		return 0;
@@ -253,7 +404,13 @@ int main(int argc, char** argv) {
 	TestMappingProvider();
 	TestOtbReader();
 	TestOtbIdentityConversion();
-	TestXmlConversion();
+	TestXmlReferenceKeys();
+	TestXmlRangesAndCollisions();
+	TestXmlFileSemanticValidation();
+	TestXmlCompatibilityFileValidation();
+	TestPathSafety();
+	TestConversionScope();
+	TestStandardStreamingPolicy();
 	if (failures != 0) {
 		std::cerr << failures << " custom converter test(s) failed.\n";
 		return 1;

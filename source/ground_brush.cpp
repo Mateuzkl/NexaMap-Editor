@@ -86,7 +86,6 @@ bool AutoBorder::load(pugi::xml_node node, wxArrayString& warnings, GroundBrush*
 			// The bundled border catalog spans multiple client generations. An
 			// item missing from the active server items.otb is an inapplicable
 			// variant, not a broken workspace; leave that edge unavailable.
-			wxLogDebug("Skipped unavailable item ID %u for border %u.", static_cast<unsigned int>(itemid), static_cast<unsigned int>(id));
 			continue;
 		}
 
@@ -665,7 +664,7 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 	RME_PROFILE_SCOPE("GroundBrush::doBorders");
 	static const auto extractGroundBrushFromTile = [](BaseMap* map, uint32_t x, uint32_t y, uint32_t z) -> GroundBrush* {
-		Tile const* tile = map->getTile(x, y, z);
+		const Tile* tile = map->getTile(x, y, z);
 		if (tile) {
 			return tile->getGroundBrush();
 		}

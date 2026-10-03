@@ -533,6 +533,34 @@ namespace {
 		}
 		sourceProbe.close();
 
+		if (options.preflightOnly) {
+			report.streamed = true;
+			report.threadsUsed = 1;
+			ReportBuilder reportBuilder(report);
+			StreamingOtbmTransform transform { provider, options.direction, targetVersion, targetItemMajorVersion, targetItemMinorVersion, reportBuilder };
+			StreamingOtbmSummary summary;
+			DiskNodeFileReadHandle input(PrintablePath(options.source), StringVector(1, "OTBM"));
+			if (!input.isOk()) {
+				report.error = "Could not open the regular OTBM source for preflight analysis.";
+				return StreamingConversionStatus::Failed;
+			}
+			BinaryNode* root = input.getRootNode();
+			if (!root || !StreamOtbmNode(root, input, nullptr, &transform, summary, memoryLimitBytes, true, report.error) || !input.isOk()) {
+				if (report.error.empty()) {
+					report.error = "The source OTBM node stream is invalid or truncated.";
+				}
+				return StreamingConversionStatus::Failed;
+			}
+			report.tileCount = summary.tileCount;
+			reportBuilder.finish(provider, options.direction);
+			if (options.strictMapping && (report.missingItems != 0 || report.ambiguousItems != 0)) {
+				report.error = "Strict mapping blocked conversion because the map contains missing or ambiguous item IDs.";
+				return StreamingConversionStatus::Failed;
+			}
+			report.success = true;
+			return StreamingConversionStatus::Succeeded;
+		}
+
 		std::error_code filesystemError;
 		const std::filesystem::path destinationDirectory = options.destination.parent_path();
 		if (!destinationDirectory.empty()) {
@@ -1201,11 +1229,11 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 			report.error = "The selected item ID mapping provider failed validation.";
 			return finish();
 		}
-		if (options.source.empty() || options.destination.empty()) {
-			report.error = "Source and destination paths are required.";
+		if (options.source.empty() || (!options.preflightOnly && options.destination.empty())) {
+			report.error = options.preflightOnly ? "A source path is required." : "Source and destination paths are required.";
 			return finish();
 		}
-		if (FileSaveTransaction::PathsReferToSameFile(options.source, options.destination)) {
+		if (!options.preflightOnly && FileSaveTransaction::PathsReferToSameFile(options.source, options.destination)) {
 			report.error = "Source and destination must be different files.";
 			return finish();
 		}
@@ -1235,29 +1263,34 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 			return finish();
 		}
 
-		ClientVersion* targetClient = ClientVersion::get(options.targetVersion.client);
-		if (!targetClient) {
-			report.error = "The selected target map version is not registered by this RME installation.";
-			return finish();
-		}
-		const MapVersion targetVersion(options.targetVersion.otbm, targetClient->getID());
-		if (targetVersion.otbm < MAP_OTBM_1 || targetVersion.otbm > MAP_OTBM_4) {
-			report.error = "The selected target OTBM version is not supported.";
-			return finish();
-		}
-		const OtbVersion targetOtb = targetClient->getOTBVersion();
-		const uint32_t targetItemMajorVersion = static_cast<uint32_t>(targetOtb.format_version);
-		const uint32_t targetItemMinorVersion = static_cast<uint32_t>(targetOtb.id);
-
 		MapVersion sourceVersion;
-		if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(options.source)), sourceVersion, nullptr, memoryBudgetCheck)) {
+		uint32_t sourceItemMajorVersion = 0;
+		if (!IOMapOTBM::getVersionInfo(FileName(PathToWxString(options.source)), sourceVersion, &sourceItemMajorVersion, memoryBudgetCheck)) {
 			if (report.error.empty()) {
 				report.error = "Source is not a valid supported OTBM file.";
 			}
 			return finish();
 		}
+		MapVersion targetVersion = sourceVersion;
+		uint32_t targetItemMajorVersion = sourceItemMajorVersion;
+		uint32_t targetItemMinorVersion = sourceVersion.client;
+		if (!options.preflightOnly && !options.preserveSourceVersion) {
+			ClientVersion* targetClient = ClientVersion::get(options.targetVersion.client);
+			if (!targetClient) {
+				report.error = "The selected target map version is not registered by this RME installation.";
+				return finish();
+			}
+			targetVersion = MapVersion(options.targetVersion.otbm, targetClient->getID());
+			const OtbVersion targetOtb = targetClient->getOTBVersion();
+			targetItemMajorVersion = static_cast<uint32_t>(targetOtb.format_version);
+			targetItemMinorVersion = static_cast<uint32_t>(targetOtb.id);
+		}
+		if (targetVersion.otbm < MAP_OTBM_1 || targetVersion.otbm > MAP_OTBM_4) {
+			report.error = "The selected target OTBM version is not supported.";
+			return finish();
+		}
 		const bool sameDirectory = FileSaveTransaction::PathsReferToSameFile(ParentDirectory(options.source), ParentDirectory(options.destination));
-		if (sourceVersion.otbm == targetVersion.otbm) {
+		if (ShouldAttemptMapItemIdStreaming(sourceVersion.otbm == targetVersion.otbm, sameDirectory, options.allowCrossDirectoryStreaming, options.preflightOnly)) {
 			const StreamingConversionStatus streamingStatus = ConvertMapItemIdsStreaming(
 				options,
 				*provider,
@@ -1274,6 +1307,14 @@ MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& op
 				report.cancelled = report.error.find("cancelled") != std::string::npos;
 				return finish();
 			}
+			if (options.requireStreaming || options.preflightOnly) {
+				report.error = "This conversion requires an uncompressed OTBM supported by the isolated streaming path; OTGZ is not supported.";
+				return finish();
+			}
+		}
+		if (options.requireStreaming || options.preflightOnly) {
+			report.error = "This conversion requires the isolated streaming path and cannot use the native editor-resource fallback.";
+			return finish();
 		}
 
 		ScopedLoadingBar loading("Converting OTBM item IDs...", true);

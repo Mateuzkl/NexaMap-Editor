@@ -115,8 +115,8 @@ public:
 			}
 		}
 
-		const std::filesystem::path normalizedLhs = Normalize(lhs);
-		const std::filesystem::path normalizedRhs = Normalize(rhs);
+		const std::filesystem::path normalizedLhs = NormalizePath(lhs);
+		const std::filesystem::path normalizedRhs = NormalizePath(rhs);
 #ifdef _WIN32
 		std::wstring lhsKey = normalizedLhs.wstring();
 		std::wstring rhsKey = normalizedRhs.wstring();
@@ -128,6 +128,36 @@ public:
 #endif
 	}
 
+	static std::filesystem::path NormalizePath(const std::filesystem::path& path) {
+		std::error_code ec;
+		std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
+		if (!ec) {
+			return normalized;
+		}
+		ec.clear();
+		normalized = std::filesystem::absolute(path, ec);
+		return (ec ? path : normalized).lexically_normal();
+	}
+
+	static bool IsSameOrWithin(const std::filesystem::path& candidatePath, const std::filesystem::path& parentPath) {
+		if (candidatePath.empty() || parentPath.empty()) {
+			return false;
+		}
+		const std::filesystem::path candidate = NormalizePath(candidatePath);
+		const std::filesystem::path parent = NormalizePath(parentPath);
+		auto candidatePart = candidate.begin();
+		for (auto parentPart = parent.begin(); parentPart != parent.end(); ++parentPart, ++candidatePart) {
+			if (candidatePart == candidate.end() || !PathComponentsEqual(*candidatePart, *parentPart)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	static bool PathsOverlap(const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
+		return IsSameOrWithin(lhs, rhs) || IsSameOrWithin(rhs, lhs);
+	}
+
 private:
 	struct Entry {
 		std::filesystem::path destination;
@@ -137,15 +167,16 @@ private:
 		bool installed = false;
 	};
 
-	static std::filesystem::path Normalize(const std::filesystem::path& path) {
-		std::error_code ec;
-		std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
-		if (!ec) {
-			return normalized;
-		}
-		ec.clear();
-		normalized = std::filesystem::absolute(path, ec);
-		return (ec ? path : normalized).lexically_normal();
+	static bool PathComponentsEqual(const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
+#ifdef _WIN32
+		std::wstring lhsKey = lhs.wstring();
+		std::wstring rhsKey = rhs.wstring();
+		std::transform(lhsKey.begin(), lhsKey.end(), lhsKey.begin(), [](wchar_t character) { return std::towlower(character); });
+		std::transform(rhsKey.begin(), rhsKey.end(), rhsKey.begin(), [](wchar_t character) { return std::towlower(character); });
+		return lhsKey == rhsKey;
+#else
+		return lhs == rhs;
+#endif
 	}
 
 	static std::filesystem::path MakeUniqueSibling(const std::filesystem::path& destination, const char* suffix) {

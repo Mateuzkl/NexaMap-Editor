@@ -14,7 +14,9 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 	std::string Lowercase(std::string value) {
@@ -34,12 +36,18 @@ namespace {
 	}
 
 	bool IsItemReferenceKey(const char* key) {
-		static constexpr std::array<const char*, 5> keys {
+		static constexpr std::array<const char*, 11> keys {
 			"rotateto",
 			"writeonceitemid",
 			"decayto",
 			"transformequipto",
 			"transformdeequipto",
+			"maletransformto",
+			"malesleeper",
+			"femaletransformto",
+			"femalesleeper",
+			"transformto",
+			"destroyto",
 		};
 		const std::string normalized = Lowercase(key ? key : "");
 		return std::find(keys.begin(), keys.end(), normalized) != keys.end();
@@ -104,9 +112,138 @@ namespace {
 		}
 		return true;
 	}
+
+	struct XmlSemanticSummary {
+		std::vector<uint16_t> declarationIds;
+		std::string error;
+	};
+
+	bool IsFormattingWhitespace(const pugi::xml_node& node) {
+		if (node.type() == pugi::node_pcdata) {
+			const std::string_view value(node.value());
+			return std::all_of(value.begin(), value.end(), [](unsigned char character) { return std::isspace(character) != 0; });
+		}
+		return false;
+	}
+
+	pugi::xml_node NextSemanticChild(pugi::xml_node child) {
+		while (child && IsFormattingWhitespace(child)) {
+			child = child.next_sibling();
+		}
+		return child;
+	}
+
+	std::string_view SemanticNodeValue(const pugi::xml_node& node) {
+		std::string_view value(node.value());
+		if (node.type() != pugi::node_pcdata) {
+			return value;
+		}
+		while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())) != 0) {
+			value.remove_prefix(1);
+		}
+		while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())) != 0) {
+			value.remove_suffix(1);
+		}
+		return value;
+	}
+
+	bool SemanticNodesEqual(const pugi::xml_node& expected, const pugi::xml_node& actual, const std::string& path, std::string& error) {
+		const std::string_view expectedValue = SemanticNodeValue(expected);
+		const std::string_view actualValue = SemanticNodeValue(actual);
+		if (expected.type() != actual.type() || std::string_view(expected.name()) != actual.name() || expectedValue != actualValue) {
+			error = "Generated items.xml changed XML content at " + path + " (node types " + std::to_string(expected.type()) + " and " + std::to_string(actual.type()) + ", value lengths " + std::to_string(expectedValue.size()) + " and " + std::to_string(actualValue.size()) + ").";
+			return false;
+		}
+
+		std::size_t expectedAttributeCount = 0;
+		for (pugi::xml_attribute attribute : expected.attributes()) {
+			++expectedAttributeCount;
+			const pugi::xml_attribute reparsed = actual.attribute(attribute.name());
+			if (!reparsed || std::string_view(attribute.value()) != reparsed.value()) {
+				error = "Generated items.xml changed attribute '" + std::string(attribute.name()) + "' at " + path + ".";
+				return false;
+			}
+		}
+		std::size_t actualAttributeCount = 0;
+		for ([[maybe_unused]] pugi::xml_attribute attribute : actual.attributes()) {
+			++actualAttributeCount;
+		}
+		if (expectedAttributeCount != actualAttributeCount) {
+			error = "Generated items.xml changed the attribute count at " + path + ".";
+			return false;
+		}
+
+		pugi::xml_node expectedChild = NextSemanticChild(expected.first_child());
+		pugi::xml_node actualChild = NextSemanticChild(actual.first_child());
+		std::size_t childIndex = 0;
+		while (expectedChild && actualChild) {
+			++childIndex;
+			const std::string childName = *expectedChild.name() ? expectedChild.name() : "node";
+			if (!SemanticNodesEqual(expectedChild, actualChild, path + "/" + childName + "[" + std::to_string(childIndex) + "]", error)) {
+				return false;
+			}
+			expectedChild = NextSemanticChild(expectedChild.next_sibling());
+			actualChild = NextSemanticChild(actualChild.next_sibling());
+		}
+		if (expectedChild || actualChild) {
+			error = "Generated items.xml changed the child-node count at " + path + ".";
+			return false;
+		}
+		return true;
+	}
+
+	XmlSemanticSummary SummarizeDocument(const pugi::xml_document& document, bool allowDestinationCollisions, bool allowMalformedRanges) {
+		XmlSemanticSummary summary;
+		const pugi::xml_node items = document.child("items");
+		if (!items) {
+			summary.error = "items.xml does not contain an <items> root element.";
+			return summary;
+		}
+		std::unordered_set<uint16_t> seen;
+		for (pugi::xml_node item : items.children("item")) {
+			const pugi::xml_attribute id = item.attribute("id");
+			const pugi::xml_attribute from = item.attribute("fromid");
+			const pugi::xml_attribute to = item.attribute("toid");
+			int64_t first = 0;
+			int64_t last = 0;
+			if (id && !from && !to) {
+				if (!ParseInteger(id.value(), first) || first <= 0 || first > std::numeric_limits<uint16_t>::max()) {
+					summary.error = "Generated items.xml contains an invalid item id declaration.";
+					return summary;
+				}
+				last = first;
+			} else if (!id && from && to) {
+				if (!ParseInteger(from.value(), first) || !ParseInteger(to.value(), last) || first <= 0 || last < first || last > std::numeric_limits<uint16_t>::max()) {
+					if (allowMalformedRanges) {
+						continue;
+					}
+					summary.error = "Generated items.xml contains an invalid fromid/toid declaration.";
+					return summary;
+				}
+			} else {
+				summary.error = "Generated items.xml contains an ambiguous or incomplete item declaration.";
+				return summary;
+			}
+			for (int64_t value = first; value <= last; ++value) {
+				const uint16_t itemId = static_cast<uint16_t>(value);
+				if (!seen.insert(itemId).second && !allowDestinationCollisions) {
+					summary.error = "Generated items.xml contains duplicate destination item IDs.";
+					return summary;
+				}
+				summary.declarationIds.push_back(itemId);
+			}
+		}
+		return summary;
+	}
 }
 
-ItemsXmlIdConversionReport ConvertItemsXmlDocument(pugi::xml_document& document, const ItemIdMappingProvider& provider, bool strictMapping, bool allowDestinationCollisions) {
+ItemsXmlIdConversionReport ConvertItemsXmlDocument(
+	pugi::xml_document& document,
+	const ItemIdMappingProvider& provider,
+	bool strictMapping,
+	bool allowDestinationCollisions,
+	bool allowMalformedRanges
+) {
 	ItemsXmlIdConversionReport report;
 	if (!provider.validate()) {
 		report.error = "The selected item ID mapping is invalid.";
@@ -149,7 +286,7 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(pugi::xml_document& document,
 			int64_t first = 0;
 			int64_t last = 0;
 			if (!ParseInteger(fromAttribute.value(), first) || !ParseInteger(toAttribute.value(), last) || first <= 0 || last < first || last > std::numeric_limits<uint16_t>::max()) {
-				if (allowDestinationCollisions) {
+				if (allowMalformedRanges) {
 					std::ostringstream message;
 					message << "Invalid source range fromid='" << fromAttribute.value() << "' toid='" << toAttribute.value()
 							<< "' was preserved unchanged by the compatibility override.";
@@ -205,7 +342,7 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(pugi::xml_document& document,
 
 		for (const auto& [sourceId, destinationId] : mapped) {
 			const auto [position, inserted] = destinationSources.emplace(destinationId, sourceId);
-			if (!inserted && position->second != sourceId) {
+			if (!inserted) {
 				++report.collisions;
 				std::ostringstream message;
 				message << "XML declarations " << position->second << " and " << sourceId << " both map to ClientID " << destinationId << '.';
@@ -227,7 +364,14 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(pugi::xml_document& document,
 	return report;
 }
 
-ItemsXmlIdConversionReport ConvertItemsXmlFile(const std::filesystem::path& source, const std::filesystem::path& destination, const ItemIdMappingProvider& provider, bool strictMapping, bool allowDestinationCollisions) {
+ItemsXmlIdConversionReport ConvertItemsXmlFile(
+	const std::filesystem::path& source,
+	const std::filesystem::path& destination,
+	const ItemIdMappingProvider& provider,
+	bool strictMapping,
+	bool allowDestinationCollisions,
+	bool allowMalformedRanges
+) {
 	ItemsXmlIdConversionReport report;
 	if (source.empty() || destination.empty() || FileSaveTransaction::PathsReferToSameFile(source, destination)) {
 		report.error = "Source and destination items.xml files must be different.";
@@ -238,13 +382,19 @@ ItemsXmlIdConversionReport ConvertItemsXmlFile(const std::filesystem::path& sour
 		return report;
 	}
 	pugi::xml_document document;
-	const pugi::xml_parse_result parsed = document.load_buffer(contents.data(), contents.size(), pugi::parse_default | pugi::parse_comments, pugi::encoding_utf8);
+	const pugi::xml_parse_result parsed = document.load_buffer(contents.data(), contents.size(), pugi::parse_full, pugi::encoding_auto);
 	if (!parsed) {
 		report.error = std::string("Could not parse items.xml: ") + parsed.description();
 		return report;
 	}
-	report = ConvertItemsXmlDocument(document, provider, strictMapping, allowDestinationCollisions);
+	report = ConvertItemsXmlDocument(document, provider, strictMapping, allowDestinationCollisions, allowMalformedRanges);
 	if (!report.success) {
+		return report;
+	}
+	const XmlSemanticSummary expected = SummarizeDocument(document, allowDestinationCollisions, allowMalformedRanges);
+	if (!expected.error.empty() || expected.declarationIds.size() != report.declarations) {
+		report.success = false;
+		report.error = expected.error.empty() ? "Converted items.xml changed the logical declaration count." : expected.error;
 		return report;
 	}
 
@@ -260,9 +410,23 @@ ItemsXmlIdConversionReport ConvertItemsXmlFile(const std::filesystem::path& sour
 	FileSaveTransaction transaction;
 	const std::filesystem::path staged = transaction.Stage(destination);
 #ifdef _WIN32
-	const bool saved = document.save_file(staged.wstring().c_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+	const bool hadBom = contents.size() >= 3 && static_cast<uint8_t>(contents[0]) == 0xEF && static_cast<uint8_t>(contents[1]) == 0xBB && static_cast<uint8_t>(contents[2]) == 0xBF;
+	bool hasDeclaration = false;
+	for (pugi::xml_node child : document.children()) {
+		hasDeclaration = hasDeclaration || child.type() == pugi::node_declaration;
+	}
+	const unsigned int format = pugi::format_default | (hadBom ? pugi::format_write_bom : 0u) | (hasDeclaration ? 0u : pugi::format_no_declaration);
+	const pugi::xml_encoding outputEncoding = parsed.encoding == pugi::encoding_auto ? pugi::encoding_utf8 : parsed.encoding;
+	const bool saved = document.save_file(staged.wstring().c_str(), "\t", format, outputEncoding);
 #else
-	const bool saved = document.save_file(staged.string().c_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+	const bool hadBom = contents.size() >= 3 && static_cast<uint8_t>(contents[0]) == 0xEF && static_cast<uint8_t>(contents[1]) == 0xBB && static_cast<uint8_t>(contents[2]) == 0xBF;
+	bool hasDeclaration = false;
+	for (pugi::xml_node child : document.children()) {
+		hasDeclaration = hasDeclaration || child.type() == pugi::node_declaration;
+	}
+	const unsigned int format = pugi::format_default | (hadBom ? pugi::format_write_bom : 0u) | (hasDeclaration ? 0u : pugi::format_no_declaration);
+	const pugi::xml_encoding outputEncoding = parsed.encoding == pugi::encoding_auto ? pugi::encoding_utf8 : parsed.encoding;
+	const bool saved = document.save_file(staged.string().c_str(), "\t", format, outputEncoding);
 #endif
 	if (!saved) {
 		report.success = false;
@@ -275,9 +439,17 @@ ItemsXmlIdConversionReport ConvertItemsXmlFile(const std::filesystem::path& sour
 		return report;
 	}
 	pugi::xml_document validation;
-	if (!validation.load_buffer(validationContents.data(), validationContents.size(), pugi::parse_default | pugi::parse_comments, pugi::encoding_utf8)) {
+	if (!validation.load_buffer(validationContents.data(), validationContents.size(), pugi::parse_full, pugi::encoding_auto)) {
 		report.success = false;
 		report.error = "Generated items.xml could not be parsed.";
+		return report;
+	}
+	const XmlSemanticSummary actual = SummarizeDocument(validation, allowDestinationCollisions, allowMalformedRanges);
+	std::string semanticError;
+	const bool semanticNodesMatch = SemanticNodesEqual(document.child("items"), validation.child("items"), "/items", semanticError);
+	if (!actual.error.empty() || actual.declarationIds != expected.declarationIds || !semanticNodesMatch) {
+		report.success = false;
+		report.error = !actual.error.empty() ? actual.error : (!semanticError.empty() ? semanticError : "Generated items.xml changed its logical item declarations.");
 		return report;
 	}
 	std::string commitError;

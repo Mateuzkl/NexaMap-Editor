@@ -6,6 +6,7 @@
 
 #include "custom_server_converter_window.h"
 
+#include "file_transaction.h"
 #include "map_item_id_converter_window.h"
 
 #include <iostream>
@@ -36,40 +37,31 @@ namespace {
 #endif
 	}
 
-	std::filesystem::path NormalizePath(const std::filesystem::path& path) {
-		std::error_code error;
-		const std::filesystem::path canonical = std::filesystem::weakly_canonical(path, error);
-		if (!error) {
-			return canonical;
-		}
-		const std::filesystem::path absolute = std::filesystem::absolute(path, error);
-		return (error ? path : absolute).lexically_normal();
-	}
-
-	bool IsWithin(const std::filesystem::path& child, const std::filesystem::path& parent) {
-		const std::filesystem::path relative = NormalizePath(child).lexically_relative(NormalizePath(parent));
-		return relative == "." || (!relative.empty() && *relative.begin() != "..");
-	}
-
 	std::filesystem::path AvailableConvertedFolder(const std::filesystem::path& parent, const std::filesystem::path& source) {
-		const std::string baseName = source.filename().string() + "-clientid-converted";
+		std::filesystem::path baseName = source.filename();
+		baseName += "-clientid-converted";
 		for (unsigned int suffix = 1; suffix < 1000; ++suffix) {
-			const std::filesystem::path candidate = parent / (suffix == 1 ? baseName : baseName + "-" + std::to_string(suffix));
+			std::filesystem::path candidateName = baseName;
+			if (suffix != 1) {
+				candidateName += "-" + std::to_string(suffix);
+			}
+			const std::filesystem::path candidate = parent / candidateName;
 			std::error_code error;
 			if (!std::filesystem::exists(candidate, error) || (!error && std::filesystem::is_directory(candidate, error) && std::filesystem::is_empty(candidate, error))) {
 				return candidate;
 			}
 		}
-		return parent / (baseName + "-new");
+		baseName += "-new";
+		return parent / baseName;
 	}
 
 	std::filesystem::path ResolveSafeDestination(const std::filesystem::path& source, const std::filesystem::path& selected) {
-		const std::filesystem::path normalizedSource = NormalizePath(source);
-		const std::filesystem::path normalizedDestination = NormalizePath(selected);
-		if (normalizedDestination == normalizedSource || IsWithin(normalizedDestination, normalizedSource)) {
+		const std::filesystem::path normalizedSource = FileSaveTransaction::NormalizePath(source);
+		const std::filesystem::path normalizedDestination = FileSaveTransaction::NormalizePath(selected);
+		if (FileSaveTransaction::IsSameOrWithin(normalizedDestination, normalizedSource)) {
 			return AvailableConvertedFolder(normalizedSource.parent_path(), normalizedSource);
 		}
-		if (IsWithin(normalizedSource, normalizedDestination)) {
+		if (FileSaveTransaction::IsSameOrWithin(normalizedSource, normalizedDestination)) {
 			return AvailableConvertedFolder(normalizedDestination, normalizedSource);
 		}
 		return normalizedDestination;
@@ -79,7 +71,7 @@ namespace {
 CustomServerConverterWindow::CustomServerConverterWindow(wxWindow* parent) :
 	wxDialog(parent, wxID_ANY, "Custom Server -> ClientID", wxDefaultPosition, wxSize(820, 680), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
 	auto* topSizer = newd wxBoxSizer(wxVERTICAL);
-	auto* intro = newd wxStaticText(this, wxID_ANY, "Convert maps, items.xml, and a normalized items.otb with the selected server's own read-only mapping. "
+	auto* intro = newd wxStaticText(this, wxID_ANY, "Convert maps, items.xml, and items.otb to ClientID using the selected server's own mapping. "
 													"The source server and its original items.otb are never modified.");
 	intro->Wrap(760);
 	topSizer->Add(intro, 0, wxEXPAND | wxALL, 14);
@@ -137,9 +129,9 @@ CustomServerConverterWindow::CustomServerConverterWindow(wxWindow* parent) :
 	destinationPicker->Bind(wxEVT_DIRPICKER_CHANGED, &CustomServerConverterWindow::onDestinationChanged, this);
 	analyzeButton->Bind(wxEVT_BUTTON, &CustomServerConverterWindow::onAnalyze, this);
 	convertButton->Bind(wxEVT_BUTTON, &CustomServerConverterWindow::onConvert, this);
-	mapsCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { updateConvertState(); });
-	itemsXmlCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { updateConvertState(); });
-	itemsOtbCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { updateConvertState(); });
+	mapsCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { analyze(); });
+	itemsXmlCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { analyze(); });
+	itemsOtbCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { analyze(); });
 	allowDuplicateClientIdsCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { analyze(); });
 }
 
@@ -151,9 +143,10 @@ void CustomServerConverterWindow::analyze() {
 		updateConvertState();
 		return;
 	}
-	analysisText->SetValue("Analyzing items.otb, items.xml and maps...");
+	analysisText->SetValue("Analyzing items.otb and the selected outputs...");
 	Update();
-	currentAnalysis = AnalyzeCustomServer(source, allowDuplicateClientIdsCheck->GetValue());
+	const CustomServerConversionScope scope { mapsCheck->GetValue(), itemsXmlCheck->GetValue(), itemsOtbCheck->GetValue() };
+	currentAnalysis = AnalyzeCustomServer(source, scope, allowDuplicateClientIdsCheck->GetValue());
 	analysisText->SetValue(wxString::FromUTF8(currentAnalysis->format()));
 	updateConvertState();
 }
@@ -185,7 +178,7 @@ void CustomServerConverterWindow::onConvert(wxCommandEvent& WXUNUSED(event)) {
 	options.sourceRoot = PickerPath(sourcePicker->GetPath());
 	options.destinationRoot = PickerPath(destinationPicker->GetPath());
 	const std::filesystem::path safeDestination = ResolveSafeDestination(options.sourceRoot, options.destinationRoot);
-	if (safeDestination != NormalizePath(options.destinationRoot)) {
+	if (safeDestination != FileSaveTransaction::NormalizePath(options.destinationRoot)) {
 		options.destinationRoot = safeDestination;
 		destinationPicker->SetPath(PickerString(safeDestination));
 		wxMessageBox(
@@ -195,16 +188,16 @@ void CustomServerConverterWindow::onConvert(wxCommandEvent& WXUNUSED(event)) {
 			this
 		);
 	}
-	options.convertMaps = mapsCheck->GetValue();
-	options.convertItemsXml = itemsXmlCheck->GetValue();
-	options.convertItemsOtb = itemsOtbCheck->GetValue();
+	options.scope.maps = mapsCheck->GetValue();
+	options.scope.itemsXml = itemsXmlCheck->GetValue();
+	options.scope.itemsOtb = itemsOtbCheck->GetValue();
 	options.allowDuplicateClientIds = allowDuplicateClientIdsCheck->GetValue();
 	if (wxMessageBox("Convert to the selected output folder? The source server will remain unchanged.", "Confirm custom conversion", wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION, this) != wxYES) {
 		return;
 	}
 	const CustomServerConversionReport report = ConvertCustomServer(options);
 	if (report.success) {
-		std::cout << "[CustomConverter] SUCCESS: output committed to " << options.destinationRoot.string() << std::endl;
+		std::cout << "[CustomConverter] SUCCESS: output committed to " << PickerString(options.destinationRoot).ToStdString(wxConvUTF8) << std::endl;
 	} else {
 		std::cerr << "[CustomConverter] FAILED: " << report.error << std::endl;
 	}

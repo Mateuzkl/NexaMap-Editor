@@ -40,6 +40,10 @@ struct MapItemIdConversionOptions {
 	MapItemIdPerformanceOptions performance;
 	std::shared_ptr<const ItemIdMappingProvider> mappingProvider;
 	bool strictMapping = false;
+	bool allowCrossDirectoryStreaming = false;
+	bool requireStreaming = false;
+	bool preflightOnly = false;
+	bool preserveSourceVersion = false;
 };
 
 struct MapItemIdConversionIssue {
@@ -74,6 +78,10 @@ struct MapItemIdConversionReport {
 
 	[[nodiscard]] std::string format(const MapItemIdConversionOptions& options) const;
 };
+
+[[nodiscard]] constexpr bool ShouldAttemptMapItemIdStreaming(bool sameVersion, bool sameDirectory, bool allowCrossDirectoryStreaming, bool preflightOnly) noexcept {
+	return sameVersion && (sameDirectory || allowCrossDirectoryStreaming || preflightOnly);
+}
 
 [[nodiscard]] MapItemIdPerformanceLimits GetMapItemIdConverterPerformanceLimits();
 [[nodiscard]] MapItemIdConversionReport ConvertMapItemIds(const MapItemIdConversionOptions& options);
