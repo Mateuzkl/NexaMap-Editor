@@ -774,6 +774,15 @@ ServerDetectionResult ServerResourceDetector::Detect(const std::filesystem::path
 		return leftName != rightName ? leftName < rightName : left.path < right.path;
 	});
 
+	// A server package may contain unrelated web/client copies of items.xml.
+	// The XML next to the selected items.otb is the authoritative matching pair.
+	if (!workspace.itemsOtbPath.empty()) {
+		const std::filesystem::path siblingItemsXml = workspace.itemsOtbPath.parent_path() / "items.xml";
+		if (IsServerWorkspaceFile(siblingItemsXml)) {
+			workspace.itemsXmlPath = Normalize(siblingItemsXml);
+		}
+	}
+
 	TraceServerScan(options, "Reading items.otb metadata", workspace.itemsOtbPath);
 	workspace.itemsOtbFingerprint = ResourceFingerprint::Read(workspace.itemsOtbPath);
 	TraceServerScan(options, "Reading items.xml metadata", workspace.itemsXmlPath);

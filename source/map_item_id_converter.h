@@ -7,9 +7,11 @@
 
 #include "client_version.h"
 #include "item_id_mapping.h"
+#include "item_id_mapping_provider.h"
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,8 @@ struct MapItemIdConversionOptions {
 	ItemIdMapping::Direction direction = ItemIdMapping::Direction::ServerToClient;
 	MapVersion targetVersion;
 	MapItemIdPerformanceOptions performance;
+	std::shared_ptr<const ItemIdMappingProvider> mappingProvider;
+	bool strictMapping = false;
 };
 
 struct MapItemIdConversionIssue {

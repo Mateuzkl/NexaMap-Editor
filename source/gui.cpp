@@ -42,6 +42,7 @@
 #include "spawn_export_window.h"
 #include "spawn_converter_window.h"
 #include "map_item_id_converter_window.h"
+#include "custom_server_converter_window.h"
 #include "client_assets.h"
 #include "workspace_session.h"
 
@@ -2206,7 +2207,7 @@ void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
 			LoadMap(FileName(event.GetString()));
 		}
 	} else if (event.GetId() == WELCOME_DIALOG_MAP_CONVERTER) {
-		static_cast<void>(RunMapItemIdConverter(welcomeDialog, MapItemIdConverterLaunchContext::Welcome));
+		RunConvertersChooser(welcomeDialog);
 	} else if (event.GetId() == WELCOME_DIALOG_SPAWN_CONVERTER) {
 		static_cast<void>(RunSpawnConverter(welcomeDialog));
 	}

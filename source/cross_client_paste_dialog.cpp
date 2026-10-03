@@ -5,6 +5,7 @@
 #include "brush.h"
 #include "items.h"
 #include "materials.h"
+#include "raw_brush.h"
 #include "replace_tool/replace_item_grid_panel.h"
 #include "theme.h"
 #include "tileset.h"
@@ -156,7 +157,7 @@ namespace {
 				entry.item.name = itemType.name.empty() ? "Unnamed item" : itemType.name;
 				entry.searchText = wxString::Format("%u %u ", itemType.id, itemType.clientID) + wxString::FromUTF8(entry.item.name);
 
-				Brush* brushes[] = { itemType.brush, itemType.doodad_brush, itemType.collection_brush, itemType.raw_brush };
+				const Brush* brushes[] = { itemType.brush, itemType.doodad_brush, itemType.collection_brush, itemType.raw_brush };
 				bool categorized = false;
 				auto semanticCategory = [&](bool condition, const wxString& category) {
 					if (condition) {
@@ -172,7 +173,7 @@ namespace {
 				semanticCategory(itemType.isContainer(), "Containers");
 				semanticCategory(itemType.doodad_brush || (itemType.brush && itemType.brush->isDoodad()), "Doodads / Objects");
 
-				for (Brush* brush : brushes) {
+				for (const Brush* brush : brushes) {
 					if (!brush) {
 						continue;
 					}

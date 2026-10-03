@@ -368,9 +368,10 @@ bool Application::OnInit() {
 		g_settings.setInteger(Config::SHOW_DIAGNOSTIC_CONSOLE, 1);
 	}
 #ifdef __WINDOWS__
-	if (g_settings.getBoolean(Config::SHOW_DIAGNOSTIC_CONSOLE)) {
-		StartDiagnosticConsole();
-	}
+	// Keep the live diagnostic terminal available in Windows builds so startup,
+	// converter and map errors are visible even when no preference was persisted.
+	g_settings.setInteger(Config::SHOW_DIAGNOSTIC_CONSOLE, 1);
+	StartDiagnosticConsole();
 #endif
 	if (g_settings.getBoolean(Config::ENABLE_DIAGNOSTIC_LOG)) {
 #ifdef __WINDOWS__

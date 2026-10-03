@@ -361,6 +361,36 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClInclude Include="..\..\source\item_id_mapping_provider.h" />
+    <ClCompile Include="..\..\source\item_id_mapping_provider.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClInclude Include="..\..\source\otb_item_id_mapping_provider.h" />
+    <ClCompile Include="..\..\source\otb_item_id_mapping_provider.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClInclude Include="..\..\source\items_xml_id_converter.h" />
+    <ClCompile Include="..\..\source\items_xml_id_converter.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClInclude Include="..\..\source\items_otb_id_converter.h" />
+    <ClCompile Include="..\..\source\items_otb_id_converter.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClInclude Include="..\..\source\custom_server_converter.h" />
+    <ClCompile Include="..\..\source\custom_server_converter.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClInclude Include="..\..\source\custom_server_converter_window.h" />
+    <ClCompile Include="..\..\source\custom_server_converter_window.cpp">
+      <IncludeInUnityFile>false</IncludeInUnityFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClInclude Include="..\..\source\positionctrl.h" />
     <ClCompile Include="..\..\source\main_toolbar.cpp" />
     <ClCompile Include="..\..\source\positionctrl.cpp" />
