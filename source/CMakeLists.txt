@@ -65,6 +65,7 @@ ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_weather.h
 ${CMAKE_CURRENT_LIST_DIR}/ingame_preview/playtest_hud.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap.h
 ${CMAKE_CURRENT_LIST_DIR}/iomap_otbm.h
+${CMAKE_CURRENT_LIST_DIR}/otbm_item_attribute_parser.h
 ${CMAKE_CURRENT_LIST_DIR}/iominimap.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_import.h
 ${CMAKE_CURRENT_LIST_DIR}/minimap_import_window.h

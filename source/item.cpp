@@ -125,6 +125,7 @@ void Item::copyBaseStateTo(Item& copy) const {
 	copy.subtypeKinds = subtypeKinds;
 	copy.subtypeAttributes = subtypeAttributes;
 	copy.selected = selected;
+	copy.preservedModernAttributes = preservedModernAttributes;
 	if (attributes) {
 		copy.attributes = newd ItemAttributeMap(*attributes);
 	}
