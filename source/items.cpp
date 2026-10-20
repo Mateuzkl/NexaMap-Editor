@@ -970,7 +970,7 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id, bool ser
 			}
 
 			std::string typeValue = attribute.as_string();
-			to_lower_str(key);
+			to_lower_str(typeValue);
 			if (typeValue == "depot") {
 				it.type = ITEM_TYPE_DEPOT;
 			} else if (typeValue == "mailbox") {

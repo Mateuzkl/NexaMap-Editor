@@ -75,6 +75,14 @@ IMPLEMENT_INCREMENT_OP(SplashType)
 
 class Item : public ItemAttributes {
 protected:
+	struct PreservedOTBMAttribute {
+		uint8_t id = 0;
+		std::string payload;
+	};
+	std::vector<PreservedOTBMAttribute> preservedModernAttributes;
+	bool preserveModernAttribute(BinaryNode* stream, uint8_t attribute);
+	virtual void serializePreservedModernAttributes(NodeFileWriteHandle& stream) const;
+
 	// Keep subtype semantics stable when an item's ID is converted or reinterpreted.
 	enum SubtypeKind : uint8_t {
 		SUBTYPE_NONE = 0,
@@ -383,7 +391,7 @@ public:
 
 	// Item properties!
 	virtual bool isComplex() const {
-		return attributes && attributes->size();
+		return (attributes && !attributes->empty()) || !preservedModernAttributes.empty();
 	} // If this item requires full save (not compact)
 
 	// Weight
