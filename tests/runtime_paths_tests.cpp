@@ -49,11 +49,14 @@ int main() {
 			transaction.Stage(destination); // Missing staged output simulates a write failure.
 			std::string error;
 			require(!transaction.Commit(error) && !error.empty(), "failed stage reports an explicit error");
+			const auto utf8Destination = destination.u8string();
+			require(error.find(std::string(utf8Destination.begin(), utf8Destination.end())) != std::string::npos, "failed stage preserves Unicode destination in error");
 		}
 		std::ifstream(destination) >> content;
 		require(content == "edited", "failed transaction preserves original");
 		for (const auto& entry : fs::directory_iterator(directory)) {
-			require(entry.path().string().find(".rme-stage") == std::string::npos && entry.path().string().find(".rme-backup") == std::string::npos, "transaction leaves no temporary siblings");
+			const auto filename = entry.path().filename().u8string();
+			require(filename.find(u8".rme-stage") == std::u8string::npos && filename.find(u8".rme-backup") == std::u8string::npos, "transaction leaves no temporary siblings");
 		}
 #ifndef _WIN32
 		const auto readonly = directory / "read only";
