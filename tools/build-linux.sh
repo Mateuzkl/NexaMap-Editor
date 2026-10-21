@@ -8,6 +8,7 @@ jobs=2
 tests=OFF
 package=0
 vcpkg_root=${VCPKG_ROOT:-}
+dependencies_dir=${NEXAMAP_DEPENDENCIES_DIR:-}
 triplet=${NEXAMAP_VCPKG_TRIPLET:-x64-linux-release}
 usage() {
   cat <<'EOF'
@@ -15,6 +16,7 @@ Usage: bash tools/build-linux.sh [options]
   --build-dir PATH    Build directory (default: build/linux-release)
   --prefix PATH       Install prefix (default: BUILD_DIR/install)
   --vcpkg-root PATH   Use an existing checkout at the manifest baseline
+  --dependencies-dir PATH  vcpkg install directory (default: cache inside vcpkg)
   --jobs NUMBER       Parallel build jobs (default: 2; full editor tests use RAM)
   --tests             Build and run all tests, including wxGTK/OpenGL tests
   --package           Produce a .deb with automatically detected dependencies
@@ -46,12 +48,13 @@ while (($#)); do
     --print-deps) dependencies; exit 0 ;;
     --tests) tests=ON; shift ;;
     --package) package=1; shift ;;
-    --build-dir|--prefix|--vcpkg-root|--jobs)
+    --build-dir|--prefix|--vcpkg-root|--dependencies-dir|--jobs)
       (($# >= 2)) || { echo "Missing value for $1" >&2; exit 2; }
       case "$1" in
         --build-dir) build=$2 ;;
         --prefix) prefix=$2 ;;
         --vcpkg-root) vcpkg_root=$2 ;;
+        --dependencies-dir) dependencies_dir=$2 ;;
         --jobs) jobs=$2 ;;
       esac
       shift 2 ;;
@@ -84,6 +87,17 @@ if [[ -z $vcpkg_root ]]; then
     git -C "$vcpkg_root" checkout --detach FETCH_HEAD
   fi
 fi
+vcpkg_root=$(CDPATH= cd -- "$vcpkg_root" && pwd)
+dependencies_dir=${dependencies_dir:-$vcpkg_root/nexamap-installed/$triplet}
+mkdir -p "$dependencies_dir"
+dependencies_dir=$(CDPATH= cd -- "$dependencies_dir" && pwd)
+# OpenSSL's configure wrapper splits its install prefix at whitespace, even
+# when CMake quotes it. Keep dependencies outside a source/build path with spaces.
+if [[ $vcpkg_root =~ [[:space:]] || $dependencies_dir =~ [[:space:]] ]]; then
+  echo 'vcpkg and its dependencies directory must have paths without whitespace.' >&2
+  echo 'Use --vcpkg-root and --dependencies-dir to select paths without whitespace.' >&2
+  exit 1
+fi
 [[ $(git -C "$vcpkg_root" rev-parse HEAD) == "$baseline" ]] || { echo "vcpkg must be at $baseline" >&2; exit 1; }
 if [[ ! -x $vcpkg_root/vcpkg ]]; then
   bash "$vcpkg_root/bootstrap-vcpkg.sh" -disableMetrics
@@ -106,6 +120,7 @@ g++ --version | head -1
 cmake -S "$root" -B "$build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" \
   -DCMAKE_TOOLCHAIN_FILE="$vcpkg_root/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_INSTALLED_DIR="$dependencies_dir" -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
   -DVCPKG_OVERLAY_TRIPLETS="$root/cmake/triplets" -DVCPKG_TARGET_TRIPLET="$triplet" \
   -DENABLE_UNITY_BUILD=ON -DBUILD_TESTING="$tests" \
   -DENABLE_MULTIPLAYER_SESSION_TESTS="$tests" -DENABLE_GL_CACHE_TESTS="$tests" \
