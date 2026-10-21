@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=NexaMap Editor
+Comment=Edit OpenTibia maps
+Comment[pt_BR]=Edite mapas OpenTibia
+Exec=nexamap-editor %F
+Icon=nexamap-editor
+Terminal=false
+Categories=Graphics;
+Keywords=OpenTibia;OTBM;Map;Editor;
+StartupNotify=true

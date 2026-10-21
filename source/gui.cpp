@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "runtime_paths.h"
 
 #include <wx/display.h>
 #include <wx/dir.h>
@@ -27,6 +28,7 @@
 #include "favorites_resources.h"
 #include "autoborder_preview.h"
 #include "main_menubar.h"
+#include "hotkey_manager.h"
 #include "multiplayer_session.h"
 #include "multiplayer_window.h"
 
@@ -318,6 +320,12 @@ wxGLContext* GUI::GetGLContext(wxGLCanvas* win) {
 					);
 		*/
 		OGLContext = new wxGLContext(win, nullptr);
+#elif defined(__WXGTK__)
+		// MapDrawer still uses compatibility matrix operations alongside its
+		// GLSL 330 renderer. Request that profile explicitly on Mesa/GTK.
+		wxGLContextAttrs attributes;
+		attributes.OGLVersion(3, 3).CompatibilityProfile().EndList();
+		OGLContext = newd wxGLContext(win, nullptr, &attributes);
 #else
 		OGLContext = newd wxGLContext(win);
 #endif
@@ -336,6 +344,10 @@ wxString GUI::GetDataDirectory() {
 			path = dir.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
 			return path;
 		}
+	}
+
+	if (!g_gui.m_dataDirectory.empty()) {
+		return g_gui.m_dataDirectory;
 	}
 
 	// Silently reset directory
@@ -376,6 +388,9 @@ wxString GUI::GetEditorDataDirectory() {
 }
 
 wxString GUI::GetLocalDataDirectory() {
+#ifdef __linux__
+	return GetLocalDirectory() + "data/";
+#endif
 	if (g_settings.getInteger(Config::INDIRECTORY_INSTALLATION)) {
 		FileName dir = GetDataDirectory();
 		dir.AppendDir("user");
@@ -397,6 +412,28 @@ wxString GUI::GetLocalDataDirectory() {
 }
 
 wxString GUI::GetLocalDirectory() {
+#ifdef __linux__
+	const auto userDirectory = RuntimePaths::UserDirectory("XDG_DATA_HOME", ".local/share");
+	if (!userDirectory.empty()) {
+		std::error_code error;
+		std::filesystem::create_directories(userDirectory / "data", error);
+		if (error) {
+			wxLogWarning("Could not create user data directory: %s", wxString::FromUTF8(error.message()));
+		}
+		static bool legacyDataChecked = false;
+		if (!legacyDataChecked) {
+			legacyDataChecked = true;
+			const auto legacy = std::filesystem::path(wxStandardPaths::Get().GetUserDataDir().ToStdString(wxConvUTF8)) / ".rme";
+			if (std::filesystem::is_directory(legacy, error) && legacy != userDirectory) {
+				std::filesystem::copy(legacy, userDirectory, std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing | std::filesystem::copy_options::copy_symlinks, error);
+				if (error) {
+					wxLogWarning("Could not import all legacy user data from %s: %s. The original files are intact.", wxString::FromUTF8(legacy.string()), wxString::FromUTF8(error.message()));
+				}
+			}
+		}
+		return wxString::FromUTF8(userDirectory.string()) + "/";
+	}
+#endif
 	if (g_settings.getInteger(Config::INDIRECTORY_INSTALLATION)) {
 		FileName dir = GetDataDirectory();
 		dir.AppendDir("user");
@@ -435,32 +472,32 @@ wxString GUI::GetExtensionsDirectory() {
 }
 
 void GUI::discoverDataDirectory(const wxString& existentFile) {
-	wxString currentDir = wxGetCwd();
-	wxString execDir = GetExecDirectory();
-
-	wxString possiblePaths[] = {
-		execDir,
-		currentDir + "/",
-
-		// these are used usually when running from build directories
-		execDir + "/../",
-		execDir + "/../../",
-		execDir + "/../../../",
-		currentDir + "/../",
+	const auto toPath = [](const wxString& value) {
+#ifdef __WINDOWS__
+		return std::filesystem::path(value.ToStdWstring());
+#else
+		return std::filesystem::path(value.ToStdString(wxConvUTF8));
+#endif
 	};
-
-	bool found = false;
-	for (const wxString& path : possiblePaths) {
-		if (wxFileName(path + "data/" + existentFile).FileExists()) {
-			m_dataDirectory = path + "data/";
-			found = true;
-			break;
+#ifndef NEXAMAP_INSTALL_DATA_DIR
+	#define NEXAMAP_INSTALL_DATA_DIR ""
+	#define NEXAMAP_INSTALL_DATA_FROM_BINDIR "../share/nexamap"
+#endif
+	wxString searched;
+	for (const auto& path : RuntimePaths::DataCandidates(toPath(GetExecDirectory()), toPath(wxGetCwd()), NEXAMAP_INSTALL_DATA_FROM_BINDIR, NEXAMAP_INSTALL_DATA_DIR)) {
+#ifdef __WINDOWS__
+		const wxString directory(path.lexically_normal().wstring());
+#else
+		const wxString directory = wxString::FromUTF8(path.lexically_normal().string());
+#endif
+		searched += "\n" + directory;
+		if (wxFileName(directory + "/" + existentFile).FileExists()) {
+			m_dataDirectory = directory + "/";
+			std::cerr << "[startup] Editor data: " << m_dataDirectory.ToStdString(wxConvUTF8) << std::endl;
+			return;
 		}
 	}
-
-	if (!found) {
-		wxLogError(wxString() + "Could not find data directory.\n");
-	}
+	wxLogError("Could not find editor data (%s). Reinstall the application. Searched:%s", existentFile, searched);
 }
 
 bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& warnings, bool force, bool workspaceAlreadyRefreshed) {
@@ -585,10 +622,16 @@ bool GUI::LoadWorkspace(wxString& error, wxArrayString& warnings, bool force) {
 
 void GUI::EnableHotkeys() {
 	hotkeys_enabled = true;
+#ifdef __WXGTK__
+	g_hotkey_manager.RebuildAccelerators(root);
+#endif
 }
 
 void GUI::DisableHotkeys() {
 	hotkeys_enabled = false;
+#ifdef __WXGTK__
+	g_hotkey_manager.RebuildAccelerators(root);
+#endif
 }
 
 bool GUI::AreHotkeysEnabled() const {

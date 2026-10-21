@@ -23,6 +23,7 @@
 #include "preferences.h"
 #include "main_menubar.h"
 #include "hotkey_manager.h"
+#include "runtime_paths.h"
 #include "artprovider.h"
 #include "theme.h"
 #include "client_assets.h"
@@ -192,6 +193,20 @@ namespace {
 
 	bool StartDiagnostics(const std::filesystem::path& executablePath) {
 		std::filesystem::path logPath = executablePath.parent_path() / "nexamap.log";
+#ifdef __linux__
+		const auto stateDirectory = RuntimePaths::UserDirectory("XDG_STATE_HOME", ".local/state");
+		if (stateDirectory.empty()) {
+			std::cerr << "[warning] No absolute HOME or XDG_STATE_HOME for diagnostic logs" << std::endl;
+			return false;
+		}
+		logPath = stateDirectory / "logs" / "nexamap.log";
+		std::error_code directoryError;
+		std::filesystem::create_directories(logPath.parent_path(), directoryError);
+		if (directoryError) {
+			std::cerr << "[warning] Could not create log directory: " << directoryError.message() << std::endl;
+			return false;
+		}
+#endif
 		diagnosticLogFile.open(logPath, std::ios::out | std::ios::app);
 #ifdef __WINDOWS__
 		if (!diagnosticLogFile) {
@@ -471,6 +486,7 @@ bool Application::OnInit() {
 	mcp::StartConfiguredServer();
 
 	g_hotkey_manager.DiscoverActions(g_gui.root->GetMainMenuBar());
+	g_gui.root->GetMainMenuBar()->UpdateLabelHotkeys();
 	g_hotkey_manager.RebuildAccelerators(g_gui.root);
 
 	g_gui.root->LoadRecentFiles();
@@ -747,6 +763,19 @@ bool Application::ParseCommandLineMap(wxString& fileName) {
 
 MainFrame::MainFrame(const wxString& title, const wxPoint& pos, const wxSize& size) :
 	wxFrame((wxFrame*)nullptr, -1, title, pos, size, wxDEFAULT_FRAME_STYLE) {
+#ifdef __WXGTK__
+	Bind(wxEVT_CHAR_HOOK, [this](wxKeyEvent& event) {
+		if (g_gui.root != this) {
+			event.Skip();
+			return;
+		}
+		g_hotkey_manager.HandleKeyHook(event, *menu_bar);
+	});
+	Bind(wxEVT_CHILD_FOCUS, [this](wxChildFocusEvent& event) {
+		g_hotkey_manager.RebuildAccelerators(this);
+		event.Skip();
+	});
+#endif
 	// Receive idle events
 	SetExtraStyle(wxWS_EX_PROCESS_IDLE);
 

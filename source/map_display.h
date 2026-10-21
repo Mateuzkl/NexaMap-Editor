@@ -188,6 +188,8 @@ private:
 	void showWaypointContextMenu(const std::string& waypointName);
 	Editor& editor;
 	MapDrawer* drawer;
+	bool gl_initialization_failed = false;
+	bool gl_context_activated = false;
 	std::shared_ptr<const MinimapImportDocument> minimap_import_overlay;
 	uint8_t minimap_import_overlay_opacity = 128;
 	bool ingamePreview;

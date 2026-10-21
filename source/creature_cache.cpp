@@ -7,6 +7,7 @@
 #include "creature_cache.h"
 #include "creatures.h"
 #include "gui.h"
+#include "runtime_paths.h"
 
 #if defined(_WIN32)
 	#ifndef WIN32_LEAN_AND_MEAN
@@ -178,6 +179,12 @@ std::string CreatureCache::WorkspaceKey::computeHash() const {
 }
 
 std::filesystem::path CreatureCache::GetCacheDirectory(const WorkspaceKey& key) {
+#ifdef __linux__
+	const auto cacheDirectory = RuntimePaths::UserDirectory("XDG_CACHE_HOME", ".cache");
+	if (!cacheDirectory.empty()) {
+		return cacheDirectory / "server_creatures" / key.computeHash();
+	}
+#endif
 	const wxString localData = GUI::GetLocalDataDirectory();
 	const std::filesystem::path basePath = std::filesystem::u8path(localData.ToStdString(wxConvUTF8));
 	return basePath / "cache" / "server_creatures" / key.computeHash();

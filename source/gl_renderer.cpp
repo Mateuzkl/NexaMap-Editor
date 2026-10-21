@@ -34,15 +34,22 @@ static void* rmeGetGLProc(const char* name) {
 	return lib ? dlsym(lib, name) : nullptr;
 }
 #else
-typedef void (*__GLXextFuncPtr)(void);
-extern "C" __GLXextFuncPtr glXGetProcAddressARB(const unsigned char*);
 static void* rmeGetGLProc(const char* name) {
-	void* p = reinterpret_cast<void*>(glXGetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
-	if (!p) {
-		static void* lib = dlopen("libGL.so.1", RTLD_LAZY);
-		if (lib) {
-			p = dlsym(lib, name);
-		}
+	// Resolve against the backend selected when wxWidgets was built. Avoid a
+	// direct GLX symbol dependency with GLVND, and support wxGTK's EGL backend.
+	#if wxUSE_GLCANVAS_EGL
+	static void* backend = dlopen("libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+	using GetProc = void* (*)(const char*);
+	static auto getProc = backend ? reinterpret_cast<GetProc>(dlsym(backend, "eglGetProcAddress")) : nullptr;
+	void* p = getProc ? getProc(name) : nullptr;
+	#else
+	static void* backend = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+	using GetProc = void* (*)(const unsigned char*);
+	static auto getProc = backend ? reinterpret_cast<GetProc>(dlsym(backend, "glXGetProcAddressARB")) : nullptr;
+	void* p = getProc ? getProc(reinterpret_cast<const unsigned char*>(name)) : nullptr;
+	#endif
+	if (!p && backend) {
+		p = dlsym(backend, name);
 	}
 	return p;
 }
@@ -139,9 +146,14 @@ void GLRenderer::init() {
 	}
 
 	if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(rmeGetGLProc))) {
-		wxLogError("GLRenderer::init — gladLoadGLLoader failed");
+		wxLogError("Cannot initialize OpenGL. Check the graphics driver/Mesa and the wxGTK display backend.");
 		return;
 	}
+	if (!GLAD_GL_VERSION_3_3) {
+		wxLogError("NexaMap requires OpenGL 3.3 or newer. Update the graphics driver/Mesa. Driver reports: %s", glGetString(GL_VERSION));
+		return;
+	}
+	std::cerr << "[OpenGL] " << glGetString(GL_VERSION) << " / " << glGetString(GL_RENDERER) << std::endl;
 
 	const GLuint vs = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vs, 1, &vertSrc, nullptr);
