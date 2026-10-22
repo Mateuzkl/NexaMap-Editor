@@ -11,6 +11,9 @@ project(rme)
 include(CTest)
 include(GNUInstallDirs)
 if(UNIX AND NOT APPLE)
+	# Keep vcpkg's static codec symbols private. GTK's shared pixbuf loaders
+	# must resolve PNG/JPEG functions from their own system libraries.
+	add_link_options("LINKER:--exclude-libs,ALL")
 	set(NEXAMAP_DATA_DIR "${CMAKE_INSTALL_DATADIR}/nexamap")
 	file(RELATIVE_PATH NEXAMAP_DATA_FROM_BINDIR "${CMAKE_INSTALL_FULL_BINDIR}" "${CMAKE_INSTALL_FULL_DATADIR}/nexamap")
 	add_compile_definitions(
@@ -304,7 +307,7 @@ elseif(UNIX AND NOT APPLE)
 	set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NexaMap OpenTibia map editor")
 	set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
 	set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libgl1, libegl1")
+	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libgl1, libegl1, librsvg2-common")
 	set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 	include(CPack)
 endif()

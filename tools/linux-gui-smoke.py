@@ -21,6 +21,11 @@ def main():
     executable = args.executable.resolve(strict=True)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    exports = subprocess.check_output(
+        ["nm", "--dynamic", "--defined-only", str(executable)], text=True
+    )
+    if re.search(r"\b(?:png_|jpeg_|TIFF)\w+(?:@@\S+)?$", exports, re.M):
+        raise RuntimeError("Bundled image codec symbols leak into the GTK plugin namespace")
     with tempfile.TemporaryDirectory(prefix="nexamap-startup-") as temporary:
         user = Path(temporary)
         env = os.environ.copy()
@@ -28,6 +33,10 @@ def main():
         for kind in ("CONFIG", "DATA", "STATE", "CACHE"):
             env[f"XDG_{kind}_HOME"] = str(user / kind.lower())
         env["NEXAMAP_DIAGNOSTICS"] = "1"
+        env["G_DEBUG"] = ",".join(filter(None, (env.get("G_DEBUG"), "fatal-criticals")))
+        # The visibility probe and screenshot use X11. Do not let an inherited
+        # Wayland socket send the application outside the test's Xvfb display.
+        env["GDK_BACKEND"] = "x11"
         log = output / "installed-startup.log"
         with log.open("w") as console:
             process = subprocess.Popen([str(executable)], cwd=user, env=env,
