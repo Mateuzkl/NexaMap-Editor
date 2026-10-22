@@ -1,4 +1,5 @@
 #include "main.h"
+#include "path_encoding.h"
 #include "favorites_resources.h"
 #include "brush.h"
 #include "raw_brush.h"
@@ -116,10 +117,10 @@ std::string FavoriteResources::CaptureContext() {
 		const auto& server = g_workspace.getServer();
 		const auto& client = g_workspace.getClient();
 		nlohmann::json context = {
-			{ "version", 1 }, { "clientRoot", FavoritePath(std::filesystem::u8path(client.rootPath.ToStdString(wxConvUTF8))) }, { "serverRoot", FavoritePath(server.rootPath) }, { "clientVersion", g_gui.GetCurrentVersionID() }, { "appearances", g_gui.IsCanaryCrystalAssetsLoaded() }, { "idMode", static_cast<int>(g_workspace.getEffectiveItemIdMode()) }, { "serverType", static_cast<int>(server.serverType) }, { "itemsOtb", FavoriteFile(server.itemsOtbPath) }, { "itemsXml", FavoriteFile(server.itemsXmlPath) }
+			{ "version", 1 }, { "clientRoot", FavoritePath(PathEncoding::FromUtf8(client.rootPath.ToStdString(wxConvUTF8))) }, { "serverRoot", FavoritePath(server.rootPath) }, { "clientVersion", g_gui.GetCurrentVersionID() }, { "appearances", g_gui.IsCanaryCrystalAssetsLoaded() }, { "idMode", static_cast<int>(g_workspace.getEffectiveItemIdMode()) }, { "serverType", static_cast<int>(server.serverType) }, { "itemsOtb", FavoriteFile(server.itemsOtbPath) }, { "itemsXml", FavoriteFile(server.itemsXmlPath) }
 		};
 		if (g_gui.IsCanaryCrystalAssetsLoaded()) {
-			const auto assets = ClientAssetsManifestLoader::Validate(std::filesystem::u8path(ClientAssets::getPath().ToStdString(wxConvUTF8)));
+			const auto assets = ClientAssetsManifestLoader::Validate(PathEncoding::FromUtf8(ClientAssets::getPath().ToStdString(wxConvUTF8)));
 			if (!assets.valid) {
 				return {};
 			}
@@ -127,8 +128,8 @@ std::string FavoriteResources::CaptureContext() {
 			context["catalog"] = FavoriteFile(assets.manifest.catalogFile);
 			context["appearanceData"] = FavoriteFile(assets.manifest.appearancesFile);
 		} else {
-			context["metadata"] = FavoriteFile(std::filesystem::u8path(g_gui.gfx.getMetadataFileName().GetFullPath().ToStdString(wxConvUTF8)));
-			context["sprites"] = FavoriteFile(std::filesystem::u8path(g_gui.gfx.getSpritesFileName().GetFullPath().ToStdString(wxConvUTF8)));
+			context["metadata"] = FavoriteFile(PathEncoding::FromUtf8(g_gui.gfx.getMetadataFileName().GetFullPath().ToStdString(wxConvUTF8)));
+			context["sprites"] = FavoriteFile(PathEncoding::FromUtf8(g_gui.gfx.getSpritesFileName().GetFullPath().ToStdString(wxConvUTF8)));
 		}
 		return context.dump();
 	} catch (const std::exception& error) {

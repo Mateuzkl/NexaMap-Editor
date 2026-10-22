@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$bindir/NexaMap Editor" "$@"

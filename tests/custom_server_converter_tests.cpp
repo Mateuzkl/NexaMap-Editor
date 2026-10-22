@@ -9,6 +9,7 @@
 #include "ext/pugixml.hpp"
 #include "custom_server_converter.h"
 #include "file_transaction.h"
+#include "path_encoding.h"
 #include "filehandle.h"
 #include "items_otb_id_converter.h"
 #include "items_xml_id_converter.h"
@@ -21,7 +22,7 @@ std::string i2s(int value) {
 }
 
 std::wstring string2wstring(const std::string& value) {
-	return std::filesystem::u8path(value).wstring();
+	return PathEncoding::FromUtf8(value).wstring();
 }
 
 namespace {
@@ -287,8 +288,8 @@ namespace {
 
 	void TestXmlFileSemanticValidation() {
 		TemporaryDirectory temporary;
-		const auto source = temporary.path / std::filesystem::u8path(u8"itens-ação.xml");
-		const auto destination = temporary.path / std::filesystem::u8path(u8"saída-convertida.xml");
+		const auto source = temporary.path / std::filesystem::path(u8"itens-ação.xml");
+		const auto destination = temporary.path / std::filesystem::path(u8"saída-convertida.xml");
 		{
 			std::ofstream output(source, std::ios::binary);
 			output << "\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"UTF-8\"?><items><!--preserve--><item id=\"1\" name=\"Ação\"><attribute key=\"transformTo\" value=\"2\"/></item><item id=\"2\"/></items>";
@@ -326,7 +327,7 @@ namespace {
 
 	void TestPathSafety() {
 		TemporaryDirectory temporary;
-		const auto parent = temporary.path / std::filesystem::u8path(u8"Servidor Ação");
+		const auto parent = temporary.path / std::filesystem::path(u8"Servidor Ação");
 		const auto child = parent / "data" / "world";
 		check(FileSaveTransaction::IsSameOrWithin(child / ".." / "items", parent), "relative dot segments cannot bypass containment");
 		check(FileSaveTransaction::PathsOverlap(parent, child), "parent and child paths overlap");
@@ -357,7 +358,7 @@ namespace {
 int main(int argc, char** argv) {
 	if (argc >= 2) {
 		const bool allowDuplicates = argc >= 3 && std::string(argv[2]) == "--allow-duplicates";
-		const auto loaded = OtbItemIdMappingProvider::Load(std::filesystem::u8path(argv[1]), allowDuplicates);
+		const auto loaded = OtbItemIdMappingProvider::Load(PathEncoding::FromUtf8(argv[1]), allowDuplicates);
 		std::cout << "entries=" << loaded.stats.entries
 				  << " serverIds=" << loaded.stats.uniqueServerIds
 				  << " clientIds=" << loaded.stats.uniqueClientIds
@@ -385,8 +386,8 @@ int main(int argc, char** argv) {
 			}
 			if (argc >= 5) {
 				const auto converted = ConvertItemsXmlFile(
-					std::filesystem::u8path(argv[3]),
-					std::filesystem::u8path(argv[4]),
+					PathEncoding::FromUtf8(argv[3]),
+					PathEncoding::FromUtf8(argv[4]),
 					*loaded.provider,
 					true,
 					allowDuplicates,

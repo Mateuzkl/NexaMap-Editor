@@ -1,4 +1,5 @@
 #include "main.h"
+#include "path_encoding.h"
 
 #include "spawn_converter_window.h"
 
@@ -15,7 +16,7 @@ namespace {
 #ifdef _WIN32
 		return std::filesystem::path(value.ToStdWstring());
 #else
-		return std::filesystem::u8path(value.ToUTF8().data());
+		return PathEncoding::FromUtf8(value.ToUTF8().data());
 #endif
 	}
 

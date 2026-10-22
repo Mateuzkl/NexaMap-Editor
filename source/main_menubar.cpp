@@ -666,7 +666,7 @@ void MainMenuBar::UpdateLabelHotkeys() {
 	for (const auto& [actionId, itemList] : items) {
 		wxString key = g_hotkey_manager.GetEffectiveKey(actionId);
 		for (wxMenuItem* item : itemList) {
-			wxString baseName = item->GetItemLabelText();
+			wxString baseName = item->GetItemLabel().BeforeFirst('\t');
 			wxString newLabel = baseName;
 			if (!key.empty()) {
 				newLabel += "\t" + key;
@@ -713,65 +713,6 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 			warnings.push_back(path.GetFullName() + ": Only menus can be subitems of main menu");
 		}
 	}
-
-#ifdef __LINUX__
-	const int count = 47;
-	wxAcceleratorEntry entries[count];
-	// Edit
-	entries[0].Set(wxACCEL_CTRL, (int)'Z', MAIN_FRAME_MENU + MenuBar::UNDO);
-	entries[1].Set(wxACCEL_CTRL | wxACCEL_SHIFT, (int)'Z', MAIN_FRAME_MENU + MenuBar::REDO);
-	entries[2].Set(wxACCEL_CTRL, (int)'F', MAIN_FRAME_MENU + MenuBar::FIND_ITEM);
-	entries[3].Set(wxACCEL_CTRL | wxACCEL_SHIFT, (int)'F', MAIN_FRAME_MENU + MenuBar::REPLACE_ITEMS);
-	entries[4].Set(wxACCEL_NORMAL, (int)'A', MAIN_FRAME_MENU + MenuBar::AUTOMAGIC);
-	entries[5].Set(wxACCEL_CTRL, (int)'B', MAIN_FRAME_MENU + MenuBar::BORDERIZE_SELECTION);
-	entries[6].Set(wxACCEL_NORMAL, (int)'P', MAIN_FRAME_MENU + MenuBar::GOTO_PREVIOUS_POSITION);
-	entries[7].Set(wxACCEL_CTRL, (int)'G', MAIN_FRAME_MENU + MenuBar::GOTO_POSITION);
-	entries[8].Set(wxACCEL_NORMAL, (int)'J', MAIN_FRAME_MENU + MenuBar::JUMP_TO_BRUSH);
-	entries[9].Set(wxACCEL_CTRL, (int)'X', MAIN_FRAME_MENU + MenuBar::CUT);
-	entries[10].Set(wxACCEL_CTRL, (int)'C', MAIN_FRAME_MENU + MenuBar::COPY);
-	entries[11].Set(wxACCEL_CTRL, (int)'V', MAIN_FRAME_MENU + MenuBar::PASTE);
-	// View
-	entries[12].Set(wxACCEL_CTRL, (int)'=', MAIN_FRAME_MENU + MenuBar::ZOOM_IN);
-	entries[13].Set(wxACCEL_CTRL, (int)'-', MAIN_FRAME_MENU + MenuBar::ZOOM_OUT);
-	entries[14].Set(wxACCEL_CTRL, (int)'0', MAIN_FRAME_MENU + MenuBar::ZOOM_NORMAL);
-	entries[15].Set(wxACCEL_NORMAL, (int)'Q', MAIN_FRAME_MENU + MenuBar::SHOW_SHADE);
-	entries[16].Set(wxACCEL_CTRL, (int)'W', MAIN_FRAME_MENU + MenuBar::SHOW_ALL_FLOORS);
-	entries[17].Set(wxACCEL_NORMAL, (int)'Q', MAIN_FRAME_MENU + MenuBar::GHOST_ITEMS);
-	entries[18].Set(wxACCEL_CTRL, (int)'L', MAIN_FRAME_MENU + MenuBar::GHOST_HIGHER_FLOORS);
-	entries[19].Set(wxACCEL_SHIFT, (int)'I', MAIN_FRAME_MENU + MenuBar::SHOW_INGAME_BOX);
-	entries[20].Set(wxACCEL_SHIFT, (int)'L', MAIN_FRAME_MENU + MenuBar::SHOW_LIGHTS);
-	entries[21].Set(wxACCEL_SHIFT, (int)'G', MAIN_FRAME_MENU + MenuBar::SHOW_GRID);
-	entries[22].Set(wxACCEL_NORMAL, (int)'V', MAIN_FRAME_MENU + MenuBar::HIGHLIGHT_ITEMS);
-	entries[23].Set(wxACCEL_NORMAL, (int)'X', MAIN_FRAME_MENU + MenuBar::HIGHLIGHT_LOCKED_DOORS);
-	entries[24].Set(wxACCEL_NORMAL, (int)'F', MAIN_FRAME_MENU + MenuBar::SHOW_CREATURES);
-	entries[25].Set(wxACCEL_NORMAL, (int)'S', MAIN_FRAME_MENU + MenuBar::SHOW_SPAWNS);
-	entries[26].Set(wxACCEL_NORMAL, (int)'E', MAIN_FRAME_MENU + MenuBar::SHOW_SPECIAL);
-	entries[27].Set(wxACCEL_SHIFT, (int)'N', MAIN_FRAME_MENU + MenuBar::SHOW_ZONES);
-	entries[28].Set(wxACCEL_SHIFT, (int)'E', MAIN_FRAME_MENU + MenuBar::SHOW_AS_MINIMAP);
-	entries[29].Set(wxACCEL_CTRL, (int)'E', MAIN_FRAME_MENU + MenuBar::SHOW_ONLY_COLORS);
-	entries[30].Set(wxACCEL_CTRL, (int)'M', MAIN_FRAME_MENU + MenuBar::SHOW_ONLY_MODIFIED);
-	entries[31].Set(wxACCEL_CTRL, (int)'H', MAIN_FRAME_MENU + MenuBar::SHOW_HOUSES);
-	entries[32].Set(wxACCEL_NORMAL, (int)'O', MAIN_FRAME_MENU + MenuBar::SHOW_PATHING);
-	entries[33].Set(wxACCEL_NORMAL, (int)'Y', MAIN_FRAME_MENU + MenuBar::SHOW_TOOLTIPS);
-	entries[34].Set(wxACCEL_NORMAL, (int)'L', MAIN_FRAME_MENU + MenuBar::SHOW_PREVIEW);
-	entries[35].Set(wxACCEL_NORMAL, (int)'K', MAIN_FRAME_MENU + MenuBar::SHOW_WALL_HOOKS);
-
-	// Window
-	entries[36].Set(wxACCEL_NORMAL, (int)'M', MAIN_FRAME_MENU + MenuBar::WIN_MINIMAP);
-	entries[37].Set(wxACCEL_NORMAL, (int)'T', MAIN_FRAME_MENU + MenuBar::SELECT_TERRAIN);
-	entries[38].Set(wxACCEL_NORMAL, (int)'D', MAIN_FRAME_MENU + MenuBar::SELECT_DOODAD);
-	entries[39].Set(wxACCEL_NORMAL, (int)'I', MAIN_FRAME_MENU + MenuBar::SELECT_ITEM);
-	entries[40].Set(wxACCEL_NORMAL, (int)'N', MAIN_FRAME_MENU + MenuBar::SELECT_COLLECTION);
-	entries[41].Set(wxACCEL_NORMAL, (int)'H', MAIN_FRAME_MENU + MenuBar::SELECT_HOUSE);
-	entries[42].Set(wxACCEL_NORMAL, (int)'C', MAIN_FRAME_MENU + MenuBar::SELECT_CREATURE);
-	entries[43].Set(wxACCEL_NORMAL, (int)'W', MAIN_FRAME_MENU + MenuBar::SELECT_WAYPOINT);
-	entries[44].Set(wxACCEL_NORMAL, (int)'Z', MAIN_FRAME_MENU + MenuBar::SELECT_ZONES);
-	entries[45].Set(wxACCEL_NORMAL, (int)'R', MAIN_FRAME_MENU + MenuBar::SELECT_RAW);
-	entries[46].Set(wxACCEL_CTRL, (int)'R', MAIN_FRAME_MENU + MenuBar::SEARCH_ON_SELECTION_DUPLICATED_ITEMS);
-
-	wxAcceleratorTable accelerator(count, entries);
-	frame->SetAcceleratorTable(accelerator);
-#endif
 
 	/*
 	// Create accelerator table
@@ -1213,29 +1154,32 @@ void MainMenuBar::OnCommandPalette(wxCommandEvent& WXUNUSED(event)) {
 	if (!selected) {
 		return;
 	}
+	DispatchAction(*selected);
+}
 
-	// Recheck after closing: multiplayer events may have changed availability.
+bool MainMenuBar::DispatchAction(MenuBar::ActionID actionId) {
+	// Refresh availability immediately before a keyboard or palette command.
 	Update();
-	wxMenuItem* item = FindEnabledItem(*selected);
+	wxMenuItem* item = FindEnabledItem(actionId);
 	if (!item) {
-		return;
+		return false;
 	}
-	wxCommandEvent command(wxEVT_MENU, MAIN_FRAME_MENU + *selected);
+	wxCommandEvent command(wxEVT_MENU, MAIN_FRAME_MENU + static_cast<int>(actionId));
 	command.SetEventObject(item->GetMenu());
 	if (item->IsCheckable()) {
-		const bool checked = item->IsRadio() || !IsItemChecked(*selected);
-		CheckItem(*selected, checked);
+		const bool checked = item->IsRadio() || !IsItemChecked(actionId);
+		CheckItem(actionId, checked);
 		command.SetInt(checked);
 	}
 
-	std::erase(recentCommands, *selected);
-	recentCommands.insert(recentCommands.begin(), *selected);
+	std::erase(recentCommands, actionId);
+	recentCommands.insert(recentCommands.begin(), actionId);
 	if (recentCommands.size() > 10) {
 		recentCommands.resize(10);
 	}
 	// Same ID and handler routing as the menu and HotkeyManager accelerators.
 	// Do not access members afterwards: Exit can destroy the frame and menu.
-	frame->GetEventHandler()->ProcessEvent(command);
+	return frame->GetEventHandler()->ProcessEvent(command);
 }
 
 void MainMenuBar::OnUndo(wxCommandEvent& WXUNUSED(event)) {

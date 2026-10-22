@@ -120,8 +120,11 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 	y_control->SetToolTip("Y Coordinate");
 	z_control = newd NumberTextCtrl(position_toolbar, wxID_ANY, 0, 0, MAP_MAX_LAYER, wxTE_PROCESS_ENTER, "Z", wxDefaultPosition, FROM_DIP(parent, wxSize(35, 20)));
 	z_control->SetToolTip("Z Coordinate");
-	go_button = newd wxButton(position_toolbar, TOOLBAR_POSITION_GO, wxEmptyString, wxDefaultPosition, parent->FromDIP(wxSize(22, 20)));
+	// wxGTK applies the inherited font before a bitmap is installed. Give it
+	// a label widget during creation, then keep the finished button bitmap-only.
+	go_button = newd wxButton(position_toolbar, TOOLBAR_POSITION_GO, " ", wxDefaultPosition, parent->FromDIP(wxSize(22, 20)));
 	go_button->SetBitmap(go_bitmap);
+	go_button->SetLabel(wxEmptyString);
 	go_button->SetToolTip("Go To Position");
 	position_toolbar->AddControl(city_control);
 	position_toolbar->AddControl(x_control);

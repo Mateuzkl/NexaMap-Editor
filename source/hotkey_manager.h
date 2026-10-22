@@ -34,6 +34,8 @@ public:
 
 	void ShowHotkeyDialog(wxWindow* parent, MainMenuBar* menubar);
 	wxString GetEffectiveKey(MenuBar::ActionID actionId) const;
+	std::optional<MenuBar::ActionID> FindAction(const wxKeyEvent& event) const;
+	void HandleKeyHook(wxKeyEvent& event, MainMenuBar& menubar);
 
 	struct ActionInfo {
 		wxString name;
@@ -63,7 +65,7 @@ private:
 
 	XmlMenuData ParseMenubarXml();
 	void BuildAcceleratorEntries(std::vector<wxAcceleratorEntry>& accelEntries) const;
-	void SyncToXml();
+	void SaveOverrides();
 };
 
 extern HotkeyManager g_hotkey_manager;

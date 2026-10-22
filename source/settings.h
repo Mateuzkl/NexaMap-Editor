@@ -315,6 +315,9 @@ private:
 	};
 	void IO(IOMode mode);
 	std::vector<DynamicValue> store;
+#ifdef __linux__
+	wxString config_filename;
+#endif
 #ifdef __WINDOWS__
 	bool use_file_cfg;
 #endif
