@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "path_encoding.h"
 
 #include "creature_cache.h"
 #include "creatures.h"
@@ -186,7 +187,7 @@ std::filesystem::path CreatureCache::GetCacheDirectory(const WorkspaceKey& key) 
 	}
 #endif
 	const wxString localData = GUI::GetLocalDataDirectory();
-	const std::filesystem::path basePath = std::filesystem::u8path(localData.ToStdString(wxConvUTF8));
+	const std::filesystem::path basePath = PathEncoding::FromUtf8(localData.ToStdString(wxConvUTF8));
 	return basePath / "cache" / "server_creatures" / key.computeHash();
 }
 

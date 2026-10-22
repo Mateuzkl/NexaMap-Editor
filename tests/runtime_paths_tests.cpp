@@ -1,4 +1,5 @@
 #include "runtime_paths.h"
+#include "path_encoding.h"
 #include "file_transaction.h"
 #include <chrono>
 #include <fstream>
@@ -16,6 +17,12 @@ void require(bool condition, const char* message) {
 int main() {
 	const fs::path temporary = fs::temp_directory_path() / ("nexamap-paths-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
 	try {
+		const auto unicode = u8"Meus Mapas/São João/عربي";
+		const std::u8string utf8(unicode);
+		const std::string bytes(utf8.begin(), utf8.end());
+		require(PathEncoding::FromUtf8(bytes) == fs::path(unicode), "UTF-8 bytes produce native Unicode paths");
+		require(PathEncoding::FromUtf8(std::string_view(bytes).substr(0, 11)) == fs::path(u8"Meus Mapas/"), "UTF-8 path conversion respects string-view bounds");
+		require(PathEncoding::FromUtf8({}).empty(), "empty UTF-8 path stays empty");
 		const auto directory = temporary / fs::path(u8"Meus Mapas/São João/عربي");
 		fs::create_directories(directory);
 #ifndef _WIN32

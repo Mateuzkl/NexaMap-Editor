@@ -31,11 +31,11 @@ dependencies() {
   echo 'sudo apt-get update'
   local packages=(
     build-essential cmake ninja-build git curl zip unzip tar pkg-config
-    autoconf autoconf-archive automake libtool bison flex linux-libc-dev
+    autoconf autoconf-archive automake libtool libltdl-dev bison flex linux-libc-dev
     libgtk-3-dev libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev
     libx11-dev libxext-dev libxrandr-dev libxi-dev libxinerama-dev
     libxcursor-dev libxxf86vm-dev libxfixes-dev libxrender-dev libxtst-dev
-    libxcomposite-dev libxdamage-dev libwayland-dev libxkbcommon-dev
+    libxcomposite-dev libxdamage-dev libwayland-dev libxkbcommon-dev librsvg2-common
     xvfb xauth xdotool mesa-utils desktop-file-utils python3 python3-venv python3-pil
   )
   printf 'sudo apt-get install -y'
@@ -71,7 +71,7 @@ if [[ -r /etc/os-release ]]; then
     echo 'This distribution is outside the Ubuntu 22.04/24.04 verification matrix.' >&2
   fi
 fi
-for command in git cmake ninja g++ pkg-config curl tar zip unzip; do
+for command in git cmake ninja g++ pkg-config curl tar zip unzip python3; do
   command -v "$command" >/dev/null || { echo "Missing $command. Use --print-deps." >&2; exit 1; }
 done
 pkg-config --exists gtk+-3.0 || { echo 'Missing GTK3 development files. Use --print-deps.' >&2; exit 1; }
@@ -102,6 +102,8 @@ fi
 if [[ ! -x $vcpkg_root/vcpkg ]]; then
   bash "$vcpkg_root/bootstrap-vcpkg.sh" -disableMetrics
 fi
+overlay="$vcpkg_root/nexamap-system-gtk-overlay"
+python3 "$root/tools/prepare-linux-wx.py" "$vcpkg_root/ports/wxwidgets" "$overlay/wxwidgets"
 mkdir -p "$build"
 build=$(CDPATH= cd -- "$build" && pwd)
 prefix=${prefix:-$build/install}
@@ -122,6 +124,7 @@ cmake -S "$root" -B "$build" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$vcpkg_root/scripts/buildsystems/vcpkg.cmake" \
   -DVCPKG_INSTALLED_DIR="$dependencies_dir" -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
   -DVCPKG_OVERLAY_TRIPLETS="$root/cmake/triplets" -DVCPKG_TARGET_TRIPLET="$triplet" \
+  -DVCPKG_OVERLAY_PORTS="$overlay" \
   -DENABLE_UNITY_BUILD=ON -DBUILD_TESTING="$tests" \
   -DENABLE_MULTIPLAYER_SESSION_TESTS="$tests" -DENABLE_GL_CACHE_TESTS="$tests" \
   "${compiler_cache_args[@]}"

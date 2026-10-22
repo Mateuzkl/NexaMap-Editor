@@ -289,7 +289,7 @@ bool IOMinimap::exportMinimap(const std::string& directory, const std::string& n
 
 		wxImage image(width, height, pixels.data(), true);
 		wxFileName file = wxString::Format("%s_%d.%s", wxstr(name), z, extension);
-		file.Normalize(wxPATH_NORM_ALL, wxstr(directory));
+		file.Normalize(wxPATH_NORM_ENV_VARS | wxPATH_NORM_DOTS | wxPATH_NORM_TILDE | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG | wxPATH_NORM_SHORTCUT, wxstr(directory));
 		image.SaveFile(file.GetFullPath(), type);
 	}
 
@@ -380,7 +380,7 @@ bool IOMinimap::exportSelection(const std::string& directory, const std::string&
 		if (!empty) {
 			image.SetData(pixels.data(), true);
 			wxFileName file = wxString::Format("%s-%d.%s", wxstr(name), z, extension);
-			file.Normalize(wxPATH_NORM_ALL, wxstr(directory));
+			file.Normalize(wxPATH_NORM_ENV_VARS | wxPATH_NORM_DOTS | wxPATH_NORM_TILDE | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG | wxPATH_NORM_SHORTCUT, wxstr(directory));
 			image.SaveFile(file.GetFullPath(), type);
 		}
 	}

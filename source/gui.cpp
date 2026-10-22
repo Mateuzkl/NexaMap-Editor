@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "path_encoding.h"
 #include "runtime_paths.h"
 
 #include <wx/display.h>
@@ -95,7 +96,7 @@ namespace {
 		}
 		const auto cacheKey = buildCacheKey(workspace);
 		const auto cacheDir = CreatureCache::GetCacheDirectory(cacheKey);
-		const auto luaPath = std::filesystem::u8path(luaDirectory.ToStdString(wxConvUTF8));
+		const auto luaPath = PathEncoding::FromUtf8(luaDirectory.ToStdString(wxConvUTF8));
 
 		const auto progress = [&](const std::string& msg) {
 			if (creatureProgress) {
@@ -1608,7 +1609,7 @@ PaletteWindow* GUI::NewPalette() {
 
 FavoritesManager& GUI::GetFavorites() {
 	if (!favorites) {
-		favorites = std::make_unique<FavoritesManager>(std::filesystem::u8path(GetLocalDataDirectory().ToStdString(wxConvUTF8)) / "favorites.json");
+		favorites = std::make_unique<FavoritesManager>(PathEncoding::FromUtf8(GetLocalDataDirectory().ToStdString(wxConvUTF8)) / "favorites.json");
 		std::string error;
 		favorites->load(error);
 		if (!error.empty()) {
@@ -2031,6 +2032,8 @@ void GUI::ShowWelcomeDialog(const wxBitmap& icon) {
 	welcomeDialog->Bind(wxEVT_CLOSE_WINDOW, &GUI::OnWelcomeDialogClosed, this);
 	welcomeDialog->Bind(WELCOME_DIALOG_ACTION, &GUI::OnWelcomeDialogAction, this);
 	welcomeDialog->Show();
+	welcomeDialog->Raise();
+	welcomeDialog->SetFocus();
 	UpdateMenubar();
 }
 

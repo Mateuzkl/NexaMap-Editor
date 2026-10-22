@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "path_encoding.h"
 #include "multiplayer_session.h"
 #include "profiling.h"
 #include "profiling_perf.h"
@@ -275,7 +276,7 @@ MapDrawer::MapDrawer(MapCanvas* canvas) :
 	perf_update_timer.Start();
 	wxString trace;
 	if (wxGetEnv("NEXAMAP_CPU_CACHE_TRACE", &trace) && trace == "1") {
-		const auto path = std::filesystem::u8path(g_gui.GetLocalDataDirectory().ToStdString(wxConvUTF8)) / ("cpu-chunks-" + std::to_string(wxGetProcessId()) + "-" + std::to_string(editor.map.getSessionId()) + ".csv");
+		const auto path = PathEncoding::FromUtf8(g_gui.GetLocalDataDirectory().ToStdString(wxConvUTF8)) / ("cpu-chunks-" + std::to_string(wxGetProcessId()) + "-" + std::to_string(editor.map.getSessionId()) + ".csv");
 		geometry_trace.open(path);
 		if (geometry_trace) {
 			geometry_trace.imbue(std::locale::classic());
