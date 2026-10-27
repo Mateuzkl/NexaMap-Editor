@@ -1,4 +1,5 @@
 // Real editor serializers and hotkey parsing, using only synthetic map data.
+#include <glad/glad.h>
 #include "main.h"
 #include "application.h"
 #include "artprovider.h"
