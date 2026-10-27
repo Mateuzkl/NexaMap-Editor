@@ -9,10 +9,32 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+	#ifndef NOMINMAX
+		#define NOMINMAX
+	#endif
+	#include <windows.h>
+#else
+	#include <cerrno>
+	#include <sys/stat.h>
+	#ifdef __linux__
+		#include <fcntl.h>
+		#include <linux/fs.h>
+		#include <sys/syscall.h>
+		#include <unistd.h>
+	#elif defined(__APPLE__)
+		#include <stdio.h>
+	#endif
+#endif
 
 class FileSaveTransaction {
 public:
+	enum class PublicationMode { Replace,
+								 CreateOnly };
+	using HardLinkFunction = void (*)(const std::filesystem::path&, const std::filesystem::path&, std::error_code&);
 	FileSaveTransaction() = default;
+	explicit FileSaveTransaction(PublicationMode mode, HardLinkFunction createLink = std::filesystem::create_hard_link) :
+		mode(mode), createLink(createLink) { }
 	FileSaveTransaction(const FileSaveTransaction&) = delete;
 	FileSaveTransaction& operator=(const FileSaveTransaction&) = delete;
 
@@ -54,6 +76,27 @@ public:
 				error = "Staged file is missing: " + PathForError(entry.staged);
 				return false;
 			}
+		}
+
+		if (mode == PublicationMode::CreateOnly) {
+			for (Entry& entry : entries) {
+				std::error_code ec;
+				// A sibling hard link installs a complete file atomically and fails
+				// if any file (including a dangling symlink) already owns the name.
+				createLink(entry.staged, entry.destination, ec);
+				if (HardLinksUnsupported(ec) && ReadIdentity(entry.staged, entry.identity, ec)) {
+					RenameExclusive(entry.staged, entry.destination, ec);
+					entry.renamed = !ec;
+				}
+				if (ec) {
+					error = "Could not create destination without replacement " + PathForError(entry.destination) + ": " + ec.message();
+					Rollback(error);
+					return false;
+				}
+				entry.installed = true;
+			}
+			CleanupStagedFiles();
+			return true;
 		}
 
 		for (Entry& entry : entries) {
@@ -159,6 +202,68 @@ public:
 	}
 
 private:
+	struct FileIdentity {
+		uint64_t device = 0, file = 0;
+		bool operator==(const FileIdentity& other) const {
+			return device == other.device && file == other.file;
+		}
+	};
+	static bool HardLinksUnsupported(const std::error_code& error) {
+		if (error == std::errc::operation_not_supported || error == std::errc::function_not_supported) {
+			return true;
+		}
+#ifdef _WIN32
+		return error.category() == std::system_category() && (error.value() == ERROR_NOT_SUPPORTED || error.value() == ERROR_INVALID_FUNCTION);
+#else
+		return false;
+#endif
+	}
+	static bool ReadIdentity(const std::filesystem::path& path, FileIdentity& identity, std::error_code& error) {
+		error.clear();
+#ifdef _WIN32
+		const HANDLE handle = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+		if (handle == INVALID_HANDLE_VALUE) {
+			error = std::error_code(GetLastError(), std::system_category());
+			return false;
+		}
+		BY_HANDLE_FILE_INFORMATION info {};
+		const bool read = GetFileInformationByHandle(handle, &info) != 0;
+		if (!read) {
+			error = std::error_code(GetLastError(), std::system_category());
+		}
+		CloseHandle(handle);
+		if (read) {
+			identity = { info.dwVolumeSerialNumber, (uint64_t(info.nFileIndexHigh) << 32) | info.nFileIndexLow };
+		}
+		return read;
+#else
+		struct stat info { };
+		if (::lstat(path.c_str(), &info) != 0) {
+			error = std::error_code(errno, std::generic_category());
+			return false;
+		}
+		identity = { static_cast<uint64_t>(info.st_dev), static_cast<uint64_t>(info.st_ino) };
+		return true;
+#endif
+	}
+	static void RenameExclusive(const std::filesystem::path& source, const std::filesystem::path& destination, std::error_code& error) {
+		error.clear();
+#ifdef _WIN32
+		if (!MoveFileExW(source.c_str(), destination.c_str(), MOVEFILE_WRITE_THROUGH)) {
+			error = std::error_code(GetLastError(), std::system_category());
+		}
+#elif defined(__linux__) && defined(SYS_renameat2)
+		if (::syscall(SYS_renameat2, AT_FDCWD, source.c_str(), AT_FDCWD, destination.c_str(), RENAME_NOREPLACE) != 0) {
+			error = std::error_code(errno, std::generic_category());
+		}
+#elif defined(__APPLE__) && defined(RENAME_EXCL)
+		if (::renamex_np(source.c_str(), destination.c_str(), RENAME_EXCL) != 0) {
+			error = std::error_code(errno, std::generic_category());
+		}
+#else
+		error = std::make_error_code(std::errc::operation_not_supported);
+#endif
+	}
 	static std::string PathForError(const std::filesystem::path& path) {
 		const auto utf8 = path.u8string();
 		return { utf8.begin(), utf8.end() };
@@ -170,6 +275,8 @@ private:
 		std::filesystem::path backup;
 		bool backedUp = false;
 		bool installed = false;
+		bool renamed = false;
+		FileIdentity identity;
 	};
 
 	static bool PathComponentsEqual(const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
@@ -203,6 +310,13 @@ private:
 				continue;
 			}
 			std::error_code ec;
+			FileIdentity current;
+			const bool sameFile = mode != PublicationMode::CreateOnly || (iterator->renamed ? ReadIdentity(iterator->destination, current, ec) && current == iterator->identity : std::filesystem::equivalent(iterator->staged, iterator->destination, ec));
+			if (!sameFile) {
+				error += " Rollback retained a destination changed by another writer: " + PathForError(iterator->destination) + ".";
+				continue;
+			}
+			ec.clear();
 			std::filesystem::remove(iterator->destination, ec);
 			if (ec) {
 				error += " Rollback could not remove " + PathForError(iterator->destination) + ": " + ec.message() + ".";
@@ -235,6 +349,8 @@ private:
 	}
 
 	std::vector<Entry> entries;
+	PublicationMode mode = PublicationMode::Replace;
+	HardLinkFunction createLink = std::filesystem::create_hard_link;
 	bool invalidDestination = false;
 	bool duplicateDestination = false;
 };

@@ -61,6 +61,21 @@ find_package(ZLIB REQUIRED)
 if(wxWidgets_USE_FILE)
 	include(${wxWidgets_USE_FILE})
 endif()
+
+add_library(map_migration_core STATIC
+	source/map_migration/migration_io.cpp
+	source/map_migration/classic_resource_catalog.cpp
+	source/map_migration/map_inventory.cpp
+	source/map_migration/cross_client_matcher.cpp
+	source/map_migration/map_migration_engine.cpp
+	source/ext/pugixml.cpp
+)
+target_include_directories(map_migration_core PUBLIC source)
+target_compile_features(map_migration_core PUBLIC cxx_std_20)
+target_link_libraries(map_migration_core PRIVATE nlohmann_json::nlohmann_json)
+if(MSVC)
+	target_compile_options(map_migration_core PRIVATE /utf-8 /bigobj)
+endif()
 add_subdirectory(source/protobuf)
 include(source/CMakeLists.txt)
 if(WIN32)
@@ -119,6 +134,7 @@ target_link_libraries(${PROJECT_NAME}
 	nlohmann_json::nlohmann_json
 	liblzma::liblzma
 	nexamap_protobuf
+	map_migration_core
 )
 
 if(UNIX AND NOT APPLE)
@@ -140,6 +156,23 @@ else()
 endif()
 
 if(BUILD_TESTING)
+	add_executable(cross_client_match_policy_tests tests/cross_client_match_policy_tests.cpp)
+	target_include_directories(cross_client_match_policy_tests PRIVATE source)
+	target_compile_features(cross_client_match_policy_tests PRIVATE cxx_std_20)
+	add_test(NAME cross_client_match_policy_tests COMMAND cross_client_match_policy_tests)
+
+	add_executable(map_migration_tests tests/map_migration_tests.cpp)
+	target_link_libraries(map_migration_tests PRIVATE map_migration_core)
+	add_test(NAME map_migration_tests COMMAND map_migration_tests)
+	if(MSVC)
+		target_compile_options(map_migration_tests PRIVATE /utf-8)
+	endif()
+	add_executable(map_migration_tool tools/map_migration_tool.cpp)
+	target_link_libraries(map_migration_tool PRIVATE map_migration_core)
+	if(MSVC)
+		target_compile_options(map_migration_tool PRIVATE /utf-8)
+	endif()
+
 	add_executable(playtest_controller_tests tests/playtest_controller_tests.cpp source/ingame_preview/playtest_controller.cpp source/ingame_preview/playtest_weather.cpp)
 	target_include_directories(playtest_controller_tests PRIVATE source)
 	target_compile_features(playtest_controller_tests PRIVATE cxx_std_20)
@@ -177,7 +210,7 @@ if(BUILD_TESTING)
 	target_include_directories(editor_test_objects PUBLIC source)
 	target_compile_features(editor_test_objects PUBLIC cxx_std_20)
 	target_compile_definitions(editor_test_objects PUBLIC NEXAMAP_MULTIPLAYER_TESTS)
-	target_link_libraries(editor_test_objects PUBLIC ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} ${CMAKE_DL_LIBS} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+	target_link_libraries(editor_test_objects PUBLIC ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} ${CMAKE_DL_LIBS} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf map_migration_core)
 	set_target_properties(editor_test_objects PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
 	if(MSVC)
 		target_compile_options(editor_test_objects PUBLIC /bigobj /utf-8)
@@ -199,7 +232,7 @@ if(BUILD_TESTING)
 
 	option(ENABLE_MULTIPLAYER_SESSION_TESTS "Build full editor wxSocket session integration tests (no visible windows)" OFF)
 	if(ENABLE_MULTIPLAYER_SESSION_TESTS)
-		add_executable(multiplayer_session_tests tests/multiplayer_session_tests.cpp tests/startup_validation_tests.cpp tests/playtest_integration_tests.cpp tests/collections_palette_tests.cpp tests/resource_session_tab_tests.cpp)
+		add_executable(multiplayer_session_tests tests/multiplayer_session_tests.cpp tests/startup_validation_tests.cpp tests/playtest_integration_tests.cpp tests/collections_palette_tests.cpp tests/resource_session_tab_tests.cpp tests/cross_client_clipboard_tests.cpp)
 		target_link_libraries(multiplayer_session_tests PRIVATE editor_test_objects)
 		add_test(NAME multiplayer_session_tests COMMAND multiplayer_session_tests)
 		set_tests_properties(multiplayer_session_tests PROPERTIES TIMEOUT 90)
@@ -212,6 +245,10 @@ if(BUILD_TESTING)
 		set_tests_properties(renderer_lifecycle_tests PROPERTIES TIMEOUT 60)
 		add_test(NAME collections_palette_tests COMMAND multiplayer_session_tests --collections-validation)
 		add_test(NAME resource_session_tab_tests COMMAND multiplayer_session_tests --resource-session-tab-validation)
+		add_test(NAME cross_client_clipboard_tests COMMAND multiplayer_session_tests --cross-client-paste-validation)
+		add_test(NAME map_migration_window_tests COMMAND multiplayer_session_tests --migration-window-validation)
+		set_tests_properties(map_migration_window_tests PROPERTIES TIMEOUT 90)
+		set_tests_properties(cross_client_clipboard_tests PROPERTIES TIMEOUT 60)
 		set_tests_properties(resource_session_tab_tests PROPERTIES TIMEOUT 30)
 		set_tests_properties(collections_palette_tests PROPERTIES TIMEOUT 30)
 	endif()

@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "cross_client_clipboard.h"
+#include "cross_client_match_policy.h"
 
 #include "basemap.h"
 #include "complexitem.h"
@@ -19,6 +20,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <tuple>
 
 namespace {
 	struct FingerprintHash {
@@ -38,7 +40,7 @@ namespace {
 	};
 
 	struct TargetSpriteCache {
-		bool visualAvailable = false;
+		bool available = false;
 		SpriteVisualFingerprint visual;
 	};
 
@@ -46,9 +48,7 @@ namespace {
 	// Similarity checks still sample a fixed 16x16 grid, so this does not make
 	// candidate comparison more expensive.
 	constexpr int StoredPreviewExtent = 64;
-	constexpr int AutomaticConfidenceThreshold = 88;
 	constexpr size_t MaximumRetainedPreviewBytes = 64u * 1024u * 1024u;
-	constexpr uint64_t SemanticRoleMask = (uint64_t(0x7) << 8) | (uint64_t(0xFF) << 14) | (uint64_t(0x3FFF) << 27);
 	constexpr uint64_t SemanticPropertyMask = (uint64_t(0x3FFF) << 0) | (uint64_t(0xFF) << 14) | (uint64_t(0x7) << 24) | (uint64_t(0x7FFF) << 27);
 
 	size_t CrossClientMaximumItemId() {
@@ -191,22 +191,11 @@ namespace {
 		return clone;
 	}
 
-	int MatchScore(const CrossClientItemSnapshot& source, const TargetCandidate& target) {
-		int score = 0;
-		score += source.group == target.group ? 30 : 0;
-		score += source.type == target.type ? 30 : 0;
-		score += source.semanticFlags == target.semanticFlags ? 50 : 0;
-		score += source.sourceClientId == target.clientId ? 15 : 0;
-		score += source.sourceId == target.id ? 20 : 0;
-		if (!source.name.empty() && !target.name.empty() && wxString::FromUTF8(source.name).CmpNoCase(wxString::FromUTF8(target.name)) == 0) {
-			score += 25;
-		}
-		return score;
-	}
-
 	bool StructurallyCompatible(const CrossClientItemSnapshot& source, const TargetCandidate& target) {
-		return source.group == target.group && source.type == target.type
-			&& (source.semanticFlags & SemanticRoleMask) == (target.semanticFlags & SemanticRoleMask);
+		return CrossClientMatchPolicy::StructurallyCompatible(
+			source.group, source.type, source.semanticFlags,
+			target.group, target.type, target.semanticFlags
+		);
 	}
 
 	bool SameName(const std::string& source, const std::string& target) {
@@ -281,10 +270,11 @@ namespace {
 	) {
 		const bool sameName = SameName(source.name, target.name);
 		const int propertySimilarity = PropertySimilarity(source.semanticFlags, target.semanticFlags);
-		const bool automatic = sameName && propertySimilarity >= 95;
-		if (!automatic && (!visualCompared || visualSimilarity < 0.45)) {
+		// A shared name or incomplete XML metadata must never be enough for auto-mapping.
+		if (!visualCompared || visualSimilarity < 0.50) {
 			return;
 		}
+		// A sampled preview is a review aid, never proof of full equivalence.
 		CrossClientItemRecommendation recommendation;
 		recommendation.destinationId = target.id;
 		recommendation.destinationClientId = target.clientId;
@@ -293,12 +283,14 @@ namespace {
 		const int propertyWeight = visualCompared ? 25 : 75;
 		const int nameScore = sameName ? (visualCompared ? 10 : 25) : 0;
 		const int confidence = visualScore + propertySimilarity * propertyWeight / 100 + nameScore;
-		recommendation.confidence = static_cast<uint8_t>(std::clamp(automatic ? std::max(AutomaticConfidenceThreshold, confidence) : confidence, 0, 100));
-		recommendation.automatic = automatic;
+		recommendation.confidence = static_cast<uint8_t>(std::clamp(confidence, 0, 100));
+		recommendation.automatic = false;
+		recommendation.visualCompared = visualCompared;
+		recommendation.visualSimilarity = visualSimilarity;
 		recommendations.push_back(std::move(recommendation));
 		std::sort(recommendations.begin(), recommendations.end(), [](const CrossClientItemRecommendation& left, const CrossClientItemRecommendation& right) {
-			if (left.automatic != right.automatic) {
-				return left.automatic;
+			if (left.visualSimilarity != right.visualSimilarity) {
+				return left.visualSimilarity > right.visualSimilarity;
 			}
 			return left.confidence == right.confidence ? left.destinationId < right.destinationId : left.confidence > right.confidence;
 		});
@@ -326,28 +318,20 @@ namespace {
 		}
 	}
 
-	SpriteVisualFingerprint PixelFingerprint(const std::vector<uint8_t>& pixels, int width, int height) {
-		SpriteVisualFingerprint fingerprint;
-		if (width <= 0 || height <= 0 || pixels.size() != static_cast<size_t>(width) * height * 4) {
-			return fingerprint;
-		}
-		constexpr uint64_t FnvOffset = 14695981039346656037ull;
-		constexpr uint64_t FnvPrime = 1099511628211ull;
-		fingerprint.primary = FnvOffset;
-		fingerprint.secondary = 0x9E3779B97F4A7C15ull;
-		auto hashByte = [&](uint8_t byte) {
-			fingerprint.primary = (fingerprint.primary ^ byte) * FnvPrime;
-			fingerprint.secondary ^= static_cast<uint64_t>(byte) + 0x9E3779B97F4A7C15ull + (fingerprint.secondary << 6) + (fingerprint.secondary >> 2);
+	SpriteVisualFingerprint PreviewFingerprint(const std::vector<uint8_t>& pixels, int width, int height) {
+		SpriteVisualFingerprint result { 14695981039346656037ull, 0x9E3779B97F4A7C15ull, pixels.size() };
+		const auto add = [&](uint8_t byte) {
+			result.primary = (result.primary ^ byte) * 1099511628211ull;
+			result.secondary ^= uint64_t(byte) + 0x9E3779B97F4A7C15ull + (result.secondary << 6) + (result.secondary >> 2);
 		};
 		for (int shift = 0; shift < 32; shift += 8) {
-			hashByte(static_cast<uint8_t>((static_cast<uint32_t>(width) >> shift) & 0xFF));
-			hashByte(static_cast<uint8_t>((static_cast<uint32_t>(height) >> shift) & 0xFF));
+			add(static_cast<uint8_t>(width >> shift));
+			add(static_cast<uint8_t>(height >> shift));
 		}
 		for (uint8_t byte : pixels) {
-			hashByte(byte);
+			add(byte);
 		}
-		fingerprint.pixelBytes = pixels.size();
-		return fingerprint;
+		return result;
 	}
 }
 
@@ -356,71 +340,81 @@ CrossClientClipboard::~CrossClientClipboard() = default;
 
 bool CrossClientClipboard::capture(CopyBuffer& source, const std::shared_ptr<EditorResourceSession>& session, wxString& error) {
 	error.clear();
-	if (!session || !source.canPaste()) {
-		error = "There is no copied map area to place in the cross-client clipboard.";
-		return false;
-	}
-
-	auto capturedMap = CloneMap(source.getBufferMap());
-	std::map<uint16_t, uint32_t> counts;
-	for (MapIterator iterator = capturedMap->begin(); iterator != capturedMap->end(); ++iterator) {
-		Tile* tile = (*iterator)->get();
-		CountItem(tile->ground, counts);
-		for (Item* item : tile->items) {
-			CountItem(item, counts);
+	clear();
+	try {
+		if (!session || session != GetActiveEditorResourceSession() || !source.canPaste()) {
+			error = "There is no copied map area to place in the cross-client clipboard.";
+			return false;
 		}
-	}
 
-	std::vector<CrossClientItemSnapshot> capturedItems;
-	capturedItems.reserve(counts.size());
-	size_t retainedPreviewBytes = 0;
-	for (const auto& [id, occurrences] : counts) {
-		CrossClientItemSnapshot snapshot;
-		snapshot.sourceId = id;
-		snapshot.occurrences = occurrences;
-		if (g_items.typeExists(id)) {
-			const ItemType& item = g_items[id];
-			snapshot.sourceClientId = item.clientID;
-			snapshot.group = static_cast<uint16_t>(item.group);
-			snapshot.type = static_cast<uint16_t>(item.type);
-			snapshot.semanticFlags = SemanticFlags(item);
-			snapshot.name = item.name;
-			GameSprite* sprite = item.sprite;
-			if (!sprite && item.clientID != 0) {
-				sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
+		auto capturedMap = CloneMap(source.getBufferMap());
+		std::map<uint16_t, uint32_t> counts;
+		for (MapIterator iterator = capturedMap->begin(); iterator != capturedMap->end(); ++iterator) {
+			Tile* tile = (*iterator)->get();
+			CountItem(tile->ground, counts);
+			for (Item* item : tile->items) {
+				CountItem(item, counts);
 			}
-			if (sprite) {
-				bool pending = false;
-				snapshot.visualAvailable = sprite->getVisualFingerprint(snapshot.visual, pending, false);
-				pending = false;
-				snapshot.previewAvailable = LoadStoredPreview(sprite, snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight, pending);
-				if (snapshot.previewAvailable && retainedPreviewBytes <= MaximumRetainedPreviewBytes
-					&& snapshot.previewRgba.size() <= MaximumRetainedPreviewBytes - retainedPreviewBytes) {
-					retainedPreviewBytes += snapshot.previewRgba.size();
-					snapshot.previewVisual = PixelFingerprint(snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight);
-				} else {
-					snapshot.previewAvailable = false;
-					snapshot.previewRgba.clear();
-					snapshot.previewWidth = 0;
-					snapshot.previewHeight = 0;
+		}
+
+		std::vector<CrossClientItemSnapshot> capturedItems;
+		capturedItems.reserve(counts.size());
+		size_t retainedPreviewBytes = 0;
+		for (const auto& [id, occurrences] : counts) {
+			CrossClientItemSnapshot snapshot;
+			snapshot.sourceId = id;
+			snapshot.occurrences = occurrences;
+			if (g_items.typeExists(id)) {
+				const ItemType& item = g_items[id];
+				snapshot.sourceClientId = item.clientID;
+				snapshot.group = static_cast<uint16_t>(item.group);
+				snapshot.type = static_cast<uint16_t>(item.type);
+				snapshot.semanticFlags = SemanticFlags(item);
+				snapshot.name = item.name;
+				GameSprite* sprite = item.sprite;
+				if (!sprite && item.clientID != 0) {
+					sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
+				}
+				if (sprite) {
+					bool pending = false;
+					snapshot.renderedVisualAvailable = sprite->getRenderedFingerprint(snapshot.renderedVisual, pending, false);
+					pending = false;
+					snapshot.previewAvailable = LoadStoredPreview(sprite, snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight, pending);
+					if (snapshot.previewAvailable && retainedPreviewBytes <= MaximumRetainedPreviewBytes
+						&& snapshot.previewRgba.size() <= MaximumRetainedPreviewBytes - retainedPreviewBytes) {
+						retainedPreviewBytes += snapshot.previewRgba.size();
+						snapshot.previewVisual = PreviewFingerprint(snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight);
+					} else {
+						snapshot.previewAvailable = false;
+						snapshot.previewRgba.clear();
+						snapshot.previewWidth = 0;
+						snapshot.previewHeight = 0;
+					}
 				}
 			}
+			capturedItems.push_back(std::move(snapshot));
 		}
-		capturedItems.push_back(std::move(snapshot));
-	}
 
-	map = std::move(capturedMap);
-	copyPosition = source.getPosition();
-	spawnDependencies = source.getSpawnDependencies();
-	sourceSession = session;
-	const WorkspaceClientSelection& client = g_workspace.getClient();
-	sourceClient = client.rootPath.empty() ? wxString("Not configured") : client.rootPath;
-	sourceServer = DisplayPath(g_workspace.getServer().rootPath);
-	items = std::move(capturedItems);
-	if (++generation == 0) {
-		++generation;
+		map = std::move(capturedMap);
+		copyPosition = source.getPosition();
+		spawnDependencies = source.getSpawnDependencies();
+		houses = source.houses;
+		copiedMapSession = source.sourceMapSessionId;
+		sourceGraphicsIdentity = g_gui.gfx.getResourceIdentity();
+		sourceSession = session;
+		const WorkspaceClientSelection& client = g_workspace.getClient();
+		sourceClient = client.rootPath.empty() ? wxString("Not configured") : client.rootPath;
+		sourceServer = DisplayPath(g_workspace.getServer().rootPath);
+		items = std::move(capturedItems);
+		if (++generation == 0) {
+			++generation;
+		}
+		return true;
+	} catch (const std::exception& exception) {
+		clear();
+		error = "Could not capture the copied area: " + wxString::FromUTF8(exception.what());
+		return false;
 	}
-	return true;
 }
 
 void CrossClientClipboard::clear() {
@@ -430,6 +424,9 @@ void CrossClientClipboard::clear() {
 	sourceServer.clear();
 	items.clear();
 	spawnDependencies.clear();
+	houses.clear();
+	copiedMapSession = InvalidSessionId;
+	sourceGraphicsIdentity = InvalidSessionId;
 	if (++generation == 0) {
 		++generation;
 	}
@@ -440,7 +437,7 @@ bool CrossClientClipboard::canPaste() const noexcept {
 }
 
 bool CrossClientClipboard::isFromSession(const std::shared_ptr<EditorResourceSession>& session) const noexcept {
-	return canPaste() && session && sourceSession.lock() == session;
+	return canPaste() && session && sourceSession.lock() == session && sourceGraphicsIdentity == g_gui.gfx.getResourceIdentity();
 }
 
 CrossClientPasteAnalysis CrossClientClipboard::analyze(
@@ -450,198 +447,199 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 ) const {
 	CrossClientPasteAnalysis analysis;
 	error.clear();
-	if (!canPaste() || !destinationSession) {
-		error = "The cross-client clipboard is empty or the destination tab has no resource session.";
+	if (!canPaste() || !destinationSession || destinationSession != GetActiveEditorResourceSession()) {
+		error = "The cross-client clipboard is empty or the destination tab is not active.";
 		return analysis;
 	}
-
 	analysis.clipboardGeneration = generation;
-	analysis.valid = true;
+	analysis.destinationGraphicsIdentity = g_gui.gfx.getResourceIdentity();
+	analysis.destinationWorkspaceGeneration = g_workspace.getGeneration();
 	analysis.sourceSession = sourceSession;
 	analysis.destinationSession = destinationSession;
 	analysis.sourceClient = sourceClient;
 	analysis.sourceServer = sourceServer;
-	const WorkspaceClientSelection& targetClient = g_workspace.getClient();
+	const auto& targetClient = g_workspace.getClient();
 	analysis.destinationClient = targetClient.rootPath.empty() ? wxString("Not configured") : targetClient.rootPath;
 	analysis.destinationServer = DisplayPath(g_workspace.getServer().rootPath);
-
+	const auto update = [&](size_t current, size_t total) {
+		if (progress && !progress(current, total)) {
+			error = "Cross-client comparison was cancelled.";
+			return false;
+		}
+		// Progress callbacks pump events: never use cached resources after a tab/reload/copy.
+		if (analysis.clipboardGeneration != generation || destinationSession != GetActiveEditorResourceSession()
+			|| analysis.destinationGraphicsIdentity != g_gui.gfx.getResourceIdentity()
+			|| analysis.destinationWorkspaceGeneration != g_workspace.getGeneration()) {
+			error = "The clipboard or destination resources changed during comparison. Paste again.";
+			return false;
+		}
+		return true;
+	};
+	const size_t maximumId = CrossClientMaximumItemId();
+	const size_t total = maximumId * 2;
+	if (!update(0, total)) {
+		return {};
+	}
 	std::unordered_map<SpriteVisualFingerprint, std::vector<TargetCandidate>, FingerprintHash> candidates;
 	std::unordered_map<uint16_t, TargetSpriteCache> spriteCache;
+	const bool needsFingerprints = std::any_of(items.begin(), items.end(), [](const auto& source) { return source.renderedVisualAvailable; });
+	const bool needsPreviews = std::any_of(items.begin(), items.end(), [](const auto& source) { return source.previewAvailable; });
 	std::unordered_set<SpriteVisualFingerprint, FingerprintHash> sourcePreviews;
-	for (const CrossClientItemSnapshot& source : items) {
-		if (source.visualAvailable && source.previewAvailable) {
+	bool needsUnfilteredFingerprints = false;
+	for (const auto& source : items) {
+		if (source.previewAvailable) {
 			sourcePreviews.insert(source.previewVisual);
+		} else if (source.renderedVisualAvailable) {
+			needsUnfilteredFingerprints = true;
 		}
 	}
-	const size_t maximumId = CrossClientMaximumItemId();
-	const size_t totalProgress = maximumId > std::numeric_limits<size_t>::max() / 2 ? maximumId : maximumId * 2;
 	for (size_t id = 1; id <= maximumId; ++id) {
-		if (progress && id % 32 == 0 && !progress(id, totalProgress)) {
-			error = "Cross-client comparison was cancelled.";
+		if (id % 32 == 0 && !update(id, total)) {
 			return {};
 		}
-		if (!g_items.typeExists(static_cast<int>(id))) {
+		if (!needsFingerprints || !g_items.typeExists(static_cast<int>(id))) {
 			continue;
 		}
 		const ItemType& item = g_items[id];
-		if (item.clientID == 0) {
+		if (!item.clientID) {
 			continue;
 		}
-
 		auto [cached, inserted] = spriteCache.try_emplace(item.clientID);
-		TargetSpriteCache& spriteData = cached->second;
-		if (inserted && !sourcePreviews.empty()) {
-			GameSprite* sprite = item.sprite;
-			if (!sprite) {
-				sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
-			}
+		if (inserted) {
+			GameSprite* sprite = item.sprite ? item.sprite : dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
 			bool pending = false;
-			std::vector<uint8_t> previewRgba;
-			int previewWidth = 0;
-			int previewHeight = 0;
-			const bool previewAvailable = LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending);
-			if (previewAvailable && sourcePreviews.contains(PixelFingerprint(previewRgba, previewWidth, previewHeight))) {
-				pending = false;
-				spriteData.visualAvailable = sprite->getVisualFingerprint(spriteData.visual, pending, false);
-			}
+			std::vector<uint8_t> preview;
+			int width = 0, height = 0;
+			// This only rejects candidates. It can never accept a sampled preview as a match.
+			const bool previewMatches = needsUnfilteredFingerprints
+				|| (LoadStoredPreview(sprite, preview, width, height, pending)
+					&& sourcePreviews.contains(PreviewFingerprint(preview, width, height)));
+			cached->second.available = previewMatches && sprite && sprite->getRenderedFingerprint(cached->second.visual, pending, false);
 		}
-
-		TargetCandidate candidate;
-		candidate.id = static_cast<uint16_t>(id);
-		candidate.clientId = item.clientID;
-		candidate.group = static_cast<uint16_t>(item.group);
-		candidate.type = static_cast<uint16_t>(item.type);
-		candidate.semanticFlags = SemanticFlags(item);
-		candidate.name = item.name;
-		if (spriteData.visualAvailable) {
-			candidates[spriteData.visual].push_back(std::move(candidate));
+		if (cached->second.available) {
+			candidates[cached->second.visual].push_back({ static_cast<uint16_t>(id), item.clientID,
+														  static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name });
 		}
 	}
-
 	analysis.rows.reserve(items.size());
-	for (const CrossClientItemSnapshot& source : items) {
+	for (const auto& source : items) {
 		CrossClientPasteRow row;
 		row.source = source;
 		analysis.totalOccurrences += source.occurrences;
-		if (!source.visualAvailable) {
-			row.detail = "The source sprite could not be read, so it cannot be remapped safely.";
-			++analysis.missing;
-			analysis.rows.push_back(std::move(row));
-			continue;
-		}
-
-		const auto matches = candidates.find(source.visual);
-		if (matches == candidates.end() || matches->second.empty()) {
-			row.detail = "No byte-identical sprite/item exists in the destination client.";
-			++analysis.missing;
-			analysis.rows.push_back(std::move(row));
-			continue;
-		}
-
-		const TargetCandidate* best = nullptr;
-		int bestScore = std::numeric_limits<int>::min();
-		for (const TargetCandidate& candidate : matches->second) {
-			if (!StructurallyCompatible(source, candidate)) {
-				continue;
-			}
-			const int score = MatchScore(source, candidate);
-			if (!best || score > bestScore || (score == bestScore && candidate.id < best->id)) {
-				best = &candidate;
-				bestScore = score;
+		std::vector<const TargetCandidate*> compatible;
+		if (source.renderedVisualAvailable) {
+			const auto found = candidates.find(source.renderedVisual);
+			if (found != candidates.end()) {
+				for (const auto& candidate : found->second) {
+					if (StructurallyCompatible(source, candidate)) {
+						compatible.push_back(&candidate);
+					}
+				}
 			}
 		}
-		if (!best) {
-			row.detail = "Identical graphics were found, but the destination item type is incompatible.";
-			++analysis.missing;
-			analysis.rows.push_back(std::move(row));
-			continue;
-		}
-		row.destinationId = best->id;
-		row.destinationClientId = best->clientId;
-		row.destinationName = best->name;
-		if (source.sourceId == best->id) {
-			row.state = CrossClientMatchState::Matched;
-			row.detail = "The destination already uses the same map item ID and identical graphics.";
-			++analysis.matched;
+		if (compatible.size() == 1) {
+			const auto& best = *compatible.front();
+			row.destinationId = best.id;
+			row.destinationClientId = best.clientId;
+			row.destinationName = best.name;
+			row.state = source.sourceId == best.id ? CrossClientMatchState::Matched : CrossClientMatchState::Remapped;
+			row.detail = "All animation frames and patterns match a unique compatible destination item.";
+		} else if (compatible.size() > 1) {
+			row.detail = "Several destination IDs have identical graphics and compatible roles. Choose the intended ID.";
+			for (const auto* candidate : compatible) {
+				// Identical visuals are still ambiguous: names and numeric IDs cannot break the tie.
+				row.recommendations.push_back({ candidate->id, candidate->clientId, candidate->name, 100, false, true, 1.0, true });
+			}
 		} else {
-			row.state = CrossClientMatchState::Remapped;
-			row.detail = wxString::Format("Map item ID %u will be replaced with %u.", source.sourceId, best->id);
-			++analysis.remapped;
+			row.detail = source.renderedVisualAvailable
+				? "No compatible item matches every frame and pattern. Suggestions require review."
+				: "The complete source graphics could not be verified. Choose a destination manually.";
 		}
 		analysis.rows.push_back(std::move(row));
 	}
-
-	const bool needsRecommendations = std::any_of(analysis.rows.begin(), analysis.rows.end(), [](const CrossClientPasteRow& row) {
-		return row.state == CrossClientMatchState::Missing;
-	});
-	if (needsRecommendations) {
+	const bool missing = std::any_of(analysis.rows.begin(), analysis.rows.end(), [](const auto& row) { return row.state == CrossClientMatchState::Missing && row.recommendations.empty(); });
+	if (missing && needsPreviews) {
+		using RoleKey = std::tuple<uint16_t, uint16_t, uint64_t>;
+		std::map<RoleKey, std::vector<CrossClientPasteRow*>> missingByRole;
+		for (auto& row : analysis.rows) {
+			if (row.state == CrossClientMatchState::Missing && row.source.previewAvailable
+				&& (row.recommendations.empty() || !row.recommendations.front().allVariantsVerified)) {
+				missingByRole[{ row.source.group, row.source.type, row.source.semanticFlags & CrossClientMatchPolicy::RequiredRoleMask }].push_back(&row);
+			}
+		}
+		// One destination preview at a time: memory is independent of the destination item count.
 		for (size_t id = 1; id <= maximumId; ++id) {
-			if (progress && id % 32 == 0 && !progress(maximumId + id, totalProgress)) {
-				error = "Cross-client comparison was cancelled.";
+			if (id % 32 == 0 && !update(maximumId + id, total)) {
 				return {};
 			}
 			if (!g_items.typeExists(static_cast<int>(id))) {
 				continue;
 			}
 			const ItemType& item = g_items[id];
-			if (item.clientID == 0) {
+			if (!item.clientID) {
 				continue;
 			}
-			GameSprite* sprite = item.sprite;
-			if (!sprite) {
-				sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
+			const TargetCandidate candidate { static_cast<uint16_t>(id), item.clientID,
+											  static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name };
+			const auto found = missingByRole.find({ candidate.group, candidate.type, candidate.semanticFlags & CrossClientMatchPolicy::RequiredRoleMask });
+			if (found == missingByRole.end()) {
+				continue;
 			}
+			GameSprite* sprite = item.sprite ? item.sprite : dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
 			bool pending = false;
-			std::vector<uint8_t> previewRgba;
-			int previewWidth = 0;
-			int previewHeight = 0;
-			const bool previewAvailable = !sourcePreviews.empty()
-				&& LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending);
-
-			TargetCandidate candidate;
-			candidate.id = static_cast<uint16_t>(id);
-			candidate.clientId = item.clientID;
-			candidate.group = static_cast<uint16_t>(item.group);
-			candidate.type = static_cast<uint16_t>(item.type);
-			candidate.semanticFlags = SemanticFlags(item);
-			candidate.name = item.name;
-			for (CrossClientPasteRow& row : analysis.rows) {
-				if (row.state != CrossClientMatchState::Missing || !StructurallyCompatible(row.source, candidate)) {
+			std::vector<uint8_t> pixels;
+			int width = 0, height = 0;
+			if (!LoadStoredPreview(sprite, pixels, width, height, pending)) {
+				continue;
+			}
+			for (auto* pendingRow : found->second) {
+				auto& row = *pendingRow;
+				// Don't mix approximate scores into an exact-but-ambiguous equivalence list.
+				if (row.state != CrossClientMatchState::Missing || !row.source.previewAvailable
+					|| (!row.recommendations.empty() && row.recommendations.front().allVariantsVerified)
+					|| !StructurallyCompatible(row.source, candidate)) {
 					continue;
 				}
-				const bool visualCompared = row.source.previewAvailable && previewAvailable;
-				const double similarity = visualCompared
-					? PreviewSimilarity(
-						row.source.previewRgba,
-						row.source.previewWidth,
-						row.source.previewHeight,
-						previewRgba,
-						previewWidth,
-						previewHeight
-					)
-					: 0.0;
-				AddRecommendation(row.recommendations, row.source, candidate, similarity, visualCompared);
+				const double similarity = PreviewSimilarity(row.source.previewRgba, row.source.previewWidth, row.source.previewHeight, pixels, width, height);
+				AddRecommendation(row.recommendations, row.source, candidate, similarity, true);
 			}
 		}
 	}
-	if (progress) {
-		progress(totalProgress, totalProgress);
+	if (!update(total, total)) {
+		return {};
 	}
+	Recount(analysis);
+	analysis.valid = true;
 	return analysis;
 }
 
+bool CrossClientClipboard::hasSafeAutomaticMapping(const CrossClientPasteRow& row) {
+	if (row.state != CrossClientMatchState::Missing || row.recommendations.empty()) {
+		return false;
+	}
+	const auto& best = row.recommendations.front();
+	int competingConfidence = -1;
+	double competingVisual = -1.0;
+	for (size_t i = 1; i < row.recommendations.size(); ++i) {
+		competingConfidence = std::max(competingConfidence, int(row.recommendations[i].confidence));
+		competingVisual = std::max(competingVisual, row.recommendations[i].visualSimilarity);
+	}
+	return CrossClientMatchPolicy::CanApplySuggestion(best.confidence, best.automatic, best.visualCompared, best.visualSimilarity, competingConfidence, competingVisual, best.allVariantsVerified);
+}
 bool CrossClientClipboard::isCompatibleDestination(const CrossClientItemSnapshot& source, uint16_t destinationId) {
 	if (destinationId == 0 || !g_items.typeExists(destinationId)) {
 		return false;
 	}
 	const ItemType& item = g_items[destinationId];
-	return source.group == static_cast<uint16_t>(item.group) && source.type == static_cast<uint16_t>(item.type)
-		&& (source.semanticFlags & SemanticRoleMask) == (SemanticFlags(item) & SemanticRoleMask);
+	return CrossClientMatchPolicy::StructurallyCompatible(
+		source.group, source.type, source.semanticFlags,
+		static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item)
+	);
 }
 
 bool CrossClientClipboard::resolveMapping(CrossClientPasteAnalysis& analysis, size_t rowIndex, uint16_t destinationId, wxString& error) {
 	error.clear();
-	if (!analysis.valid || rowIndex >= analysis.rows.size()) {
+	if (!analysis.valid || rowIndex >= analysis.rows.size() || analysis.destinationSession.lock() != GetActiveEditorResourceSession() || analysis.destinationGraphicsIdentity != g_gui.gfx.getResourceIdentity() || analysis.destinationWorkspaceGeneration != g_workspace.getGeneration()) {
 		error = "The selected cross-client row is no longer available.";
 		return false;
 	}
@@ -662,49 +660,68 @@ bool CrossClientClipboard::resolveMapping(CrossClientPasteAnalysis& analysis, si
 
 bool CrossClientClipboard::apply(const CrossClientPasteAnalysis& analysis, CopyBuffer& destination, wxString& error) {
 	error.clear();
-	if (!canPaste() || analysis.clipboardGeneration != generation) {
-		error = "The copied area changed while the cross-client verification window was open.";
-		return false;
-	}
-	if (analysis.destinationSession.lock() != GetActiveEditorResourceSession()) {
-		error = "The destination resource session changed before the paste was applied.";
-		return false;
-	}
-	if (!analysis.canApply()) {
-		error = "The copied area contains missing resources. No map or client file was changed.";
-		return false;
-	}
-
-	std::unordered_map<uint16_t, uint16_t> remap;
-	for (const CrossClientPasteRow& row : analysis.rows) {
-		if (!isCompatibleDestination(row.source, row.destinationId)) {
-			error = wxString::Format("Destination item ID %u is missing or incompatible. Nothing was changed.", row.destinationId);
+	try {
+		if (!canPaste() || analysis.clipboardGeneration != generation) {
+			error = "The copied area changed while the cross-client verification window was open.";
 			return false;
 		}
-		remap[row.source.sourceId] = row.destinationId;
-	}
-	std::vector<std::pair<Item*, uint16_t>> changedItems;
-	VisitMapItems(*map, [&](Item* item) {
-		const auto mapping = remap.find(item->getID());
-		if (mapping != remap.end()) {
-			changedItems.emplace_back(item, item->getID());
-			item->setID(mapping->second);
+		if (analysis.destinationSession.expired() || analysis.destinationSession.lock() != GetActiveEditorResourceSession() || analysis.destinationGraphicsIdentity != g_gui.gfx.getResourceIdentity() || analysis.destinationWorkspaceGeneration != g_workspace.getGeneration()) {
+			error = "The destination resource session changed before the paste was applied.";
+			return false;
 		}
-	});
-	struct RestoreItemIds {
-		std::vector<std::pair<Item*, uint16_t>>& items;
-		~RestoreItemIds() {
-			for (auto iterator = items.rbegin(); iterator != items.rend(); ++iterator) {
-				iterator->first->setID(iterator->second);
+		if (!analysis.canApply()) {
+			error = "The copied area contains missing resources. No map or client file was changed.";
+			return false;
+		}
+
+		std::unordered_map<uint16_t, uint16_t> remap;
+		if (analysis.rows.size() != items.size()) {
+			error = "The mapping does not cover the complete copied area. Paste again.";
+			return false;
+		}
+		for (const CrossClientPasteRow& row : analysis.rows) {
+			if (!isCompatibleDestination(row.source, row.destinationId)) {
+				error = wxString::Format("Destination item ID %u is missing or incompatible. Nothing was changed.", row.destinationId);
+				return false;
+			}
+			remap[row.source.sourceId] = row.destinationId;
+		}
+		for (const auto& source : items) {
+			if (!remap.contains(source.sourceId)) {
+				error = "The mapping does not cover every copied item. Nothing was changed.";
+				return false;
 			}
 		}
-	} restore { changedItems };
+		std::vector<std::pair<Item*, uint16_t>> changedItems;
+		struct RestoreItemIds {
+			std::vector<std::pair<Item*, uint16_t>>& items;
+			~RestoreItemIds() {
+				for (auto iterator = items.rbegin(); iterator != items.rend(); ++iterator) {
+					iterator->first->setID(iterator->second);
+				}
+			}
+		} restore { changedItems };
+		VisitMapItems(*map, [&](Item* item) {
+			const auto mapping = remap.find(item->getID());
+			if (mapping != remap.end()) {
+				changedItems.emplace_back(item, item->getID());
+				item->setID(mapping->second);
+			}
+		});
 
-	std::unique_ptr<BaseMap> converted = CloneMap(*map);
-	if (!converted || converted->size() == 0) {
-		error = "The converted paste buffer is empty.";
+		std::unique_ptr<BaseMap> converted = CloneMap(*map);
+		if (!converted || converted->size() == 0) {
+			error = "The converted paste buffer is empty.";
+			return false;
+		}
+		CopyBuffer prepared;
+		prepared.replace(std::move(converted), copyPosition, spawnDependencies);
+		prepared.houses = houses;
+		prepared.sourceMapSessionId = copiedMapSession;
+		destination.swap(prepared);
+		return true;
+	} catch (const std::exception& exception) {
+		error = "Could not prepare the converted area: " + wxString::FromUTF8(exception.what());
 		return false;
 	}
-	destination.replace(std::move(converted), copyPosition, spawnDependencies);
-	return true;
 }

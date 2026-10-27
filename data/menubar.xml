@@ -67,6 +67,7 @@
 		<item name="Release My Locks" action="MULTIPLAYER_UNLOCK" help="Release your tile and area locks."/>
 	</menu>
 	<menu name="Tools">
+		<item name="Converter mapa inteiro para meu cliente..." action="WHOLE_MAP_MIGRATION" help="Comparar dois conjuntos de OTB/DAT/SPR e gerar uma cópia completa do mapa com IDs do meu servidor."/>
 		<item name="Command Palette..." action="COMMAND_PALETTE" hotkey="Ctrl+Shift+P" help="Search and execute NexaMap commands."/>
 		<item name="MCP Server..." action="MCP_SERVER" help="Connect AI clients to the active NexaMap workspace through a loopback-only MCP server."/>
 		<separator/>

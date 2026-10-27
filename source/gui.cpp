@@ -2268,6 +2268,11 @@ bool GUI::PrepareCrossClientPaste(Editor& editor) {
 	if (!crossClientClipboard || !crossClientClipboard->canPaste() || crossClientClipboard->isFromSession(activeSession)) {
 		return editor.copybuffer.canPaste();
 	}
+	const SessionId destinationMap = editor.map.getSessionId();
+	const auto destinationStillActive = [&] {
+		const Editor* current = GetCurrentEditor();
+		return current == &editor && current->map.getSessionId() == destinationMap;
+	};
 
 	wxProgressDialog progress(
 		"Cross-Client Paste",
@@ -2285,6 +2290,9 @@ bool GUI::PrepareCrossClientPaste(Editor& editor) {
 		},
 		error
 	);
+	if (!destinationStillActive()) {
+		return false;
+	}
 	if (!error.empty()) {
 		if (error != "Cross-client comparison was cancelled.") {
 			PopupDialog(root, "Cross-Client Paste", error, wxOK | wxICON_ERROR);
@@ -2292,11 +2300,17 @@ bool GUI::PrepareCrossClientPaste(Editor& editor) {
 		return false;
 	}
 
-	CrossClientPasteDialog dialog(root, analysis);
-	if (dialog.ShowModal() != wxID_OK) {
+	progress.Hide();
+	if (!analysis.canApply()) {
+		CrossClientPasteDialog dialog(root, analysis);
+		if (dialog.ShowModal() != wxID_OK) {
+			return false;
+		}
+		analysis = dialog.GetAnalysis();
+	}
+	if (!destinationStillActive()) {
 		return false;
 	}
-	analysis = dialog.GetAnalysis();
 	if (!crossClientClipboard->apply(analysis, editor.copybuffer, error)) {
 		PopupDialog(root, "Cross-Client Paste", error, wxOK | wxICON_ERROR);
 		return false;
@@ -2394,7 +2408,9 @@ void GUI::ChangeFloor(int new_floor) {
 }
 
 void GUI::SetStatusText(const wxString& text) {
-	g_gui.root->SetStatusText(text, 0);
+	if (root) {
+		root->SetStatusText(text, 0);
+	}
 }
 
 void GUI::SetTitle(wxString title) {
@@ -2444,8 +2460,10 @@ void GUI::UpdateTitle() {
 }
 
 void GUI::UpdateMenus() {
-	wxCommandEvent evt(EVT_UPDATE_MENUS);
-	g_gui.root->AddPendingEvent(evt);
+	if (root) {
+		wxCommandEvent evt(EVT_UPDATE_MENUS);
+		root->AddPendingEvent(evt);
+	}
 }
 
 void GUI::ShowToolbar(ToolBarID id, bool show) {

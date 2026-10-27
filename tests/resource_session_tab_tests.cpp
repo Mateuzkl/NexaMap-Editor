@@ -10,12 +10,18 @@
 #include "gui.h"
 #include "items.h"
 #include "map_tab.h"
+#include "cross_client_test_sprite.h"
 
 #include <iostream>
 #include <array>
 #include <new>
 
 class ResourceSessionTabTests {
+	static inline std::vector<std::unique_ptr<CrossClientTestSprite>> sprites;
+	static GameSprite* sprite(uint8_t colour) {
+		sprites.push_back(std::make_unique<CrossClientTestSprite>(colour));
+		return sprites.back().get();
+	}
 	static void check(bool value, const char* message) {
 		if (!value) {
 			throw std::runtime_error(message);
@@ -28,6 +34,7 @@ class ResourceSessionTabTests {
 		type->clientID = id;
 		type->group = ITEM_GROUP_GROUND;
 		type->name = name;
+		type->sprite = sprite(25);
 		g_items.items.set(id, type);
 	}
 
@@ -37,6 +44,7 @@ class ResourceSessionTabTests {
 		type->clientID = id;
 		type->name = name;
 		type->isWall = wall;
+		type->sprite = sprite(wall ? 100 : 200);
 		g_items.items.set(id, type);
 	}
 
@@ -71,14 +79,22 @@ class ResourceSessionTabTests {
 	) {
 		wxString error;
 		check(clipboard.capture(g_gui.copybuffer, source, error), "Could not capture the source session copybuffer");
+		g_gui.CaptureCrossClientCopy(g_gui.copybuffer);
 		activateWithoutUi(destination);
+		for (size_t index = 0; index < g_gui.tabbook->GetTabCount(); ++index) {
+			auto* tab = dynamic_cast<MapTab*>(g_gui.tabbook->GetTab(index));
+			if (tab && tab->GetResourceSession() == destination) {
+				g_gui.tabbook->SetFocusedTab(index);
+				break;
+			}
+		}
 		CrossClientPasteAnalysis analysis = clipboard.analyze(destination, {}, error);
 		check(analysis.valid && analysis.rows.size() == 1, "Cross-client analysis did not retain the copied area");
-		check(!analysis.rows[0].recommendations.empty() && analysis.rows[0].recommendations.front().automatic, "Matching item properties were not offered for automatic remapping");
-		check(analysis.rows[0].recommendations.front().destinationId == destinationId, "Automatic remapping selected resources from the wrong tab");
-		check(CrossClientClipboard::resolveMapping(analysis, 0, analysis.rows[0].recommendations.front().destinationId, error), "Could not remap the copied ground item");
+		check(analysis.canApply(), "Identical complete graphics were not automatically remapped");
+		check(analysis.rows[0].destinationId == destinationId, "Automatic remapping selected resources from the wrong tab");
 		check(clipboard.apply(analysis, g_gui.copybuffer, error), "Could not apply the cross-client clipboard mapping");
 		check(copiedItemId() == destinationId, "Cross-client paste used resources from the wrong tab");
+		check(g_gui.PrepareCrossClientPaste(*g_gui.GetCurrentEditor()), "Verified area paste should proceed without opening a review dialog");
 	}
 
 public:
@@ -127,6 +143,7 @@ public:
 		activateWithoutUi(sessionB);
 		defineGround(200, "Shared cross-client ground");
 		defineWall(201, "Shared cross-client wall", true);
+		g_items[201].isWall = false; // Simulate destination without brush/XML labels.
 		defineWall(202, "Shared cross-client wall", false);
 		fillCopyBuffer(200);
 		g_gui.loaded_version = otherVersion->getID();
@@ -184,6 +201,7 @@ public:
 		g_gui.SetApplicationClosing(wasClosing);
 		activateWithoutUi(originalSession);
 		ClientVersion::unloadVersions();
+		sprites.clear();
 		std::cout << "PASS independent tabs: 8.60 + another client, repeated switching, bidirectional cross-client clipboard and isolated close\n";
 	}
 };

@@ -33,6 +33,7 @@
 #include "reference_style_window.h"
 #include "mcp/mcp_window.h"
 #include "map_item_id_converter_window.h"
+#include "map_migration/map_migration_window.h"
 #include "map_diagnostics_window.h"
 #include "minimap_import_window.h"
 #include "png_map_import_window.h"
@@ -82,6 +83,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(IMPORT_PNG_MAP, wxITEM_NORMAL, OnImportPngMap);
 	MAKE_ACTION(CLEAR_MINIMAP_OVERLAY, wxITEM_NORMAL, OnClearMinimapOverlay);
 	MAKE_ACTION(MAP_ITEM_ID_CONVERTER, wxITEM_NORMAL, OnMapItemIdConverter);
+	MAKE_ACTION(WHOLE_MAP_MIGRATION, wxITEM_NORMAL, OnWholeMapMigration);
 	MAKE_ACTION(PROCEDURAL_MAP_GENERATOR, wxITEM_NORMAL, OnProceduralMapGenerator);
 	MAKE_ACTION(SPAWN_NPC_CONVERTER, wxITEM_NORMAL, OnSpawnNpcConverter);
 	MAKE_ACTION(IMPORT_MONSTERS, wxITEM_NORMAL, OnImportMonsterData);
@@ -450,6 +452,7 @@ void MainMenuBar::Update() {
 	EnableItem(IMPORT_PNG_MAP, loaded);
 	EnableItem(CLEAR_MINIMAP_OVERLAY, has_map && g_gui.GetCurrentMapTab()->GetCanvas()->HasMinimapImportOverlay());
 	EnableItem(MAP_ITEM_ID_CONVERTER, loaded);
+	EnableItem(WHOLE_MAP_MIGRATION, live == nullptr);
 	EnableItem(PROCEDURAL_MAP_GENERATOR, loaded && has_map);
 	EnableItem(SPAWN_NPC_CONVERTER, true);
 	EnableItem(IMPORT_MONSTERS, is_local);
@@ -931,6 +934,10 @@ void MainMenuBar::OnClearMinimapOverlay(wxCommandEvent& WXUNUSED(event)) {
 
 void MainMenuBar::OnMapItemIdConverter(wxCommandEvent& WXUNUSED(event)) {
 	static_cast<void>(RunMapItemIdConverter(frame, MapItemIdConverterLaunchContext::Editor));
+}
+
+void MainMenuBar::OnWholeMapMigration(wxCommandEvent& WXUNUSED(event)) {
+	static_cast<void>(RunWholeMapMigration(frame));
 }
 
 void MainMenuBar::OnProceduralMapGenerator(wxCommandEvent& WXUNUSED(event)) {

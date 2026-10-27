@@ -1,4 +1,5 @@
 // Real editor serializers and hotkey parsing, using only synthetic map data.
+#include <glad/glad.h>
 #include "main.h"
 #include "application.h"
 #include "artprovider.h"
@@ -11,6 +12,7 @@
 #include "iomap_otbm.h"
 #include "editor_tabs.h"
 #include "editor.h"
+#include "multiplayer_session.h"
 #include "map_tab.h"
 #include "map_display.h"
 #include "gl_renderer.h"
@@ -19,6 +21,15 @@
 #include <wx/evtloop.h>
 #include <wx/uiaction.h>
 #include <wx/dcscreen.h>
+
+Editor::Editor(CopyBuffer& buffer, std::nullptr_t) :
+	actionQueue(new ActionQueue(*this)), selection(*this), copybuffer(buffer), replace_brush(nullptr) {
+	map.mapVersion = { MAP_OTBM_4, static_cast<ClientVersionID>(17) };
+	map.setWidth(512);
+	map.setHeight(512);
+	map.setName("Linux editor test fixture");
+	map.unnamed = true;
+}
 
 namespace {
 	void require(bool condition, const char* message) {
@@ -84,7 +95,7 @@ namespace {
 		g_hotkey_manager.DiscoverActions(menu);
 		int toolCommands = 0;
 		g_gui.root->Bind(
-			wxEVT_MENU, [&](wxCommandEvent&) { ++toolCommands; }, MAIN_FRAME_MENU + MenuBar::NEW
+			wxEVT_MENU, [&](wxCommandEvent&) { ++toolCommands; }, static_cast<int>(MAIN_FRAME_MENU) + static_cast<int>(MenuBar::NEW)
 		);
 		auto* text = new wxTextCtrl(g_gui.root, wxID_ANY, "", wxPoint(30, 30), wxSize(200, 30));
 		auto* focusPanel = new wxPanel(g_gui.root, wxID_ANY, wxPoint(30, 80), wxSize(200, 60), wxWANTS_CHARS);
@@ -96,6 +107,13 @@ namespace {
 		require(input.Text("trd"), "inject native GTK typing");
 #else
 		// The pinned vcpkg wxWidgets port disables wxUIActionSimulator.
+		// Xvfb has no window manager to grant keyboard focus to a shown frame.
+		wxMilliSleep(100);
+		wxYield();
+		const auto focusCommand = "xdotool search --onlyvisible --pid " + std::to_string(wxGetProcessId()) + " --name . windowfocus";
+		require(std::system(focusCommand.c_str()) == 0, "focus native GTK test window");
+		text->SetFocus();
+		wxYield();
 		require(std::system("xdotool type --clearmodifiers --delay 20 trd") == 0, "inject native GTK typing with xdotool");
 #endif
 		wxMilliSleep(80);
@@ -228,6 +246,8 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 	setenv("HOME", directory.c_str(), 1);
 	setenv("XDG_CONFIG_HOME", directory.c_str(), 1);
 	setenv("XDG_DATA_HOME", directory.c_str(), 1);
+	// This test captures X11 windows; WSLg may otherwise prefer Wayland over DISPLAY.
+	setenv("GDK_BACKEND", "x11", 1);
 	if (!wxEntryStart(argc, argv)) {
 		return 1;
 	}

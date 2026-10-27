@@ -34,12 +34,13 @@ Container::~Container() {
 Item* Container::deepCopy() const {
 	// Preserve nested items even if the converted ID is not classified as a
 	// container by the currently loaded item database.
-	auto* copy = newd Container(id);
+	std::unique_ptr<Container> copy(newd Container(id));
 	copyBaseStateTo(*copy);
+	copy->contents.reserve(contents.size());
 	for (const Item* item : contents) {
 		copy->contents.push_back(item->deepCopy());
 	}
-	return copy;
+	return copy.release();
 }
 
 Item* Container::getItem(size_t index) const {
@@ -63,10 +64,10 @@ Teleport::Teleport(const uint16_t type) :
 Item* Teleport::deepCopy() const {
 	// A converted ID may no longer be classified as a teleport by the active
 	// items.otb. Preserve the dynamic type and its OTBM-only data regardless.
-	auto* copy = newd Teleport(id);
+	std::unique_ptr<Teleport> copy(newd Teleport(id));
 	copyBaseStateTo(*copy);
 	copy->destination = destination;
-	return copy;
+	return copy.release();
 }
 
 // Door
@@ -78,10 +79,10 @@ Door::Door(const uint16_t type) :
 
 Item* Door::deepCopy() const {
 	// Do not let an ID/type-table change slice a house door into a plain Item.
-	auto* copy = newd Door(id);
+	std::unique_ptr<Door> copy(newd Door(id));
 	copyBaseStateTo(*copy);
 	copy->doorId = doorId;
-	return copy;
+	return copy.release();
 }
 
 // Depot
@@ -94,10 +95,10 @@ Depot::Depot(const uint16_t type) :
 Item* Depot::deepCopy() const {
 	// A converted ID may not be classified as a depot by the active item
 	// metadata. Preserve the dynamic type and Town association explicitly.
-	auto* copy = newd Depot(id);
+	std::unique_ptr<Depot> copy(newd Depot(id));
 	copyBaseStateTo(*copy);
 	copy->depotId = depotId;
-	return copy;
+	return copy.release();
 }
 
 // Podium
@@ -109,12 +110,12 @@ Podium::Podium(const uint16_t type) :
 
 Item* Podium::deepCopy() const {
 	// Keep podium-only state even if the converted ID is classified differently.
-	auto* copy = newd Podium(id);
+	std::unique_ptr<Podium> copy(newd Podium(id));
 	copyBaseStateTo(*copy);
 	copy->outfit = outfit;
 	copy->showOutfit = showOutfit;
 	copy->showMount = showMount;
 	copy->showPlatform = showPlatform;
 	copy->direction = direction;
-	return copy;
+	return copy.release();
 }

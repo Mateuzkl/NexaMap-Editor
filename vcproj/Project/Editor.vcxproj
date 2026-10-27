@@ -124,7 +124,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MaxFilesInUnityFile>8</MaxFilesInUnityFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>comctl32.lib;Rpcrt4.lib;WS2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -152,7 +152,7 @@
       <PrecompiledHeaderFile>main.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MaxFilesInUnityFile>8</MaxFilesInUnityFile>
-      <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -184,7 +184,7 @@
       <MaxFilesInUnityFile>8</MaxFilesInUnityFile>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>-Zm114 /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS -Zm114 /utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>comctl32.lib;WS2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -215,7 +215,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MaxFilesInUnityFile>8</MaxFilesInUnityFile>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <AdditionalOptions>-Zm114 /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS -Zm114 /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalUsingDirectories>
       </AdditionalUsingDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -313,6 +313,15 @@
     <ClCompile Include="..\..\source\reference_style_window.cpp" />
     <ClInclude Include="..\..\source\map_item_id_converter_window.h" />
     <ClCompile Include="..\..\source\map_item_id_converter_window.cpp" />
+    <ClInclude Include="..\..\source\map_migration\map_migration.h" />
+    <ClInclude Include="..\..\source\map_migration\migration_io.h" />
+    <ClInclude Include="..\..\source\map_migration\map_migration_window.h" />
+    <ClCompile Include="..\..\source\map_migration\migration_io.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\classic_resource_catalog.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\map_inventory.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\cross_client_matcher.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\map_migration_engine.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\map_migration_window.cpp" />
     <ClInclude Include="..\..\source\map_item_id_converter.h" />
     <ClCompile Include="..\..\source\map_item_id_converter.cpp" />
     <ClInclude Include="..\..\source\depot_conversion_validation.h" />

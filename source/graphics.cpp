@@ -1768,6 +1768,10 @@ void GameSprite::unloadDC() {
 }
 
 bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit) {
+	return getVisualVariantRGBA(pixels, pixelWidth, pixelHeight, pending, allowAsync, outfit, 0, 0, 0, 0);
+}
+
+bool GameSprite::getVisualVariantRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int patternX, int patternY, int patternZ, int frame) {
 	constexpr size_t MaximumPreviewBytes = 16u * 1024u * 1024u;
 	pending = false;
 	pixelWidth = static_cast<int>(width) * SPRITE_PIXELS;
@@ -1788,7 +1792,7 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 		}
 		for (uint8_t tileX = 0; tileX < width; ++tileX) {
 			for (uint8_t tileY = 0; tileY < height; ++tileY) {
-				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, outfit ? std::min(2, static_cast<int>(pattern_x) - 1) : 0, outfit ? layer : 0, 0, 0);
+				const int index = getIndex(tileX, tileY, outfit ? 0 : layer, outfit ? std::min(2, static_cast<int>(pattern_x) - 1) : patternX, outfit ? layer : patternY, outfit ? 0 : patternZ, frame);
 				if (index < 0 || static_cast<size_t>(index) >= spriteList.size() || !spriteList[index]) {
 					continue;
 				}
@@ -1859,12 +1863,79 @@ bool GameSprite::getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWi
 							continue;
 						}
 						const size_t destination = (static_cast<size_t>(destinationY + y) * pixelWidth + destinationX + x) * 4;
-						std::copy_n(tilePixels.data() + source, 4, pixels.data() + destination);
+						auto* dst = pixels.data() + destination;
+						const auto* src = tilePixels.data() + source;
+						const unsigned alpha = src[3], inverse = 255 - alpha, combined = alpha + (dst[3] * inverse + 127) / 255;
+						for (unsigned c = 0; c < 3; ++c) {
+							dst[c] = combined ? static_cast<uint8_t>((src[c] * alpha + (dst[c] * dst[3] * inverse + 127) / 255 + combined / 2) / combined) : 0;
+						}
+						dst[3] = static_cast<uint8_t>(combined);
 					}
 				}
 			}
 		}
 	}
+	return true;
+}
+
+bool GameSprite::getRenderedFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync) {
+	pending = false;
+	fingerprint = {};
+	const uint64_t variants = uint64_t(pattern_x) * pattern_y * pattern_z * frames;
+	const uint64_t pixels = uint64_t(width) * height * SPRITE_PIXELS_SIZE;
+	const uint64_t expected = uint64_t(width) * height * layers * variants;
+	if (!variants || !pixels || !layers || expected != spriteList.size() || pixels * variants > 16ull * 1024 * 1024 || std::any_of(spriteList.begin(), spriteList.end(), [](const auto* image) { return image == nullptr; })) {
+		return false;
+	}
+	SpriteVisualFingerprint result;
+	result.primary = 14695981039346656037ull;
+	result.secondary = 0x9E3779B97F4A7C15ull;
+	const auto byte = [&](uint8_t value) {
+		result.primary = (result.primary ^ value) * 1099511628211ull;
+		result.secondary ^= uint64_t(value) + 0x9E3779B97F4A7C15ull + (result.secondary << 6) + (result.secondary >> 2);
+	};
+	const auto number = [&](uint32_t value) {
+		for (int shift = 0; shift < 32; shift += 8) {
+			byte(static_cast<uint8_t>(value >> shift));
+		}
+	};
+	for (uint32_t value : { uint32_t(width), uint32_t(height), uint32_t(pattern_x), uint32_t(pattern_y), uint32_t(pattern_z), uint32_t(frames), uint32_t(draw_height), uint32_t(drawoffset_x), uint32_t(drawoffset_y), has_light ? 1u : 0u, has_light ? uint32_t(light.intensity) : 0u, has_light ? uint32_t(light.color) : 0u }) {
+		number(value);
+	}
+	number(animator ? 1 : 0);
+	if (animator) {
+		if (animator->frame_count != frames) {
+			return false;
+		}
+		number(static_cast<uint32_t>(animator->start_frame));
+		number(static_cast<uint32_t>(animator->loop_count));
+		number(animator->async ? 1 : 0);
+		for (const auto* duration : animator->durations) {
+			if (!duration) {
+				return false;
+			}
+			number(duration->min);
+			number(duration->max);
+		}
+	}
+	std::vector<uint8_t> rgba;
+	int w = 0, h = 0;
+	for (unsigned frame = 0; frame < frames; ++frame) {
+		for (unsigned pz = 0; pz < pattern_z; ++pz) {
+			for (unsigned py = 0; py < pattern_y; ++py) {
+				for (unsigned px = 0; px < pattern_x; ++px) {
+					if (!getVisualVariantRGBA(rgba, w, h, pending, allowAsync, nullptr, px, py, pz, frame)) {
+						return false;
+					}
+					for (auto value : rgba) {
+						byte(value);
+					}
+					result.pixelBytes += rgba.size();
+				}
+			}
+		}
+	}
+	fingerprint = result;
 	return true;
 }
 
