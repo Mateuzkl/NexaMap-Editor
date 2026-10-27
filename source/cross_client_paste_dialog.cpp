@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "cross_client_paste_dialog.h"
+#include "cross_client_match_policy.h"
 
 #include "brush.h"
 #include "items.h"
@@ -29,7 +30,16 @@
 #include <wx/stattext.h>
 
 namespace {
-	constexpr int HighConfidenceThreshold = 88;
+	bool HasSafeAutomaticMapping(const CrossClientPasteRow& row) {
+		if (row.state != CrossClientMatchState::Missing || row.recommendations.empty()) {
+			return false;
+		}
+		const CrossClientItemRecommendation& best = row.recommendations.front();
+		const int nextConfidence = row.recommendations.size() > 1 ? row.recommendations[1].confidence : -1;
+		return CrossClientMatchPolicy::CanApplySuggestion(
+			best.confidence, best.automatic, best.visualCompared, best.visualSimilarity, nextConfidence
+		);
+	}
 
 	void StyleText(wxStaticText* label, const wxColour& foreground, const wxColour& background) {
 		label->SetForegroundColour(foreground);
@@ -461,7 +471,7 @@ CrossClientPasteDialog::CrossClientPasteDialog(wxWindow* parent, const CrossClie
 	auto* actionHint = newd wxStaticText(this, wxID_ANY, "Double-click any row to choose or change its destination ID.");
 	StyleText(actionHint, subtle, surface);
 	recommendedButton = newd wxButton(this, wxID_ANY, "Auto-Map Compatible");
-	recommendedButton->SetToolTip("Map missing rows when graphics are highly similar or when name, role and placement properties provide a safe match.");
+	recommendedButton->SetToolTip("Auto-map only visually supported, high-confidence suggestions without close competitors.");
 	resolveButton = newd wxButton(this, wxID_ANY, "Choose Destination...");
 	actionRow->Add(actionHint, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 12));
 	actionRow->Add(recommendedButton, 0, wxRIGHT, FROM_DIP(this, 8));
@@ -557,8 +567,8 @@ void CrossClientPasteDialog::PopulateRows() {
 			wxString recommendation = "Not found";
 			if (!row.recommendations.empty()) {
 				const CrossClientItemRecommendation& best = row.recommendations.front();
-				recommendation = best.automatic
-					? wxString::Format("Auto: %u (properties)", best.destinationId)
+				recommendation = HasSafeAutomaticMapping(row)
+					? wxString::Format("Auto: %u (%u%%)", best.destinationId, best.confidence)
 					: wxString::Format("Suggested: %u (%u%%)", best.destinationId, best.confidence);
 			}
 			itemList->SetItem(listIndex, 1, recommendation);
@@ -594,8 +604,7 @@ void CrossClientPasteDialog::RefreshState() {
 	remappedValue->SetLabel(wxString::Format("Remapped %u", analysis.remapped));
 	missingValue->SetLabel(wxString::Format("Missing %u", analysis.missing));
 	const bool hasAutomaticMapping = std::any_of(analysis.rows.begin(), analysis.rows.end(), [](const CrossClientPasteRow& row) {
-		return row.state == CrossClientMatchState::Missing && !row.recommendations.empty()
-			&& (row.recommendations.front().automatic || row.recommendations.front().confidence >= HighConfidenceThreshold);
+		return HasSafeAutomaticMapping(row);
 	});
 	recommendedButton->Enable(hasAutomaticMapping);
 	resolveButton->Enable(!analysis.rows.empty());
@@ -659,17 +668,16 @@ void CrossClientPasteDialog::ApplyRecommendedMappings() {
 	std::vector<std::pair<size_t, uint16_t>> mappings;
 	for (size_t rowIndex = 0; rowIndex < analysis.rows.size(); ++rowIndex) {
 		const CrossClientPasteRow& row = analysis.rows[rowIndex];
-		if (row.state == CrossClientMatchState::Missing && !row.recommendations.empty()
-			&& (row.recommendations.front().automatic || row.recommendations.front().confidence >= HighConfidenceThreshold)) {
+		if (HasSafeAutomaticMapping(row)) {
 			mappings.emplace_back(rowIndex, row.recommendations.front().destinationId);
 		}
 	}
 	if (mappings.empty()) {
-		wxMessageBox("No unresolved item currently has a safe graphics or property match.", "No compatible automatic matches", wxOK | wxICON_INFORMATION, this);
+		wxMessageBox("No unresolved item has a unique, high-confidence visual match. Review uncertain items manually.", "No compatible automatic matches", wxOK | wxICON_INFORMATION, this);
 		return;
 	}
 	const int answer = wxMessageBox(
-		wxString::Format("Map %zu missing item types using their best compatible graphics and property matches?\n\nThis only updates the review. You can inspect or change every mapping before Apply & Paste.", mappings.size()),
+		wxString::Format("Auto-map %zu item types using high-confidence visual matches without close alternatives?\n\nThis only updates the review. You can inspect or change every mapping before Apply & Paste.", mappings.size()),
 		"Review automatic mappings",
 		wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION,
 		this
