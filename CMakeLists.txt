@@ -118,6 +118,11 @@ else()
 endif()
 
 if(BUILD_TESTING)
+	add_executable(cross_client_match_policy_tests tests/cross_client_match_policy_tests.cpp)
+	target_include_directories(cross_client_match_policy_tests PRIVATE source)
+	target_compile_features(cross_client_match_policy_tests PRIVATE cxx_std_20)
+	add_test(NAME cross_client_match_policy_tests COMMAND cross_client_match_policy_tests)
+
 	add_executable(playtest_controller_tests tests/playtest_controller_tests.cpp source/ingame_preview/playtest_controller.cpp source/ingame_preview/playtest_weather.cpp)
 	target_include_directories(playtest_controller_tests PRIVATE source)
 	target_compile_features(playtest_controller_tests PRIVATE cxx_std_20)
