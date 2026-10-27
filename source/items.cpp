@@ -66,6 +66,7 @@ ItemType::ItemType() :
 	hookSouth(false),
 	canReadText(false),
 	canWriteText(false),
+	allowDistRead(false),
 	replaceable(true),
 	decays(false),
 	stackable(false),
@@ -78,6 +79,7 @@ ItemType::ItemType() :
 	isWall(false),
 	isBrushDoor(false),
 	isOpen(false),
+	isLocked(false),
 	isTable(false),
 	isCarpet(false),
 

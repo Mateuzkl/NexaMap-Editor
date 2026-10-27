@@ -370,6 +370,7 @@ public:
 	}
 	// Update menu item labels to match current HotkeyManager effective keys
 	void UpdateLabelHotkeys();
+	bool DispatchAction(MenuBar::ActionID actionId);
 
 protected:
 	wxMenuItem* FindEnabledItem(MenuBar::ActionID id) const;

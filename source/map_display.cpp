@@ -37,7 +37,9 @@
 #include "map_display.h"
 #include "zone_brush.h"
 #include "map_drawer.h"
+#include "gl_renderer.h"
 #include "application.h"
+#include "hotkey_manager.h"
 #include "border_workspace_window.h"
 #include "border_learning_window.h"
 #include "reference_style_window.h"
@@ -237,7 +239,7 @@ END_EVENT_TABLE()
 bool MapCanvas::processed[] = { 0 };
 
 MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist, bool ingamePreview) :
-	wxGLCanvas(parent, wxID_ANY, nullptr, wxDefaultPosition, wxDefaultSize, wxWANTS_CHARS),
+	wxGLCanvas(parent, wxID_ANY, attriblist, wxDefaultPosition, wxDefaultSize, wxWANTS_CHARS),
 	editor(editor),
 	ingamePreview(ingamePreview),
 	floor(GROUND_LAYER),
@@ -292,7 +294,11 @@ MapCanvas::~MapCanvas() {
 	delete popup_menu;
 	delete animation_timer;
 	if (drawer) {
-		SetCurrent(*g_gui.GetGLContext(this));
+		// Hidden tabs/test canvases which never rendered own no GL objects.
+		// Do not create a context solely to destroy such a drawer on wxGTK.
+		if (gl_context_activated || drawer->getRenderer()->isInitialized()) {
+			SetCurrent(*g_gui.GetGLContext(this));
+		}
 		delete drawer;
 	}
 	std::free(screenshot_buffer);
@@ -427,7 +433,24 @@ void MapCanvas::GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensi
 }
 
 void MapCanvas::OnPaint(wxPaintEvent& event) {
-	SetCurrent(*g_gui.GetGLContext(this));
+	wxPaintDC paint(this);
+	if (gl_initialization_failed) {
+		return;
+	}
+	auto* context = g_gui.GetGLContext(this);
+	if (!context->IsOK() || !SetCurrent(*context)) {
+		gl_initialization_failed = true;
+		wxLogError("Cannot activate the map OpenGL context. Check the graphics driver/Mesa and wxGTK display backend.");
+		return;
+	}
+	gl_context_activated = true;
+	// Load function pointers only after the canvas context is current, before
+	// SetupGL and any texture/viewport operations can call them.
+	drawer->getRenderer()->init();
+	if (!drawer->getRenderer()->isInitialized()) {
+		gl_initialization_failed = true;
+		return;
+	}
 
 	if (g_gui.IsRenderingEnabled()) {
 		DrawingOptions& options = drawer->getOptions();
@@ -2121,6 +2144,13 @@ void MapCanvas::OnGainMouse(wxMouseEvent& event) {
 void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 	if (ingamePreview) {
 		event.Skip();
+		return;
+	}
+	// Also resolve commands delivered directly to the canvas (e.g. redirected
+	// scrollbar events), before canvas-local Z/X/D/number handling,
+	// so Ctrl+Z and custom bindings cannot be consumed as brush operations.
+	if (const auto action = g_hotkey_manager.FindAction(event); action && g_gui.root && g_gui.AreHotkeysEnabled()) {
+		g_gui.root->GetMainMenuBar()->DispatchAction(*action);
 		return;
 	}
 	if (event.GetKeyCode() == WXK_SPACE) {

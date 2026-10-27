@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "path_encoding.h"
 
 #include "workspace_session.h"
 
@@ -20,7 +21,7 @@ namespace {
 #ifdef __WINDOWS__
 		return std::filesystem::path(path.ToStdWstring());
 #else
-		return std::filesystem::u8path(path.ToStdString(wxConvUTF8));
+		return PathEncoding::FromUtf8(path.ToStdString(wxConvUTF8));
 #endif
 	}
 

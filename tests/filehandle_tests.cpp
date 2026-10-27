@@ -72,6 +72,19 @@ int main() {
 	}
 	std::filesystem::remove(invalid, cleanupError);
 
+	const std::filesystem::path truncated = temporaryFile("-truncated.otbm");
+	{
+		std::ofstream header(truncated, std::ios::binary);
+		header << "OTBM";
+	}
+	{
+		DiskNodeFileReadHandle handle(truncated.string(), std::vector<std::string> { "OTBM" });
+		check(handle.isOk(), "truncated fixture has a valid file identifier");
+		check(handle.getRootNode() == nullptr, "missing root marker is rejected");
+		check(handle.error_code == FILE_READ_ERROR, "missing root marker reports a read error");
+	}
+	std::filesystem::remove(truncated, cleanupError);
+
 	const std::filesystem::path existingDestination = temporaryFile("-existing.otbm");
 	{
 		std::ofstream original(existingDestination, std::ios::binary);
