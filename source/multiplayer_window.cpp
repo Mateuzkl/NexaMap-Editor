@@ -5,6 +5,7 @@
 #include "application.h"
 #include "editor.h"
 #include "map_tab.h"
+#include "workspace_session.h"
 #include <wx/notebook.h>
 #include <wx/clipbrd.h>
 #include <wx/numdlg.h>
@@ -29,9 +30,42 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 	port->SetRange(1, 65535);
 	port->SetValue(options.port);
 	field(hosting ? "Listening port" : "Port", port);
-	auto* password = new wxTextCtrl(&dialog, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
+	auto* password = new wxTextCtrl(&dialog, wxID_ANY, wxstr(options.password), wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
 	password->SetMaxLength(256);
 	field("Session password", password);
+	wxDirPickerCtrl* clientDirectory = nullptr;
+	wxDirPickerCtrl* itemDirectory = nullptr;
+	wxStaticText* resourceError = nullptr;
+	if (!hosting && !g_gui.IsVersionLoaded()) {
+		const wxString clientPath = options.clientDirectory.empty() ? g_workspace.getClient().rootPath : wxstr(options.clientDirectory);
+		const auto& workspacePath = g_workspace.getServer().rootPath;
+#ifdef __WINDOWS__
+		const wxString savedItemPath(workspacePath.wstring());
+#else
+		const wxString savedItemPath = wxString::FromUTF8(workspacePath.string());
+#endif
+		const wxString itemPath = options.itemDirectory.empty() ? savedItemPath : wxstr(options.itemDirectory);
+		clientDirectory = new wxDirPickerCtrl(&dialog, wxID_ANY, clientPath, "Select the local client used by the host", wxDefaultPosition, wxDefaultSize, wxDIRP_USE_TEXTCTRL | wxDIRP_DIR_MUST_EXIST);
+		clientDirectory->SetName("multiplayer-client-directory");
+		field("Local client (DAT/SPR or Assets)", clientDirectory);
+		itemDirectory = new wxDirPickerCtrl(&dialog, wxID_ANY, itemPath, "Select the local folder containing the host's item definitions", wxDefaultPosition, wxDefaultSize, wxDIRP_USE_TEXTCTRL | wxDIRP_DIR_MUST_EXIST);
+		itemDirectory->SetName("multiplayer-item-directory");
+		field("Local item definitions (items.otb or appearances.dat)", itemDirectory);
+		resourceError = new wxStaticText(&dialog, wxID_ANY, "");
+		resourceError->SetName("multiplayer-resource-error");
+		field("", resourceError);
+		dialog.Bind(
+			wxEVT_BUTTON, [=, &dialog](wxCommandEvent&) {
+				if (!wxDirExists(clientDirectory->GetPath()) || !wxDirExists(itemDirectory->GetPath())) {
+					resourceError->SetLabel("Select both local folders on this PC. The map is downloaded from the host.");
+					dialog.GetSizer()->Fit(&dialog);
+					return;
+				}
+				dialog.EndModal(wxID_OK);
+			},
+			wxID_OK
+		);
+	}
 	wxSpinCtrl* maxPlayers = nullptr;
 	wxChoice* role = nullptr;
 	wxCheckBox* approvals = nullptr;
@@ -85,7 +119,7 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 		field("", copy);
 	}
 	layout->Add(form, 1, wxEXPAND | wxALL, 16);
-	auto* help = new wxStaticText(&dialog, wxID_ANY, "Use the same NexaMap build and client/item definitions on every PC.\nSame PC: 127.0.0.1. LAN: host IPv4. VPN: host VPN IP.\nDirect Internet: configure firewall, NAT and port forwarding.\nThe host starts listening after OK. Password authentication does not encrypt map/chat traffic.");
+	auto* help = new wxStaticText(&dialog, wxID_ANY, "Use the same NexaMap build and client/item definitions on every PC.\nJoining downloads the map from the host; no local map file is needed.\nClient graphics and matching item definitions must be available on this PC.\nSame PC: 127.0.0.1. LAN: host IPv4. VPN: host VPN IP.\nDirect Internet: configure firewall, NAT and port forwarding.\nThe host starts listening after OK. Password authentication does not encrypt map/chat traffic.");
 	help->Wrap(dialog.FromDIP(540));
 	layout->Add(help, 0, wxLEFT | wxRIGHT | wxBOTTOM, 16);
 	layout->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxALL, 12);
@@ -98,6 +132,10 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 	options.name = nstr(name->GetValue());
 	options.password = nstr(password->GetValue());
 	options.port = static_cast<uint16_t>(port->GetValue());
+	if (clientDirectory) {
+		options.clientDirectory = nstr(clientDirectory->GetPath());
+		options.itemDirectory = nstr(itemDirectory->GetPath());
+	}
 	if (address) {
 		wxString endpoint = address->GetValue().Trim().Trim(false);
 		if (endpoint.Find(':') != wxNOT_FOUND && endpoint.Find(':') == endpoint.Find(':', true)) {

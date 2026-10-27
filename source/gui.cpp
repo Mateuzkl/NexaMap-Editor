@@ -2119,6 +2119,26 @@ void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
 	}
 }
 
+bool GUI::LoadMultiplayerResources(const wxString& clientDirectory, const wxString& itemDirectory, wxString& error, wxArrayString& warnings) {
+	error.clear();
+	warnings.clear();
+	// Joining an already loaded client must not depend on a saved server path
+	// from another PC. The handshake still verifies the loaded item definitions.
+	if (IsVersionLoaded()) {
+		return true;
+	}
+	if (!g_workspace.configureServer(itemDirectory, error)) {
+		if (error.empty()) {
+			error = "Select the local folder containing the host's items.otb or appearances.dat.";
+		}
+		return false;
+	}
+	if (!g_workspace.configureClient(clientDirectory, error, warnings)) {
+		return false;
+	}
+	return LoadWorkspace(error, warnings);
+}
+
 bool GUI::JoinMultiplayerSession(wxWindow* parent) {
 	if (closingApplication || MultiplayerSession::current()) {
 		return false;
@@ -2126,21 +2146,26 @@ bool GUI::JoinMultiplayerSession(wxWindow* parent) {
 
 	wxWindow* dialogParent = parent ? parent : (welcomeDialog ? static_cast<wxWindow*>(welcomeDialog) : static_cast<wxWindow*>(root));
 	MultiplayerSession::Options options;
-	if (!MultiplayerWindow::configure(dialogParent, false, options) || MultiplayerSession::current() || closingApplication) {
-		return false;
-	}
-
-	// If joining from the startup / welcome screen, automatically validate and load workspace resources
-	if (welcomeDialog != nullptr) {
+	for (;;) {
+		if (!MultiplayerWindow::configure(dialogParent, false, options) || MultiplayerSession::current() || closingApplication) {
+			return false;
+		}
 		wxString error;
 		wxArrayString warnings;
-		if (!LoadWorkspace(error, warnings)) {
-			PopupDialog(dialogParent, "Workspace not ready", error, wxOK);
-			return false;
+		if (!LoadMultiplayerResources(wxstr(options.clientDirectory), wxstr(options.itemDirectory), error, warnings)) {
+			PopupDialog(dialogParent, "Multiplayer resources", error + "\n\nSelect the local client and item definitions used by the host. No local map file is required.", wxOK | wxICON_ERROR);
+			if (MultiplayerSession::current() || closingApplication) {
+				return false;
+			}
+			continue;
 		}
 		if (!warnings.empty()) {
 			ListDialog("Workspace warnings", warnings);
 		}
+		if (MultiplayerSession::current() || closingApplication) {
+			return false;
+		}
+		break;
 	}
 
 	// Joining requires a clean empty map

@@ -324,6 +324,7 @@ public:
 	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false, bool workspaceAlreadyRefreshed = false);
 	bool LoadCanaryCrystalAssets(wxString& error, wxArrayString& warnings, bool force = false, bool workspaceAlreadyRefreshed = false);
 	bool LoadWorkspace(wxString& error, wxArrayString& warnings, bool force = false);
+	bool LoadMultiplayerResources(const wxString& clientDirectory, const wxString& itemDirectory, wxString& error, wxArrayString& warnings);
 	bool JoinMultiplayerSession(wxWindow* parent = nullptr);
 	bool IsCanaryCrystalAssetsLoaded() const {
 		return canary_crystal_assets_loaded;
@@ -541,6 +542,7 @@ protected:
 #ifdef NEXAMAP_MULTIPLAYER_TESTS
 	friend class CollectionsPaletteTests;
 	friend class ResourceSessionTabTests;
+	friend class MultiplayerSessionTests;
 #endif
 	friend MapTab::MapTab(MapTabbook*, std::unique_ptr<Editor>);
 	friend MapTab::MapTab(const MapTab*);

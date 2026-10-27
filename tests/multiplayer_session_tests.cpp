@@ -8,6 +8,9 @@
 #include "multiplayer_codec.h"
 #include "multiplayer_crypto.h"
 #include "welcome_dialog.h"
+#include "multiplayer_window.h"
+#include "gui.h"
+#include "workspace_session.h"
 #include <wx/evtloop.h>
 #include <chrono>
 #include <iostream>
@@ -114,9 +117,84 @@ class MultiplayerSessionTests {
 		tx.tiles.push_back({ Multiplayer::tileKey(pos.x, pos.y, pos.z), Multiplayer::sha256(Multiplayer::encodeTile(tile)), Multiplayer::encodeTile(changed.get()) });
 		session.submit(std::move(tx));
 	}
+	static void checkJoinResources() {
+		WorkspaceSession previousWorkspace;
+		previousWorkspace.swap(g_workspace);
+		g_workspace.setPersistenceEnabled(false);
+		const auto previousVersion = g_gui.loaded_version;
+		auto restore = [&] {
+			g_gui.loaded_version = previousVersion;
+			g_workspace.swap(previousWorkspace);
+		};
+		try {
+			g_gui.loaded_version = CLIENT_VERSION_NONE;
+			MultiplayerSession::Options options;
+			std::string callbackError;
+			auto inspect = [&](bool needsResources, bool accept) {
+				wxTheApp->CallAfter([&, needsResources, accept] {
+					for (wxWindow* window : wxTopLevelWindows) {
+						auto* dialog = dynamic_cast<wxDialog*>(window);
+						if (!dialog || dialog->GetTitle() != "Join multiplayer session") {
+							continue;
+						}
+						try {
+							auto* client = dynamic_cast<wxDirPickerCtrl*>(dialog->FindWindow("multiplayer-client-directory"));
+							auto* items = dynamic_cast<wxDirPickerCtrl*>(dialog->FindWindow("multiplayer-item-directory"));
+							check(bool(client) == needsResources && bool(items) == needsResources, "Join did not offer local resources only when needed");
+							if (needsResources && !accept) {
+								client->SetPath("");
+								items->SetPath("");
+								wxCommandEvent submit(wxEVT_BUTTON, wxID_OK);
+								dialog->GetEventHandler()->ProcessEvent(submit);
+								check(dialog->IsModal(), "Join accepted missing resource folders");
+								auto* message = dynamic_cast<wxStaticText*>(dialog->FindWindow("multiplayer-resource-error"));
+								check(message && !message->GetLabel().empty(), "Missing resources have no actionable explanation");
+							}
+						} catch (const std::exception& error) {
+							callbackError = error.what();
+						}
+						dialog->EndModal(accept && callbackError.empty() ? wxID_OK : wxID_CANCEL);
+						return;
+					}
+				});
+			};
+			const auto generation = g_workspace.getGeneration();
+			inspect(true, false);
+			check(!MultiplayerWindow::configure(nullptr, false, options), "Cancel unexpectedly started a join");
+			check(callbackError.empty(), callbackError.c_str());
+			check(g_workspace.getGeneration() == generation && !MultiplayerSession::current(), "Cancel changed the workspace or started networking");
+
+			// The dialog accepts local item/client folders without requiring a world.otbm.
+			const auto directory = std::filesystem::temp_directory_path() / ("nexamap-join-resources-" + std::to_string(wxGetProcessId()));
+			std::filesystem::create_directory(directory);
+			options.clientDirectory = options.itemDirectory = directory.string();
+			inspect(true, true);
+			check(MultiplayerWindow::configure(nullptr, false, options), "Could not select local resource folders without a map");
+			check(callbackError.empty(), callbackError.c_str());
+			wxString error;
+			wxArrayString warnings;
+			check(!g_gui.LoadMultiplayerResources(wxstr(options.clientDirectory), wxstr(options.itemDirectory), error, warnings) && !error.empty(), "Missing item definitions were silently accepted");
+			std::filesystem::remove(directory);
+
+			// Already loaded definitions remain usable even when the saved server no longer exists.
+			g_gui.loaded_version = static_cast<ClientVersionID>(17);
+			const auto before = g_workspace.getGeneration();
+			check(g_gui.LoadMultiplayerResources("missing-client", "missing-server", error, warnings), "Loaded resources still require a local server workspace");
+			check(g_workspace.getGeneration() == before, "Joining replaced the active resource workspace");
+			inspect(false, false);
+			check(!MultiplayerWindow::configure(nullptr, false, options), "Loaded join cancellation failed");
+			check(callbackError.empty(), callbackError.c_str());
+			std::cout << "PASS startup join resource selection, missing definitions, cancel and loaded resources with an unavailable server\n";
+		} catch (...) {
+			restore();
+			throw;
+		}
+		restore();
+	}
 
 public:
 	static void run() {
+		checkJoinResources();
 		{
 			Fixture f;
 			// The production policy must still reject a second UI session.
