@@ -64,6 +64,7 @@ public:
 	BaseMap& getBufferMap();
 
 private:
+	friend class CrossClientClipboard;
 	void resetBounds();
 	void includePosition(const Position& position);
 	void rebuildBounds();

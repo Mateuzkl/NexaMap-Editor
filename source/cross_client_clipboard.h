@@ -4,10 +4,13 @@
 #include "graphics.h"
 #include "position.h"
 #include "spawn_source_remap.h"
+#include "house.h"
+#include "session_id.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -31,8 +34,8 @@ struct CrossClientItemSnapshot {
 	uint16_t type = 0;
 	uint64_t semanticFlags = 0;
 	std::string name;
-	SpriteVisualFingerprint visual;
-	bool visualAvailable = false;
+	SpriteVisualFingerprint renderedVisual;
+	bool renderedVisualAvailable = false;
 	SpriteVisualFingerprint previewVisual;
 	bool previewAvailable = false;
 	int previewWidth = 0;
@@ -48,6 +51,7 @@ struct CrossClientItemRecommendation {
 	bool automatic = false;
 	bool visualCompared = false;
 	double visualSimilarity = 0.0;
+	bool allVariantsVerified = false;
 };
 
 struct CrossClientPasteRow {
@@ -63,6 +67,8 @@ struct CrossClientPasteRow {
 struct CrossClientPasteAnalysis {
 	bool valid = false;
 	uint64_t clipboardGeneration = 0;
+	SessionId destinationGraphicsIdentity = InvalidSessionId;
+	uint64_t destinationWorkspaceGeneration = 0;
 	std::weak_ptr<EditorResourceSession> sourceSession;
 	std::weak_ptr<EditorResourceSession> destinationSession;
 	wxString sourceClient;
@@ -102,6 +108,7 @@ public:
 	) const;
 	static bool resolveMapping(CrossClientPasteAnalysis& analysis, size_t rowIndex, uint16_t destinationId, wxString& error);
 	static bool isCompatibleDestination(const CrossClientItemSnapshot& source, uint16_t destinationId);
+	static bool hasSafeAutomaticMapping(const CrossClientPasteRow& row);
 	bool apply(const CrossClientPasteAnalysis& analysis, CopyBuffer& destination, wxString& error);
 
 private:
@@ -112,6 +119,9 @@ private:
 	wxString sourceServer;
 	std::vector<CrossClientItemSnapshot> items;
 	SpawnDependencyMap spawnDependencies;
+	std::map<uint32_t, HouseSnapshot> houses;
+	SessionId copiedMapSession = InvalidSessionId;
+	SessionId sourceGraphicsIdentity = InvalidSessionId;
 	uint64_t generation = 0;
 };
 

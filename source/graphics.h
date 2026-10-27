@@ -131,6 +131,9 @@ public:
 	void clean(int time);
 	bool getVisualPreviewRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync = true, const Outfit* outfit = nullptr);
 	bool getVisualFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
+	// Every composed frame/pattern, excluding cosmetic DAT metadata such as
+	// minimap colour and movement speed. No preview downsampling or GL calls.
+	bool getRenderedFingerprint(SpriteVisualFingerprint& fingerprint, bool& pending, bool allowAsync = true);
 
 	int getDrawHeight() const;
 	std::pair<int, int> getDrawOffset() const;
@@ -145,6 +148,7 @@ public:
 	static GameSprite* createFromBitmap(const wxArtID& bitmapId);
 
 protected:
+	bool getVisualVariantRGBA(std::vector<uint8_t>& pixels, int& pixelWidth, int& pixelHeight, bool& pending, bool allowAsync, const Outfit* outfit, int patternX, int patternY, int patternZ, int frame);
 	class Image;
 	class NormalImage;
 	class EditorImage;
@@ -199,7 +203,7 @@ protected:
 		GLuint getHardwareID() override;
 		uint8_t* getRGBData() override;
 		uint8_t* getRGBAData() override;
-		uint8_t* getRGBAData(bool* pending);
+		virtual uint8_t* getRGBAData(bool* pending);
 		void getUV(float& u0, float& v0, float& u1, float& v1) override;
 
 		// Sprite atlas state (only used for atlased NormalImage sprites)
@@ -323,6 +327,7 @@ public:
 	void reset();
 
 private:
+	friend class GameSprite;
 	int getDuration(int frame) const;
 	int getPingPongFrame();
 	int getLoopFrame();

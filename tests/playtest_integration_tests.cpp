@@ -345,10 +345,13 @@ public:
 		map->setTile(tile);
 		source.replace(std::move(map), { 100, 100, 7 });
 		auto session = CreateEditorResourceSession();
+		const auto previous = GetActiveEditorResourceSession();
+		SetActiveEditorResourceSession(session);
 		std::weak_ptr<EditorResourceSession> released = session;
 		CrossClientClipboard clipboard;
 		wxString error;
 		check(clipboard.capture(source, session, error), "Cross-client clipboard capture");
+		SetActiveEditorResourceSession(previous);
 		session.reset();
 		check(released.expired() && clipboard.canPaste(), "Clipboard retained the complete source resource session");
 		std::cout << "PASS cross-client clipboard releases closed source resource session\n";

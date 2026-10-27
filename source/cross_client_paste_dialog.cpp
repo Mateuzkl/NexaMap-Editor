@@ -31,14 +31,7 @@
 
 namespace {
 	bool HasSafeAutomaticMapping(const CrossClientPasteRow& row) {
-		if (row.state != CrossClientMatchState::Missing || row.recommendations.empty()) {
-			return false;
-		}
-		const CrossClientItemRecommendation& best = row.recommendations.front();
-		const int nextConfidence = row.recommendations.size() > 1 ? row.recommendations[1].confidence : -1;
-		return CrossClientMatchPolicy::CanApplySuggestion(
-			best.confidence, best.automatic, best.visualCompared, best.visualSimilarity, nextConfidence
-		);
+		return CrossClientClipboard::hasSafeAutomaticMapping(row);
 	}
 
 	void StyleText(wxStaticText* label, const wxColour& foreground, const wxColour& background) {
@@ -342,7 +335,7 @@ namespace {
 					}
 					ReplaceLibraryItem suggested = found->item;
 					const wxString destinationName = wxString::FromUTF8(found->item.name);
-					suggested.name = recommendation.automatic
+					suggested.name = HasSafeAutomaticMapping(row) && &recommendation == &row.recommendations.front()
 						? wxString::Format("Auto  %s", destinationName.c_str()).ToStdString()
 						: wxString::Format("%u%%  %s", recommendation.confidence, destinationName.c_str()).ToStdString();
 					visible.push_back(std::move(suggested));
@@ -760,7 +753,7 @@ void CrossClientPasteDialog::UpdateItemPreview(const wxPoint& position) {
 			if (!recommendation.destinationName.empty()) {
 				metadata << "  " << wxString::FromUTF8(recommendation.destinationName);
 			}
-			metadata << (recommendation.automatic ? wxString("\nSafe property match") : wxString::Format("\nVisual confidence  %u%%", recommendation.confidence));
+			metadata << (recommendation.allVariantsVerified ? wxString("\nAll frames match; destination ID needs review") : wxString::Format("\nPreview similarity score  %u%% (review required)", recommendation.confidence));
 		}
 	} else {
 		metadata << wxString::Format("\n\nDestination  %u", row.destinationId);
