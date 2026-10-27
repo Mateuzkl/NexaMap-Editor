@@ -1171,4 +1171,15 @@
     <ClInclude Include="..\..\source\multiplayer_window.h"><Filter>multiplayer\Header Files</Filter></ClInclude>
     <ClCompile Include="..\..\source\multiplayer_window.cpp"><Filter>multiplayer\Source Files</Filter></ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\source\map_migration\map_migration.h"><Filter>editor\io</Filter></ClInclude>
+    <ClInclude Include="..\..\source\map_migration\migration_io.h"><Filter>editor\io</Filter></ClInclude>
+    <ClInclude Include="..\..\source\map_migration\map_migration_window.h"><Filter>editor\io</Filter></ClInclude>
+    <ClCompile Include="..\..\source\map_migration\migration_io.cpp"><Filter>editor\io</Filter></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\classic_resource_catalog.cpp"><Filter>editor\io</Filter></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\map_inventory.cpp"><Filter>editor\io</Filter></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\cross_client_matcher.cpp"><Filter>editor\io</Filter></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\map_migration_engine.cpp"><Filter>editor\io</Filter></ClCompile>
+    <ClCompile Include="..\..\source\map_migration\map_migration_window.cpp"><Filter>editor\io</Filter></ClCompile>
+  </ItemGroup>
 </Project>
