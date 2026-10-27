@@ -209,6 +209,11 @@ class PlaytestIntegrationTests {
 		auto preview = std::make_unique<MapWindow>(&frame, editor, true);
 		const int attributes[] = { WX_GL_RGBA, WX_GL_DOUBLEBUFFER, 0 };
 		auto* canvas = new wxGLCanvas(&frame, wxID_ANY, attributes, wxDefaultPosition, wxSize(320, 240));
+#ifdef __WXGTK__
+		// EGL needs a realized native drawable before a context can be current.
+		frame.Show();
+		wxYield();
+#endif
 		wxGLContext context(canvas);
 		check(context.IsOK() && canvas->SetCurrent(context), "Weather GL context");
 		GLRenderer renderer;
@@ -302,6 +307,10 @@ public:
 		wxFrame frame(nullptr, wxID_ANY, "Hidden frame teardown validation");
 		auto view = std::make_unique<MapWindow>(&frame, editor, true);
 		auto* canvas = view->GetCanvas();
+#ifdef __WXGTK__
+		frame.Show();
+		wxYield();
+#endif
 		check(canvas->SetCurrent(*g_gui.GetGLContext(canvas)), "Map canvas GL context");
 		for (int cycle = 0; cycle < 100; ++cycle) {
 			GLint projection = 0, modelview = 0;

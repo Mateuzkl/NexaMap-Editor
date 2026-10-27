@@ -36,6 +36,7 @@ public:
 	int GetSelection();
 	void CycleTab(bool forward = true);
 	wxWindow* GetCurrentPage();
+	wxWindow* GetPageParent() const;
 	EditorTab* GetCurrentTab();
 	EditorTab* GetTab(int idx);
 

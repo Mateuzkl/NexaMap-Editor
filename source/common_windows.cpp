@@ -708,7 +708,7 @@ void ExportTilesetsWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		g_settings.setString(Config::TILESET_EXPORT_DIR, directory_text_field->GetValue().ToStdString());
 
 		FileName file(file_name_text_field->GetValue() + ".xml");
-		file.Normalize(wxPATH_NORM_ALL, directory.GetFullPath());
+		file.Normalize(wxPATH_NORM_ENV_VARS | wxPATH_NORM_DOTS | wxPATH_NORM_TILDE | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG | wxPATH_NORM_SHORTCUT, directory.GetFullPath());
 
 		pugi::xml_document doc;
 		pugi::xml_node node = doc.append_child("materials");

@@ -51,7 +51,7 @@ public:
 		for (const Entry& entry : entries) {
 			std::error_code ec;
 			if (!std::filesystem::exists(entry.staged, ec) || ec) {
-				error = "Staged file is missing: " + entry.staged.string();
+				error = "Staged file is missing: " + PathForError(entry.staged);
 				return false;
 			}
 		}
@@ -60,7 +60,7 @@ public:
 			std::error_code ec;
 			const bool destinationExists = std::filesystem::exists(entry.destination, ec);
 			if (ec) {
-				error = "Could not inspect destination " + entry.destination.string() + ": " + ec.message();
+				error = "Could not inspect destination " + PathForError(entry.destination) + ": " + ec.message();
 				Rollback(error);
 				return false;
 			}
@@ -71,7 +71,7 @@ public:
 			entry.backup = MakeUniqueSibling(entry.destination, ".rme-backup");
 			std::filesystem::rename(entry.destination, entry.backup, ec);
 			if (ec) {
-				error = "Could not prepare destination " + entry.destination.string() + ": " + ec.message();
+				error = "Could not prepare destination " + PathForError(entry.destination) + ": " + ec.message();
 				Rollback(error);
 				return false;
 			}
@@ -82,7 +82,7 @@ public:
 			std::error_code ec;
 			std::filesystem::rename(entry.staged, entry.destination, ec);
 			if (ec) {
-				error = "Could not replace destination " + entry.destination.string() + ": " + ec.message();
+				error = "Could not replace destination " + PathForError(entry.destination) + ": " + ec.message();
 				Rollback(error);
 				return false;
 			}
@@ -159,6 +159,11 @@ public:
 	}
 
 private:
+	static std::string PathForError(const std::filesystem::path& path) {
+		const auto utf8 = path.u8string();
+		return { utf8.begin(), utf8.end() };
+	}
+
 	struct Entry {
 		std::filesystem::path destination;
 		std::filesystem::path staged;
@@ -200,7 +205,7 @@ private:
 			std::error_code ec;
 			std::filesystem::remove(iterator->destination, ec);
 			if (ec) {
-				error += " Rollback could not remove " + iterator->destination.string() + ": " + ec.message() + ".";
+				error += " Rollback could not remove " + PathForError(iterator->destination) + ": " + ec.message() + ".";
 			}
 			iterator->installed = false;
 		}
@@ -212,7 +217,7 @@ private:
 			std::error_code ec;
 			std::filesystem::rename(iterator->backup, iterator->destination, ec);
 			if (ec) {
-				error += " Original remains at " + iterator->backup.string() + " because rollback failed: " + ec.message() + ".";
+				error += " Original remains at " + PathForError(iterator->backup) + " because rollback failed: " + ec.message() + ".";
 			} else {
 				iterator->backedUp = false;
 			}

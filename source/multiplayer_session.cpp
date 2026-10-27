@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <string_view>
 #ifndef _WIN32
+	#include <netinet/in.h>
 	#include <netinet/tcp.h>
 	#include <sys/socket.h>
 #endif

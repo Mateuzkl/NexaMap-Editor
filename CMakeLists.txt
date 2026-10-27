@@ -9,6 +9,18 @@ endif()
 project(rme)
 
 include(CTest)
+include(GNUInstallDirs)
+if(UNIX AND NOT APPLE)
+	# Keep vcpkg's static codec symbols private. GTK's shared pixbuf loaders
+	# must resolve PNG/JPEG functions from their own system libraries.
+	add_link_options("LINKER:--exclude-libs,ALL")
+	set(NEXAMAP_DATA_DIR "${CMAKE_INSTALL_DATADIR}/nexamap")
+	file(RELATIVE_PATH NEXAMAP_DATA_FROM_BINDIR "${CMAKE_INSTALL_FULL_BINDIR}" "${CMAKE_INSTALL_FULL_DATADIR}/nexamap")
+	add_compile_definitions(
+		NEXAMAP_INSTALL_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/nexamap"
+		NEXAMAP_INSTALL_DATA_FROM_BINDIR="${NEXAMAP_DATA_FROM_BINDIR}"
+	)
+endif()
 
 option(ENABLE_UNITY_BUILD "Enable unity build for faster compilation" ON)
 
@@ -24,7 +36,10 @@ find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(liblzma CONFIG REQUIRED)
-find_package(Protobuf REQUIRED)
+find_package(Protobuf CONFIG QUIET)
+if(NOT Protobuf_FOUND)
+	find_package(Protobuf REQUIRED)
+endif()
 
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
@@ -89,11 +104,15 @@ if(ENABLE_UNITY_BUILD)
 	endif()
 endif()
 
-include_directories(${OPENGL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR})
+include_directories(${OPENGL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR}
+	$<TARGET_PROPERTY:fmt::fmt,INTERFACE_INCLUDE_DIRECTORIES>
+	$<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
+)
 target_link_libraries(${PROJECT_NAME}
 	${wxWidgets_LIBRARIES}
 	${OPENGL_LIBRARIES}
 	Threads::Threads
+	${CMAKE_DL_LIBS}
 	${ZLIB_LIBRARIES}
 	glad::glad
 	fmt::fmt
@@ -102,15 +121,18 @@ target_link_libraries(${PROJECT_NAME}
 	nexamap_protobuf
 )
 
-install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
-install(DIRECTORY data DESTINATION .)
-if(WIN32)
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+if(UNIX AND NOT APPLE)
+	install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+else()
+	install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+endif()
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_directory
 		"${CMAKE_CURRENT_SOURCE_DIR}/data"
 		"$<TARGET_FILE_DIR:${PROJECT_NAME}>/data"
 		COMMENT "Copying data directory to build output directory"
 	)
+if(WIN32)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE "_WIN32_WINNT=0x0601")
 	target_link_libraries(${PROJECT_NAME} bcrypt ws2_32)
 else()
@@ -155,7 +177,7 @@ if(BUILD_TESTING)
 	target_include_directories(editor_test_objects PUBLIC source)
 	target_compile_features(editor_test_objects PUBLIC cxx_std_20)
 	target_compile_definitions(editor_test_objects PUBLIC NEXAMAP_MULTIPLAYER_TESTS)
-	target_link_libraries(editor_test_objects PUBLIC ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
+	target_link_libraries(editor_test_objects PUBLIC ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} ${CMAKE_DL_LIBS} Threads::Threads ${ZLIB_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json liblzma::liblzma nexamap_protobuf)
 	set_target_properties(editor_test_objects PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE 8)
 	if(MSVC)
 		target_compile_options(editor_test_objects PUBLIC /bigobj /utf-8)
@@ -206,7 +228,7 @@ if(BUILD_TESTING)
 	if(ENABLE_GL_CACHE_TESTS)
 		add_executable(map_chunk_render_cache_gl_tests tests/map_chunk_render_cache_gl_tests.cpp source/gl_renderer.cpp source/post_process_renderer.cpp source/map_chunk_render_cache.cpp)
 		target_include_directories(map_chunk_render_cache_gl_tests PRIVATE source)
-		target_link_libraries(map_chunk_render_cache_gl_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} glad::glad fmt::fmt nlohmann_json::nlohmann_json)
+		target_link_libraries(map_chunk_render_cache_gl_tests PRIVATE ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} ${CMAKE_DL_LIBS} glad::glad fmt::fmt nlohmann_json::nlohmann_json)
 		target_compile_features(map_chunk_render_cache_gl_tests PRIVATE cxx_std_20)
 		if(MSVC)
 			target_compile_options(map_chunk_render_cache_gl_tests PRIVATE /utf-8)
@@ -253,21 +275,62 @@ if(BUILD_TESTING)
 	endif()
 	add_test(NAME multiplayer_protocol_tests COMMAND multiplayer_protocol_tests)
 endif()
+if(UNIX AND NOT APPLE)
+	set(NEXAMAP_RESOURCE_DESTINATION "${NEXAMAP_DATA_DIR}")
+else()
+	set(NEXAMAP_RESOURCE_DESTINATION .)
+endif()
 install(DIRECTORY
 	"${CMAKE_CURRENT_SOURCE_DIR}/brushes"
 	"${CMAKE_CURRENT_SOURCE_DIR}/data"
 	"${CMAKE_CURRENT_SOURCE_DIR}/extensions"
 	"${CMAKE_CURRENT_SOURCE_DIR}/icons"
-	DESTINATION .
+	DESTINATION "${NEXAMAP_RESOURCE_DESTINATION}"
+	PATTERN "user" EXCLUDE
 )
 install(FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.rtf"
 	"${CMAKE_CURRENT_SOURCE_DIR}/README.md"
-	"${CMAKE_CURRENT_SOURCE_DIR}/NexaMap-Debug.cmd"
-	DESTINATION .
+	DESTINATION "${NEXAMAP_RESOURCE_DESTINATION}"
 )
+if(WIN32)
+	install(FILES NexaMap-Debug.cmd DESTINATION .)
+elseif(UNIX AND NOT APPLE)
+	install(PROGRAMS packaging/nexamap-editor DESTINATION ${CMAKE_INSTALL_BINDIR})
+	install(FILES packaging/nexamap-editor.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+	install(FILES brushes/icon/editor_icon.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/32x32/apps RENAME nexamap-editor.png)
+	set(CPACK_GENERATOR "DEB;TGZ")
+	set(CPACK_PACKAGE_NAME "nexamap-editor")
+	file(STRINGS source/version_info.h NEXAMAP_VERSION_LINE REGEX "^#define NEXAMAP_VERSION_STRING")
+	string(REGEX REPLACE ".*\"([^\"]+)\".*" "\\1" CPACK_PACKAGE_VERSION "${NEXAMAP_VERSION_LINE}")
+	set(CPACK_PACKAGE_CONTACT "NexaMap maintainers <https://github.com/Mateuzkl/NexaMap-Editor/issues>")
+	set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NexaMap OpenTibia map editor")
+	set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+	set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libgl1, libegl1, librsvg2-common")
+	set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+	include(CPack)
+endif()
 
 if(BUILD_TESTING)
+	add_executable(runtime_paths_tests tests/runtime_paths_tests.cpp)
+	target_include_directories(runtime_paths_tests PRIVATE source)
+	target_compile_features(runtime_paths_tests PRIVATE cxx_std_20)
+	if(MSVC)
+		target_compile_options(runtime_paths_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME runtime_paths_tests COMMAND runtime_paths_tests)
+	if(UNIX AND NOT APPLE)
+		find_package(PkgConfig REQUIRED)
+		pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+		add_executable(linux_gui_capture tools/linux_gui_capture.cpp)
+		target_link_libraries(linux_gui_capture PRIVATE PkgConfig::GTK3)
+		add_executable(linux_editor_tests tests/linux_editor_tests.cpp)
+		target_link_libraries(linux_editor_tests PRIVATE editor_test_objects)
+		add_test(NAME linux_editor_tests COMMAND linux_editor_tests)
+		set_tests_properties(linux_editor_tests PROPERTIES TIMEOUT 60)
+	endif()
+
 	add_executable(house_paste_hardening_tests
 		tests/house_paste_hardening_tests.cpp
 		source/session_id.cpp

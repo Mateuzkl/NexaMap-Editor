@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "path_encoding.h"
 
 #include "map_item_id_converter_window.h"
 
@@ -165,8 +166,8 @@ MapItemIdConverterWindow::MapItemIdConverterWindow(wxWindow* parent) :
 
 MapItemIdConversionOptions MapItemIdConverterWindow::getOptions() const {
 	MapItemIdConversionOptions options;
-	options.source = std::filesystem::u8path(nstr(sourcePicker->GetPath()));
-	options.destination = std::filesystem::u8path(nstr(destinationPicker->GetPath()));
+	options.source = PathEncoding::FromUtf8(nstr(sourcePicker->GetPath()));
+	options.destination = PathEncoding::FromUtf8(nstr(destinationPicker->GetPath()));
 	options.direction = directionChoice->GetSelection() == 0 ? ItemIdMapping::Direction::ServerToClient : ItemIdMapping::Direction::ClientToServer;
 	const int targetSelection = targetVersionChoice->GetSelection();
 	if (targetSelection != wxNOT_FOUND && static_cast<std::size_t>(targetSelection) < targetVersions.size()) {

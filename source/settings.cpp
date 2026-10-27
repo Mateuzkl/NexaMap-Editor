@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include "settings.h"
+#include "runtime_paths.h"
 #include "gui_ids.h"
 #include "client_version.h"
 
@@ -25,6 +26,7 @@
 #include <wx/config.h>
 #include <wx/fileconf.h>
 #include <wx/wfstream.h>
+#include <wx/sstream.h>
 
 #include <string>
 #include <thread>
@@ -449,6 +451,31 @@ void Settings::load() {
 		conf = newd wxConfig("Mapeditor", "OTAcademy", "", "", wxCONFIG_USE_GLOBAL_FILE);
 		g_settings.setInteger(Config::INDIRECTORY_INSTALLATION, 0);
 	}
+#elif defined(__linux__)
+	const auto configDirectory = RuntimePaths::UserDirectory("XDG_CONFIG_HOME", ".config");
+	if (configDirectory.empty()) {
+		wxLogError("No absolute HOME or XDG_CONFIG_HOME for NexaMap configuration.");
+	}
+	config_filename = configDirectory.empty() ? wxString() : wxString::FromUTF8((configDirectory / "editor.cfg").string());
+	wxString loadFilename = config_filename;
+	if (!wxFileExists(loadFilename)) {
+		// Import legacy preferences by reading them; leave the original intact.
+		const wxString legacy = wxStandardPaths::Get().GetUserConfigDir() + "/.rme/editor.cfg";
+		const wxString portable = wxFileName(wxStandardPaths::Get().GetExecutablePath()).GetPath() + "/editor.cfg";
+		if (wxFileExists(legacy)) {
+			loadFilename = legacy;
+		} else if (wxFileExists(portable)) {
+			loadFilename = portable;
+		}
+	}
+	if (wxFileExists(loadFilename)) {
+		wxFileInputStream file(loadFilename);
+		conf = newd wxFileConfig(file);
+	} else {
+		wxStringInputStream empty("");
+		conf = newd wxFileConfig(empty);
+	}
+	g_settings.setInteger(Config::INDIRECTORY_INSTALLATION, 0);
 #else
 	FileName filename("./editor.cfg");
 	if (filename.FileExists()) { // Use local file if it exists
@@ -489,6 +516,17 @@ void Settings::save(bool endoftheworld) {
 		if (!wxConfig::Get()->Flush()) {
 			wxLogError("Could not flush settings to the system configuration store.");
 		}
+	}
+#elif defined(__linux__)
+	auto* conf = dynamic_cast<wxFileConfig*>(wxConfig::Get());
+	if (!conf || config_filename.empty()) {
+		return;
+	}
+	wxFileName filename(config_filename);
+	if (!wxFileName::DirExists(filename.GetPath()) && !filename.Mkdir(0700, wxPATH_MKDIR_FULL)) {
+		wxLogError("Could not create configuration directory " + filename.GetPath());
+	} else if (!SaveFileConfigAtomically(*conf, config_filename)) {
+		wxLogError("Could not save settings to " + config_filename);
 	}
 #else
 	wxFileConfig* conf = dynamic_cast<wxFileConfig*>(wxConfig::Get());
