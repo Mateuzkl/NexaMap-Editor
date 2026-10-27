@@ -11,6 +11,11 @@
 #include "multiplayer_window.h"
 #include "gui.h"
 #include "workspace_session.h"
+#include "application.h"
+#include "editor_resource_session.h"
+#include "client_assets.h"
+#include <appearances.pb.h>
+#include <wx/fileconf.h>
 #include <wx/evtloop.h>
 #include <chrono>
 #include <iostream>
@@ -118,18 +123,65 @@ class MultiplayerSessionTests {
 		session.submit(std::move(tx));
 	}
 	static void checkJoinResources() {
+		g_gui.discoverDataDirectory("clients.xml");
+		ClientVersion::loadVersions();
+		g_gui.root = new MainFrame("Hidden multiplayer resource validation", wxDefaultPosition, wxSize(800, 600));
+		const auto originalSession = GetActiveEditorResourceSession();
+		const auto originalPaths = ClientVersion::capturePaths();
+		const bool originalUiPending = g_gui.resourceSessionUiPending;
+		const auto directory = std::filesystem::temp_directory_path() / ("nexamap-join-resources-" + std::to_string(wxGetProcessId()));
+		check(std::filesystem::create_directory(directory), "Join test directory already exists");
+		wxFileConfig config("NexaMap tests", "", wxstr((directory / "settings.cfg").string()), "", wxCONFIG_USE_LOCAL_FILE);
+		config.DisableAutoSave();
+		auto* previousConfig = wxConfigBase::Set(&config);
+		const std::vector<uint32_t> stringSettings { Config::WORKSPACE_CLIENT_ROOT, Config::WORKSPACE_SERVER_ROOT, Config::WORKSPACE_ITEMS_OTB_PATH, Config::WORKSPACE_ITEMS_XML_PATH, Config::WORKSPACE_APPEARANCES_PATH, Config::CANARY_CRYSTAL_ASSETS_DIRECTORY, Config::ASSETS_DATA_DIRS };
+		std::vector<std::string> previousSettings;
+		for (auto key : stringSettings) {
+			previousSettings.push_back(g_settings.getString(key));
+		}
+		const int previousDefault = g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION);
 		WorkspaceSession previousWorkspace;
 		previousWorkspace.swap(g_workspace);
-		g_workspace.setPersistenceEnabled(false);
 		const auto previousVersion = g_gui.loaded_version;
 		auto restore = [&] {
+			g_gui.DestroyLoadBar();
+			g_gui.ActivateResourceSession(originalSession);
 			g_gui.loaded_version = previousVersion;
+			g_gui.resourceSessionUiPending = originalUiPending;
 			g_workspace.swap(previousWorkspace);
+			auto paths = originalPaths;
+			ClientVersion::restorePaths(paths);
+			for (size_t i = 0; i < stringSettings.size(); ++i) {
+				g_settings.setString(stringSettings[i], previousSettings[i]);
+			}
+			g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, previousDefault);
+			wxConfigBase::Set(previousConfig);
+			g_gui.aui_manager->UnInit();
+			delete g_gui.aui_manager;
+			g_gui.aui_manager = nullptr;
+			delete g_gui.root;
+			g_gui.root = nullptr;
+			g_gui.tabbook = nullptr;
+			std::filesystem::remove_all(directory);
 		};
 		try {
 			g_gui.loaded_version = CLIENT_VERSION_NONE;
 			MultiplayerSession::Options options;
 			std::string callbackError;
+			const auto selectedClient = directory / "client";
+			const auto selectedItems = directory / "items";
+			std::filesystem::create_directory(selectedClient);
+			std::filesystem::create_directory(selectedItems);
+			auto write = [&](const std::filesystem::path& path, std::string_view bytes) {
+				std::ofstream file(path, std::ios::binary);
+				file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+				check(bool(file), "Could not write join resource fixture");
+			};
+			const auto oldItems = directory / "old-items";
+			std::filesystem::create_directory(oldItems);
+			write(oldItems / "items.otb", "original definitions");
+			wxString setupError;
+			check(g_workspace.configureServer(wxstr(oldItems.string()), setupError, false), "Could not create original workspace fixture");
 			auto inspect = [&](bool needsResources, bool accept) {
 				wxTheApp->CallAfter([&, needsResources, accept] {
 					for (wxWindow* window : wxTopLevelWindows) {
@@ -141,6 +193,14 @@ class MultiplayerSessionTests {
 							auto* client = dynamic_cast<wxDirPickerCtrl*>(dialog->FindWindow("multiplayer-client-directory"));
 							auto* items = dynamic_cast<wxDirPickerCtrl*>(dialog->FindWindow("multiplayer-item-directory"));
 							check(bool(client) == needsResources && bool(items) == needsResources, "Join did not offer local resources only when needed");
+							if (needsResources && accept) {
+								client->SetPath(wxstr(selectedClient.string()));
+								items->SetPath(wxstr(selectedItems.string()));
+								wxCommandEvent submit(wxEVT_BUTTON, wxID_OK);
+								dialog->GetEventHandler()->ProcessEvent(submit);
+								check(!dialog->IsModal() && dialog->GetReturnCode() == wxID_OK, "OK handler rejected valid resource folders");
+								return;
+							}
 							if (needsResources && !accept) {
 								client->SetPath("");
 								items->SetPath("");
@@ -153,7 +213,7 @@ class MultiplayerSessionTests {
 						} catch (const std::exception& error) {
 							callbackError = error.what();
 						}
-						dialog->EndModal(accept && callbackError.empty() ? wxID_OK : wxID_CANCEL);
+						dialog->EndModal(wxID_CANCEL);
 						return;
 					}
 				});
@@ -165,19 +225,73 @@ class MultiplayerSessionTests {
 			check(g_workspace.getGeneration() == generation && !MultiplayerSession::current(), "Cancel changed the workspace or started networking");
 
 			// The dialog accepts local item/client folders without requiring a world.otbm.
-			const auto directory = std::filesystem::temp_directory_path() / ("nexamap-join-resources-" + std::to_string(wxGetProcessId()));
-			std::filesystem::create_directory(directory);
-			options.clientDirectory = options.itemDirectory = directory.string();
+			options.clientDirectory.clear();
+			options.itemDirectory.clear();
 			inspect(true, true);
 			check(MultiplayerWindow::configure(nullptr, false, options), "Could not select local resource folders without a map");
 			check(callbackError.empty(), callbackError.c_str());
+			check(options.clientDirectory == selectedClient.string() && options.itemDirectory == selectedItems.string(), "Selected picker paths were not copied into the join options");
 			wxString error;
 			wxArrayString warnings;
+			const auto beforeSession = GetActiveEditorResourceSession();
+			const auto beforeWorkspace = g_workspace.getGeneration();
 			check(!g_gui.LoadMultiplayerResources(wxstr(options.clientDirectory), wxstr(options.itemDirectory), error, warnings) && !error.empty(), "Missing item definitions were silently accepted");
-			std::filesystem::remove(directory);
+			check(GetActiveEditorResourceSession() == beforeSession && g_workspace.getGeneration() == beforeWorkspace, "Failed server selection changed the active workspace");
+			for (size_t i = 0; i < stringSettings.size(); ++i) {
+				check(g_settings.getString(stringSettings[i]) == previousSettings[i], "Failed selection changed saved paths");
+			}
+			check(!std::filesystem::exists(directory / "settings.cfg"), "Failed selection wrote configuration to disk");
+
+			auto unchanged = [&] {
+				check(GetActiveEditorResourceSession() == beforeSession && g_workspace.getGeneration() == beforeWorkspace && g_workspace.getServer().rootPath == std::filesystem::weakly_canonical(oldItems), "Failed resource load changed the previous workspace");
+				check(ClientVersion::capturePaths() == originalPaths, "Failed resource load changed client profile paths");
+				check(!g_gui.IsVersionLoaded(), "Failed resource load retained a partial version");
+				for (size_t i = 0; i < stringSettings.size(); ++i) {
+					check(g_settings.getString(stringSettings[i]) == previousSettings[i], "Failed resource load changed saved paths");
+				}
+				check(g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION) == previousDefault, "Failed resource load changed the default client");
+				check(!std::filesystem::exists(directory / "settings.cfg"), "Failed resource load wrote settings");
+			};
+			write(selectedItems / "items.otb", "invalid items");
+			check(!g_gui.LoadMultiplayerResources(wxstr(selectedClient.string()), wxstr(selectedItems.string()), error, warnings), "Invalid client folder was accepted");
+			unchanged();
+			// Matching signatures pass detection but the truncated DAT fails the real loader.
+			write(selectedClient / "Tibia.dat", std::string("\x21\xb7\x28\x4c", 4));
+			write(selectedClient / "Tibia.spr", std::string("\x94\x05\x22\x4c", 4));
+			check(!g_gui.LoadMultiplayerResources(wxstr(selectedClient.string()), wxstr(selectedItems.string()), error, warnings), "Truncated client resources were accepted");
+			unchanged();
+
+			const auto assets = directory / "assets-client" / "data" / "things" / "1530";
+			const auto definitions = directory / "appearance-definitions";
+			std::filesystem::create_directories(assets);
+			std::filesystem::create_directory(definitions);
+			write(assets / "catalog-content.json", R"([{"type":"appearances","file":"appearances.dat"},{"type":"sprite","file":"sheet.lzma","firstspriteid":1,"lastspriteid":1,"spritetype":0}])");
+			write(assets / "sheet.lzma", "lazy sprite fixture");
+			write(assets / "appearances.dat", "invalid package definitions must not be used");
+			write(definitions / "appearances.dat", "invalid selected definitions");
+			const auto assetsPathBefore = ClientAssets::getPath();
+			check(!g_gui.LoadMultiplayerResources(wxstr(assets.string()), wxstr(definitions.string()), error, warnings), "Invalid appearances data was accepted");
+			check(error.Contains("corrupt") || error.Contains("incompatible"), "Assets-only definitions did not reach the appearances loader");
+			unchanged();
+			check(ClientAssets::getPath() == assetsPathBefore && !ClientAssets::isLoaded(), "Failed Assets load changed the previous client state");
+
+			// Only the explicitly selected definitions contain a valid object. The server
+			// detector must remain Unknown/Generic; normal workspace policy stays strict.
+			rme::protobuf::appearances::Appearances appearances;
+			auto* ground = appearances.add_object();
+			ground->set_id(100);
+			ground->set_name("Multiplayer selected ground");
+			ground->mutable_flags()->mutable_bank()->set_waypoints(150);
+			ground->add_frame_group()->mutable_sprite_info()->add_sprite_id(1);
+			write(definitions / "appearances.dat", appearances.SerializeAsString());
+			check(g_gui.LoadMultiplayerResources(wxstr(assets.string()), wxstr(definitions.string()), error, warnings), error.ToUTF8().data());
+			check(g_gui.IsCanaryCrystalAssetsLoaded() && ClientAssets::isLoaded() && g_items.typeExists(100) && g_items[100].name == "Multiplayer selected ground", "Assets-only join did not load the selected definitions");
+			check(g_workspace.getServer().serverType == ServerType::UnknownGeneric && !g_workspace.getServer().usesCanaryCrystalLoader() && !g_workspace.hasCompatibleServerResources(), "Resource-only join weakened normal server detection");
+			check(g_settings.getString(Config::WORKSPACE_CLIENT_ROOT) == assets.string() && g_settings.getString(Config::WORKSPACE_SERVER_ROOT) == definitions.string(), "Successful resource selection was not persisted");
+			check(g_settings.getString(Config::WORKSPACE_APPEARANCES_PATH) == (definitions / "appearances.dat").string(), "Selected appearances definitions were not persisted");
+			std::cout << "PASS transactional server/client/resource failures, restored profiles and Assets state, standalone appearances loading and success-only persistence\n";
 
 			// Already loaded definitions remain usable even when the saved server no longer exists.
-			g_gui.loaded_version = static_cast<ClientVersionID>(17);
 			const auto before = g_workspace.getGeneration();
 			check(g_gui.LoadMultiplayerResources("missing-client", "missing-server", error, warnings), "Loaded resources still require a local server workspace");
 			check(g_workspace.getGeneration() == before, "Joining replaced the active resource workspace");

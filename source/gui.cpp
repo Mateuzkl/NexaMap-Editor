@@ -2127,16 +2127,51 @@ bool GUI::LoadMultiplayerResources(const wxString& clientDirectory, const wxStri
 	if (IsVersionLoaded()) {
 		return true;
 	}
-	if (!g_workspace.configureServer(itemDirectory, error)) {
-		if (error.empty()) {
-			error = "Select the local folder containing the host's items.otb or appearances.dat.";
+	const auto previousSession = GetActiveEditorResourceSession();
+	const bool previousUiPending = resourceSessionUiPending;
+	const bool persistenceEnabled = g_workspace.isPersistenceEnabled();
+	WorkspaceSession selection = g_workspace;
+	selection.setPersistenceEnabled(false);
+	auto previousPaths = ClientVersion::capturePaths();
+	const auto pendingSession = CreateEditorResourceSession();
+	RenderingLock loadingLock;
+	auto restore = [&] {
+		DestroyLoadBar();
+		ActivateResourceSession(previousSession);
+		resourceSessionUiPending = previousUiPending;
+		ClientVersion::restorePaths(previousPaths);
+	};
+	struct Rollback {
+		decltype(restore)& action;
+		bool active = true;
+		~Rollback() {
+			if (active) {
+				action();
+			}
 		}
+	} rollback { restore };
+	if (!ActivateResourceSession(pendingSession)) {
 		return false;
 	}
-	if (!g_workspace.configureClient(clientDirectory, error, warnings)) {
+	g_workspace.swap(selection);
+	if (!g_workspace.configureMultiplayerResources(clientDirectory, itemDirectory, error, warnings)) {
 		return false;
 	}
-	return LoadWorkspace(error, warnings);
+	// A join needs graphics and definitions only, not evidence of a complete
+	// Canary/TFS server or a local map. Normal LoadWorkspace validation stays intact.
+	const auto& client = g_workspace.getClient();
+	const bool loaded = client.mode == WorkspaceClientMode::Appearances
+		? LoadCanaryCrystalAssets(error, warnings, true, true)
+		: LoadVersion(client.versionId, error, warnings, true, true);
+	DestroyLoadBar();
+	if (!loaded || closingApplication) {
+		return false;
+	}
+	loaded_workspace_generation = g_workspace.getGeneration();
+	g_workspace.setPersistenceEnabled(persistenceEnabled);
+	g_workspace.persistSelection();
+	rollback.active = false;
+	return true;
 }
 
 bool GUI::JoinMultiplayerSession(wxWindow* parent) {
