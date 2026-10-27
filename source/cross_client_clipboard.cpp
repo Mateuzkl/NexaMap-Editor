@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "cross_client_clipboard.h"
+#include "cross_client_match_policy.h"
 
 #include "basemap.h"
 #include "complexitem.h"
@@ -40,6 +41,8 @@ namespace {
 	struct TargetSpriteCache {
 		bool visualAvailable = false;
 		SpriteVisualFingerprint visual;
+		bool previewAvailable = false;
+		SpriteVisualFingerprint previewVisual;
 	};
 
 	// Keep enough source detail for the review dialog's enlarged hover preview.
@@ -48,7 +51,6 @@ namespace {
 	constexpr int StoredPreviewExtent = 64;
 	constexpr int AutomaticConfidenceThreshold = 88;
 	constexpr size_t MaximumRetainedPreviewBytes = 64u * 1024u * 1024u;
-	constexpr uint64_t SemanticRoleMask = (uint64_t(0x7) << 8) | (uint64_t(0xFF) << 14) | (uint64_t(0x3FFF) << 27);
 	constexpr uint64_t SemanticPropertyMask = (uint64_t(0x3FFF) << 0) | (uint64_t(0xFF) << 14) | (uint64_t(0x7) << 24) | (uint64_t(0x7FFF) << 27);
 
 	size_t CrossClientMaximumItemId() {
@@ -205,8 +207,10 @@ namespace {
 	}
 
 	bool StructurallyCompatible(const CrossClientItemSnapshot& source, const TargetCandidate& target) {
-		return source.group == target.group && source.type == target.type
-			&& (source.semanticFlags & SemanticRoleMask) == (target.semanticFlags & SemanticRoleMask);
+		return CrossClientMatchPolicy::StructurallyCompatible(
+			source.group, source.type, source.semanticFlags,
+			target.group, target.type, target.semanticFlags
+		);
 	}
 
 	bool SameName(const std::string& source, const std::string& target) {
@@ -281,10 +285,11 @@ namespace {
 	) {
 		const bool sameName = SameName(source.name, target.name);
 		const int propertySimilarity = PropertySimilarity(source.semanticFlags, target.semanticFlags);
-		const bool automatic = sameName && propertySimilarity >= 95;
-		if (!automatic && (!visualCompared || visualSimilarity < 0.45)) {
+		// A shared name or incomplete XML metadata must never be enough for auto-mapping.
+		if (!visualCompared || visualSimilarity < 0.50) {
 			return;
 		}
+		const bool automatic = visualSimilarity >= 0.985 && propertySimilarity >= 95;
 		CrossClientItemRecommendation recommendation;
 		recommendation.destinationId = target.id;
 		recommendation.destinationClientId = target.clientId;
@@ -295,6 +300,8 @@ namespace {
 		const int confidence = visualScore + propertySimilarity * propertyWeight / 100 + nameScore;
 		recommendation.confidence = static_cast<uint8_t>(std::clamp(automatic ? std::max(AutomaticConfidenceThreshold, confidence) : confidence, 0, 100));
 		recommendation.automatic = automatic;
+		recommendation.visualCompared = visualCompared;
+		recommendation.visualSimilarity = visualSimilarity;
 		recommendations.push_back(std::move(recommendation));
 		std::sort(recommendations.begin(), recommendations.end(), [](const CrossClientItemRecommendation& left, const CrossClientItemRecommendation& right) {
 			if (left.automatic != right.automatic) {
@@ -466,11 +473,15 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 	analysis.destinationServer = DisplayPath(g_workspace.getServer().rootPath);
 
 	std::unordered_map<SpriteVisualFingerprint, std::vector<TargetCandidate>, FingerprintHash> candidates;
+	std::unordered_map<SpriteVisualFingerprint, std::vector<TargetCandidate>, FingerprintHash> previewCandidates;
 	std::unordered_map<uint16_t, TargetSpriteCache> spriteCache;
 	std::unordered_set<SpriteVisualFingerprint, FingerprintHash> sourcePreviews;
+	bool needsUnfilteredFingerprints = false;
 	for (const CrossClientItemSnapshot& source : items) {
-		if (source.visualAvailable && source.previewAvailable) {
+		if (source.previewAvailable) {
 			sourcePreviews.insert(source.previewVisual);
+		} else if (source.visualAvailable) {
+			needsUnfilteredFingerprints = true;
 		}
 	}
 	const size_t maximumId = CrossClientMaximumItemId();
@@ -490,19 +501,30 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 
 		auto [cached, inserted] = spriteCache.try_emplace(item.clientID);
 		TargetSpriteCache& spriteData = cached->second;
-		if (inserted && !sourcePreviews.empty()) {
+		if (inserted) {
 			GameSprite* sprite = item.sprite;
 			if (!sprite) {
 				sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
 			}
-			bool pending = false;
-			std::vector<uint8_t> previewRgba;
-			int previewWidth = 0;
-			int previewHeight = 0;
-			const bool previewAvailable = LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending);
-			if (previewAvailable && sourcePreviews.contains(PixelFingerprint(previewRgba, previewWidth, previewHeight))) {
-				pending = false;
-				spriteData.visualAvailable = sprite->getVisualFingerprint(spriteData.visual, pending, false);
+			if (sprite) {
+				bool previewAvailable = false;
+				if (!sourcePreviews.empty()) {
+					bool pending = false;
+					std::vector<uint8_t> previewRgba;
+					int previewWidth = 0;
+					int previewHeight = 0;
+					previewAvailable = LoadStoredPreview(sprite, previewRgba, previewWidth, previewHeight, pending);
+					if (previewAvailable) {
+						spriteData.previewVisual = PixelFingerprint(previewRgba, previewWidth, previewHeight);
+						spriteData.previewAvailable = sourcePreviews.contains(spriteData.previewVisual);
+					}
+				}
+				// Full fingerprints include DAT layout/flags. Index even without a preview
+				// when an original snapshot has no retained RGBA preview.
+				if (needsUnfilteredFingerprints || spriteData.previewAvailable || !previewAvailable) {
+					bool pending = false;
+					spriteData.visualAvailable = sprite->getVisualFingerprint(spriteData.visual, pending, false);
+				}
 			}
 		}
 
@@ -514,7 +536,10 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 		candidate.semanticFlags = SemanticFlags(item);
 		candidate.name = item.name;
 		if (spriteData.visualAvailable) {
-			candidates[spriteData.visual].push_back(std::move(candidate));
+			candidates[spriteData.visual].push_back(candidate);
+		}
+		if (spriteData.previewAvailable) {
+			previewCandidates[spriteData.previewVisual].push_back(std::move(candidate));
 		}
 	}
 
@@ -523,16 +548,8 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 		CrossClientPasteRow row;
 		row.source = source;
 		analysis.totalOccurrences += source.occurrences;
-		if (!source.visualAvailable) {
-			row.detail = "The source sprite could not be read, so it cannot be remapped safely.";
-			++analysis.missing;
-			analysis.rows.push_back(std::move(row));
-			continue;
-		}
-
-		const auto matches = candidates.find(source.visual);
-		if (matches == candidates.end() || matches->second.empty()) {
-			row.detail = "No byte-identical sprite/item exists in the destination client.";
+		if (!source.visualAvailable && !source.previewAvailable) {
+			row.detail = "The source sprite has neither a readable fingerprint nor a preview. Choose a destination manually.";
 			++analysis.missing;
 			analysis.rows.push_back(std::move(row));
 			continue;
@@ -540,22 +557,39 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 
 		const TargetCandidate* best = nullptr;
 		int bestScore = std::numeric_limits<int>::min();
-		for (const TargetCandidate& candidate : matches->second) {
-			if (!StructurallyCompatible(source, candidate)) {
-				continue;
+		bool matchedByPreview = false;
+		const auto chooseBest = [&](const std::vector<TargetCandidate>& matches, bool preview) {
+			for (const TargetCandidate& candidate : matches) {
+				if (!StructurallyCompatible(source, candidate)) {
+					continue;
+				}
+				const int score = MatchScore(source, candidate);
+				if (!best || score > bestScore || (score == bestScore && candidate.id < best->id)) {
+					best = &candidate;
+					bestScore = score;
+					matchedByPreview = preview;
+				}
 			}
-			const int score = MatchScore(source, candidate);
-			if (!best || score > bestScore || (score == bestScore && candidate.id < best->id)) {
-				best = &candidate;
-				bestScore = score;
+		};
+		if (source.visualAvailable) {
+			const auto fullMatch = candidates.find(source.visual);
+			if (fullMatch != candidates.end()) {
+				chooseBest(fullMatch->second, false);
+			}
+		}
+		if (!best && source.previewAvailable) {
+			const auto previewMatch = previewCandidates.find(source.previewVisual);
+			if (previewMatch != previewCandidates.end()) {
+				chooseBest(previewMatch->second, true);
 			}
 		}
 		if (!best) {
-			row.detail = "Identical graphics were found, but the destination item type is incompatible.";
+			row.detail = "No structurally compatible sprite with an identical fingerprint or pixel preview was found.";
 			++analysis.missing;
 			analysis.rows.push_back(std::move(row));
 			continue;
 		}
+
 		row.destinationId = best->id;
 		row.destinationClientId = best->clientId;
 		row.destinationName = best->name;
@@ -565,7 +599,9 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			++analysis.matched;
 		} else {
 			row.state = CrossClientMatchState::Remapped;
-			row.detail = wxString::Format("Map item ID %u will be replaced with %u.", source.sourceId, best->id);
+			row.detail = wxString::Format(matchedByPreview
+				? "Pixel-identical preview: map item ID %u will be replaced with %u."
+				: "Map item ID %u will be replaced with %u.", source.sourceId, best->id);
 			++analysis.remapped;
 		}
 		analysis.rows.push_back(std::move(row));
@@ -635,8 +671,10 @@ bool CrossClientClipboard::isCompatibleDestination(const CrossClientItemSnapshot
 		return false;
 	}
 	const ItemType& item = g_items[destinationId];
-	return source.group == static_cast<uint16_t>(item.group) && source.type == static_cast<uint16_t>(item.type)
-		&& (source.semanticFlags & SemanticRoleMask) == (SemanticFlags(item) & SemanticRoleMask);
+	return CrossClientMatchPolicy::StructurallyCompatible(
+		source.group, source.type, source.semanticFlags,
+		static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item)
+	);
 }
 
 bool CrossClientClipboard::resolveMapping(CrossClientPasteAnalysis& analysis, size_t rowIndex, uint16_t destinationId, wxString& error) {
