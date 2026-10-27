@@ -82,7 +82,7 @@ Tile::~Tile() {
 }
 
 Tile* Tile::deepCopy(BaseMap& map) {
-	Tile* copy = map.allocator.allocateTile(location);
+	std::unique_ptr<Tile> copy(map.allocator.allocateTile(location));
 	copy->flags = flags;
 	copy->house_id = house_id;
 	if (spawn) {
@@ -97,6 +97,7 @@ Tile* Tile::deepCopy(BaseMap& map) {
 	}
 
 	copy->zones = zones;
+	copy->items.reserve(items.size());
 
 	ItemVector::iterator it;
 
@@ -106,7 +107,7 @@ Tile* Tile::deepCopy(BaseMap& map) {
 		++it;
 	}
 
-	return copy;
+	return copy.release();
 }
 
 uint32_t Tile::memsize() const {

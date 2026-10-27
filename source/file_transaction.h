@@ -12,7 +12,11 @@
 
 class FileSaveTransaction {
 public:
+	enum class PublicationMode { Replace,
+								 CreateOnly };
 	FileSaveTransaction() = default;
+	explicit FileSaveTransaction(PublicationMode mode) :
+		mode(mode) { }
 	FileSaveTransaction(const FileSaveTransaction&) = delete;
 	FileSaveTransaction& operator=(const FileSaveTransaction&) = delete;
 
@@ -54,6 +58,23 @@ public:
 				error = "Staged file is missing: " + PathForError(entry.staged);
 				return false;
 			}
+		}
+
+		if (mode == PublicationMode::CreateOnly) {
+			for (Entry& entry : entries) {
+				std::error_code ec;
+				// A sibling hard link installs a complete file atomically and fails
+				// if any file (including a dangling symlink) already owns the name.
+				std::filesystem::create_hard_link(entry.staged, entry.destination, ec);
+				if (ec) {
+					error = "Could not create destination without replacement " + PathForError(entry.destination) + ": " + ec.message();
+					Rollback(error);
+					return false;
+				}
+				entry.installed = true;
+			}
+			CleanupStagedFiles();
+			return true;
 		}
 
 		for (Entry& entry : entries) {
@@ -203,6 +224,11 @@ private:
 				continue;
 			}
 			std::error_code ec;
+			if (mode == PublicationMode::CreateOnly && !std::filesystem::equivalent(iterator->staged, iterator->destination, ec)) {
+				error += " Rollback retained a destination changed by another writer: " + PathForError(iterator->destination) + ".";
+				continue;
+			}
+			ec.clear();
 			std::filesystem::remove(iterator->destination, ec);
 			if (ec) {
 				error += " Rollback could not remove " + PathForError(iterator->destination) + ": " + ec.message() + ".";
@@ -235,6 +261,7 @@ private:
 	}
 
 	std::vector<Entry> entries;
+	PublicationMode mode = PublicationMode::Replace;
 	bool invalidDestination = false;
 	bool duplicateDestination = false;
 };

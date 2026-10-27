@@ -192,6 +192,68 @@ namespace {
 		check(!CrossClientClipboard::hasSafeAutomaticMapping(row), "Competitors after second recommendation were ignored");
 		std::cout << "PASS door state/lock compatibility and all competing suggestions\n";
 	}
+	void failedCloneIsAtomic() {
+		struct State {
+			int alive = 0, successfulCopiesBeforeFailure = -1;
+			Item* snapshot = nullptr;
+		};
+		class Probe final : public Item {
+		public:
+			Probe(uint16_t id, const std::shared_ptr<State>& state) :
+				Item(id, 1), state(state) {
+				++state->alive;
+			}
+			~Probe() override {
+				--state->alive;
+			}
+			Item* deepCopy() const override {
+				if (state->successfulCopiesBeforeFailure == 0) {
+					throw std::runtime_error("injected nested clone failure");
+				}
+				if (state->successfulCopiesBeforeFailure > 0) {
+					--state->successfulCopiesBeforeFailure;
+				}
+				auto* copy = new Probe(getID(), state);
+				state->snapshot = copy;
+				return copy;
+			}
+			std::shared_ptr<State> state;
+		};
+		Fixture f;
+		f.define(100, 10).group = ITEM_GROUP_GROUND;
+		f.define(101, 20).type = ITEM_TYPE_CONTAINER;
+		f.define(102, 30);
+		CopyBuffer source, destination;
+		auto map = std::make_unique<BaseMap>();
+		auto* tile = map->allocator(map->createTileL({ 100, 100, 7 }));
+		tile->addItem(Item::Create(100));
+		auto* container = dynamic_cast<Container*>(Item::Create(101));
+		auto state = std::make_shared<State>();
+		container->getVector().push_back(new Probe(102, state));
+		container->getVector().push_back(new Probe(102, state));
+		tile->addItem(container);
+		map->setTile(tile);
+		source.replace(std::move(map), { 100, 100, 7 });
+		CrossClientClipboard clipboard;
+		wxString error;
+		check(clipboard.capture(source, f.source, error), "Capture exception fixture");
+		Item* snapshot = state->snapshot;
+		const int aliveBefore = state->alive;
+		activate(f.target);
+		f.define(200, 10).group = ITEM_GROUP_GROUND;
+		f.define(201, 20).type = ITEM_TYPE_CONTAINER;
+		f.define(202, 30);
+		f.buffer(destination, 200);
+		const auto analysis = clipboard.analyze(f.target, {}, error);
+		check(analysis.canApply(), "Exception fixture match");
+		state->successfulCopiesBeforeFailure = 1;
+		check(!clipboard.apply(analysis, destination, error) && !error.empty(), "Nested exception escaped apply");
+		check(snapshot->getID() == 102 && state->alive == aliveBefore, "Failed clone leaked items or changed frozen IDs");
+		check(destination.getBufferMap().getTile({ 100, 100, 7 })->ground->getID() == 200, "Failed clone modified destination");
+		state->successfulCopiesBeforeFailure = -1;
+		check(clipboard.apply(analysis, destination, error), "Retry after clone failure failed");
+		std::cout << "PASS injected nested clone exception: no retained partial copies, restored source IDs and atomic destination\n";
+	}
 	void areaAttributesUndoRedo() {
 		Fixture f;
 		f.define(100, 10).group = ITEM_GROUP_GROUND;
@@ -373,6 +435,7 @@ void RunCrossClientClipboardTests() {
 	renderedFingerprintCoverage();
 	cancellationAndStaleResources();
 	incompatibleRoles();
+	failedCloneIsAtomic();
 	areaAttributesUndoRedo();
 	realClassicAssets();
 	ClientVersion::unloadVersions();

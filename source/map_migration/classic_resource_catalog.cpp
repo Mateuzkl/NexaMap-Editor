@@ -5,6 +5,7 @@
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
+#include <deque>
 
 namespace MapMigration {
 	namespace {
@@ -174,6 +175,8 @@ namespace MapMigration {
 			}
 		}
 		std::map<uint16_t, Layout> ParseDat(const std::vector<uint8_t>& bytes, ClassicOptions options, DatDialect dialect, const Control& control) {
+			IO::StageTimer timer(control, "parseDAT");
+			control.update(0, "Lendo DAT...");
 			Cursor cursor { bytes };
 			static_cast<void>(cursor.u32());
 			std::array<uint16_t, 4> counts { cursor.u16(), cursor.u16(), cursor.u16(), cursor.u16() };
@@ -210,8 +213,10 @@ namespace MapMigration {
 		}
 		class SpriteReader {
 		public:
-			SpriteReader(const Path& path, const ClassicOptions& options) :
-				file(path, std::ios::binary), alpha(options.alpha) {
+			SpriteReader(const Path& path, const ClassicOptions& options, const Control& control) :
+				file(path, std::ios::binary), alpha(options.alpha), control(control),
+				cacheLimit(std::max<uint64_t>(4096, std::min<uint64_t>(32ull * 1024 * 1024, control.memoryLimitBytes / 16))) {
+				control.update(0, "Lendo SPR...");
 				if (!file) {
 					throw std::runtime_error("Não foi possível abrir o SPR.");
 				}
@@ -228,6 +233,7 @@ namespace MapMigration {
 					throw std::runtime_error("Índice SPR inválido.");
 				}
 				offsets.resize(static_cast<size_t>(count) + 1);
+				control.check();
 				std::vector<uint8_t> index(static_cast<size_t>(count) * 4);
 				if (!file.read(reinterpret_cast<char*>(index.data()), index.size())) {
 					throw std::runtime_error("Índice SPR truncado.");
@@ -238,6 +244,7 @@ namespace MapMigration {
 				}
 			}
 			std::shared_ptr<const std::vector<uint8_t>> pixels(uint32_t id) {
+				control.check();
 				if (auto found = cache.find(id); found != cache.end()) {
 					return found->second;
 				}
@@ -283,10 +290,12 @@ namespace MapMigration {
 						}
 					}
 				}
-				if (cache.size() >= 8192) {
-					cache.clear(); // At most 32 MiB of decoded SPR tiles.
+				while (!cacheOrder.empty() && cache.size() * (4096ull + 96) >= cacheLimit) {
+					cache.erase(cacheOrder.front());
+					cacheOrder.pop_front();
 				}
 				cache.emplace(id, result);
+				cacheOrder.push_back(id);
 				return result;
 			}
 			uint32_t signature = 0;
@@ -294,9 +303,12 @@ namespace MapMigration {
 		private:
 			std::ifstream file;
 			bool alpha;
+			Control control;
+			uint64_t cacheLimit;
 			uint64_t fileSize = 0;
 			std::vector<uint32_t> offsets;
 			std::unordered_map<uint32_t, std::shared_ptr<const std::vector<uint8_t>>> cache;
+			std::deque<uint32_t> cacheOrder;
 		};
 		std::vector<uint8_t> Compose(const Layout& layout, size_t variant, SpriteReader& sprites) {
 			const size_t width = size_t(layout.width) * 32, height = size_t(layout.height) * 32;
@@ -410,6 +422,8 @@ namespace MapMigration {
 				}
 				result->valid = true;
 				result->allVariantsVerified = true;
+			} catch (const std::bad_alloc&) {
+				throw;
 			} catch (const std::exception& error) {
 				control.check();
 				result->error = error.what();
@@ -440,17 +454,18 @@ namespace MapMigration {
 					return 0;
 			}
 		}
-		void ReadXml(Catalog& catalog) {
+		void ReadXml(Catalog& catalog, const Control& control) {
 			if (catalog.resources.xml.empty()) {
 				catalog.warnings.push_back("items.xml ausente: nomes e classificações adicionais não foram usados.");
 				return;
 			}
 			pugi::xml_document document;
-			const auto bytes = IO::ReadFile(catalog.resources.xml, 32ull * 1024 * 1024);
+			const auto bytes = IO::ReadFile(catalog.resources.xml, std::min<uint64_t>(control.memoryLimitBytes / 8, 32ull * 1024 * 1024));
 			if (!document.load_buffer(bytes.data(), bytes.size()) || !document.child("items")) {
 				throw std::runtime_error("items.xml inválido.");
 			}
 			for (auto node : document.child("items").children("item")) {
+				control.check();
 				const unsigned begin = node.attribute("id") ? node.attribute("id").as_uint() : node.attribute("fromid").as_uint();
 				const unsigned end = node.attribute("id") ? begin : node.attribute("toid").as_uint();
 				if (begin == 0 || end > 65535 || end < begin) {
@@ -492,6 +507,8 @@ namespace MapMigration {
 	}
 
 	Catalog LoadCatalog(const ResourceSet& resources, const Control& control) {
+		IO::StageTimer timer(control, "catalog");
+		control.check();
 		Catalog catalog;
 		catalog.resources = resources;
 		if (resources.otb.empty()) {
@@ -576,7 +593,7 @@ namespace MapMigration {
 			},
 			control
 		);
-		ReadXml(catalog);
+		ReadXml(catalog, control);
 		const auto dat = IO::ReadFile(resources.dat, std::min<uint64_t>(control.memoryLimitBytes / 4, 64ull * 1024 * 1024));
 		Cursor header { dat };
 		catalog.datSignature = header.u32();
@@ -590,6 +607,8 @@ namespace MapMigration {
 					layouts = ParseDat(dat, options, dialect, control);
 					catalog.resources.dialect = dialect;
 					break;
+				} catch (const std::bad_alloc&) {
+					throw;
 				} catch (const std::exception& error) {
 					control.check();
 					lastError = error.what();
@@ -601,11 +620,15 @@ namespace MapMigration {
 		}
 		resourcesHash.add("nexamap-classic-catalog-v1:dialect=" + std::to_string(static_cast<int>(catalog.resources.dialect)));
 		catalog.fingerprint = resourcesHash.finish();
-		SpriteReader sprites(resources.spr, options);
+		SpriteReader sprites(resources.spr, options, control);
 		catalog.sprSignature = sprites.signature;
 		std::unordered_map<uint16_t, std::shared_ptr<const Visual>> visuals;
 		size_t completed = 0;
-		uint64_t visualMemory = 0;
+		for (const auto& [id, item] : catalog.items) {
+			const uint64_t bytes = sizeof(CatalogItem) + 96 + item.name.capacity() + item.type.capacity() + item.otbRecordDigest.capacity() + item.xmlProperties.capacity();
+			control.retain(bytes);
+			catalog.retainedBytes += bytes;
+		}
 		for (auto& [id, item] : catalog.items) {
 			if (++completed % 32 == 0) {
 				control.update(static_cast<int>(completed * 100 / catalog.items.size()), "Comparando variações gráficas dos recursos...");
@@ -622,7 +645,9 @@ namespace MapMigration {
 					visual = missing;
 				}
 				visuals.emplace(item.clientId, visual);
-				visualMemory += sizeof(Visual) + visual->preview.capacity() + visual->layout.spriteIds.capacity() * sizeof(uint32_t) + visual->layout.durations.capacity() * sizeof(uint32_t) + visual->variantFeatures.capacity() * sizeof(std::array<uint8_t, 256>) + visual->variantPixels.capacity() * (sizeof(std::string) + 64);
+				const uint64_t bytes = sizeof(Visual) + 96 + visual->preview.capacity() + visual->layout.spriteIds.capacity() * sizeof(uint32_t) + visual->layout.durations.capacity() * sizeof(uint32_t) + visual->variantFeatures.capacity() * sizeof(std::array<uint8_t, 256>) + visual->variantPixels.capacity() * (sizeof(std::string) + 64);
+				control.retain(bytes);
+				catalog.retainedBytes += bytes;
 				item.visual = std::move(visual);
 			}
 			if (item.visual && item.visual->valid) {
@@ -644,9 +669,6 @@ namespace MapMigration {
 					item.roles |= Border;
 					item.knownRoles |= Border;
 				}
-			}
-			if (visualMemory > control.memoryLimitBytes / 3) {
-				throw std::runtime_error("Catálogo excede o orçamento de previews; aumente o limite de memória.");
 			}
 		}
 		control.update(100, "Catálogo concluído.");

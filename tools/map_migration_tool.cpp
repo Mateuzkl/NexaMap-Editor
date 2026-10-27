@@ -6,9 +6,17 @@ int main(int argc, char** argv) {
 	using namespace MapMigration;
 	try {
 		std::map<std::string, std::string> args;
-		bool convert = false, visualDraft = false;
+		bool convert = false, visualDraft = false, allowGroundLoss = false, compatibleApproximation = false;
 		for (int i = 1; i < argc; ++i) {
 			const std::string option = argv[i];
+			if (option == "--allow-ground-loss") {
+				allowGroundLoss = true;
+				continue;
+			}
+			if (option == "--compatible-approximation") {
+				compatibleApproximation = true;
+				continue;
+			}
 			if (option == "--visual-draft") {
 				visualDraft = true;
 				continue;
@@ -35,6 +43,7 @@ int main(int argc, char** argv) {
 		Options options;
 		options.sourceMap = path("--map");
 		options.outputMap = path("--output");
+		options.allowGroundLoss = allowGroundLoss;
 		options.source = { path("--source-otb"), path("--source-xml", false), path("--source-dat"), path("--source-spr"), path("--source-otfi", false) };
 		options.target = { path("--target-otb"), path("--target-xml", false), path("--target-dat"), path("--target-spr"), path("--target-otfi", false) };
 		Control control;
@@ -44,8 +53,8 @@ int main(int argc, char** argv) {
 		if (args.contains("--mappings")) {
 			LoadReviewedMappings(plan, path("--mappings"));
 		}
-		if (visualDraft && plan.error.empty()) {
-			ResolveAutomatically(plan, AutomaticPolicy::VisualDraft, control);
+		if ((visualDraft || compatibleApproximation) && plan.error.empty()) {
+			ResolveAutomatically(plan, visualDraft ? AutomaticPolicy::VisualDraft : AutomaticPolicy::CompatibleApproximation, control);
 		}
 		std::cout << "tiles=" << plan.inventory.tiles << " items=" << plan.inventory.items << " distinct_ids=" << plan.rows.size() << " unresolved_ids=" << plan.unresolvedIds() << " unresolved_occurrences=" << plan.unresolvedOccurrences() << '\n';
 		std::map<std::string, uint64_t> decisions;
@@ -71,7 +80,7 @@ int main(int argc, char** argv) {
 				std::cerr << result.error << '\n';
 				return 3;
 			}
-			std::cout << "Converted, reopened and validated. Changed items: " << result.changedItems << '\n';
+			std::cout << (result.validated ? "Converted and functionally validated. Changed items: " : "Experimental output; structure verified, functional compatibility unproven. Changed items: ") << result.changedItems << '\n';
 		}
 		return plan.unresolvedIds() ? 2 : 0;
 	} catch (const std::exception& error) {

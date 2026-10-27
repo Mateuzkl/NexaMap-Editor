@@ -3,11 +3,59 @@
 #include <bit>
 #include <iomanip>
 #include <sstream>
+#ifdef _WIN32
+	#ifndef NOMINMAX
+		#define NOMINMAX
+	#endif
+	#include <windows.h>
+	#include <psapi.h>
+#elif defined(__linux__)
+	#include <unistd.h>
+#endif
 
 namespace MapMigration {
+	namespace {
+		uint64_t ResidentBytes() {
+#ifdef _WIN32
+			PROCESS_MEMORY_COUNTERS counters {};
+			return K32GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)) ? counters.WorkingSetSize : 0;
+#elif defined(__linux__)
+			uint64_t total = 0, resident = 0;
+			std::ifstream status("/proc/self/statm");
+			return status >> total >> resident ? resident * static_cast<uint64_t>(sysconf(_SC_PAGESIZE)) : 0;
+#else
+			return 0;
+#endif
+		}
+	}
 	void Control::check() const {
 		if (cancelled && cancelled->load(std::memory_order_relaxed)) {
 			throw std::runtime_error("Operação cancelada.");
+		}
+		if (metrics) {
+			std::lock_guard lock(metrics->mutex);
+			const auto now = std::chrono::steady_clock::now();
+			if (now - metrics->lastProbe >= std::chrono::milliseconds(25)) {
+				const auto resident = ResidentBytes();
+				if (!metrics->baselineResidentBytes) {
+					metrics->baselineResidentBytes = resident;
+				}
+				metrics->lastProbe = now;
+				metrics->peakResidentBytes = std::max(metrics->peakResidentBytes, resident);
+				if (resident > metrics->baselineResidentBytes && resident - metrics->baselineResidentBytes > memoryLimitBytes) {
+					throw std::runtime_error("Job excede o orçamento agregado de memória (RSS/Working Set). Nenhuma saída foi publicada.");
+				}
+			}
+		}
+	}
+	void Control::retain(uint64_t bytes) const {
+		check();
+		if (metrics) {
+			std::lock_guard lock(metrics->mutex);
+			if (bytes > memoryLimitBytes || metrics->retainedBytes > memoryLimitBytes - bytes) {
+				throw std::runtime_error("Catálogos excedem o orçamento agregado de memória.");
+			}
+			metrics->retainedBytes += bytes;
 		}
 	}
 	void Control::update(int percent, const std::string& message) const {
@@ -15,6 +63,7 @@ namespace MapMigration {
 		if (progress) {
 			progress(std::clamp(percent, 0, 100), message);
 		}
+		check();
 	}
 	std::string Sha256(const std::vector<uint8_t>& data) {
 		IO::Digest digest;
@@ -22,6 +71,7 @@ namespace MapMigration {
 		return digest.finish();
 	}
 	FileDigest FingerprintFile(const Path& path, const Control& control) {
+		IO::StageTimer timer(control, "resourceHash");
 		std::ifstream file(path, std::ios::binary);
 		if (!file) {
 			throw std::runtime_error("Não foi possível ler: " + IO::Utf8(path));
@@ -38,6 +88,10 @@ namespace MapMigration {
 		}
 		if (!file.eof()) {
 			throw std::runtime_error("Falha de leitura: " + IO::Utf8(path));
+		}
+		if (control.metrics) {
+			std::lock_guard lock(control.metrics->mutex);
+			control.metrics->hashedBytes += size;
 		}
 		return { std::filesystem::absolute(path).lexically_normal(), size, hash.finish() };
 	}
@@ -188,6 +242,7 @@ namespace MapMigration::IO {
 		return data;
 	}
 	void Walk(const Path& path, const std::string& magic, const NodeVisitor& visit, const Control& control, const Path& output) {
+		StageTimer timer(control, output.empty() ? "parseMap" : "writeMap");
 		std::ifstream input(path, std::ios::binary);
 		std::array<char, 4> header {};
 		if (!input.read(header.data(), 4)) {
@@ -214,6 +269,9 @@ namespace MapMigration::IO {
 			}
 			std::vector<uint8_t> payload;
 			for (;;) {
+				if (payload.size() % 65536 == 0) {
+					control.check();
+				}
 				int byte = input.peek();
 				if (byte == 0xFE || byte == 0xFF) {
 					break;

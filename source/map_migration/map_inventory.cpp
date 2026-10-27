@@ -78,13 +78,13 @@ namespace MapMigration {
 					default:
 						// Unknown payload can be copied, but a subsequent editor save
 						// could discard it. Block instead of claiming a safe roundtrip.
-						++inventory.opaqueItemAttributes;
 						throw std::runtime_error("Atributo de item desconhecido: " + std::to_string(attribute) + ". Conversão bloqueada para permitir reabertura sem descarte.");
 				}
 			}
 		}
 	}
-	Inventory InspectMap(const Path& path, const Catalog& catalog, const Control& control, bool collectContext) {
+	Inventory InspectMap(const Path& path, const Catalog& catalog, const Control& control, bool collectContext, bool fingerprintSidecars) {
+		IO::StageTimer timer(control, "inventory");
 		Inventory inventory;
 		inventory.mapFile = FingerprintFile(path, control);
 		struct Context {
@@ -174,7 +174,9 @@ namespace MapMigration {
 							sidecar.attribute = attribute;
 							sidecar.reference = value;
 							const auto source = IO::FromUtf8(value);
-							sidecar.file = FingerprintFile(source.is_absolute() ? source : path.parent_path() / source, control);
+							if (fingerprintSidecars) {
+								sidecar.file = FingerprintFile(source.is_absolute() ? source : path.parent_path() / source, control);
+							}
 							inventory.sidecars.push_back(std::move(sidecar));
 							IO::AppendText(normalized, "");
 						} else if (attribute == 1 || attribute == 7) {

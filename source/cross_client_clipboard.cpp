@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <tuple>
 
 namespace {
 	struct FingerprintHash {
@@ -340,74 +341,80 @@ CrossClientClipboard::~CrossClientClipboard() = default;
 bool CrossClientClipboard::capture(CopyBuffer& source, const std::shared_ptr<EditorResourceSession>& session, wxString& error) {
 	error.clear();
 	clear();
-	if (!session || session != GetActiveEditorResourceSession() || !source.canPaste()) {
-		error = "There is no copied map area to place in the cross-client clipboard.";
-		return false;
-	}
-
-	auto capturedMap = CloneMap(source.getBufferMap());
-	std::map<uint16_t, uint32_t> counts;
-	for (MapIterator iterator = capturedMap->begin(); iterator != capturedMap->end(); ++iterator) {
-		Tile* tile = (*iterator)->get();
-		CountItem(tile->ground, counts);
-		for (Item* item : tile->items) {
-			CountItem(item, counts);
+	try {
+		if (!session || session != GetActiveEditorResourceSession() || !source.canPaste()) {
+			error = "There is no copied map area to place in the cross-client clipboard.";
+			return false;
 		}
-	}
 
-	std::vector<CrossClientItemSnapshot> capturedItems;
-	capturedItems.reserve(counts.size());
-	size_t retainedPreviewBytes = 0;
-	for (const auto& [id, occurrences] : counts) {
-		CrossClientItemSnapshot snapshot;
-		snapshot.sourceId = id;
-		snapshot.occurrences = occurrences;
-		if (g_items.typeExists(id)) {
-			const ItemType& item = g_items[id];
-			snapshot.sourceClientId = item.clientID;
-			snapshot.group = static_cast<uint16_t>(item.group);
-			snapshot.type = static_cast<uint16_t>(item.type);
-			snapshot.semanticFlags = SemanticFlags(item);
-			snapshot.name = item.name;
-			GameSprite* sprite = item.sprite;
-			if (!sprite && item.clientID != 0) {
-				sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
+		auto capturedMap = CloneMap(source.getBufferMap());
+		std::map<uint16_t, uint32_t> counts;
+		for (MapIterator iterator = capturedMap->begin(); iterator != capturedMap->end(); ++iterator) {
+			Tile* tile = (*iterator)->get();
+			CountItem(tile->ground, counts);
+			for (Item* item : tile->items) {
+				CountItem(item, counts);
 			}
-			if (sprite) {
-				bool pending = false;
-				snapshot.renderedVisualAvailable = sprite->getRenderedFingerprint(snapshot.renderedVisual, pending, false);
-				pending = false;
-				snapshot.previewAvailable = LoadStoredPreview(sprite, snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight, pending);
-				if (snapshot.previewAvailable && retainedPreviewBytes <= MaximumRetainedPreviewBytes
-					&& snapshot.previewRgba.size() <= MaximumRetainedPreviewBytes - retainedPreviewBytes) {
-					retainedPreviewBytes += snapshot.previewRgba.size();
-					snapshot.previewVisual = PreviewFingerprint(snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight);
-				} else {
-					snapshot.previewAvailable = false;
-					snapshot.previewRgba.clear();
-					snapshot.previewWidth = 0;
-					snapshot.previewHeight = 0;
+		}
+
+		std::vector<CrossClientItemSnapshot> capturedItems;
+		capturedItems.reserve(counts.size());
+		size_t retainedPreviewBytes = 0;
+		for (const auto& [id, occurrences] : counts) {
+			CrossClientItemSnapshot snapshot;
+			snapshot.sourceId = id;
+			snapshot.occurrences = occurrences;
+			if (g_items.typeExists(id)) {
+				const ItemType& item = g_items[id];
+				snapshot.sourceClientId = item.clientID;
+				snapshot.group = static_cast<uint16_t>(item.group);
+				snapshot.type = static_cast<uint16_t>(item.type);
+				snapshot.semanticFlags = SemanticFlags(item);
+				snapshot.name = item.name;
+				GameSprite* sprite = item.sprite;
+				if (!sprite && item.clientID != 0) {
+					sprite = dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
+				}
+				if (sprite) {
+					bool pending = false;
+					snapshot.renderedVisualAvailable = sprite->getRenderedFingerprint(snapshot.renderedVisual, pending, false);
+					pending = false;
+					snapshot.previewAvailable = LoadStoredPreview(sprite, snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight, pending);
+					if (snapshot.previewAvailable && retainedPreviewBytes <= MaximumRetainedPreviewBytes
+						&& snapshot.previewRgba.size() <= MaximumRetainedPreviewBytes - retainedPreviewBytes) {
+						retainedPreviewBytes += snapshot.previewRgba.size();
+						snapshot.previewVisual = PreviewFingerprint(snapshot.previewRgba, snapshot.previewWidth, snapshot.previewHeight);
+					} else {
+						snapshot.previewAvailable = false;
+						snapshot.previewRgba.clear();
+						snapshot.previewWidth = 0;
+						snapshot.previewHeight = 0;
+					}
 				}
 			}
+			capturedItems.push_back(std::move(snapshot));
 		}
-		capturedItems.push_back(std::move(snapshot));
-	}
 
-	map = std::move(capturedMap);
-	copyPosition = source.getPosition();
-	spawnDependencies = source.getSpawnDependencies();
-	houses = source.houses;
-	copiedMapSession = source.sourceMapSessionId;
-	sourceGraphicsIdentity = g_gui.gfx.getResourceIdentity();
-	sourceSession = session;
-	const WorkspaceClientSelection& client = g_workspace.getClient();
-	sourceClient = client.rootPath.empty() ? wxString("Not configured") : client.rootPath;
-	sourceServer = DisplayPath(g_workspace.getServer().rootPath);
-	items = std::move(capturedItems);
-	if (++generation == 0) {
-		++generation;
+		map = std::move(capturedMap);
+		copyPosition = source.getPosition();
+		spawnDependencies = source.getSpawnDependencies();
+		houses = source.houses;
+		copiedMapSession = source.sourceMapSessionId;
+		sourceGraphicsIdentity = g_gui.gfx.getResourceIdentity();
+		sourceSession = session;
+		const WorkspaceClientSelection& client = g_workspace.getClient();
+		sourceClient = client.rootPath.empty() ? wxString("Not configured") : client.rootPath;
+		sourceServer = DisplayPath(g_workspace.getServer().rootPath);
+		items = std::move(capturedItems);
+		if (++generation == 0) {
+			++generation;
+		}
+		return true;
+	} catch (const std::exception& exception) {
+		clear();
+		error = "Could not capture the copied area: " + wxString::FromUTF8(exception.what());
+		return false;
 	}
-	return true;
 }
 
 void CrossClientClipboard::clear() {
@@ -552,6 +559,14 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 	}
 	const bool missing = std::any_of(analysis.rows.begin(), analysis.rows.end(), [](const auto& row) { return row.state == CrossClientMatchState::Missing && row.recommendations.empty(); });
 	if (missing && needsPreviews) {
+		using RoleKey = std::tuple<uint16_t, uint16_t, uint64_t>;
+		std::map<RoleKey, std::vector<CrossClientPasteRow*>> missingByRole;
+		for (auto& row : analysis.rows) {
+			if (row.state == CrossClientMatchState::Missing && row.source.previewAvailable
+				&& (row.recommendations.empty() || !row.recommendations.front().allVariantsVerified)) {
+				missingByRole[{ row.source.group, row.source.type, row.source.semanticFlags & CrossClientMatchPolicy::RequiredRoleMask }].push_back(&row);
+			}
+		}
 		// One destination preview at a time: memory is independent of the destination item count.
 		for (size_t id = 1; id <= maximumId; ++id) {
 			if (id % 32 == 0 && !update(maximumId + id, total)) {
@@ -566,6 +581,10 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			}
 			const TargetCandidate candidate { static_cast<uint16_t>(id), item.clientID,
 											  static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name };
+			const auto found = missingByRole.find({ candidate.group, candidate.type, candidate.semanticFlags & CrossClientMatchPolicy::RequiredRoleMask });
+			if (found == missingByRole.end()) {
+				continue;
+			}
 			GameSprite* sprite = item.sprite ? item.sprite : dynamic_cast<GameSprite*>(g_gui.gfx.getSprite(item.clientID));
 			bool pending = false;
 			std::vector<uint8_t> pixels;
@@ -573,7 +592,8 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			if (!LoadStoredPreview(sprite, pixels, width, height, pending)) {
 				continue;
 			}
-			for (auto& row : analysis.rows) {
+			for (auto* pendingRow : found->second) {
+				auto& row = *pendingRow;
 				// Don't mix approximate scores into an exact-but-ambiguous equivalence list.
 				if (row.state != CrossClientMatchState::Missing || !row.source.previewAvailable
 					|| (!row.recommendations.empty() && row.recommendations.front().allVariantsVerified)
@@ -640,63 +660,68 @@ bool CrossClientClipboard::resolveMapping(CrossClientPasteAnalysis& analysis, si
 
 bool CrossClientClipboard::apply(const CrossClientPasteAnalysis& analysis, CopyBuffer& destination, wxString& error) {
 	error.clear();
-	if (!canPaste() || analysis.clipboardGeneration != generation) {
-		error = "The copied area changed while the cross-client verification window was open.";
-		return false;
-	}
-	if (analysis.destinationSession.expired() || analysis.destinationSession.lock() != GetActiveEditorResourceSession() || analysis.destinationGraphicsIdentity != g_gui.gfx.getResourceIdentity() || analysis.destinationWorkspaceGeneration != g_workspace.getGeneration()) {
-		error = "The destination resource session changed before the paste was applied.";
-		return false;
-	}
-	if (!analysis.canApply()) {
-		error = "The copied area contains missing resources. No map or client file was changed.";
-		return false;
-	}
+	try {
+		if (!canPaste() || analysis.clipboardGeneration != generation) {
+			error = "The copied area changed while the cross-client verification window was open.";
+			return false;
+		}
+		if (analysis.destinationSession.expired() || analysis.destinationSession.lock() != GetActiveEditorResourceSession() || analysis.destinationGraphicsIdentity != g_gui.gfx.getResourceIdentity() || analysis.destinationWorkspaceGeneration != g_workspace.getGeneration()) {
+			error = "The destination resource session changed before the paste was applied.";
+			return false;
+		}
+		if (!analysis.canApply()) {
+			error = "The copied area contains missing resources. No map or client file was changed.";
+			return false;
+		}
 
-	std::unordered_map<uint16_t, uint16_t> remap;
-	if (analysis.rows.size() != items.size()) {
-		error = "The mapping does not cover the complete copied area. Paste again.";
-		return false;
-	}
-	for (const CrossClientPasteRow& row : analysis.rows) {
-		if (!isCompatibleDestination(row.source, row.destinationId)) {
-			error = wxString::Format("Destination item ID %u is missing or incompatible. Nothing was changed.", row.destinationId);
+		std::unordered_map<uint16_t, uint16_t> remap;
+		if (analysis.rows.size() != items.size()) {
+			error = "The mapping does not cover the complete copied area. Paste again.";
 			return false;
 		}
-		remap[row.source.sourceId] = row.destinationId;
-	}
-	for (const auto& source : items) {
-		if (!remap.contains(source.sourceId)) {
-			error = "The mapping does not cover every copied item. Nothing was changed.";
-			return false;
+		for (const CrossClientPasteRow& row : analysis.rows) {
+			if (!isCompatibleDestination(row.source, row.destinationId)) {
+				error = wxString::Format("Destination item ID %u is missing or incompatible. Nothing was changed.", row.destinationId);
+				return false;
+			}
+			remap[row.source.sourceId] = row.destinationId;
 		}
-	}
-	std::vector<std::pair<Item*, uint16_t>> changedItems;
-	struct RestoreItemIds {
-		std::vector<std::pair<Item*, uint16_t>>& items;
-		~RestoreItemIds() {
-			for (auto iterator = items.rbegin(); iterator != items.rend(); ++iterator) {
-				iterator->first->setID(iterator->second);
+		for (const auto& source : items) {
+			if (!remap.contains(source.sourceId)) {
+				error = "The mapping does not cover every copied item. Nothing was changed.";
+				return false;
 			}
 		}
-	} restore { changedItems };
-	VisitMapItems(*map, [&](Item* item) {
-		const auto mapping = remap.find(item->getID());
-		if (mapping != remap.end()) {
-			changedItems.emplace_back(item, item->getID());
-			item->setID(mapping->second);
-		}
-	});
+		std::vector<std::pair<Item*, uint16_t>> changedItems;
+		struct RestoreItemIds {
+			std::vector<std::pair<Item*, uint16_t>>& items;
+			~RestoreItemIds() {
+				for (auto iterator = items.rbegin(); iterator != items.rend(); ++iterator) {
+					iterator->first->setID(iterator->second);
+				}
+			}
+		} restore { changedItems };
+		VisitMapItems(*map, [&](Item* item) {
+			const auto mapping = remap.find(item->getID());
+			if (mapping != remap.end()) {
+				changedItems.emplace_back(item, item->getID());
+				item->setID(mapping->second);
+			}
+		});
 
-	std::unique_ptr<BaseMap> converted = CloneMap(*map);
-	if (!converted || converted->size() == 0) {
-		error = "The converted paste buffer is empty.";
+		std::unique_ptr<BaseMap> converted = CloneMap(*map);
+		if (!converted || converted->size() == 0) {
+			error = "The converted paste buffer is empty.";
+			return false;
+		}
+		CopyBuffer prepared;
+		prepared.replace(std::move(converted), copyPosition, spawnDependencies);
+		prepared.houses = houses;
+		prepared.sourceMapSessionId = copiedMapSession;
+		destination.swap(prepared);
+		return true;
+	} catch (const std::exception& exception) {
+		error = "Could not prepare the converted area: " + wxString::FromUTF8(exception.what());
 		return false;
 	}
-	CopyBuffer prepared;
-	prepared.replace(std::move(converted), copyPosition, spawnDependencies);
-	prepared.houses = houses;
-	prepared.sourceMapSessionId = copiedMapSession;
-	destination.swap(prepared);
-	return true;
 }

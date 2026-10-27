@@ -3,6 +3,7 @@
 #include <bit>
 #include <cmath>
 #include <unordered_map>
+#include "migration_io.h"
 
 namespace MapMigration {
 	namespace {
@@ -81,8 +82,10 @@ namespace MapMigration {
 		}
 		void ResolveVisualDraftRows(Plan& plan, const Control& control) {
 			std::unordered_map<std::string, std::vector<const CatalogItem*>> completeIndex, singleIndex;
+			std::unordered_map<uint64_t, std::vector<const CatalogItem*>> roleIndex;
 			for (const auto& [id, item] : plan.target->items) {
 				if (item.visual && item.visual->valid) {
+					roleIndex[item.roles & (FunctionalRoles & ~uint64_t(Ground))].push_back(&item);
 					completeIndex[item.visual->completePixels].push_back(&item);
 					if (item.visual->variantPixels.size() == 1) {
 						singleIndex[item.visual->variantPixels.front()].push_back(&item);
@@ -161,10 +164,9 @@ namespace MapMigration {
 				// Bounded coarse ranking, followed by full preview comparison. The
 				// result remains explicitly approximate, even if no rival is close.
 				std::vector<std::pair<double, const CatalogItem*>> shortlist;
-				for (const auto& [id, b] : plan.target->items) {
-					if (id % 256 == 0) {
-						control.check();
-					}
+				for (const auto* target : roleIndex[(a.roles | row.usage.requiredRoles) & (FunctionalRoles & ~uint64_t(Ground))]) {
+					const auto& b = *target;
+					control.check();
 					if (!acceptable(b)) {
 						continue;
 					}
@@ -287,9 +289,21 @@ namespace MapMigration {
 		}
 		return true;
 	}
+	bool FunctionallyEquivalent(const CatalogItem& source, const CatalogItem& target, uint64_t required) {
+		return Compatible(source, target, required) && SameProperties(source, target)
+			&& source.visual && target.visual && SameSpatial(source.visual->layout, target.visual->layout)
+			&& source.xmlProperties == target.xmlProperties;
+	}
 	std::vector<MappingRow> Match(const Inventory& inventory, const Catalog& source, const Catalog& target, const Control& control) {
+		IO::StageTimer timer(control, "match");
+		if (control.metrics) {
+			std::lock_guard lock(control.metrics->mutex);
+			++control.metrics->fullMatchPasses;
+		}
 		std::unordered_map<std::string, std::vector<const CatalogItem*>> exactIndex;
+		std::unordered_map<uint64_t, std::vector<const CatalogItem*>> roleIndex;
 		for (const auto& [id, item] : target.items) {
+			roleIndex[item.roles & FunctionalRoles].push_back(&item);
 			if (item.visual && item.visual->valid) {
 				exactIndex[item.visual->completePixels].push_back(&item);
 			}
@@ -352,10 +366,10 @@ namespace MapMigration {
 				row.reason = "Vários ServerIDs compatíveis têm os mesmos gráficos; escolha o ID correto uma vez para o mapa inteiro.";
 			} else {
 				bool compatibleTarget = false;
-				for (const auto& [candidateId, candidate] : target.items) {
-					if (candidateId % 256 == 0) {
-						control.check();
-					}
+				for (const auto* destination : roleIndex[(item.roles | usage.requiredRoles) & FunctionalRoles]) {
+					const auto& candidate = *destination;
+					const auto candidateId = candidate.serverId;
+					control.check();
 					if (!Compatible(item, candidate, usage.requiredRoles)) {
 						continue;
 					}
@@ -378,6 +392,10 @@ namespace MapMigration {
 					}
 					if (histogram < 0.40) {
 						continue;
+					}
+					if (control.metrics) {
+						std::lock_guard lock(control.metrics->mutex);
+						++control.metrics->candidateComparisons;
 					}
 					const double preview = Similarity(a, b);
 					const bool samePlacement = SamePlacement(a.layout, b.layout);
@@ -505,8 +523,16 @@ namespace MapMigration {
 				reviewed[row.sourceId] = row.targetId;
 			}
 		}
-		Plan next = plan;
-		next.rows = Match(plan.inventory, *plan.source, *plan.target, control);
+		Plan next;
+		next.source = plan.source;
+		next.target = plan.target;
+		// Immutable catalogs and inventory bind the existing evidence. Re-run only
+		// when dropping a more permissive policy, never immediately after Analyze.
+		next.rows = policy < plan.automaticPolicy || plan.rows.size() != plan.inventory.usedIds.size()
+				|| plan.matchedSourceFingerprint != plan.source->fingerprint || plan.matchedTargetFingerprint != plan.target->fingerprint
+				|| plan.matchedMapDigest != plan.inventory.mapFile.sha256
+			? Match(plan.inventory, *plan.source, *plan.target, control)
+			: plan.rows;
 		for (const auto& [sourceId, targetId] : reviewed) {
 			std::string error;
 			if (!Resolve(next, sourceId, targetId, error)) {
@@ -553,6 +579,10 @@ namespace MapMigration {
 		control.check();
 		plan.rows = std::move(next.rows);
 		plan.visualDraft = next.visualDraft;
+		plan.automaticPolicy = policy;
+		plan.matchedSourceFingerprint = plan.source->fingerprint;
+		plan.matchedTargetFingerprint = plan.target->fingerprint;
+		plan.matchedMapDigest = plan.inventory.mapFile.sha256;
 	}
 	bool Resolve(Plan& plan, uint16_t sourceId, uint16_t targetId, std::string& error) {
 		error.clear();

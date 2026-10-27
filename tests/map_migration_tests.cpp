@@ -1,10 +1,12 @@
 #include "map_migration/map_migration.h"
 #include "map_migration/migration_io.h"
+#include "file_transaction.h"
 #include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <cstdlib>
 
 namespace {
 	using namespace MapMigration;
@@ -422,8 +424,15 @@ namespace {
 		ResolveAutomatically(plan, AutomaticPolicy::VisualDraft);
 		Check(plan.visualDraft && plan.ready() && plan.rows.front().targetId == 500, "explicit appearance priority resolves identical pixels across destination metadata changes");
 		Check(!CompatibleForVisualDraft(plan.target->items.at(500), plan.source->items.at(100)), "an ordinary source object cannot overwrite an existing ground");
+		plan.options.outputMap.replace_filename("visual_teste.otbm");
+		const auto rejected = Convert(plan);
+		Check(!rejected.success && rejected.error.find("ground") != std::string::npos, "visual policy alone never authorizes ground loss");
+		Check(!std::filesystem::exists(plan.options.outputMap), "rejected ground loss publishes no map");
+		plan.options.allowGroundLoss = true;
 		const auto result = Convert(plan);
 		Check(result.success, result.error.c_str());
+		Check(result.structurallyValidated && !result.validated && !result.semanticallyCompatible, "experimental structure is never labeled functionally validated");
+		Check(!result.outputGroundlessPositions.empty(), "ground loss positions are available for review");
 		Check(result.outputTilesWithoutGround == 2 && InspectMap(result.outputMap, *plan.target).items == 2, "visual trial preserves items and reports the functional change");
 		const auto data = IO::ReadFile(result.jsonReport, 1000000);
 		const std::string text(data.begin(), data.end());
@@ -441,12 +450,225 @@ namespace {
 		Check(!plan.ready(), "transparent source container has no invisible exact target");
 		ResolveAutomatically(plan, AutomaticPolicy::VisualDraft);
 		Check(plan.ready(), "visual trial selects a valid visible container when no invisible one exists");
+		plan.options.outputMap.replace_filename("transparent_teste.otbm");
 		const auto row = std::find_if(plan.rows.begin(), plan.rows.end(), [](const auto& r) { return r.sourceId == 101; });
 		Check(row != plan.rows.end() && row->targetId == 501 && row->reason.find("Container transparente") != std::string::npos, "visibility change is explicit and container type retained");
 		const auto result = Convert(plan);
 		Check(result.success, result.error.c_str());
 		Check(InspectMap(result.outputMap, *plan.target).nestedItems == 4, "container fallback preserves all nested contents");
 		std::cout << "PASS transparent-container trial fallback with nested contents preserved\n";
+	}
+	void TestCreateOnlyPublication(const Path& root) {
+		std::filesystem::create_directories(root);
+		const auto output = root / IO::FromUtf8("saída-com-espaço.otbm");
+		const auto sidecar = root / "sidecar.xml";
+		{
+			FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly);
+			TextFile(transaction.Stage(sidecar), "new sidecar");
+			TextFile(transaction.Stage(output), "new map");
+			TextFile(output, "other writer");
+			std::string error;
+			Check(!transaction.Commit(error), "late name collision must fail");
+			Check(IO::ReadFile(output, 100) == Bytes({ 'o', 't', 'h', 'e', 'r', ' ', 'w', 'r', 'i', 't', 'e', 'r' }), "late writer was replaced");
+			Check(!std::filesystem::exists(sidecar), "create-only rollback retained an earlier sidecar");
+		}
+		const auto dangling = root / "dangling.otbm";
+		std::error_code ec;
+		std::filesystem::create_symlink(root / "absent", dangling, ec);
+		if (!ec) {
+			FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly);
+			TextFile(transaction.Stage(dangling), "new map");
+			std::string error;
+			Check(!transaction.Commit(error) && std::filesystem::is_symlink(dangling), "dangling symlink was replaced");
+		}
+		Set source(root / "source", Source), target(root / "target", Target);
+		auto plan = FixturePlan(root / "map", source, target);
+		bool injected = false;
+		Control control;
+		control.progress = [&](int p, const auto&) {
+			if (p == 98 && !injected) {
+				injected = true;
+				TextFile(plan.options.outputMap, "other writer");
+			}
+		};
+		const auto result = Convert(plan, control);
+		Check(injected && !result.success, "race after preflight must abort actual conversion");
+		Check(!std::filesystem::exists(result.jsonReport) && !std::filesystem::exists(result.csvReport), "failed publication left reports");
+		Check(IO::ReadFile(plan.options.outputMap, 100) == IO::ReadFile(output, 100), "conversion race overwrote another writer");
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+			Check(entry.path().filename().string().find(".rme-stage") == std::string::npos, "failed publication leaked staging");
+		}
+		std::cout << "PASS exclusive publication: late writer, Unicode, dangling symlink, sidecar/report rollback\n";
+	}
+	void TestIncrementalAndBudget(const Path& root) {
+		Set source(root / "source", Source), target(root / "target", Target);
+		Options options { MapFile(root / "map", false, false), root / "new.otbm", source.paths, target.paths };
+		Control control;
+		auto plan = Analyze(options, control);
+		Check(plan.ready() && control.metrics->fullMatchPasses == 1, "initial analysis must match once");
+		ResolveAutomatically(plan, AutomaticPolicy::Safe, control);
+		ResolveAutomatically(plan, AutomaticPolicy::VisualDraft, control);
+		Check(control.metrics->fullMatchPasses == 1, "automatic refinement repeated the full match");
+		ResolveAutomatically(plan, AutomaticPolicy::Safe, control);
+		Check(control.metrics->fullMatchPasses == 2 && !plan.visualDraft, "policy downgrade must restore safe evidence");
+		auto changed = std::make_shared<Catalog>(*plan.target);
+		changed->fingerprint += "-reloaded";
+		plan.target = changed;
+		ResolveAutomatically(plan, AutomaticPolicy::Safe, control);
+		Check(control.metrics->fullMatchPasses == 3, "catalog fingerprint change must invalidate reused evidence");
+		Control limited;
+		limited.memoryLimitBytes = 1;
+		auto rejected = Analyze(options, limited);
+		Check(!rejected.error.empty() && !rejected.ready(), "memory budget failure must abort cleanly");
+		Check(!std::filesystem::exists(options.outputMap), "budget failure published output");
+		Check(control.metrics->hashedBytes > 0 && control.metrics->retainedBytes > 0 && !control.metrics->stageMilliseconds.empty(), "job measurements missing");
+		std::cout << "PASS single full match, safe policy downgrade, aggregate memory budget and stage metrics\n";
+	}
+	void TestRepeatedJobs(const Path& root) {
+		Set source(root / "source", Source), target(root / "target", Target);
+		for (unsigned i = 0; i < 30; ++i) {
+			auto plan = FixturePlan(root / ("map" + std::to_string(i)), source, target);
+			Check(plan.ready(), "repeated analysis failed");
+			std::weak_ptr<const Catalog> sourceLife = plan.source, targetLife = plan.target;
+			{
+				const auto result = Convert(plan);
+				Check(result.success, result.error.c_str());
+			}
+			plan = {};
+			Check(sourceLife.expired() && targetLife.expired(), "completed job retained catalogs");
+		}
+		std::cout << "PASS 30 complete conversion/destruction cycles release both catalogs\n";
+	}
+	void TestCancellationPhases(const Path& root) {
+		Set source(root / "source", Source), target(root / "target", Target);
+		Options options { MapFile(root / "map"), root / "new.otbm", source.paths, target.paths };
+		for (const auto& phase : { std::string("Lendo DAT"), std::string("Lendo SPR"), std::string("Comparando IDs") }) {
+			std::atomic<bool> cancel = false;
+			Control control;
+			control.cancelled = &cancel;
+			control.progress = [&](int, const auto& message) {if(message.find(phase)!=std::string::npos){ cancel = true;
+} };
+			auto plan = Analyze(options, control);
+			Check(cancel && plan.cancelled && !plan.ready(), "analysis stage ignored cancellation");
+		}
+		auto plan = Analyze(options);
+		Check(plan.ready(), "cancellation fixture plan");
+		for (const auto& phase : { std::string("Copiando arquivos"), std::string("Gravando mapa"), std::string("Revalidando"), std::string("Publicando") }) {
+			std::atomic<bool> cancel = false;
+			Control control;
+			control.cancelled = &cancel;
+			control.progress = [&](int, const auto& message) {if(message.find(phase)!=std::string::npos){ cancel = true;
+} };
+			const auto result = Convert(plan, control);
+			Check(cancel && result.cancelled && !result.success && !std::filesystem::exists(options.outputMap), "conversion stage ignored cancellation or published output");
+		}
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+			Check(entry.path().filename().string().find(".rme-stage") == std::string::npos, "cancelled phase leaked a staged file");
+		}
+		std::cout << "PASS cancellation during DAT, SPR, matching, sidecars, map writing, revalidation and publication\n";
+	}
+	void StressMapSizes(const Path& root) {
+		if (!std::getenv("NEXAMAP_MIGRATION_STRESS")) {
+			return;
+		}
+		Set source(root / "source", { { 100, 100, 1 } }), target(root / "target", { { 500, 100, 1 } });
+		std::filesystem::create_directories(root / "maps");
+		for (const uint64_t count : { 10000ull, 100000ull, 1000000ull }) {
+			// Stream the large fixture rather than retaining one million heap nodes.
+			std::ofstream file(root / "maps" / "large.otbm", std::ios::binary);
+			const auto emit = [&](const Bytes& data) {
+				file.put(char(0xFE));
+				for (auto byte : data) {
+					if (byte >= 0xFD) {
+						file.put(char(0xFD));
+					}
+					file.put(char(byte));
+				}
+			};
+			Bytes header { 0 };
+			U32(header, 2);
+			U16(header, 65535);
+			U16(header, 65535);
+			U32(header, 3);
+			U32(header, 0);
+			file.write("OTBM", 4);
+			emit(header);
+			emit({ 2 });
+			uint64_t remaining = count;
+			for (unsigned areaY = 0; remaining; areaY += 256) {
+				for (unsigned areaX = 0; areaX < 65536 && remaining; areaX += 256) {
+					Bytes area { 4 };
+					U16(area, uint16_t(areaX));
+					U16(area, uint16_t(areaY));
+					area.push_back(7);
+					emit(area);
+					for (unsigned y = 0; y < 256 && remaining; ++y) {
+						for (unsigned x = 0; x < 256 && remaining; ++x) {
+							Bytes tile { 5, uint8_t(x), uint8_t(y), 9 };
+							U16(tile, 100);
+							emit(tile);
+							file.put(char(0xFF));
+							--remaining;
+						}
+					}
+					file.put(char(0xFF));
+				}
+			}
+			file.put(char(0xFF));
+			file.put(char(0xFF));
+			file.close();
+			Control control;
+			auto started = std::chrono::steady_clock::now();
+			auto plan = Analyze({ root / "maps" / "large.otbm", root / ("out" + std::to_string(count) + ".otbm"), source.paths, target.paths }, control);
+			Check(plan.ready() && plan.inventory.tiles == count, "stress inventory count");
+			const auto result = Convert(plan, control);
+			Check(result.success, result.error.c_str());
+			std::cout << "BENCH tiles=" << count << " ms=" << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count()
+					  << " peakRSS=" << control.metrics->peakResidentBytes << " hashedBytes=" << control.metrics->hashedBytes << '\n';
+		}
+	}
+	void BenchmarkMatching() {
+		if (!std::getenv("NEXAMAP_MIGRATION_STRESS")) {
+			return;
+		}
+		for (const unsigned targetCount : { 10000u, 50000u }) {
+			Catalog target, source;
+			auto a = std::make_shared<Visual>(), b = std::make_shared<Visual>();
+			a->valid = b->valid = a->visiblePixels = b->visiblePixels = true;
+			a->allVariantsVerified = b->allVariantsVerified = true;
+			a->completePixels = "source";
+			b->completePixels = "target";
+			a->preview = b->preview = { 80, 90, 100, 255 };
+			a->histogram[0] = b->histogram[0] = 1;
+			a->variantFeatures.resize(1);
+			b->variantFeatures.resize(1);
+			a->variantFeatures[0].fill(100);
+			b->variantFeatures[0].fill(100);
+			for (unsigned id = 1; id <= targetCount; ++id) {
+				auto& item = target.items[uint16_t(id)];
+				item.serverId = item.clientId = uint16_t(id);
+				item.roles = id % 4096;
+				item.visual = b;
+			}
+			for (const unsigned sourceCount : { 100u, 1000u, 5000u }) {
+				Inventory inventory;
+				source.items.clear();
+				for (unsigned id = 1; id <= sourceCount; ++id) {
+					auto& item = source.items[uint16_t(id)];
+					item.serverId = item.clientId = uint16_t(id);
+					item.roles = id % 4096;
+					item.visual = a;
+					inventory.usedIds[uint16_t(id)].occurrences = 1;
+				}
+				Control control;
+				const auto start = std::chrono::steady_clock::now();
+				const auto rows = Match(inventory, source, target, control);
+				Check(rows.size() == sourceCount && std::all_of(rows.begin(), rows.end(), [](const auto& row) { return !row.resolved(); }), "indexed benchmark unexpectedly resolved ties");
+				Check(control.metrics->candidateComparisons < uint64_t(sourceCount) * targetCount / 100, "functional index did not reduce candidate work");
+				std::cout << "BENCH sourceIDs=" << sourceCount << " targetIDs=" << targetCount << " ms=" << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()
+						  << " compared=" << control.metrics->candidateComparisons << " fullScanPairs=" << uint64_t(sourceCount) * targetCount << '\n';
+			}
+		}
 	}
 }
 int main() {
@@ -464,6 +686,12 @@ int main() {
 		TestContextualPatterns(root / "patterns");
 		TestVisualDraftOutput(root / "visual-draft");
 		TestTransparentContainerTrial(root / "transparent-container");
+		TestCreateOnlyPublication(root / "publication");
+		TestIncrementalAndBudget(root / "incremental");
+		TestRepeatedJobs(root / "repeated");
+		TestCancellationPhases(root / "cancel-phases");
+		StressMapSizes(root / "stress");
+		BenchmarkMatching();
 		std::filesystem::remove_all(root);
 		return 0;
 	} catch (const std::exception& error) {

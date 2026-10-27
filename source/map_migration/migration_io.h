@@ -7,6 +7,25 @@
 #include <stdexcept>
 
 namespace MapMigration::IO {
+	class StageTimer {
+	public:
+		StageTimer(const Control& control, std::string stage) :
+			metrics(control.metrics), stage(std::move(stage)), started(std::chrono::steady_clock::now()) { }
+		~StageTimer() noexcept {
+			try {
+				if (metrics) {
+					std::lock_guard lock(metrics->mutex);
+					metrics->stageMilliseconds[stage] += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+				}
+			} catch (...) { /* Optional telemetry must never break cleanup. */
+			}
+		}
+
+	private:
+		std::shared_ptr<JobMetrics> metrics;
+		std::string stage;
+		std::chrono::steady_clock::time_point started;
+	};
 	class Digest {
 	public:
 		Digest();

@@ -14,6 +14,10 @@
 #include <wx/filedlg.h>
 #include <mutex>
 #include <thread>
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	#include <iostream>
+	#include <wx/weakref.h>
+#endif
 
 namespace MapMigrationWindowDetails {
 	using namespace MapMigration;
@@ -57,6 +61,45 @@ namespace MapMigrationWindowDetails {
 	};
 	class Dialog final : public wxDialog {
 	public:
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+		static void ValidateLifecycle() {
+			const auto check = [](bool value, const char* message) {
+				if (!value) {
+					throw std::runtime_error(message);
+				}
+			};
+			const auto before = wxTopLevelWindows.GetCount();
+			for (unsigned cycle = 0; cycle < 100; ++cycle) {
+				auto dialog = std::make_unique<Dialog>(nullptr);
+				wxWeakRef<wxWindow> lifetime(dialog.get());
+				check(!dialog->approximation->GetValue(), "Migration must default to Safe");
+				wxCommandEvent choice(wxEVT_CHOICE, dialog->roleFilter->GetId());
+				choice.SetEventObject(dialog->roleFilter);
+				dialog->roleFilter->GetEventHandler()->ProcessEvent(choice);
+				check(dialog->fillCalls == 1, "Choice handler invoked more than once");
+				wxFileDirPickerEvent changed(wxEVT_FILEPICKER_CHANGED, dialog->sourceMap, dialog->sourceMap->GetId(), "");
+				dialog->sourceMap->GetEventHandler()->ProcessEvent(changed);
+				check(dialog->invalidateCalls == 1, "File picker handler invoked more than once");
+				// Exercise actual button binding, worker completion and timer binding.
+				wxCommandEvent click(wxEVT_BUTTON, dialog->analyze->GetId());
+				click.SetEventObject(dialog->analyze);
+				dialog->analyze->GetEventHandler()->ProcessEvent(click);
+				check(dialog->analysisCalls == 1 && dialog->busy, "Analyze handler count/lifetime");
+				dialog->worker.join();
+				wxTimerEvent tick(dialog->timer);
+				dialog->GetEventHandler()->ProcessEvent(tick);
+				check(dialog->pollCalls == 1 && !dialog->busy && !dialog->work, "Completed worker state retained after Poll");
+				if (cycle == 99) {
+					dialog->CallAfter([window = dialog.get()] { window->Close(); });
+					check(dialog->ShowModal() == wxID_CANCEL && dialog->closeCalls == 1, "Close handler invoked more than once");
+				}
+				dialog.reset();
+				check(!lifetime, "Migration dialog outlived destruction");
+			}
+			check(wxTopLevelWindows.GetCount() == before, "Repeated dialogs leaked top-level windows");
+			std::cout << "PASS 100 migration dialogs: single button/choice/picker/timer callbacks, worker join and destruction\n";
+		}
+#endif
 		Dialog(wxWindow* parent) :
 			wxDialog(parent, wxID_ANY, Text("Converter mapa inteiro para meu cliente"), wxDefaultPosition, wxSize(1120, 850), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER), timer(this) {
 			workspaceGeneration = g_workspace.getGeneration();
@@ -156,7 +199,7 @@ namespace MapMigrationWindowDetails {
 			pages->AddPage(report, Text("3. Resultado e diagnóstico"));
 			root->Add(pages, 1, wxEXPAND | wxLEFT | wxRIGHT, 12);
 			approximation = new wxCheckBox(this, wxID_ANY, Text("Gerar OTBM de teste priorizando aparência (aceita propriedades, bloqueio e velocidade do destino)"));
-			approximation->SetValue(true);
+			approximation->SetValue(false);
 			root->Add(approximation, 0, wxLEFT | wxRIGHT | wxTOP, 12);
 			status = new wxStaticText(this, wxID_ANY, Text("Pronto para analisar."));
 			root->Add(status, 0, wxEXPAND | wxALL, 8);
@@ -191,8 +234,19 @@ namespace MapMigrationWindowDetails {
 			saveMappings->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Mappings(true); });
 			loadMappings->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Mappings(false); });
 			cancel->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CancelOrClose(); });
-			Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {if(busy){closing=true;work->cancel=true;event.Veto();}else{ EndModal(wxID_CANCEL);
-} });
+			Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+				++closeCalls;
+#endif
+				if (busy) {
+					closing = true;
+					work->cancel = true;
+					if (event.CanVeto())
+						event.Veto();
+				} else {
+					EndModal(wxID_CANCEL);
+				}
+			});
 			Bind(wxEVT_TIMER, [this](wxTimerEvent&) { Poll(); });
 			timer.Start(80);
 			for (auto* picker : { sourceOtb, sourceDat, sourceSpr, sourceXml, targetOtb, targetXml, targetDat, targetSpr }) {
@@ -214,7 +268,8 @@ namespace MapMigrationWindowDetails {
 			return result.outputMap;
 		}
 		bool canOpen() const {
-			return currentTarget->GetValue() && workspaceGeneration == g_workspace.getGeneration() && g_gui.IsVersionLoaded() && !g_workspace.getServer().trackedResourcesChanged();
+			return result.success && result.semanticallyCompatible && !plan.visualDraft && currentTarget->GetValue()
+				&& workspaceGeneration == g_workspace.getGeneration() && g_gui.IsVersionLoaded() && !g_workspace.getServer().trackedResourcesChanged();
 		}
 
 	private:
@@ -254,6 +309,9 @@ namespace MapMigrationWindowDetails {
 			}
 		}
 		void Invalidate() {
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+			++invalidateCalls;
+#endif
 			if (!busy) {
 				plan = {};
 				result = {};
@@ -268,6 +326,7 @@ namespace MapMigrationWindowDetails {
 			value.outputMap = NativePath(outputMap->GetPath());
 			value.source = { NativePath(sourceOtb->GetPath()), NativePath(sourceXml->GetPath()), NativePath(sourceDat->GetPath()), NativePath(sourceSpr->GetPath()), {} };
 			value.target = { NativePath(targetOtb->GetPath()), NativePath(targetXml->GetPath()), NativePath(targetDat->GetPath()), NativePath(targetSpr->GetPath()), {} };
+			value.allowGroundLoss = groundLossAccepted;
 			return value;
 		}
 		void UpdateButtons() {
@@ -295,21 +354,24 @@ namespace MapMigrationWindowDetails {
 			busy = true;
 			UpdateButtons();
 			const auto state = work;
+			lastPercent = -1;
+			lastMessage.clear();
 			Control control;
 			control.cancelled = &state->cancel;
 			control.progress = [state](int p, const std::string& text) {std::lock_guard lock(state->mutex);state->percent=p;state->message=text; };
 			if (automaticRun) {
 				const auto options = OptionsFromControls();
-				const auto previous = plan;
+				auto previous = std::move(plan);
 				const auto policy = approximation->GetValue() ? AutomaticPolicy::VisualDraft : AutomaticPolicy::Safe;
-				worker = std::jthread([state, options, previous, policy, control] {
-					Plan value = previous;
+				worker = std::jthread([state, options, previous = std::move(previous), policy, control]() mutable {
+					Plan value = std::move(previous);
 					Result outcome;
 					try {
 						if (!value.source || !value.target || !value.error.empty() || value.cancelled) {
 							value = Analyze(options, control);
 						}
 						value.options.outputMap = options.outputMap;
+						value.options.allowGroundLoss = options.allowGroundLoss;
 						if (!value.error.empty()) {
 							throw std::runtime_error(value.error);
 						}
@@ -324,7 +386,7 @@ namespace MapMigrationWindowDetails {
 								outcome.csvReport = value.options.outputMap;
 								outcome.csvReport.replace_extension(".automatic-analysis.csv");
 								std::filesystem::create_directories(std::filesystem::absolute(outcome.jsonReport).parent_path());
-								WriteReports(value, outcome.jsonReport, outcome.csvReport);
+								WriteReports(value, outcome.jsonReport, outcome.csvReport, nullptr, control);
 							}
 						}
 					} catch (const std::exception& error) {
@@ -337,14 +399,22 @@ namespace MapMigrationWindowDetails {
 					state->done = true;
 				});
 			} else if (converting) {
-				const auto snapshot = plan;
-				worker = std::jthread([state, snapshot, control] {auto value=Convert(snapshot,control);std::lock_guard lock(state->mutex);state->result=std::move(value);state->done=true; });
+				worker = std::jthread([state, snapshot = std::move(plan), control]() mutable {
+					auto value = Convert(snapshot, control);
+					std::lock_guard lock(state->mutex);
+					state->plan = std::move(snapshot);
+					state->result = std::move(value);
+					state->done = true;
+				});
 			} else {
 				const auto options = OptionsFromControls();
 				worker = std::jthread([state, options, control] {auto value=Analyze(options,control);std::lock_guard lock(state->mutex);state->plan=std::move(value);state->done=true; });
 			}
 		}
 		void StartAnalysis() {
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+			++analysisCalls;
+#endif
 			workspaceGeneration = g_workspace.getGeneration();
 			Begin(false);
 		}
@@ -353,7 +423,12 @@ namespace MapMigrationWindowDetails {
 				wxMessageBox(Text("Selecione o caminho do novo mapa de saída na aba Arquivos."), Text("Saída necessária"), wxOK | wxICON_INFORMATION, this);
 				return;
 			}
+			groundLossAccepted = false;
 			if (approximation->GetValue()) {
+				if (wxMessageBox(Text("Gerar somente um mapa experimental? A aparência e as propriedades podem mudar, inclusive pisos virarem objetos sem chão. Essa saída não é compatibilidade comprovada e não será aberta automaticamente."), Text("Confirmar mapa experimental"), wxYES_NO | wxNO_DEFAULT | wxICON_WARNING, this) != wxYES) {
+					return;
+				}
+				groundLossAccepted = true;
 				auto output = NativePath(outputMap->GetPath());
 				if (!output.empty() && !WxPath(output.stem()).EndsWith("_teste")) {
 					auto name = output.stem();
@@ -369,6 +444,18 @@ namespace MapMigrationWindowDetails {
 				return;
 			}
 			plan.options.outputMap = NativePath(outputMap->GetPath());
+			if (plan.visualDraft) {
+				if (wxMessageBox(Text("Este plano experimental pode perder chão e alterar bloqueios. Autorizar a geração apenas para teste, sem abertura automática?"), Text("Confirmar mapa experimental"), wxYES_NO | wxNO_DEFAULT | wxICON_WARNING, this) != wxYES) {
+					return;
+				}
+				plan.options.allowGroundLoss = true;
+				auto path = plan.options.outputMap;
+				if (!WxPath(path.stem()).EndsWith("_teste")) {
+					path.replace_filename(path.stem().native() + Path("_teste.otbm").native());
+					plan.options.outputMap = path;
+					outputMap->SetPath(WxPath(path));
+				}
+			}
 			if (std::filesystem::exists(plan.options.outputMap)) {
 				wxMessageBox(Text("Escolha um nome novo para a saída; nenhum arquivo existente será sobrescrito."), Text("Saída já existe"), wxOK | wxICON_INFORMATION, this);
 				return;
@@ -376,16 +463,29 @@ namespace MapMigrationWindowDetails {
 			Begin(true);
 		}
 		void Poll() {
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+			++pollCalls;
+#endif
 			if (!busy || !work) {
 				return;
 			}
 			bool done, converting;
+			int percent;
+			std::string message;
 			{
 				std::lock_guard lock(work->mutex);
-				gauge->SetValue(work->percent);
-				status->SetLabel(Text(work->message));
+				percent = work->percent;
+				message = work->message;
 				done = work->done;
 				converting = work->converting || work->automatic;
+			}
+			if (percent != lastPercent) {
+				gauge->SetValue(percent);
+				lastPercent = percent;
+			}
+			if (message != lastMessage) {
+				status->SetLabel(Text(message));
+				lastMessage = std::move(message);
 			}
 			if (!done) {
 				return;
@@ -394,18 +494,21 @@ namespace MapMigrationWindowDetails {
 				worker.join();
 			}
 			busy = false;
-			if (work->automatic) {
+			if (converting) {
 				plan = std::move(work->plan);
-				FillRows();
+				if (work->automatic) {
+					FillRows();
+				}
 			}
 			if (converting) {
 				result = std::move(work->result);
 				if (result.success) {
 					const bool approximate = plan.visualDraft || std::any_of(plan.rows.begin(), plan.rows.end(), [](const auto& row) { return row.decision == Decision::Approximate; });
 					report->SetValue(Text(approximate ? "Mapa para teste gerado automaticamente. A estrutura foi validada; existem aproximações visuais registradas no relatório.\n\nSaída: " : "Mapa inteiro convertido, reaberto pelo validador e preservado estruturalmente.\n\nSaída: ") + WxPath(result.outputMap) + Text("\nRelatório JSON: ") + WxPath(result.jsonReport) + Text("\nRelatório CSV: ") + WxPath(result.csvReport));
+					report->AppendText(Text("\nCompatibilidade funcional comprovada: " + std::string(result.semanticallyCompatible ? "sim" : "não") + "\nTiles sem chão na origem: " + std::to_string(plan.inventory.tilesWithoutGround) + "\nTiles sem chão na saída: " + std::to_string(result.outputTilesWithoutGround)));
 					pages->SetSelection(2);
 					UpdateButtons();
-					if (canOpen()) {
+					if (canOpen() && !closing) {
 						EndModal(wxID_OK);
 						return;
 					}
@@ -423,12 +526,16 @@ namespace MapMigrationWindowDetails {
 					pages->SetSelection(1);
 				}
 			}
+			work.reset();
 			UpdateButtons();
 			if (closing) {
 				EndModal(wxID_CANCEL);
 			}
 		}
 		void FillRows() {
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+			++fillCalls;
+#endif
 			list->Freeze();
 			list->DeleteAllItems();
 			for (size_t i = 0; i < plan.rows.size(); ++i) {
@@ -577,10 +684,23 @@ namespace MapMigrationWindowDetails {
 		Result result;
 		uint64_t workspaceGeneration = 0;
 		bool busy = false, closing = false;
+		bool groundLossAccepted = false;
+		int lastPercent = -1;
+		std::string lastMessage;
 		std::shared_ptr<Work> work;
 		std::jthread worker;
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+		unsigned analysisCalls = 0, fillCalls = 0, invalidateCalls = 0, pollCalls = 0, closeCalls = 0;
+#endif
 	};
 }
+
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+void RunMapMigrationWindowTests() {
+	g_settings.setDefaults();
+	MapMigrationWindowDetails::Dialog::ValidateLifecycle();
+}
+#endif
 
 bool RunWholeMapMigration(wxWindow* parent) {
 	MapMigrationWindowDetails::Dialog dialog(parent);

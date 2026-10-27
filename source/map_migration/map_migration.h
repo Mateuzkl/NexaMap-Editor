@@ -10,6 +10,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <mutex>
 
 // This module owns its catalogs and performs no wx/GL operations. It never
 // reads or swaps g_items, g_gui.gfx, brushes or the active resource session.
@@ -42,12 +44,21 @@ namespace MapMigration {
 	};
 	inline constexpr uint64_t FunctionalRoles = Ground | Container | Teleport | Door | Depot | Fluid | Splash | Bed | Podium | Field | Key | Mailbox;
 
+	struct JobMetrics {
+		mutable std::mutex mutex;
+		uint64_t fullMatchPasses = 0, candidateComparisons = 0, hashedBytes = 0;
+		uint64_t retainedBytes = 0, baselineResidentBytes = 0, peakResidentBytes = 0;
+		std::chrono::steady_clock::time_point lastProbe;
+		std::map<std::string, double> stageMilliseconds;
+	};
 	struct Control {
 		const std::atomic<bool>* cancelled = nullptr;
 		std::function<void(int, const std::string&)> progress;
 		uint64_t memoryLimitBytes = 512ull * 1024 * 1024;
+		std::shared_ptr<JobMetrics> metrics = std::make_shared<JobMetrics>();
 		void check() const;
 		void update(int percent, const std::string& message) const;
+		void retain(uint64_t bytes) const;
 	};
 
 	struct ResourceSet {
@@ -102,6 +113,7 @@ namespace MapMigration {
 		std::vector<FileDigest> files;
 		std::vector<std::string> warnings;
 		uint64_t duplicateClientIds = 0;
+		uint64_t retainedBytes = 0;
 	};
 	struct Position {
 		uint16_t x = 0, y = 0;
@@ -128,7 +140,7 @@ namespace MapMigration {
 		uint32_t version = 0, itemMajorVersion = 0, itemMinorVersion = 0;
 		uint16_t width = 0, height = 0;
 		uint64_t tiles = 0, items = 0, grounds = 0, containers = 0, nestedItems = 0;
-		uint64_t tilesWithoutGround = 0, opaqueItemAttributes = 0;
+		uint64_t tilesWithoutGround = 0;
 		std::vector<Position> groundlessPositions;
 		std::array<uint64_t, 16> floors {};
 		std::map<uint16_t, Usage> usedIds;
@@ -171,6 +183,7 @@ namespace MapMigration {
 	struct Options {
 		Path sourceMap, outputMap;
 		ResourceSet source, target;
+		bool allowGroundLoss = false;
 	};
 	struct Plan {
 		Options options;
@@ -181,33 +194,40 @@ namespace MapMigration {
 		std::string error;
 		bool cancelled = false;
 		bool visualDraft = false;
+		AutomaticPolicy automaticPolicy = AutomaticPolicy::Safe;
+		std::string matchedSourceFingerprint, matchedTargetFingerprint, matchedMapDigest;
+		std::shared_ptr<JobMetrics> metrics;
+		uint64_t memoryLimitBytes = 512ull * 1024 * 1024;
 		[[nodiscard]] uint64_t unresolvedIds() const noexcept;
 		[[nodiscard]] uint64_t unresolvedOccurrences() const noexcept;
 		[[nodiscard]] bool ready() const noexcept;
 	};
 	struct Result {
 		bool success = false, cancelled = false, validated = false;
+		bool structurallyValidated = false, semanticallyCompatible = false;
 		Path outputMap, jsonReport, csvReport;
 		uint64_t changedItems = 0;
 		uint64_t outputTilesWithoutGround = 0;
+		std::vector<Position> outputGroundlessPositions;
 		std::string error;
 	};
 
 	[[nodiscard]] FileDigest FingerprintFile(const Path&, const Control& = {});
 	[[nodiscard]] std::string Sha256(const std::vector<uint8_t>&);
 	[[nodiscard]] Catalog LoadCatalog(const ResourceSet&, const Control& = {});
-	[[nodiscard]] Inventory InspectMap(const Path&, const Catalog&, const Control& = {}, bool collectContext = true);
+	[[nodiscard]] Inventory InspectMap(const Path&, const Catalog&, const Control& = {}, bool collectContext = true, bool fingerprintSidecars = true);
 	[[nodiscard]] bool Compatible(const CatalogItem&, const CatalogItem&, uint64_t requiredRoles = 0);
+	[[nodiscard]] bool FunctionallyEquivalent(const CatalogItem&, const CatalogItem&, uint64_t requiredRoles = 0);
 	[[nodiscard]] bool CompatibleForVisualDraft(const CatalogItem&, const CatalogItem&, uint64_t requiredRoles = 0);
 	[[nodiscard]] uint16_t TargetIdAt(const MappingRow&, Position);
 	[[nodiscard]] std::vector<MappingRow> Match(const Inventory&, const Catalog&, const Catalog&, const Control& = {});
 	[[nodiscard]] Plan Analyze(const Options&, const Control& = {});
 	[[nodiscard]] bool Resolve(Plan&, uint16_t sourceId, uint16_t targetId, std::string& error);
-	// Reassesses every source ID in one pass, retaining reviewed decisions.
+	// Refines analyzed rows; only a policy downgrade needs another full match.
 	// Approximation is an explicit policy and never resolves tied/invalid items.
 	void ResolveAutomatically(Plan&, AutomaticPolicy, const Control& = {});
 	[[nodiscard]] Result Convert(const Plan&, const Control& = {});
-	void WriteReports(const Plan&, const Path& jsonPath, const Path& csvPath, const Result* = nullptr);
+	void WriteReports(const Plan&, const Path& jsonPath, const Path& csvPath, const Result* = nullptr, const Control& = {});
 	void SaveReviewedMappings(const Plan&, const Path&);
 	void LoadReviewedMappings(Plan&, const Path&);
 	[[nodiscard]] std::string DecisionName(Decision);

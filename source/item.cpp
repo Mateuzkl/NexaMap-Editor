@@ -113,11 +113,11 @@ Item::~Item() {
 }
 
 Item* Item::deepCopy() const {
-	Item* copy = Create(id, subtype);
+	std::unique_ptr<Item> copy(Create(id, subtype));
 	if (copy) {
 		copyBaseStateTo(*copy);
 	}
-	return copy;
+	return copy.release();
 }
 
 void Item::copyBaseStateTo(Item& copy) const {
