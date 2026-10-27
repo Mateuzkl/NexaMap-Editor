@@ -2119,6 +2119,61 @@ void GUI::OnWelcomeDialogAction(wxCommandEvent& event) {
 	}
 }
 
+bool GUI::LoadMultiplayerResources(const wxString& clientDirectory, const wxString& itemDirectory, wxString& error, wxArrayString& warnings) {
+	error.clear();
+	warnings.clear();
+	// Joining an already loaded client must not depend on a saved server path
+	// from another PC. The handshake still verifies the loaded item definitions.
+	if (IsVersionLoaded()) {
+		return true;
+	}
+	const auto previousSession = GetActiveEditorResourceSession();
+	const bool previousUiPending = resourceSessionUiPending;
+	const bool persistenceEnabled = g_workspace.isPersistenceEnabled();
+	WorkspaceSession selection = g_workspace;
+	selection.setPersistenceEnabled(false);
+	auto previousPaths = ClientVersion::capturePaths();
+	const auto pendingSession = CreateEditorResourceSession();
+	RenderingLock loadingLock;
+	auto restore = [&] {
+		DestroyLoadBar();
+		ActivateResourceSession(previousSession);
+		resourceSessionUiPending = previousUiPending;
+		ClientVersion::restorePaths(previousPaths);
+	};
+	struct Rollback {
+		decltype(restore)& action;
+		bool active = true;
+		~Rollback() {
+			if (active) {
+				action();
+			}
+		}
+	} rollback { restore };
+	if (!ActivateResourceSession(pendingSession)) {
+		return false;
+	}
+	g_workspace.swap(selection);
+	if (!g_workspace.configureMultiplayerResources(clientDirectory, itemDirectory, error, warnings)) {
+		return false;
+	}
+	// A join needs graphics and definitions only, not evidence of a complete
+	// Canary/TFS server or a local map. Normal LoadWorkspace validation stays intact.
+	const auto& client = g_workspace.getClient();
+	const bool loaded = client.mode == WorkspaceClientMode::Appearances
+		? LoadCanaryCrystalAssets(error, warnings, true, true)
+		: LoadVersion(client.versionId, error, warnings, true, true);
+	DestroyLoadBar();
+	if (!loaded || closingApplication) {
+		return false;
+	}
+	loaded_workspace_generation = g_workspace.getGeneration();
+	g_workspace.setPersistenceEnabled(persistenceEnabled);
+	g_workspace.persistSelection();
+	rollback.active = false;
+	return true;
+}
+
 bool GUI::JoinMultiplayerSession(wxWindow* parent) {
 	if (closingApplication || MultiplayerSession::current()) {
 		return false;
@@ -2126,21 +2181,26 @@ bool GUI::JoinMultiplayerSession(wxWindow* parent) {
 
 	wxWindow* dialogParent = parent ? parent : (welcomeDialog ? static_cast<wxWindow*>(welcomeDialog) : static_cast<wxWindow*>(root));
 	MultiplayerSession::Options options;
-	if (!MultiplayerWindow::configure(dialogParent, false, options) || MultiplayerSession::current() || closingApplication) {
-		return false;
-	}
-
-	// If joining from the startup / welcome screen, automatically validate and load workspace resources
-	if (welcomeDialog != nullptr) {
+	for (;;) {
+		if (!MultiplayerWindow::configure(dialogParent, false, options) || MultiplayerSession::current() || closingApplication) {
+			return false;
+		}
 		wxString error;
 		wxArrayString warnings;
-		if (!LoadWorkspace(error, warnings)) {
-			PopupDialog(dialogParent, "Workspace not ready", error, wxOK);
-			return false;
+		if (!LoadMultiplayerResources(wxstr(options.clientDirectory), wxstr(options.itemDirectory), error, warnings)) {
+			PopupDialog(dialogParent, "Multiplayer resources", error + "\n\nSelect the local client and item definitions used by the host. No local map file is required.", wxOK | wxICON_ERROR);
+			if (MultiplayerSession::current() || closingApplication) {
+				return false;
+			}
+			continue;
 		}
 		if (!warnings.empty()) {
 			ListDialog("Workspace warnings", warnings);
 		}
+		if (MultiplayerSession::current() || closingApplication) {
+			return false;
+		}
+		break;
 	}
 
 	// Joining requires a clean empty map

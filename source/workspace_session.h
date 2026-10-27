@@ -34,6 +34,11 @@ public:
 	void loadConfiguredPaths();
 	void swap(WorkspaceSession& other) noexcept;
 	void setPersistenceEnabled(bool enabled);
+	[[nodiscard]] bool isPersistenceEnabled() const {
+		return persistenceEnabled;
+	}
+	void persistSelection();
+	bool configureMultiplayerResources(const wxString& clientPath, const wxString& itemPath, wxString& error, wxArrayString& warnings);
 
 	bool configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist = true);
 	bool configureServer(const wxString& path, wxString& error, bool persist = true);

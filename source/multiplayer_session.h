@@ -35,6 +35,9 @@ public:
 		std::string name = "Mapper";
 		std::string address;
 		std::string password;
+		// Local resource selection only; never sent to the host.
+		std::string clientDirectory;
+		std::string itemDirectory;
 		uint16_t port = Multiplayer::DefaultPort;
 		uint32_t maxPlayers = 8;
 		Multiplayer::Role defaultRole = Multiplayer::Role::Editor;

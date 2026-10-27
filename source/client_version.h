@@ -209,6 +209,13 @@ public:
 	static ClientVersionList getAllVersionsSupportedForClientVersion(ClientVersion* v);
 	static ClientVersion* getLatestVersion();
 	static ClientVersion* detectFromPath(const FileName& path, wxString& error);
+	struct Paths {
+		FileName client, metadata, sprites;
+		friend bool operator==(const Paths&, const Paths&) = default;
+	};
+	using PathsSnapshot = std::map<ClientVersionID, Paths>;
+	static PathsSnapshot capturePaths();
+	static void restorePaths(PathsSnapshot& snapshot);
 
 	bool operator==(const ClientVersion& o) const {
 		return otb.id == o.otb.id;
