@@ -92,6 +92,9 @@ ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_format.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.h
+${CMAKE_CURRENT_LIST_DIR}/map_migration/map_migration.h
+${CMAKE_CURRENT_LIST_DIR}/map_migration/migration_io.h
+${CMAKE_CURRENT_LIST_DIR}/map_migration/map_migration_window.h
 ${CMAKE_CURRENT_LIST_DIR}/custom_server_converter.h
 ${CMAKE_CURRENT_LIST_DIR}/custom_server_converter_window.h
 ${CMAKE_CURRENT_LIST_DIR}/map_allocator.h
@@ -330,6 +333,7 @@ ${CMAKE_CURRENT_LIST_DIR}/map_diagnostics_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_format.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_item_id_converter_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/map_migration/map_migration_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/custom_server_converter.cpp
 ${CMAKE_CURRENT_LIST_DIR}/custom_server_converter_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/map_display.cpp

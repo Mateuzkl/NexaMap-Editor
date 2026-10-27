@@ -198,6 +198,7 @@ namespace MenuBar {
 		USE_GPU_GROUND_CACHE,
 		MAP_DIAGNOSTICS,
 		SHOW_CONTAINER_PREVIEW,
+		WHOLE_MAP_MIGRATION,
 	};
 }
 
@@ -245,6 +246,7 @@ public:
 	void OnImportPngMap(wxCommandEvent& event);
 	void OnClearMinimapOverlay(wxCommandEvent& event);
 	void OnMapItemIdConverter(wxCommandEvent& event);
+	void OnWholeMapMigration(wxCommandEvent& event);
 	void OnProceduralMapGenerator(wxCommandEvent& event);
 	void OnSpawnNpcConverter(wxCommandEvent& event);
 	void OnImportMonsterData(wxCommandEvent& event);
