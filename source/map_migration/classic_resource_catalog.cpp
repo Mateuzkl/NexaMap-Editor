@@ -598,20 +598,36 @@ namespace MapMigration {
 		Cursor header { dat };
 		catalog.datSignature = header.u32();
 		std::map<uint16_t, Layout> layouts;
-		if (resources.dialect != DatDialect::Automatic) {
+		if (resources.dialect != DatDialect::Automatic && options.specified) {
 			layouts = ParseDat(dat, options, resources.dialect, control);
 		} else {
 			std::string lastError;
 			for (const auto dialect : { DatDialect::Classic86, DatDialect::Classic78, DatDialect::Modern1010, DatDialect::Classic755, DatDialect::Classic74 }) {
-				try {
-					layouts = ParseDat(dat, options, dialect, control);
-					catalog.resources.dialect = dialect;
+				if (resources.dialect != DatDialect::Automatic && resources.dialect != dialect) {
+					continue;
+				}
+				for (unsigned flags = 0; flags < (options.specified ? 1u : 8u); ++flags) {
+					auto candidate = options;
+					if (!options.specified) {
+						candidate.extended = (flags & 1) != 0;
+						candidate.durations = (flags & 2) != 0;
+						candidate.groups = (flags & 4) != 0;
+					}
+					try {
+						auto parsed = ParseDat(dat, candidate, dialect, control);
+						layouts = std::move(parsed);
+						options = candidate;
+						catalog.resources.dialect = dialect;
+						break;
+					} catch (const std::bad_alloc&) {
+						throw;
+					} catch (const std::exception& error) {
+						control.check();
+						lastError = error.what();
+					}
+				}
+				if (!layouts.empty()) {
 					break;
-				} catch (const std::bad_alloc&) {
-					throw;
-				} catch (const std::exception& error) {
-					control.check();
-					lastError = error.what();
 				}
 			}
 			if (layouts.empty()) {
@@ -619,6 +635,7 @@ namespace MapMigration {
 			}
 		}
 		resourcesHash.add("nexamap-classic-catalog-v1:dialect=" + std::to_string(static_cast<int>(catalog.resources.dialect)));
+		resourcesHash.add(":extended=" + std::to_string(options.extended) + ":alpha=" + std::to_string(options.alpha) + ":durations=" + std::to_string(options.durations) + ":groups=" + std::to_string(options.groups));
 		catalog.fingerprint = resourcesHash.finish();
 		SpriteReader sprites(resources.spr, options, control);
 		catalog.sprSignature = sprites.signature;

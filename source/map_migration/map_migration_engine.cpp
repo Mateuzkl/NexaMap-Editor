@@ -506,9 +506,18 @@ namespace MapMigration {
 		}
 		Plan reviewed = plan;
 		for (const auto& row : data.at("mappings")) {
-			const auto source = row.at("source").get<unsigned>(), target = row.at("target").get<unsigned>();
+			if (!row.at("source").is_number_integer() || !row.at("target").is_number_integer()) {
+				throw std::runtime_error("Mapping salvo contém IDs não inteiros.");
+			}
+			const auto source = row.at("source").get<uint64_t>(), target = row.at("target").get<uint64_t>();
 			std::string error;
-			if (source > 65535 || target > 65535 || !Resolve(reviewed, static_cast<uint16_t>(source), static_cast<uint16_t>(target), error)) {
+			if (source > 65535 || target > 65535) {
+				throw std::runtime_error("Mapping salvo contém IDs fora de 16 bits.");
+			}
+			if (!plan.inventory.usedIds.contains(static_cast<uint16_t>(source))) {
+				continue;
+			}
+			if (!Resolve(reviewed, static_cast<uint16_t>(source), static_cast<uint16_t>(target), error)) {
 				throw std::runtime_error("Mapping salvo incompatível: " + error);
 			}
 		}

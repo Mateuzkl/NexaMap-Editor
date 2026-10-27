@@ -63,7 +63,7 @@ namespace {
 	struct Set {
 		Path root;
 		ResourceSet paths;
-		Set(Path path, const std::vector<Definition>& definitions, bool alpha = false, bool secondLayer = false, bool secondFrameDifferent = false, uint8_t groundPatterns = 1) :
+		Set(Path path, const std::vector<Definition>& definitions, bool alpha = false, bool secondLayer = false, bool secondFrameDifferent = false, uint8_t groundPatterns = 1, bool durations = false, bool groups = false, bool extended = true) :
 			root(std::move(path)) {
 			paths = { root / "items.otb", {}, root / "Tibia.dat", root / "Tibia.spr", root / "Tibia.otfi" };
 			Node otb { { 0, 0, 0, 0, 0 }, {} };
@@ -84,7 +84,7 @@ namespace {
 			Bytes dat;
 			U32(dat, 0x4C2C7993);
 			U16(dat, 105);
-			U16(dat, 0);
+			U16(dat, groups ? 1 : 0);
 			U16(dat, 0);
 			U16(dat, 0);
 			for (unsigned cid = 100; cid <= 105; ++cid) {
@@ -100,23 +100,51 @@ namespace {
 				}
 				dat.push_back(255);
 				dat.insert(dat.end(), { 1, 1, static_cast<uint8_t>(secondLayer ? 2 : 1), static_cast<uint8_t>(cid == 100 ? groundPatterns : 1), 1, 1, static_cast<uint8_t>(secondFrameDifferent ? 2 : 1) });
+				if (durations && secondFrameDifferent) {
+					dat.insert(dat.end(), { 0, 0, 0, 0, 0, 0 });
+					for (unsigned frame = 0; frame < 2; ++frame) {
+						U32(dat, 100);
+						U32(dat, 100);
+					}
+				}
 				for (unsigned frame = 0; frame < (secondFrameDifferent ? 2u : 1u); ++frame) {
 					for (unsigned pattern = 0; pattern < (cid == 100 ? groundPatterns : 1u); ++pattern) {
-						U32(dat, frame == 1 || pattern ? 6 : cid - 99);
+						if (extended) {
+							U32(dat, frame == 1 || pattern ? 6 : cid - 99);
+						} else {
+							U16(dat, static_cast<uint16_t>(frame == 1 || pattern ? 6 : cid - 99));
+						}
 						if (secondLayer) {
-							U32(dat, 0);
+							if (extended) {
+								U32(dat, 0);
+							} else {
+								U16(dat, 0);
+							}
 						}
 					}
+				}
+			}
+			if (groups) {
+				dat.insert(dat.end(), { 255, 1, 0, 1, 1, 1, 1, 1, 1, 1 });
+				if (extended) {
+					U32(dat, 1);
+				} else {
+					U16(dat, 1);
 				}
 			}
 			Write(paths.dat, dat);
 			Bytes spr;
 			U32(spr, 0x4C220594);
-			U32(spr, 6);
-			spr.resize(8 + 6 * 4);
+			if (extended) {
+				U32(spr, 6);
+			} else {
+				U16(spr, 6);
+			}
+			const size_t indexOffset = extended ? 8 : 6;
+			spr.resize(indexOffset + 6 * 4);
 			constexpr std::array<std::array<uint8_t, 3>, 6> colours = { { { 20, 180, 35 }, { 220, 180, 10 }, { 20, 30, 220 }, { 230, 10, 20 }, { 150, 80, 20 }, { 190, 30, 190 } } };
 			for (size_t sprite = 0; sprite < colours.size(); ++sprite) {
-				IO::Put32(spr, 8 + sprite * 4, static_cast<uint32_t>(spr.size()));
+				IO::Put32(spr, indexOffset + sprite * 4, static_cast<uint32_t>(spr.size()));
 				spr.insert(spr.end(), { 255, 0, 255 });
 				Bytes pixels;
 				U16(pixels, 0);
@@ -131,7 +159,7 @@ namespace {
 				spr.insert(spr.end(), pixels.begin(), pixels.end());
 			}
 			Write(paths.spr, spr);
-			TextFile(paths.otfi, std::string("DatSpr\n  extended: true\n  transparency: ") + (alpha ? "true" : "false") + "\n  frame-durations: false\n  frame-groups: false\n");
+			TextFile(paths.otfi, std::string("DatSpr\n  extended: ") + (extended ? "true" : "false") + "\n  transparency: " + (alpha ? "true" : "false") + "\n  frame-durations: " + (durations ? "true" : "false") + "\n  frame-groups: " + (groups ? "true" : "false") + "\n");
 		}
 	};
 	Path MapFile(const Path& root, bool nested = true, bool sidecars = true, uint16_t ground = 100, uint16_t container = 101) {
@@ -500,6 +528,132 @@ namespace {
 		}
 		std::cout << "PASS exclusive publication: late writer, Unicode, dangling symlink, sidecar/report rollback\n";
 	}
+	void TestRenameOnlyPublication(const Path& root) {
+		std::filesystem::create_directories(root);
+		const auto unsupported = [](const Path&, const Path&, std::error_code& error) { error = std::make_error_code(std::errc::operation_not_supported); };
+		const auto output = root / IO::FromUtf8("renomeado-São-João.otbm");
+		std::string error;
+		{
+			FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly, unsupported);
+			const auto staged = transaction.Stage(output);
+			TextFile(staged, "new map");
+			Check(transaction.Commit(error), error.c_str());
+			Check(!std::filesystem::exists(staged) && IO::ReadFile(output, 100) == Bytes({ 'n', 'e', 'w', ' ', 'm', 'a', 'p' }), "rename fallback did not install the complete file");
+		}
+		const auto hard = root / "hard.txt", renamed = root / "renamed.txt";
+		const auto mixed = [](const Path& source, const Path& destination, std::error_code& error) {
+			if (destination.filename() == "hard.txt") {
+				std::filesystem::create_hard_link(source, destination, error);
+			} else {
+				error = std::make_error_code(std::errc::operation_not_supported);
+			}
+		};
+		{
+			FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly, mixed);
+			TextFile(transaction.Stage(hard), "hard link");
+			TextFile(transaction.Stage(renamed), "rename");
+			TextFile(transaction.Stage(output), "collision");
+			Check(!transaction.Commit(error), "rename fallback replaced an occupied destination");
+			Check(!std::filesystem::exists(hard) && !std::filesystem::exists(renamed), "mixed hard-link/rename rollback retained partial output");
+			Check(IO::ReadFile(output, 100) == Bytes({ 'n', 'e', 'w', ' ', 'm', 'a', 'p' }), "rename collision changed existing output");
+		}
+		static Path installed, replacement;
+		installed = root / "installed.txt";
+		replacement = root / "replacement.txt";
+		TextFile(replacement, "another writer");
+		const auto replaceThenFail = [](const Path&, const Path& destination, std::error_code& error) {
+			if (destination == installed) {
+				error = std::make_error_code(std::errc::operation_not_supported);
+			} else {
+				std::filesystem::remove(installed);
+				std::filesystem::rename(replacement, installed);
+				error = std::make_error_code(std::errc::permission_denied);
+			}
+		};
+		{
+			FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly, replaceThenFail);
+			TextFile(transaction.Stage(installed), "original");
+			TextFile(transaction.Stage(root / "fail.txt"), "not published");
+			Check(!transaction.Commit(error) && std::filesystem::exists(installed), "rename rollback removed a destination replaced by another writer");
+			Check(IO::ReadFile(installed, 100) == Bytes({ 'a', 'n', 'o', 't', 'h', 'e', 'r', ' ', 'w', 'r', 'i', 't', 'e', 'r' }), "rename rollback changed another writer");
+			Check(!std::filesystem::exists(root / "fail.txt"), "permission denied incorrectly enabled rename fallback");
+		}
+		const auto symlink = root / "symlink.txt";
+		std::error_code ec;
+		std::filesystem::create_symlink(root / "missing", symlink, ec);
+		if (!ec) {
+			FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly, unsupported);
+			TextFile(transaction.Stage(symlink), "new file");
+			Check(!transaction.Commit(error) && std::filesystem::is_symlink(symlink), "exclusive rename replaced dangling symlink");
+		}
+		std::cout << "PASS unsupported hard links: exclusive rename, collisions, mixed rollback and changed destination identity\n";
+	}
+	void TestUnspecifiedDatOptions(const Path& root) {
+		for (unsigned flags = 0; flags < 8; ++flags) {
+			const bool extended = flags & 1, durations = flags & 2, groups = flags & 4;
+			Set set(root / std::to_string(flags), Source, false, false, durations, 1, durations, groups, extended);
+			const auto explicitCatalog = LoadCatalog(set.paths);
+			std::filesystem::remove(set.paths.otfi);
+			auto implicit = set.paths;
+			implicit.otfi.clear();
+			const auto automatic = LoadCatalog(implicit);
+			for (const auto& [id, item] : explicitCatalog.items) {
+				Check(automatic.items.at(id).visual->valid && automatic.items.at(id).visual->completePixels == item.visual->completePixels, "automatic DAT options changed complete graphics or SPR decoding");
+			}
+			implicit.dialect = DatDialect::Classic86;
+			const auto fixedDialect = LoadCatalog(implicit);
+			Check(fixedDialect.items.at(100).visual->valid, "fixed dialect without OTFI must still detect format options");
+		}
+		Set specified(root / "specified", Source);
+		TextFile(specified.paths.otfi, "DatSpr\n  extended: false\n  transparency: false\n  frame-durations: false\n  frame-groups: false\n");
+		bool rejected = false;
+		try {
+			static_cast<void>(LoadCatalog(specified.paths));
+		} catch (const std::exception&) {
+			rejected = true;
+		}
+		Check(rejected, "explicit OTFI options were silently overridden");
+		std::cout << "PASS automatic DAT options: 16/32-bit IDs, animation durations, creature groups and explicit OTFI precedence\n";
+	}
+	void TestReviewedSubset(const Path& root) {
+		Set source(root / "source", Source), target(root / "target", Target);
+		auto whole = FixturePlan(root / "whole", source, target, true, false);
+		std::string error;
+		for (auto& row : whole.rows) {
+			Check(Resolve(whole, row.sourceId, row.targetId, error), "whole-map reviewed fixture");
+		}
+		const auto cache = root / "mappings.json";
+		SaveReviewedMappings(whole, cache);
+		const auto digest = FingerprintFile(cache).sha256;
+		auto subset = FixturePlan(root / "subset", source, target, false, false);
+		Check(subset.rows.size() == 1, "subset fixture must use fewer source IDs");
+		LoadReviewedMappings(subset, cache);
+		Check(subset.rows.front().decision == Decision::Reviewed && subset.rows.front().targetId == 500, "reviewed mappings from larger map were not reused");
+		Check(FingerprintFile(cache).sha256 == digest, "loading subset rewrote the saved decisions");
+		const auto saved = [&](const std::string& mappings) {
+			TextFile(cache, "{\"schema\":1,\"sourceResourceFingerprint\":\"" + whole.source->fingerprint + "\",\"targetResourceFingerprint\":\"" + whole.target->fingerprint + "\",\"mappings\":" + mappings + "}");
+		};
+		for (const auto& mappings : { "[{\"source\":101,\"target\":70000}]", "[{\"source\":4294967396,\"target\":500}]", "[{\"source\":-1,\"target\":500}]" }) {
+			saved(mappings);
+			bool rejected = false;
+			try {
+				LoadReviewedMappings(subset, cache);
+			} catch (const std::exception&) {
+				rejected = true;
+			}
+			Check(rejected, "out-of-range IDs must fail even for unused source IDs");
+		}
+		auto fresh = FixturePlan(root / "fresh", source, target, false, false);
+		saved("[{\"source\":100,\"target\":500},{\"source\":100,\"target\":501}]");
+		bool rejected = false;
+		try {
+			LoadReviewedMappings(fresh, cache);
+		} catch (const std::exception&) {
+			rejected = true;
+		}
+		Check(rejected && fresh.rows.front().decision != Decision::Reviewed, "incompatible present ID must fail without partially applying decisions");
+		std::cout << "PASS reviewed mapping reuse on subset, preserved cache, 16-bit bounds and incompatible present IDs\n";
+	}
 	void TestIncrementalAndBudget(const Path& root) {
 		Set source(root / "source", Source), target(root / "target", Target);
 		Options options { MapFile(root / "map", false, false), root / "new.otbm", source.paths, target.paths };
@@ -687,6 +841,9 @@ int main() {
 		TestVisualDraftOutput(root / "visual-draft");
 		TestTransparentContainerTrial(root / "transparent-container");
 		TestCreateOnlyPublication(root / "publication");
+		TestRenameOnlyPublication(root / "rename-publication");
+		TestUnspecifiedDatOptions(root / "dat-options");
+		TestReviewedSubset(root / "reviewed-subset");
 		TestIncrementalAndBudget(root / "incremental");
 		TestRepeatedJobs(root / "repeated");
 		TestCancellationPhases(root / "cancel-phases");
