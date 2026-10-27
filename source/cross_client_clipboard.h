@@ -46,6 +46,8 @@ struct CrossClientItemRecommendation {
 	std::string destinationName;
 	uint8_t confidence = 0;
 	bool automatic = false;
+	bool visualCompared = false;
+	double visualSimilarity = 0.0;
 };
 
 struct CrossClientPasteRow {
