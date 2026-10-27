@@ -288,8 +288,14 @@ bool DiskNodeFileReadHandle::renewCache() {
 
 BinaryNode* DiskNodeFileReadHandle::getRootNode() {
 	assert(root_node == nullptr); // You should never do this twice
+	if (!file) {
+		return nullptr;
+	}
 	uint8_t first;
-	fread(&first, 1, 1, file);
+	if (fread(&first, 1, 1, file) != 1) {
+		error_code = FILE_READ_ERROR;
+		return nullptr;
+	}
 	if (first == NODE_START) {
 		root_node = getNode(nullptr);
 		root_node->load();

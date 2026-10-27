@@ -22,6 +22,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <cstdint>
 #include <stack>
 #include <vector>
 #include <stdio.h>

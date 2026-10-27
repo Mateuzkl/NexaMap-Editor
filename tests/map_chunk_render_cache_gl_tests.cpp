@@ -31,6 +31,8 @@ namespace {
 		const int attributes[] = { WX_GL_RGBA, WX_GL_DOUBLEBUFFER, 0 };
 		auto window = std::make_unique<wxFrame>(nullptr, wxID_ANY, "Offscreen GL cache tests", wxDefaultPosition, wxSize(192, 192));
 		auto* canvas = new wxGLCanvas(window.get(), wxID_ANY, attributes, wxDefaultPosition, wxSize(192, 192));
+		window->Show();
+		wxYield(); // wxGTK must realize the canvas before making its context current.
 		wxGLContext context(canvas);
 		require(context.IsOK() && canvas->SetCurrent(context), "OpenGL context creation");
 		GLRenderer renderer;

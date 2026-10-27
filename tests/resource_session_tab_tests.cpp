@@ -12,6 +12,8 @@
 #include "map_tab.h"
 
 #include <iostream>
+#include <array>
+#include <new>
 
 class ResourceSessionTabTests {
 	static void check(bool value, const char* message) {
@@ -82,6 +84,14 @@ class ResourceSessionTabTests {
 public:
 	static void run() {
 		std::cout << std::unitbuf;
+		// Freshly allocated metadata must not inherit semantic flags from the
+		// allocator: this made cross-client recommendations differ on GCC/Linux.
+		alignas(ItemType) std::array<unsigned char, sizeof(ItemType)> storage;
+		storage.fill(0xA5);
+		auto* defaults = new (storage.data()) ItemType();
+		const bool flagsInitialized = !defaults->isLocked && !defaults->allowDistRead;
+		defaults->~ItemType();
+		check(flagsInitialized, "New item metadata inherited uninitialized semantic flags");
 		g_settings.setDefaults();
 		g_settings.setInteger(Config::INDIRECTORY_INSTALLATION, 1);
 		g_gui.discoverDataDirectory("clients.xml");

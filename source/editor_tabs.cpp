@@ -42,7 +42,13 @@ MapTabbook::MapTabbook(wxWindow* parent, wxWindowID id) :
 	notebook = newd wxAuiNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_CLOSE_ON_ACTIVE_TAB);
 	addPage = newd wxPanel(notebook, wxID_ANY);
 	notebook->AddPage(addPage, "+", false);
-	for (wxAuiTabCtrl* tabControl : notebook->GetAllTabCtrls()) {
+#if wxCHECK_VERSION(3, 3, 0)
+	const auto tabControls = notebook->GetAllTabCtrls();
+#else
+	// At construction only the initial '+' page and its tab control exist.
+	const std::vector<wxAuiTabCtrl*> tabControls { notebook->GetActiveTabCtrl() };
+#endif
+	for (wxAuiTabCtrl* tabControl : tabControls) {
 		tabControl->Bind(wxEVT_LEFT_DOWN, &MapTabbook::OnNotebookLeftDown, this);
 	}
 	initializing = false;
@@ -52,6 +58,10 @@ MapTabbook::MapTabbook(wxWindow* parent, wxWindowID id) :
 
 MapTabbook::~MapTabbook() {
 	;
+}
+
+wxWindow* MapTabbook::GetPageParent() const {
+	return notebook;
 }
 
 void MapTabbook::CycleTab(bool forward) {
@@ -170,7 +180,14 @@ void MapTabbook::OnNotebookLeftDown(wxMouseEvent& evt) {
 		return;
 	}
 	auto* tabControl = dynamic_cast<wxAuiTabCtrl*>(evt.GetEventObject());
-	const wxWindow* clickedPage = tabControl ? tabControl->TabHitTest(evt.GetPosition()).window : nullptr;
+	wxWindow* clickedPage = nullptr;
+	if (tabControl) {
+#if wxCHECK_VERSION(3, 3, 0)
+		clickedPage = tabControl->TabHitTest(evt.GetPosition()).window;
+#else
+		tabControl->TabHitTest(evt.GetX(), evt.GetY(), &clickedPage);
+#endif
+	}
 	if (addPage && clickedPage == addPage) {
 		RequestNewMapTab();
 		return;

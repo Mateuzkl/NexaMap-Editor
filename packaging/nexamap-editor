@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Probe WSLg acceleration before opting in. Respect explicit driver/software
+# choices and leave native Linux display selection to GTK.
+if [ -d /mnt/wslg ] && [ -e /dev/dxg ]; then
+  if [ "${GDK_BACKEND+x}" != x ]; then export GDK_BACKEND=x11; fi
+  if [ "${GALLIUM_DRIVER+x}" != x ] && [ "${LIBGL_ALWAYS_SOFTWARE+x}" != x ] &&
+     [ "${MESA_LOADER_DRIVER_OVERRIDE+x}" != x ] && command -v glxinfo >/dev/null 2>&1; then
+    if GALLIUM_DRIVER=d3d12 glxinfo -B 2>/dev/null | grep -q 'OpenGL renderer string: D3D12'; then
+      export GALLIUM_DRIVER=d3d12
+    fi
+  fi
+fi
+exec "$bindir/NexaMap Editor" "$@"

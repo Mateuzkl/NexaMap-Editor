@@ -44,6 +44,9 @@ public:
 	~GLRenderer();
 
 	void init();
+	bool isInitialized() const noexcept {
+		return initialized;
+	}
 	void beginFrame() noexcept;
 
 	void drawTexturedQuad(float x, float y, float w, float h, GLuint textureId, const GLColor& color, float u0 = 0.f, float v0 = 0.f, float u1 = 1.f, float v1 = 1.f);

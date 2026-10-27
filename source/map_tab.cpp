@@ -38,7 +38,9 @@ MapTab::InternalReference::~InternalReference() {
 
 MapTab::MapTab(MapTabbook* aui, std::unique_ptr<Editor> editor) :
 	EditorTab(),
-	MapWindow(aui, *editor),
+	// EGL surfaces are tied to the native window created with the canvas.
+	// Construct inside the notebook so AddTab never reparents a live surface.
+	MapWindow(aui->GetPageParent(), *editor),
 	aui(aui),
 	iref(std::make_shared<InternalReference>(std::move(editor))) {
 
@@ -48,7 +50,7 @@ MapTab::MapTab(MapTabbook* aui, std::unique_ptr<Editor> editor) :
 
 MapTab::MapTab(const MapTab* other) :
 	EditorTab(),
-	MapWindow(other->aui, *other->iref->editor),
+	MapWindow(other->aui->GetPageParent(), *other->iref->editor),
 	aui(other->aui),
 	iref(other->iref) {
 	aui->AddTab(this, true);
