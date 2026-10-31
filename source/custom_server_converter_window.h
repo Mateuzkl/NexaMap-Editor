@@ -13,6 +13,7 @@
 
 class wxButton;
 class wxCheckBox;
+class wxCheckListBox;
 class wxDirPickerCtrl;
 class wxFileDirPickerEvent;
 class wxTextCtrl;
@@ -24,6 +25,7 @@ public:
 private:
 	void analyze();
 	void updateConvertState();
+	void refreshMapList();
 	void onSourceChanged(wxFileDirPickerEvent& event);
 	void onDestinationChanged(wxFileDirPickerEvent& event);
 	void onAnalyze(wxCommandEvent& event);
@@ -33,6 +35,8 @@ private:
 	wxDirPickerCtrl* destinationPicker = nullptr;
 	wxTextCtrl* analysisText = nullptr;
 	wxCheckBox* mapsCheck = nullptr;
+	wxCheckListBox* mapsList = nullptr;
+	std::vector<std::filesystem::path> mapPaths;
 	wxCheckBox* itemsXmlCheck = nullptr;
 	wxCheckBox* itemsOtbCheck = nullptr;
 	wxCheckBox* allowDuplicateClientIdsCheck = nullptr;

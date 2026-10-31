@@ -12,6 +12,7 @@
 #include <iostream>
 #include <wx/button.h>
 #include <wx/checkbox.h>
+#include <wx/checklst.h>
 #include <wx/choicdlg.h>
 #include <wx/filepicker.h>
 #include <wx/msgdlg.h>
@@ -100,6 +101,11 @@ CustomServerConverterWindow::CustomServerConverterWindow(wxWindow* parent) :
 	scopeBox->Add(itemsOtbCheck, 0, wxALL, 8);
 	topSizer->Add(scopeBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 14);
 
+	auto* mapsBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Maps to convert");
+	mapsList = newd wxCheckListBox(mapsBox->GetStaticBox(), wxID_ANY, wxDefaultPosition, wxSize(-1, 92));
+	mapsBox->Add(mapsList, 1, wxEXPAND | wxALL, 8);
+	topSizer->Add(mapsBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 14);
+
 	auto* safetyBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Compatibility override");
 	allowDuplicateClientIdsCheck = newd wxCheckBox(safetyBox->GetStaticBox(), wxID_ANY, "Allow duplicate ClientID aliases (unsafe: distinct ServerIDs will merge)");
 	allowDuplicateClientIdsCheck->SetValue(false);
@@ -133,6 +139,23 @@ CustomServerConverterWindow::CustomServerConverterWindow(wxWindow* parent) :
 	itemsXmlCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { analyze(); });
 	itemsOtbCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { analyze(); });
 	allowDuplicateClientIdsCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { analyze(); });
+	mapsList->Bind(wxEVT_CHECKLISTBOX, [this](wxCommandEvent&) { analyze(); });
+}
+
+void CustomServerConverterWindow::refreshMapList() {
+	const std::filesystem::path source = PickerPath(sourcePicker->GetPath());
+	const ServerDetectionResult detection = ServerResourceDetector::Detect(source);
+	mapPaths.clear();
+	mapsList->Clear();
+	if (!detection.validRoot) {
+		return;
+	}
+	mapPaths.reserve(detection.workspace.maps.size());
+	for (const DetectedMap& map : detection.workspace.maps) {
+		mapPaths.push_back(map.path);
+		mapsList->Append(PickerString(map.path.filename()));
+		mapsList->Check(static_cast<unsigned int>(mapPaths.size() - 1), true);
+	}
 }
 
 void CustomServerConverterWindow::analyze() {
@@ -145,7 +168,16 @@ void CustomServerConverterWindow::analyze() {
 	}
 	analysisText->SetValue("Analyzing items.otb and the selected outputs...");
 	Update();
-	const CustomServerConversionScope scope { mapsCheck->GetValue(), itemsXmlCheck->GetValue(), itemsOtbCheck->GetValue() };
+	CustomServerConversionScope scope;
+	scope.maps = mapsCheck->GetValue();
+	scope.itemsXml = itemsXmlCheck->GetValue();
+	scope.itemsOtb = itemsOtbCheck->GetValue();
+	scope.restrictMapSelection = true;
+	for (std::size_t index = 0; index < mapPaths.size(); ++index) {
+		if (mapsList->IsChecked(static_cast<unsigned int>(index))) {
+			scope.selectedMaps.push_back(mapPaths[index]);
+		}
+	}
 	currentAnalysis = AnalyzeCustomServer(source, scope, allowDuplicateClientIdsCheck->GetValue());
 	analysisText->SetValue(wxString::FromUTF8(currentAnalysis->format()));
 	updateConvertState();
@@ -156,6 +188,7 @@ void CustomServerConverterWindow::updateConvertState() {
 }
 
 void CustomServerConverterWindow::onSourceChanged(wxFileDirPickerEvent& WXUNUSED(event)) {
+	refreshMapList();
 	analyze();
 }
 
@@ -191,6 +224,12 @@ void CustomServerConverterWindow::onConvert(wxCommandEvent& WXUNUSED(event)) {
 	options.scope.maps = mapsCheck->GetValue();
 	options.scope.itemsXml = itemsXmlCheck->GetValue();
 	options.scope.itemsOtb = itemsOtbCheck->GetValue();
+	options.scope.restrictMapSelection = true;
+	for (std::size_t index = 0; index < mapPaths.size(); ++index) {
+		if (mapsList->IsChecked(static_cast<unsigned int>(index))) {
+			options.scope.selectedMaps.push_back(mapPaths[index]);
+		}
+	}
 	options.allowDuplicateClientIds = allowDuplicateClientIdsCheck->GetValue();
 	if (wxMessageBox("Convert to the selected output folder? The source server will remain unchanged.", "Confirm custom conversion", wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION, this) != wxYES) {
 		return;

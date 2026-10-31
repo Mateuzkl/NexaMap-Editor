@@ -22,6 +22,8 @@ struct CustomServerConversionScope {
 	bool maps = true;
 	bool itemsXml = true;
 	bool itemsOtb = true;
+	bool restrictMapSelection = false;
+	std::vector<std::filesystem::path> selectedMaps;
 
 	[[nodiscard]] bool any() const noexcept {
 		return maps || itemsXml || itemsOtb;

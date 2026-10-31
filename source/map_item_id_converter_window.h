@@ -33,6 +33,7 @@ private:
 	void onConfirm(wxCommandEvent& event);
 
 	wxFilePickerCtrl* sourcePicker = nullptr;
+	wxFilePickerCtrl* mappingOtbPicker = nullptr;
 	wxFilePickerCtrl* destinationPicker = nullptr;
 	wxRadioBox* directionChoice = nullptr;
 	wxChoice* targetVersionChoice = nullptr;

@@ -11,6 +11,7 @@
 #include "gui.h"
 #include "iomap.h"
 #include "item_id_mapping.h"
+#include "otb_item_id_mapping_provider.h"
 #include "settings.h"
 
 #include <wx/choice.h>
@@ -52,7 +53,7 @@ MapItemIdConverterWindow::MapItemIdConverterWindow(wxWindow* parent) :
 	auto* intro = newd wxStaticText(
 		this,
 		wxID_ANY,
-		"Convert every ground, item and nested container ID using the embedded native C++ mapping. "
+		"Convert every ground, item and nested container ID. Use the server's items.otb to match its exact ServerID/ClientID pairs, or leave it blank to use NexaMap's embedded mapping. "
 		"The source is never modified. Output is staged, reopened and structurally validated before commit."
 	);
 	intro->Wrap(680);
@@ -74,6 +75,15 @@ MapItemIdConverterWindow::MapItemIdConverterWindow(wxWindow* parent) :
 	);
 	fileGrid->Add(destinationPicker, 1, wxEXPAND);
 	fileBox->Add(fileGrid, 1, wxEXPAND | wxALL, 10);
+	auto* mappingGrid = newd wxFlexGridSizer(2, 8, 12);
+	mappingGrid->AddGrowableCol(1, 1);
+	mappingGrid->Add(newd wxStaticText(fileBox->GetStaticBox(), wxID_ANY, "Server items.otb:"), 0, wxALIGN_CENTER_VERTICAL);
+	mappingOtbPicker = newd wxFilePickerCtrl(
+		fileBox->GetStaticBox(), wxID_ANY, wxEmptyString, "Select the source server's items.otb", "OTB item database (*.otb)|*.otb",
+		wxDefaultPosition, wxDefaultSize, wxFLP_OPEN | wxFLP_FILE_MUST_EXIST | wxFLP_USE_TEXTCTRL
+	);
+	mappingGrid->Add(mappingOtbPicker, 1, wxEXPAND);
+	fileBox->Add(mappingGrid, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 	topSizer->Add(fileBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 14);
 
 	auto* versionBox = newd wxStaticBoxSizer(wxHORIZONTAL, this, "Map version");
@@ -168,6 +178,13 @@ MapItemIdConversionOptions MapItemIdConverterWindow::getOptions() const {
 	MapItemIdConversionOptions options;
 	options.source = PathEncoding::FromUtf8(nstr(sourcePicker->GetPath()));
 	options.destination = PathEncoding::FromUtf8(nstr(destinationPicker->GetPath()));
+	const std::filesystem::path mappingPath = PathEncoding::FromUtf8(nstr(mappingOtbPicker->GetPath()));
+	if (!mappingPath.empty()) {
+		const OtbItemIdMappingLoadResult mapping = OtbItemIdMappingProvider::Load(mappingPath, true);
+		if (mapping.ready()) {
+			options.mappingProvider = mapping.provider;
+		}
+	}
 	options.direction = directionChoice->GetSelection() == 0 ? ItemIdMapping::Direction::ServerToClient : ItemIdMapping::Direction::ClientToServer;
 	const int targetSelection = targetVersionChoice->GetSelection();
 	if (targetSelection != wxNOT_FOUND && static_cast<std::size_t>(targetSelection) < targetVersions.size()) {
@@ -244,6 +261,10 @@ void MapItemIdConverterWindow::onConfirm(wxCommandEvent& WXUNUSED(event)) {
 		memoryLimitSpin->SetValue(selectedMemoryGiB);
 	}
 	const MapItemIdConversionOptions options = getOptions();
+	if (!mappingOtbPicker->GetPath().empty() && !options.mappingProvider) {
+		wxMessageBox("The selected items.otb mapping could not be loaded.", "Invalid items.otb mapping", wxOK | wxICON_ERROR, this);
+		return;
+	}
 	std::error_code filesystemError;
 	if (options.source.empty() || !std::filesystem::is_regular_file(options.source, filesystemError) || filesystemError) {
 		wxMessageBox("Select an existing source .otbm file.", "Invalid source", wxOK | wxICON_ERROR, this);
@@ -256,6 +277,15 @@ void MapItemIdConverterWindow::onConfirm(wxCommandEvent& WXUNUSED(event)) {
 	if (ClientVersion::get(options.targetVersion.client) == nullptr) {
 		wxMessageBox("Select a supported target map version.", "Missing target version", wxOK | wxICON_ERROR, this);
 		return;
+	}
+	const wxString mappingPathText = mappingOtbPicker->GetPath();
+	if (!mappingPathText.empty()) {
+		const std::filesystem::path mappingPath = PathEncoding::FromUtf8(nstr(mappingPathText));
+		const OtbItemIdMappingLoadResult mapping = OtbItemIdMappingProvider::Load(mappingPath, true);
+		if (!mapping.ready()) {
+			wxMessageBox(wxString::FromUTF8(mapping.error.c_str()), "Invalid items.otb mapping", wxOK | wxICON_ERROR, this);
+			return;
+		}
 	}
 	if (as_lower_str(options.source.extension().string()) != ".otbm" || as_lower_str(options.destination.extension().string()) != ".otbm") {
 		wxMessageBox("Source and destination must use the .otbm extension.", "Invalid file type", wxOK | wxICON_ERROR, this);

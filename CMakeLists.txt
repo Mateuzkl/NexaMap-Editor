@@ -8,6 +8,12 @@ endif()
 
 project(rme)
 
+if(WIN32)
+	# Prevent windows.h (which can be pulled in by an earlier source in a
+	# unity build) from including winsock.h before wxWidgets' winsock2.h.
+	add_compile_definitions(WIN32_LEAN_AND_MEAN)
+endif()
+
 include(CTest)
 include(GNUInstallDirs)
 if(UNIX AND NOT APPLE)

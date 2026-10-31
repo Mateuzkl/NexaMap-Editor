@@ -35,6 +35,24 @@ namespace {
 		return result.ec == std::errc() && result.ptr == end;
 	}
 
+	bool ParseIdRange(const char* text, int64_t& first, int64_t& last) {
+		if (ParseInteger(text, first)) {
+			last = first;
+			return true;
+		}
+		if (!text) {
+			return false;
+		}
+		const std::string_view value(text);
+		const std::size_t separator = value.find('-');
+		if (separator == std::string_view::npos || separator == 0 || separator + 1 >= value.size()) {
+			return false;
+		}
+		const std::string firstText(value.substr(0, separator));
+		const std::string lastText(value.substr(separator + 1));
+		return ParseInteger(firstText.c_str(), first) && ParseInteger(lastText.c_str(), last);
+	}
+
 	bool IsItemReferenceKey(const char* key) {
 		static constexpr std::array<const char*, 11> keys {
 			"rotateto",
@@ -207,11 +225,10 @@ namespace {
 			int64_t first = 0;
 			int64_t last = 0;
 			if (id && !from && !to) {
-				if (!ParseInteger(id.value(), first) || first <= 0 || first > std::numeric_limits<uint16_t>::max()) {
+				if (!ParseIdRange(id.value(), first, last) || first <= 0 || last < first || last > std::numeric_limits<uint16_t>::max()) {
 					summary.error = "Generated items.xml contains an invalid item id declaration.";
 					return summary;
 				}
-				last = first;
 			} else if (!id && from && to) {
 				if (!ParseInteger(from.value(), first) || !ParseInteger(to.value(), last) || first <= 0 || last < first || last > std::numeric_limits<uint16_t>::max()) {
 					if (allowMalformedRanges) {
@@ -264,24 +281,50 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(
 		std::vector<std::pair<uint16_t, uint16_t>> mapped;
 
 		if (idAttribute) {
-			int64_t sourceValue = 0;
-			if (!ParseInteger(idAttribute.value(), sourceValue) || sourceValue <= 0 || sourceValue > std::numeric_limits<uint16_t>::max()) {
+			int64_t first = 0;
+			int64_t last = 0;
+			if (!ParseIdRange(idAttribute.value(), first, last) || first <= 0 || last < first || last > std::numeric_limits<uint16_t>::max()) {
 				report.error = "items.xml contains an invalid item id declaration.";
 				return report;
 			}
-			++report.declarations;
-			uint16_t converted = 0;
-			if (!MapId(provider, static_cast<uint16_t>(sourceValue), converted)) {
-				AddMissing(report, static_cast<uint16_t>(sourceValue), "item id", false);
-			} else {
+			mapped.reserve(static_cast<std::size_t>(last - first + 1));
+			for (int64_t sourceValue = first; sourceValue <= last; ++sourceValue) {
+				++report.declarations;
+				uint16_t converted = 0;
+				if (!MapId(provider, static_cast<uint16_t>(sourceValue), converted)) {
+					AddMissing(report, static_cast<uint16_t>(sourceValue), "item id", false);
+					continue;
+				}
 				++report.mappedDeclarations;
-				mapped.emplace_back(static_cast<uint16_t>(sourceValue), converted);
 				if (converted != sourceValue) {
-					idAttribute.set_value(converted);
 					++report.changedDeclarations;
 				}
+				mapped.emplace_back(static_cast<uint16_t>(sourceValue), converted);
 			}
-			ConvertReferenceAttributes(item, provider, report);
+			if (mapped.size() == static_cast<std::size_t>(last - first + 1)) {
+				bool contiguous = true;
+				for (std::size_t index = 1; index < mapped.size(); ++index) {
+					if (static_cast<uint32_t>(mapped[index].second) != static_cast<uint32_t>(mapped.front().second) + index) {
+						contiguous = false;
+						break;
+					}
+				}
+				if (contiguous) {
+					const std::string convertedRange = mapped.size() == 1
+						? std::to_string(mapped.front().second)
+						: std::to_string(mapped.front().second) + "-" + std::to_string(mapped.back().second);
+					idAttribute.set_value(convertedRange.c_str());
+					ConvertReferenceAttributes(item, provider, report);
+				} else {
+					for (const auto& [sourceId, destinationId] : mapped) {
+						pugi::xml_node expanded = items.insert_copy_before(item, item);
+						expanded.attribute("id").set_value(destinationId);
+						ConvertReferenceAttributes(expanded, provider, report);
+					}
+					items.remove_child(item);
+					++report.expandedRanges;
+				}
+			}
 		} else if (fromAttribute && toAttribute) {
 			int64_t first = 0;
 			int64_t last = 0;
@@ -314,7 +357,7 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(
 			if (mapped.size() == static_cast<std::size_t>(last - first + 1)) {
 				bool contiguous = true;
 				for (std::size_t index = 1; index < mapped.size(); ++index) {
-					if (mapped[index].second != static_cast<uint16_t>(mapped.front().second + index)) {
+					if (static_cast<uint32_t>(mapped[index].second) != static_cast<uint32_t>(mapped.front().second) + index) {
 						contiguous = false;
 						break;
 					}
