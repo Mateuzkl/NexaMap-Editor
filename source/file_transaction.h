@@ -19,7 +19,6 @@
 	#include <sys/stat.h>
 	#ifdef __linux__
 		#include <fcntl.h>
-		#include <linux/fs.h>
 		#include <sys/syscall.h>
 		#include <unistd.h>
 	#elif defined(__APPLE__)
@@ -253,7 +252,10 @@ private:
 			error = std::error_code(GetLastError(), std::system_category());
 		}
 #elif defined(__linux__) && defined(SYS_renameat2)
-		if (::syscall(SYS_renameat2, AT_FDCWD, source.c_str(), AT_FDCWD, destination.c_str(), RENAME_NOREPLACE) != 0) {
+		// Linux's RENAME_NOREPLACE ABI flag. Avoid linux/fs.h, whose BLOCK_SIZE
+		// macro collides with MapCanvas when sources are compiled in unity mode.
+		constexpr unsigned int renameNoReplace = 1;
+		if (::syscall(SYS_renameat2, AT_FDCWD, source.c_str(), AT_FDCWD, destination.c_str(), renameNoReplace) != 0) {
 			error = std::error_code(errno, std::generic_category());
 		}
 #elif defined(__APPLE__) && defined(RENAME_EXCL)

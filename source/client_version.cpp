@@ -340,6 +340,24 @@ void ClientVersion::saveVersions() {
 	g_settings.setString(Config::ASSETS_DATA_DIRS, vers_obj.dump());
 }
 
+ClientVersion::PathsSnapshot ClientVersion::capturePaths() {
+	PathsSnapshot snapshot;
+	for (const auto& [id, version] : client_versions) {
+		snapshot.emplace(id, Paths { version->client_path, version->metadata_path, version->sprites_path });
+	}
+	return snapshot;
+}
+
+void ClientVersion::restorePaths(PathsSnapshot& snapshot) {
+	for (auto& [id, paths] : snapshot) {
+		if (auto* version = get(id)) {
+			std::swap(version->client_path, paths.client);
+			std::swap(version->metadata_path, paths.metadata);
+			std::swap(version->sprites_path, paths.sprites);
+		}
+	}
+}
+
 // Client version class
 
 ClientVersion::ClientVersion(OtbVersion otb, std::string versionName, wxString path) :

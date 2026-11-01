@@ -110,6 +110,40 @@ void WorkspaceSession::setPersistenceEnabled(bool enabled) {
 	persistenceEnabled = enabled;
 }
 
+void WorkspaceSession::persistSelection() {
+	if (!persistenceEnabled) {
+		return;
+	}
+	if (client.mode == WorkspaceClientMode::Classic) {
+		g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, client.versionId);
+		ClientVersion::saveVersions();
+	} else if (client.mode == WorkspaceClientMode::Appearances) {
+		ClientAssets::saveConfiguredPath();
+	}
+	persistPaths();
+	g_settings.save();
+}
+
+bool WorkspaceSession::configureMultiplayerResources(const wxString& clientPath, const wxString& itemPath, wxString& error, wxArrayString& warnings) {
+	if (!configureServer(itemPath, error, false) || !configureClient(clientPath, error, warnings, false)) {
+		return false;
+	}
+	if (client.mode == WorkspaceClientMode::Appearances) {
+		if (!server.hasAppearances() || !validatedClientAssetsManifest) {
+			error = "Select the local appearances.dat definitions used by the host for this Assets client.";
+			return false;
+		}
+		// Joining selects resources, not a server profile. A standalone definitions
+		// folder is valid; retain the selected client's sprite catalog and use the
+		// explicitly selected item definitions, without reclassifying other maps.
+		validatedClientAssetsManifest->appearancesFile = server.appearancesPath;
+	} else if (!server.hasItemsOtb()) {
+		error = "This DAT/SPR client requires the host's local items.otb definitions.";
+		return false;
+	}
+	return true;
+}
+
 bool WorkspaceSession::configureClient(const wxString& path, wxString& error, wxArrayString& warnings, bool persist) {
 	error.clear();
 	warnings.clear();
