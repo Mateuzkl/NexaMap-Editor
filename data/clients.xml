@@ -20,6 +20,8 @@
 		<otb client="7.80" version="1" id="4"/>
 		<otb client="7.90" version="1" id="5"/>
 		<otb client="7.92" version="1" id="6"/>
+		<!-- PEX uses an OTB 2.x item database with the 7.92 client ID. -->
+		<otb client="7.92 PEX" version="2" id="6"/>
 		<otb client="8.00" version="2" id="7"/>
 		<otb client="8.10" version="2" id="8"/>
 		<otb client="8.11" version="2" id="9"/>
@@ -125,6 +127,12 @@
 			<otbm version="1"/>
 			<extensions from="7.6" to="7.6"/>
 			<data format="7.55" dat="0x439D5A33" spr="0x439852BE"/>
+		</client>
+
+		<!-- PEX: keep legacy DAT flags and honor extended SPR/animation via Tibia.otfi. -->
+		<client name="7.92 PEX Season" otb="7.92 PEX" visible="true" data_directory="792">
+			<otbm version="2"/>
+			<data format="7.8" dat="0x459E7B73" spr="0x45880FE8"/>
 		</client>
 
 		<client name="8.00" otb="8.00" visible="true" data_directory="800">
