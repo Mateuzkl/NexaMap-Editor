@@ -301,6 +301,10 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(
 				}
 				mapped.emplace_back(static_cast<uint16_t>(sourceValue), converted);
 			}
+			if (mapped.size() != static_cast<std::size_t>(last - first + 1)) {
+				report.error = "Cannot convert an item range with missing mappings.";
+				return report;
+			}
 			if (mapped.size() == static_cast<std::size_t>(last - first + 1)) {
 				bool contiguous = true;
 				for (std::size_t index = 1; index < mapped.size(); ++index) {
@@ -310,10 +314,13 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(
 					}
 				}
 				if (contiguous) {
-					const std::string convertedRange = mapped.size() == 1
-						? std::to_string(mapped.front().second)
-						: std::to_string(mapped.front().second) + "-" + std::to_string(mapped.back().second);
-					idAttribute.set_value(convertedRange.c_str());
+					if (mapped.size() == 1) {
+						idAttribute.set_value(mapped.front().second);
+					} else {
+						item.remove_attribute("id");
+						item.append_attribute("fromid").set_value(mapped.front().second);
+						item.append_attribute("toid").set_value(mapped.back().second);
+					}
 					ConvertReferenceAttributes(item, provider, report);
 				} else {
 					for (const auto& [sourceId, destinationId] : mapped) {
@@ -353,6 +360,10 @@ ItemsXmlIdConversionReport ConvertItemsXmlDocument(
 					++report.changedDeclarations;
 				}
 				mapped.emplace_back(static_cast<uint16_t>(sourceValue), converted);
+			}
+			if (mapped.size() != static_cast<std::size_t>(last - first + 1)) {
+				report.error = "Cannot convert an item range with missing mappings.";
+				return report;
 			}
 			if (mapped.size() == static_cast<std::size_t>(last - first + 1)) {
 				bool contiguous = true;

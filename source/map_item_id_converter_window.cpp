@@ -11,6 +11,7 @@
 #include "gui.h"
 #include "iomap.h"
 #include "item_id_mapping.h"
+#include "item_id_mapping_provider.h"
 #include "otb_item_id_mapping_provider.h"
 #include "settings.h"
 
@@ -34,15 +35,18 @@ namespace {
 
 	class ClientIdViewCodec final : public ItemIdCodec {
 	public:
+		explicit ClientIdViewCodec(std::shared_ptr<const ItemIdMappingProvider> mapping) : provider(mapping ? std::move(mapping) : GetBuiltInItemIdMappingProvider()) { }
 		bool Decode(uint16_t storedId, uint16_t& serverId) const override {
-			serverId = ItemIdMapping::clientToServer(storedId).converted;
+			serverId = provider->convert(storedId, ItemIdMapping::Direction::ClientToServer).converted;
 			return true;
 		}
 
 		bool Encode(uint16_t serverId, uint16_t& storedId) const override {
-			storedId = ItemIdMapping::serverToClient(serverId).converted;
+			storedId = provider->convert(serverId, ItemIdMapping::Direction::ServerToClient).converted;
 			return true;
 		}
+	private:
+		std::shared_ptr<const ItemIdMappingProvider> provider;
 	};
 }
 
@@ -175,16 +179,12 @@ MapItemIdConverterWindow::MapItemIdConverterWindow(wxWindow* parent) :
 }
 
 MapItemIdConversionOptions MapItemIdConverterWindow::getOptions() const {
+	if (confirmedOptions) {
+		return *confirmedOptions;
+	}
 	MapItemIdConversionOptions options;
 	options.source = PathEncoding::FromUtf8(nstr(sourcePicker->GetPath()));
 	options.destination = PathEncoding::FromUtf8(nstr(destinationPicker->GetPath()));
-	const std::filesystem::path mappingPath = PathEncoding::FromUtf8(nstr(mappingOtbPicker->GetPath()));
-	if (!mappingPath.empty()) {
-		const OtbItemIdMappingLoadResult mapping = OtbItemIdMappingProvider::Load(mappingPath, true);
-		if (mapping.ready()) {
-			options.mappingProvider = mapping.provider;
-		}
-	}
 	options.direction = directionChoice->GetSelection() == 0 ? ItemIdMapping::Direction::ServerToClient : ItemIdMapping::Direction::ClientToServer;
 	const int targetSelection = targetVersionChoice->GetSelection();
 	if (targetSelection != wxNOT_FOUND && static_cast<std::size_t>(targetSelection) < targetVersions.size()) {
@@ -260,11 +260,7 @@ void MapItemIdConverterWindow::onConfirm(wxCommandEvent& WXUNUSED(event)) {
 		selectedMemoryGiB = static_cast<int>(memoryGiB);
 		memoryLimitSpin->SetValue(selectedMemoryGiB);
 	}
-	const MapItemIdConversionOptions options = getOptions();
-	if (!mappingOtbPicker->GetPath().empty() && !options.mappingProvider) {
-		wxMessageBox("The selected items.otb mapping could not be loaded.", "Invalid items.otb mapping", wxOK | wxICON_ERROR, this);
-		return;
-	}
+	MapItemIdConversionOptions options = getOptions();
 	std::error_code filesystemError;
 	if (options.source.empty() || !std::filesystem::is_regular_file(options.source, filesystemError) || filesystemError) {
 		wxMessageBox("Select an existing source .otbm file.", "Invalid source", wxOK | wxICON_ERROR, this);
@@ -281,11 +277,17 @@ void MapItemIdConverterWindow::onConfirm(wxCommandEvent& WXUNUSED(event)) {
 	const wxString mappingPathText = mappingOtbPicker->GetPath();
 	if (!mappingPathText.empty()) {
 		const std::filesystem::path mappingPath = PathEncoding::FromUtf8(nstr(mappingPathText));
-		const OtbItemIdMappingLoadResult mapping = OtbItemIdMappingProvider::Load(mappingPath, true);
+		const OtbItemIdMappingLoadResult mapping = OtbItemIdMappingProvider::Load(mappingPath, false);
 		if (!mapping.ready()) {
-			wxMessageBox(wxString::FromUTF8(mapping.error.c_str()), "Invalid items.otb mapping", wxOK | wxICON_ERROR, this);
+			std::string error = mapping.error;
+			if (mapping.stats.duplicateClientIds != 0) {
+				error += " Duplicate ClientIDs would merge distinct ServerIDs. This converter requires a one-to-one mapping.";
+			}
+			wxMessageBox(wxString::FromUTF8(error.c_str()), "Invalid items.otb mapping", wxOK | wxICON_ERROR, this);
 			return;
 		}
+		options.mappingProvider = mapping.provider;
+		options.strictMapping = true;
 	}
 	if (as_lower_str(options.source.extension().string()) != ".otbm" || as_lower_str(options.destination.extension().string()) != ".otbm") {
 		wxMessageBox("Source and destination must use the .otbm extension.", "Invalid file type", wxOK | wxICON_ERROR, this);
@@ -308,6 +310,7 @@ void MapItemIdConverterWindow::onConfirm(wxCommandEvent& WXUNUSED(event)) {
 		g_settings.setInteger(Config::MAP_ITEM_ID_CONVERTER_MEMORY_LIMIT_GIB, selectedMemoryGiB);
 		g_settings.save();
 	}
+	confirmedOptions = std::move(options);
 	EndModal(wxID_OK);
 }
 
@@ -332,7 +335,7 @@ bool RunMapItemIdConverter(wxWindow* parent, MapItemIdConverterLaunchContext con
 		if (options.direction == ItemIdMapping::Direction::ClientToServer) {
 			return g_gui.LoadValidatedConvertedMap(destination);
 		}
-		ClientIdViewCodec readCodec;
+		ClientIdViewCodec readCodec(options.mappingProvider);
 		return g_gui.LoadValidatedConvertedMap(destination, &readCodec, true);
 	}
 	return true;

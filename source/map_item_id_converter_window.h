@@ -10,6 +10,7 @@
 #include <wx/dialog.h>
 
 #include <vector>
+#include <optional>
 
 class wxFilePickerCtrl;
 class wxFileDirPickerEvent;
@@ -45,6 +46,7 @@ private:
 	int maximumMemoryLimitGiB = 1;
 	std::vector<MapVersion> targetVersions;
 	wxString generatedDestination;
+	std::optional<MapItemIdConversionOptions> confirmedOptions;
 };
 
 enum class MapItemIdConverterLaunchContext {

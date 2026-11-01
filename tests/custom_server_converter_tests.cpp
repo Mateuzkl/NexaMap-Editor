@@ -255,6 +255,25 @@ namespace {
 	}
 
 	void TestXmlRangesAndCollisions() {
+		auto contiguousMapping = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 11 } });
+		pugi::xml_document contiguous;
+		contiguous.load("<items><item id='1-2' name='range'><attribute key='rotateTo' value='2'/></item></items>");
+		const auto contiguousReport = ConvertItemsXmlDocument(contiguous, *contiguousMapping.provider, true);
+		const auto range = contiguous.child("items").child("item");
+		check(contiguousReport.success && !range.attribute("id") && range.attribute("fromid").as_uint() == 10 && range.attribute("toid").as_uint() == 11,
+			"hyphenated input emits loader-compatible fromid/toid output");
+		check(FindAttribute(range, "rotateTo").attribute("value").as_uint() == 11, "range references are converted");
+		for (const char* xml : { "<items><item id='1-3'/></items>", "<items><item fromid='1' toid='3'/></items>" }) {
+			pugi::xml_document partial;
+			partial.load(xml);
+			check(!ConvertItemsXmlDocument(partial, *contiguousMapping.provider, false).success, "partial ranges cannot silently retain source IDs");
+		}
+		pugi::xml_document scattered;
+		scattered.load("<items><item id='1-2' name='range'/></items>");
+		auto scatteredMapping = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 30 } });
+		check(ConvertItemsXmlDocument(scattered, *scatteredMapping.provider, true).success, "hyphenated non-contiguous input converts");
+		check(scattered.child("items").first_child().attribute("id").as_uint() == 10 && scattered.child("items").last_child().attribute("id").as_uint() == 30,
+			"expanded range preserves every destination ID");
 		auto mapping = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 30 }, { 3, 31 }, { 4, 40 } });
 		pugi::xml_document expanded;
 		expanded.load("<items><item fromid='1' toid='3'/></items>");
