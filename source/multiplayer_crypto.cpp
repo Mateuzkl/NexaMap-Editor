@@ -1,7 +1,9 @@
 // NexaMap multiplayer. SPDX-License-Identifier: GPL-3.0-or-later
 #include "multiplayer_crypto.h"
 #ifdef _WIN32
-	#define WIN32_LEAN_AND_MEAN
+	#ifndef WIN32_LEAN_AND_MEAN
+		#define WIN32_LEAN_AND_MEAN
+	#endif
 	#include <windows.h>
 	#include <bcrypt.h>
 	#pragma comment(lib, "bcrypt.lib")

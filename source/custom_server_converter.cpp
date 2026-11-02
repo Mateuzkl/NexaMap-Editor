@@ -19,6 +19,7 @@
 #include <iostream>
 #include <sstream>
 #include <system_error>
+#include <unordered_set>
 
 namespace {
 	constexpr std::size_t MaximumReportedMapIssues = 12;
@@ -329,6 +330,15 @@ CustomServerAnalysis AnalyzeCustomServer(const std::filesystem::path& sourceRoot
 		return analysis;
 	}
 	analysis.workspace = detection.workspace;
+	if (scope.maps && scope.restrictMapSelection) {
+		std::unordered_set<std::filesystem::path> selected;
+		for (const std::filesystem::path& path : scope.selectedMaps) {
+			selected.insert(FileSaveTransaction::NormalizePath(path));
+		}
+		std::erase_if(analysis.workspace.maps, [&selected](const DetectedMap& map) {
+			return !selected.contains(FileSaveTransaction::NormalizePath(map.path));
+		});
+	}
 	if (!analysis.workspace.hasItemsOtb()) {
 		analysis.error = "items.otb was not found; it is required as the read-only mapping authority.";
 		return analysis;
