@@ -30,6 +30,8 @@
 #include "map_format.h"
 #include "session_id.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <unordered_set>
 
 inline bool IsRemovableDuplicatedItem(const Item* item) {
@@ -209,6 +211,26 @@ public:
 		unnamed = false;
 	}
 
+	// Sidecars that exist on disk but were not loaded with the map. A save must
+	// not overwrite them: their contents are not in memory.
+	const std::vector<std::filesystem::path>& getUnloadedSidecars() const {
+		return unloadedSidecars;
+	}
+	void addUnloadedSidecar(const std::filesystem::path& file) {
+		std::error_code ec;
+		if (!file.empty() && std::filesystem::exists(file, ec) && std::find(unloadedSidecars.begin(), unloadedSidecars.end(), file) == unloadedSidecars.end()) {
+			unloadedSidecars.push_back(file);
+		}
+	}
+
+	// Unmapped or ambiguous item IDs the user already accepted for this map.
+	uint64_t getConfirmedItemIdIssues() const {
+		return confirmedItemIdIssues;
+	}
+	void setConfirmedItemIdIssues(uint64_t issues) {
+		confirmedItemIdIssues = issues;
+	}
+
 	// Returns true if the given (non-zero) unique id is already present somewhere on the map.
 	bool hasUniqueId(uint16_t uid) const;
 	uint32_t getUniqueIdCount(uint16_t uid) const {
@@ -249,6 +271,8 @@ protected:
 	uint32_t sourceItemMajorVersion = 0;
 	uint32_t sourceItemMinorVersion = 0;
 	bool spawnFilenamesExplicit = false;
+	std::vector<std::filesystem::path> unloadedSidecars;
+	uint64_t confirmedItemIdIssues = 0;
 
 public:
 	Towns towns;

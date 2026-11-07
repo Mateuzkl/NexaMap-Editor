@@ -314,8 +314,10 @@ void ItemAttributes::serializeAttributeMap(const IOMap& maphandle, NodeFileWrite
 
 bool ItemAttribute::unserialize(const IOMap& maphandle, BinaryNode* stream) {
 	// Read type
-	uint8_t rtype;
-	stream->getU8(rtype);
+	uint8_t rtype = 0;
+	if (!stream->getU8(rtype)) {
+		return false;
+	}
 
 	// Read contents
 	switch (rtype) {
@@ -381,6 +383,7 @@ void ItemAttribute::serialize(const IOMap& maphandle, NodeFileWriteHandle& f) co
 			break;
 		case BOOLEAN:
 			uint8_t u8; std::memcpy(&u8, getBoolean(), sizeof(u8)); f.addU8(u8);
+			break;
 		default:
 			break;
 	}

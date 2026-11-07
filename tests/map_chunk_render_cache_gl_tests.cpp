@@ -4,6 +4,7 @@
 #include "map_chunk_render_cache.h"
 #include "map_chunk_revision.h"
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 
@@ -92,7 +93,7 @@ namespace {
 				}
 				const int x = 16 + static_cast<int>(i / 4) * 32 + camera;
 				const int y = 16 + static_cast<int>(i % 4) * 32;
-				const GLColor color = { static_cast<uint8_t>(i == selected ? 120 : 210), 170, 235, 255 };
+				const GLColor color = { static_cast<uint8_t>(static_cast<int>(i) == selected ? 120 : 210), 170, 235, 255 };
 				if (!entry || static_cast<int>(i) == selected || !cache.draw(*entry, i, x, y, color)) {
 					const auto uv = resolve(q);
 					renderer.drawTexturedQuad(x + q.offsetX, y + q.offsetY, 32, 32, texture, color, uv.u0, uv.v0, uv.u1, uv.v1);
@@ -183,12 +184,14 @@ namespace {
 }
 
 int main(int argc, char** argv) {
+	// ctest skips on 77. CI sets this variable so that a broken GL setup fails instead.
+	const int unavailable = std::getenv("NEXAMAP_REQUIRE_GL_TESTS") ? 1 : 77;
 	if (!wxEntryStart(argc, argv)) {
-		return 77;
+		return unavailable;
 	}
 	if (!wxTheApp->CallOnInit()) {
 		wxEntryCleanup();
-		return 77;
+		return unavailable;
 	}
 	int result = 0;
 	try {

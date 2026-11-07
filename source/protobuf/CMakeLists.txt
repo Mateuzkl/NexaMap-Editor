@@ -1,5 +1,5 @@
 add_library(nexamap_protobuf appearances.proto)
-target_link_libraries(nexamap_protobuf PUBLIC protobuf::libprotobuf)
+target_link_libraries(nexamap_protobuf PUBLIC protobuf::libprotobuf PRIVATE nexamap_hardening)
 target_include_directories(nexamap_protobuf PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
 protobuf_generate(TARGET nexamap_protobuf LANGUAGE cpp)
 

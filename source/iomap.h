@@ -67,6 +67,10 @@ public:
 	virtual ~IOMap() { }
 
 	MapVersion version;
+	// Counted during load, where item nodes only hold a const IOMap reference.
+	mutable uint64_t discardedItemChildren = 0;
+	// Teleports whose destination floor does not exist, loaded without one.
+	mutable uint64_t invalidTeleportDestinations = 0;
 
 	wxArrayString& getWarnings() {
 		return warnings;

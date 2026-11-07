@@ -13,17 +13,29 @@
 #include "../iominimap.h"
 #include "../iomap.h"
 #include "../map.h"
+#include "../path_encoding.h"
 #include "../tile.h"
 
+#include <array>
+#include <filesystem>
 #include <map>
 #include <mutex>
 #include <set>
 
+#include <wx/file.h>
 #include <wx/filename.h>
 #include <wx/image.h>
+#include <wx/mstream.h>
 
 namespace mcp {
 	namespace {
+		// Decoding happens on the GUI thread, so the file's header decides whether it is decoded.
+		constexpr size_t MaximumBitmapFileBytes = 64 * 1024 * 1024;
+		constexpr uint32_t MaximumBitmapDimension = 512;
+		constexpr uint64_t MaximumBitmapPixels = 262144;
+		// Matches the limit of the selected-area export; each floor allocates width*height*3.
+		constexpr int MaximumMinimapImageDimension = 2048;
+
 		void RequireConfirmation(const Json& arguments) {
 			if (!arguments.value("confirm", false)) {
 				throw Error("this non-undoable operation requires confirm=true");
@@ -34,6 +46,12 @@ namespace mcp {
 			if (!arguments.contains("path") || !arguments["path"].is_string()) {
 				throw Error("path is required");
 			}
+#ifdef _WIN32
+			// Merely probing \\\\host\\share sends the user's NTLM credentials to that host.
+			if (IsUncPath(arguments["path"].get<std::string>())) {
+				throw Error("network paths are not allowed");
+			}
+#endif
 			wxFileName path(wxString::FromUTF8(arguments["path"].get<std::string>()));
 			if (!path.IsAbsolute() || !path.FileExists()) {
 				throw Error("path must be an existing absolute file");
@@ -57,18 +75,22 @@ namespace mcp {
 			throw Error("invalid import policy");
 		}
 
+		std::string BaseName(const std::string& path) {
+			return wxFileName(wxString::FromUTF8(path)).GetFullName().ToStdString(wxConvUTF8);
+		}
+
 		Json MapProperties(const Map& map) {
 			return {
 				{ "name", map.getName() },
 				{ "description", map.getMapDescription() },
 				{ "width", map.getWidth() },
 				{ "height", map.getHeight() },
-				{ "filename", map.hasFile() ? Json(map.getFilename()) : Json(nullptr) },
-				{ "houseFilename", map.getHouseFilename() },
-				{ "spawnFilename", map.getSpawnFilename() },
-				{ "spawnNpcFilename", map.getSpawnNpcFilename() },
-				{ "waypointFilename", map.getWaypointFilename() },
-				{ "zoneFilename", map.getZoneFilename() },
+				{ "filename", map.hasFile() ? Json(BaseName(map.getFilename())) : Json(nullptr) },
+				{ "houseFilename", BaseName(map.getHouseFilename()) },
+				{ "spawnFilename", BaseName(map.getSpawnFilename()) },
+				{ "spawnNpcFilename", BaseName(map.getSpawnNpcFilename()) },
+				{ "waypointFilename", BaseName(map.getWaypointFilename()) },
+				{ "zoneFilename", BaseName(map.getZoneFilename()) },
 			};
 		}
 
@@ -93,6 +115,67 @@ namespace mcp {
 			return value;
 		}
 
+		// Read once into memory, so the bytes probed are exactly the bytes decoded.
+		std::string ReadBitmapFile(const wxFileName& path) {
+			wxFile file(path.GetFullPath());
+			const wxFileOffset length = file.IsOpened() ? file.Length() : -1;
+			if (length <= 0 || static_cast<uint64_t>(length) > MaximumBitmapFileBytes) {
+				throw Error("bitmap file is unreadable or larger than 64 MiB");
+			}
+			std::string bytes(static_cast<size_t>(length), '\0');
+			if (file.Read(bytes.data(), bytes.size()) != static_cast<ssize_t>(bytes.size())) {
+				throw Error("could not read bitmap file");
+			}
+			const std::optional<std::pair<uint32_t, uint32_t>> size = ProbeImageSize(bytes);
+			if (!size) {
+				throw Error("bitmap must be a PNG or BMP file");
+			}
+			if (size->first == 0 || size->second == 0 || size->first > MaximumBitmapDimension || size->second > MaximumBitmapDimension || static_cast<uint64_t>(size->first) * size->second > MaximumBitmapPixels) {
+				throw Error("bitmap dimensions must fit within 512x512 and 262144 pixels");
+			}
+			return bytes;
+		}
+
+		std::filesystem::path MinimapExportRoot() {
+			return PathEncoding::FromUtf8(GUI::GetLocalDataDirectory().ToStdString(wxConvUTF8)) / "mcp-exports";
+		}
+
+		void RequireFreeMinimapTargets(const std::filesystem::path& root, const std::string& name, const std::string& formatName, MinimapExportMode mode) {
+			if (formatName == "otmm") {
+				RequireFreeExportTarget(root / PathEncoding::FromUtf8(name + ".otmm"));
+				return;
+			}
+			// IOMinimap names whole-floor images name_z and selected-area images name-z.
+			const std::string separator = mode == MinimapExportMode::SelectedArea ? "-" : "_";
+			for (int floor = 0; floor <= MAP_MAX_LAYER; ++floor) {
+				RequireFreeExportTarget(root / PathEncoding::FromUtf8(name + separator + std::to_string(floor) + "." + formatName));
+			}
+		}
+
+		// Mirrors the per-floor bounding box in IOMinimap, whose buffer is sized from it.
+		void RequireBoundedMinimapImage(Map& map, int firstFloor, int lastFloor) {
+			std::array<int, MAP_LAYERS> minX, minY, maxX, maxY;
+			minX.fill(MAP_MAX_WIDTH + 1);
+			minY.fill(MAP_MAX_HEIGHT + 1);
+			maxX.fill(-1);
+			maxY.fill(-1);
+			for (auto iterator = map.begin(); iterator != map.end(); ++iterator) {
+				const Tile* tile = (*iterator)->get();
+				if (!tile || (!tile->ground && tile->items.empty())) {
+					continue;
+				}
+				const Position& position = tile->getPosition();
+				minX[position.z] = std::min(minX[position.z], position.x);
+				minY[position.z] = std::min(minY[position.z], position.y);
+				maxX[position.z] = std::max(maxX[position.z], position.x);
+				maxY[position.z] = std::max(maxY[position.z], position.y);
+			}
+			for (int floor = firstFloor; floor <= lastFloor; ++floor) {
+				if (maxX[floor] - minX[floor] >= MaximumMinimapImageDimension || maxY[floor] - minY[floor] >= MaximumMinimapImageDimension) {
+					throw Error("the map spans more than 2048 tiles on a floor; use format otmm or mode selected-area");
+				}
+			}
+		}
 	}
 
 	void RegisterImportExportTools() {
@@ -107,6 +190,7 @@ namespace mcp {
 				true,
 				[](const Json& arguments) {
 					RequireConfirmation(arguments);
+					RequireUserConfirmation("Create and switch to a new blank map tab.");
 					const int width = arguments.value("width", 2048);
 					const int height = arguments.value("height", 2048);
 					return StructuredResult(CallJsonOnGui([arguments, width, height] {
@@ -142,6 +226,7 @@ namespace mcp {
 				[](const Json& arguments) {
 					RequireConfirmation(arguments);
 					const wxFileName path = RequiredExistingFile(arguments);
+					RequireUserConfirmation("Open this map file in NexaMap:\n" + SanitizeDialogText(arguments["path"].get<std::string>()));
 					return StructuredResult(CallJsonOnGui([path] { if (!g_gui.LoadMap(FileName(path.GetFullPath()))){ throw Error("NexaMap could not open the requested map");
 } Editor* editor = g_gui.GetCurrentEditor(); if (!editor){ throw Error("opened map did not become active");
 } Json result = MapProperties(editor->map); result["opened"] = true; result["mapSessionId"] = editor->map.getSessionId(); return result; }));
@@ -153,7 +238,7 @@ namespace mcp {
 				"Read basic metadata and auxiliary filenames from the active map.",
 				{ { "type", "object" }, { "properties", Json::object() }, { "additionalProperties", false } },
 				false,
-				[](const Json&) { return StructuredResult(OnGui([](const EditorContext& context) { Json result = MapProperties(context.map); result["mapSessionId"] = context.mapSessionId; return result; })); },
+				[](const Json&) { return UntrustedMapResult(OnGui([](const EditorContext& context) { Json result = MapProperties(context.map); result["mapSessionId"] = context.mapSessionId; return result; })); },
 			});
 
 			registry.add({
@@ -161,7 +246,7 @@ namespace mcp {
 				"Explicitly update basic active-map metadata. This is non-undoable and requires confirmation.",
 				{ { "type", "object" }, { "properties", { { "width", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 65535 } } }, { "height", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 65535 } } }, { "name", { { "type", "string" }, { "maxLength", 255 } } }, { "description", { { "type", "string" }, { "maxLength", 4096 } } }, { "confirm", { { "type", "boolean" }, { "default", false } } }, { "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } }, { "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } } } }, { "additionalProperties", false } },
 				true,
-				[](const Json& arguments) { RequireConfirmation(arguments); return StructuredResult(OnGui([arguments](const EditorContext& context) { VerifyWritableContext(context, arguments); if (arguments.contains("width")){ context.map.setWidth(arguments["width"].get<int>());
+				[](const Json& arguments) { RequireConfirmation(arguments); RequireMapConfirmation(arguments, "Change the active map's name, description or size. This cannot be undone."); return StructuredResult(OnGui([arguments](const EditorContext& context) { VerifyWritableContext(context, arguments); if (arguments.contains("width")){ context.map.setWidth(arguments["width"].get<int>());
 } if (arguments.contains("height")){ context.map.setHeight(arguments["height"].get<int>());
 } if (arguments.contains("name")){ context.map.setName(arguments["name"].get<std::string>());
 } if (arguments.contains("description")){ context.map.setMapDescription(arguments["description"].get<std::string>());
@@ -179,8 +264,9 @@ namespace mcp {
 					const Position offset = arguments.contains("offset") ? ParsePosition(arguments["offset"], "offset") : Position(0, 0, 0);
 					const ImportType housePolicy = ParseImportType(arguments.value("housePolicy", "smart-merge"));
 					const ImportType spawnPolicy = ParseImportType(arguments.value("spawnPolicy", "smart-merge"));
+					RequireMapConfirmation(arguments, "Merge this map file into the active map. This clears the undo history:\n" + arguments["path"].get<std::string>());
 					return StructuredResult(OnGui([arguments, path, offset, housePolicy, spawnPolicy](const EditorContext& context) { VerifyWritableContext(context, arguments); if (!context.editor.importMap(FileName(path.GetFullPath()), offset.x, offset.y, offset.z, housePolicy, spawnPolicy)){ throw Error("map import failed");
-} g_gui.RefreshView(); return Json { { "imported", true }, { "path", path.GetFullPath().ToStdString() }, { "mapSessionId", context.mapSessionId }, { "changeGeneration", context.map.getChangeGeneration() }, { "undoAvailable", false } }; }));
+} g_gui.RefreshView(); return Json { { "imported", true }, { "path", path.GetFullName().ToStdString(wxConvUTF8) }, { "mapSessionId", context.mapSessionId }, { "changeGeneration", context.map.getChangeGeneration() }, { "undoAvailable", false } }; }));
 				},
 			});
 
@@ -197,10 +283,13 @@ namespace mcp {
 					}
 					const bool autoborder = arguments.value("autoborder", true);
 					const bool allowExpansion = arguments.value("allowExpansion", false);
-					return StructuredResult(OnGui([arguments, path, origin, autoborder, allowExpansion](const EditorContext& context) {
+					const std::string bitmap = ReadBitmapFile(path);
+					RequireSafetyOverrideConfirmation(arguments);
+					return StructuredResult(OnGui([arguments, bitmap, origin, autoborder, allowExpansion](const EditorContext& context) {
 						VerifyWritableContext(context, arguments);
 						wxImage image;
-						if (!image.LoadFile(path.GetFullPath()) || !image.IsOk()) {
+						wxMemoryInputStream stream(bitmap.data(), bitmap.size());
+						if (!image.LoadFile(stream) || !image.IsOk()) {
 							throw Error("could not decode bitmap image");
 						}
 						if (image.GetWidth() <= 0 || image.GetHeight() <= 0 || image.GetWidth() > 512 || image.GetHeight() > 512 || static_cast<uint64_t>(image.GetWidth()) * image.GetHeight() > 262144) {
@@ -288,19 +377,14 @@ namespace mcp {
 
 			registry.add({
 				"export_minimap",
-				"Export the active map minimap to an absolute directory. External file creation requires confirmation.",
-				{ { "type", "object" }, { "properties", { { "directory", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 4096 } } }, { "name", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 255 } } }, { "format", { { "type", "string" }, { "enum", Json::array({ "png", "bmp", "otmm" }) }, { "default", "png" } } }, { "mode", { { "type", "string" }, { "enum", Json::array({ "all-floors", "ground-floor", "specific-floor", "selected-area" }) }, { "default", "all-floors" } } }, { "floor", { { "type", "integer" }, { "minimum", 0 }, { "maximum", 15 }, { "default", 7 } } }, { "confirm", { { "type", "boolean" }, { "default", false } } } } }, { "required", Json::array({ "directory", "name" }) }, { "additionalProperties", false } },
+				"Export the active map minimap as new files in NexaMap's mcp-exports folder. Requires confirm=true and approval in NexaMap; existing files are never overwritten.",
+				{ { "type", "object" }, { "properties", { { "name", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 128 } } }, { "format", { { "type", "string" }, { "enum", Json::array({ "png", "bmp", "otmm" }) }, { "default", "png" } } }, { "mode", { { "type", "string" }, { "enum", Json::array({ "all-floors", "ground-floor", "specific-floor", "selected-area" }) }, { "default", "all-floors" } } }, { "floor", { { "type", "integer" }, { "minimum", 0 }, { "maximum", 15 }, { "default", 7 } } }, { "confirm", { { "type", "boolean" }, { "default", false } } }, { "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } }, { "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } } } }, { "required", Json::array({ "name" }) }, { "additionalProperties", false } },
 				true,
 				[](const Json& arguments) {
 					RequireConfirmation(arguments);
-					wxFileName directory(wxString::FromUTF8(arguments.value("directory", "")), "");
-					if (!directory.IsAbsolute() || !directory.DirExists()) {
-						throw Error("directory must be an existing absolute directory");
-					}
 					const std::string name = arguments.value("name", "");
-					wxFileName safeName(wxString::FromUTF8(name));
-					if (safeName.GetFullName().ToStdString() != name || !safeName.GetPath().empty()) {
-						throw Error("name must be a plain file name without directories");
+					if (!IsSafeExportName(name)) {
+						throw Error("name may only use letters, digits, '.', '_' and '-', and must not start with '.' or '-'");
 					}
 					const std::string formatName = arguments.value("format", "png");
 					const std::string modeName = arguments.value("mode", "all-floors");
@@ -310,8 +394,24 @@ namespace mcp {
 						: modeName == "selected-area"																						  ? MinimapExportMode::SelectedArea
 																																			  : MinimapExportMode::AllFloors;
 					const int floor = arguments.value("floor", 7);
-					return StructuredResult(OnGui([directory, name, format, mode, floor](const EditorContext& context) { IOMinimap exporter(&context.editor, format, mode, false); if (!exporter.saveMinimap(directory.GetFullPath().ToStdString(), name, floor)){ throw Error("minimap export failed: " + exporter.getError());
-} return Json { { "exported", true }, { "directory", directory.GetFullPath().ToStdString() }, { "name", name } }; }));
+					RequireMapConfirmation(arguments, "Export the minimap of the active map to NexaMap's mcp-exports folder as: " + name);
+					return StructuredResult(OnGui([arguments, name, formatName, format, mode, floor](const EditorContext& context) {
+						VerifyMapSession(context, arguments);
+						const std::filesystem::path root = MinimapExportRoot();
+						PrepareExportRoot(root);
+						RequireFreeMinimapTargets(root, name, formatName, mode);
+						if (format != MinimapExportFormat::Otmm && mode != MinimapExportMode::SelectedArea) {
+							const int singleFloor = mode == MinimapExportMode::GroundFloor ? GROUND_LAYER : floor;
+							const bool allFloors = mode == MinimapExportMode::AllFloors;
+							RequireBoundedMinimapImage(context.map, allFloors ? 0 : singleFloor, allFloors ? MAP_MAX_LAYER : singleFloor);
+						}
+						IOMinimap exporter(&context.editor, format, mode, false);
+						const std::u8string rootText = root.u8string();
+						if (!exporter.saveMinimap(std::string(rootText.begin(), rootText.end()), name, floor)) {
+							throw Error("minimap export failed: " + exporter.getError());
+						}
+						return Json { { "exported", true }, { "directory", "mcp-exports" }, { "name", name } };
+					}));
 				},
 			});
 		});

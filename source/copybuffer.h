@@ -69,6 +69,7 @@ private:
 	void includePosition(const Position& position);
 	void rebuildBounds();
 	void captureHouse(const Map& map, uint32_t houseId);
+	void captureZones(const Map& map, const Tile& tile);
 	HouseSnapshot getHouseSnapshot(uint32_t houseId) const;
 
 	Position copyPos;
@@ -78,6 +79,8 @@ private:
 	std::unique_ptr<BaseMap> tiles;
 	SessionId sourceMapSessionId;
 	std::map<uint32_t, HouseSnapshot> houses;
+	// Zone IDs only mean something next to their map's registry.
+	std::map<unsigned int, std::string> zoneNames;
 	SpawnDependencyMap spawnDependencies;
 };
 

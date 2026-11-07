@@ -25,7 +25,7 @@ namespace {
 #ifdef _WIN32
 		return std::filesystem::path(path.ToStdWstring());
 #else
-		return std::filesystem::path(path.ToStdString());
+		return std::filesystem::path(nstr(path));
 #endif
 	}
 

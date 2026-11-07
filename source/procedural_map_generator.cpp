@@ -1114,11 +1114,9 @@ BriefInterpretation InterpretBrief(const std::string& text) {
 		"estrada", "estradas", "lago", "largo", "larga", "largos", "largas", "caminho", "caminhos", "denso", "densa", "esparso", "esparsa", "vegetacao", "multiplas", "entradas", "andares", "caca", "oeste", "leste", "norte", "sul",
 	};
 	const std::set<std::string> ignoredWords { "with", "and", "the", "from", "com", "uma", "para", "dos", "das" };
-	bool hasExplicitPreset = false;
 	for (const auto& token : tokens) {
 		if (const auto it = presets.find(token); it != presets.end()) {
 			result.preset = it->second;
-			hasExplicitPreset = true;
 			result.hasSupportedTerms = true;
 			result.recognized.push_back(token);
 		} else if (modifiers.contains(token)) {
@@ -1130,7 +1128,6 @@ BriefInterpretation InterpretBrief(const std::string& text) {
 			// Hunt has special precedence - always override
 			if (token == "hunt" || token == "hunting" || token == "caca") {
 				result.preset = Preset::HuntingArea;
-				hasExplicitPreset = true;
 			}
 		} else if (ignoredWords.contains(token)) {
 			continue;

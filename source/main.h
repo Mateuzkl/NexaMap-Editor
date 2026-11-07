@@ -96,7 +96,8 @@ _Ret_bytecap_(_Size) inline void* __CRTDECL operator new[](size_t _Size, const c
 #endif
 
 // PugiXML
-#include "ext/pugixml.hpp"
+#include <pugixml.hpp>
+#include "xml_attribute.h"
 
 #include <assert.h>
 #define _MSG(msg) !bool(msg)

@@ -212,7 +212,7 @@ void ContainerItemPopupMenu::Update(ContainerItemButton* btn) {
 	}
 
 	Container* parentContainer = btn->getParentContainer();
-	if (parentContainer->getVolume() <= (int)parentContainer->getVector().size()) {
+	if (parentContainer->getVolume() <= parentContainer->getVector().size()) {
 		addItem->Enable(false);
 	}
 }

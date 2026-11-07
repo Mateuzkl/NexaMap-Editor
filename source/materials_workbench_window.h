@@ -48,8 +48,8 @@ private:
 	};
 	struct NodeEntry {
 		wxString key;
-		std::vector<ItemEntry> items;
-		std::vector<DoorEntry> doors;
+		std::vector<ItemEntry> items {};
+		std::vector<DoorEntry> doors {};
 	};
 	struct TileEntry {
 		int x = 0;
@@ -59,7 +59,7 @@ private:
 	};
 	struct CompositeEntry {
 		int chance = 10;
-		std::vector<TileEntry> tiles;
+		std::vector<TileEntry> tiles {};
 	};
 	struct AlternativeEntry {
 		std::vector<ItemEntry> singles;

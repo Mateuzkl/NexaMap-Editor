@@ -31,8 +31,8 @@ Spawns::~Spawns() {
 void Spawns::addSpawn(Tile* tile) {
 	ASSERT(tile->spawn);
 
-	auto it = spawns.insert(tile->getPosition());
-	ASSERT(it.second);
+	[[maybe_unused]] const auto inserted = spawns.insert(tile->getPosition());
+	ASSERT(inserted.second);
 }
 
 void Spawns::removeSpawn(Tile* tile) {

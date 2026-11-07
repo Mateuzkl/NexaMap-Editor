@@ -438,6 +438,7 @@ bool PaletteWindow::OnSelectBrush(const Brush* whatbrush, PaletteType primary) {
 				SelectPage(TILESET_COLLECTION);
 				return true;
 			}
+			[[fallthrough]];
 		}
 		case TILESET_ITEM: {
 			if (item_palette && item_palette->SelectBrush(whatbrush)) {

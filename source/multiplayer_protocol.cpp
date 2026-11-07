@@ -183,6 +183,20 @@ namespace Multiplayer {
 		}
 		return true;
 	}
+	std::string printableText(std::string value) {
+		if (!validText(value, value.size(), true)) {
+			for (auto& c : value) {
+				if (static_cast<uint8_t>(c) < 32 || static_cast<uint8_t>(c) >= 127) {
+					c = '?';
+				}
+			}
+		}
+		return value;
+	}
+	bool validHostPassword(const std::string& password, bool loopbackOnly) {
+		const auto characters = std::count_if(password.begin(), password.end(), [](char c) { return (static_cast<uint8_t>(c) & 0xc0) != 0x80; });
+		return loopbackOnly || static_cast<size_t>(characters) >= MinHostPassword;
+	}
 	uint64_t tileKey(uint16_t x, uint16_t y, uint8_t z) {
 		return uint64_t(x) | (uint64_t(y) << 16) | (uint64_t(z) << 32);
 	}
@@ -200,6 +214,9 @@ namespace Multiplayer {
 	}
 	bool Region::valid() const {
 		return x1 <= x2 && y1 <= y2 && z <= 15;
+	}
+	uint64_t Region::area() const {
+		return (uint64_t(x2) - x1 + 1) * (uint64_t(y2) - y1 + 1);
 	}
 	bool Region::contains(uint64_t key) const {
 		return tileZ(key) == z && tileX(key) >= x1 && tileX(key) <= x2 && tileY(key) >= y1 && tileY(key) <= y2;
@@ -228,7 +245,7 @@ namespace Multiplayer {
 	}
 	bool Locks::acquire(uint32_t owner, uint64_t id, Region region, uint64_t now) {
 		expire(now);
-		if (!id || !region.valid()) {
+		if (!id || !region.valid() || region.area() > MaxLockArea) {
 			return false;
 		}
 		for (const auto& l : leases) {
@@ -243,7 +260,8 @@ namespace Multiplayer {
 				return true;
 			}
 		}
-		if (leases.size() >= MaxLocks) {
+		const auto owned = std::count_if(leases.begin(), leases.end(), [&](const auto& l) { return l.owner == owner; });
+		if (leases.size() >= MaxLocks || static_cast<size_t>(owned) >= MaxLocksPerOwner) {
 			return false;
 		}
 		leases.push_back({ id, owner, region, now + 30000 });
@@ -254,6 +272,9 @@ namespace Multiplayer {
 	}
 	void Locks::releaseOwner(uint32_t owner) {
 		std::erase_if(leases, [&](const auto& l) { return l.owner == owner; });
+	}
+	void Locks::releaseOverlapping(const Region& region) {
+		std::erase_if(leases, [&](const auto& l) { return l.region.overlaps(region); });
 	}
 	bool Locks::expire(uint64_t now) {
 		return std::erase_if(leases, [&](const auto& l) { return l.expires <= now; }) != 0;
@@ -345,7 +366,8 @@ namespace Multiplayer {
 			if (it != tiles.end() && it->second > tx.base) {
 				return "Conflict: another accepted edit changed this tile.";
 			}
-			if (!locks.permits(author, tile.key, now)) {
+			// The host owns the map: a client lease must never be able to lock it out.
+			if (role != Role::Host && !locks.permits(author, tile.key, now)) {
 				return "A tile in this edit is locked by another participant.";
 			}
 		}

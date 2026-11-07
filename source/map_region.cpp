@@ -23,6 +23,9 @@
 #include "tile.h"
 #include "object_pool.h"
 
+#include <stdexcept>
+#include <string>
+
 //**************** Tile Location **********************
 
 TileLocation::TileLocation() :
@@ -177,6 +180,12 @@ QTreeNode* QTreeNode::getLeafForce(int x, int y) {
 
 Floor* QTreeNode::createFloor(int x, int y, int z) {
 	ASSERT(isLeaf);
+	// The callers dereference the result, so a bad floor cannot be reported
+	// through it. File, network and MCP input is validated before it gets here,
+	// so this only stops programming errors from writing past array[].
+	if (z < 0 || z >= MAP_LAYERS) {
+		throw std::out_of_range("Map floor out of range: " + std::to_string(z));
+	}
 	if (!array[z]) {
 		array[z] = newd Floor(x, y, z, map.getChunkRevisionTracker());
 	}
@@ -233,7 +242,7 @@ void QTreeNode::setVisible(uint32_t client, bool underground, bool value) {
 
 TileLocation* QTreeNode::getTile(int x, int y, int z) {
 	ASSERT(isLeaf);
-	Floor* f = array[z];
+	Floor* f = getFloor(static_cast<uint32_t>(z));
 	if (!f) {
 		return nullptr;
 	}

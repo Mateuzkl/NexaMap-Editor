@@ -21,7 +21,7 @@ namespace {
 	bool ValidateBeforeApply(const Map& map, const SpawnDocument& document, std::vector<std::string>& warnings) {
 		std::map<Position, SpawnSignature> signatures;
 		for (const SpawnAreaData& area : document.areas) {
-			if (area.centerX < 0 || area.centerX > 65535 || area.centerY < 0 || area.centerY > 65535 || area.centerZ < 0 || area.centerZ > 255 || area.radius < 0 || area.radius > 255) {
+			if (area.centerX < 0 || area.centerX > 65535 || area.centerY < 0 || area.centerY > 65535 || area.centerZ < 0 || area.centerZ > MAP_MAX_LAYER || area.radius < 0 || area.radius > 255) {
 				warnings.push_back("Spawn document contains an invalid area and was not applied.");
 				return false;
 			}
@@ -156,6 +156,17 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 	SpawnDocument document;
 	document.format = map.getSpawnFormat();
 	std::unordered_set<Creature*> captured;
+	// A source that no longer reaches the creature (spawn deleted, or the creature
+	// dragged into another spawn) must not hide it from the spawn it stands in,
+	// or no spawn claims it and the creature disappears on the next load.
+	const auto sourceReaches = [&](const Position& source, const Tile& tile) {
+		const Tile* sourceTile = map.spawns.find(source) != map.spawns.end() ? map.getTile(source) : nullptr;
+		if (!sourceTile || !sourceTile->spawn) {
+			return false;
+		}
+		const int radius = document.format == SpawnFormat::CanaryCrystal ? sourceTile->spawn->getSize() : std::max(1, sourceTile->spawn->getSize());
+		return tile.getZ() == source.z && std::abs(tile.getX() - source.x) <= radius && std::abs(tile.getY() - source.y) <= radius;
+	};
 	for (const Position& center : map.spawns) {
 		Tile* centerTile = map.getTile(center);
 		if (!centerTile || !centerTile->spawn) {
@@ -176,7 +187,7 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 					continue;
 				}
 				Creature* creature = tile->creature;
-				if (creature->hasSpawnSource() && creature->getSpawnSource() != center) {
+				if (creature->hasSpawnSource() && creature->getSpawnSource() != center && sourceReaches(creature->getSpawnSource(), *tile)) {
 					continue;
 				}
 				captured.insert(creature);
@@ -255,6 +266,17 @@ SpawnDocument SpawnMapAdapter::Capture(Map& map) {
 			area.kind = SpawnAreaKind::Monsters;
 			document.areas.push_back(std::move(area));
 		}
+	}
+
+	size_t uncaptured = 0;
+	for (MapIterator it = map.begin(); it != map.end(); ++it) {
+		const Tile* tile = (*it)->get();
+		if (tile && tile->creature && !captured.contains(tile->creature)) {
+			++uncaptured;
+		}
+	}
+	if (uncaptured != 0) {
+		document.warnings.push_back(std::to_string(uncaptured) + " creature(s) are outside every spawn and were not saved. Move them into a spawn or add one around them.");
 	}
 	return document;
 }

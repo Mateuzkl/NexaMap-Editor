@@ -24,18 +24,22 @@
 #include <zlib.h>
 
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <new>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <typeinfo>
 
 #include <wx/choicdlg.h>
 
 #include "settings.h"
 #include "gui.h" // Loadbar
 #include "file_transaction.h"
+#include "path_encoding.h"
 #include "spawn_format.h"
 
 #include "creatures.h"
@@ -55,6 +59,127 @@ typedef uint32_t flags_t;
 static const uint32_t LEGACY_TILESTATE_ZONE_BRUSH = 0x0040;
 
 namespace {
+	// Book and sign authorship has no editor field, so it travels in the item
+	// attribute map under these keys and returns to its OTBM attributes on save.
+	const char* const WRITTEN_BY_ATTRIBUTE = "writtenby";
+	const char* const WRITTEN_DATE_ATTRIBUTE = "writtendate";
+
+	std::string pathToUtf8(const std::filesystem::path& path) {
+		const std::u8string utf8 = path.u8string();
+		return std::string(utf8.begin(), utf8.end());
+	}
+
+	std::filesystem::path sidecarDirectory(const FileName& mapFile) {
+		return PathEncoding::FromUtf8(nstr(mapFile.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
+	}
+
+	// A node-level read can end at a clean boundary without any read error, so a
+	// file cut between two nodes parses as a smaller map. Only the balance of the
+	// node markers across the whole file shows that the tail is missing.
+	class OtbmNodeBalance {
+	public:
+		void feed(const uint8_t* bytes, size_t size) {
+			for (size_t index = 0; index < size && !invalid; ++index) {
+				if (escaped) {
+					escaped = false;
+				} else if (bytes[index] == NODE_START) {
+					++depth;
+					started = true;
+				} else if (bytes[index] == NODE_END) {
+					invalid = depth == 0;
+					--depth;
+				} else if (bytes[index] == ESCAPE_CHAR) {
+					escaped = true;
+				}
+			}
+		}
+		bool isComplete() const {
+			return started && !invalid && !escaped && depth == 0;
+		}
+
+	private:
+		uint64_t depth = 0;
+		bool started = false;
+		bool escaped = false;
+		bool invalid = false;
+	};
+
+	bool otbmFileIsComplete(const FileName& filename) {
+		std::ifstream file(PathEncoding::FromUtf8(nstr(filename.GetFullPath())), std::ios::binary);
+		if (!file) {
+			return false;
+		}
+		constexpr size_t IDENTIFIER_SIZE = 4;
+		file.seekg(IDENTIFIER_SIZE);
+		OtbmNodeBalance balance;
+		std::vector<char> buffer(1024 * 1024);
+		while (file) {
+			file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+			balance.feed(reinterpret_cast<const uint8_t*>(buffer.data()), static_cast<size_t>(file.gcount()));
+		}
+		return file.eof() && balance.isComplete();
+	}
+
+	// The non-attribute-map encoding only has fields for these keys.
+	bool hasMapOnlyAttributes(const Item& item) {
+		static const std::set<std::string> flatKeys { "aid", "uid", "text", "desc", "tier", WRITTEN_BY_ATTRIBUTE, WRITTEN_DATE_ATTRIBUTE };
+		for (const auto& attribute : item.getAttributes()) {
+			if (!flatKeys.contains(attribute.first)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	uint64_t countItemsWithMapOnlyAttributes(Map& map) {
+		uint64_t count = 0;
+		std::vector<const Item*> pending;
+		for (MapIterator iterator = map.begin(); iterator != map.end(); ++iterator) {
+			const Tile* tile = (*iterator)->get();
+			if (!tile) {
+				continue;
+			}
+			pending.assign(tile->items.begin(), tile->items.end());
+			pending.push_back(tile->ground);
+			while (!pending.empty()) {
+				const Item* item = pending.back();
+				pending.pop_back();
+				if (!item) {
+					continue;
+				}
+				count += hasMapOnlyAttributes(*item) ? 1 : 0;
+				if (const auto* container = dynamic_cast<const Container*>(item)) {
+					pending.insert(pending.end(), container->getVector().begin(), container->getVector().end());
+				}
+			}
+		}
+		return count;
+	}
+
+	const wxString TRUNCATED_OTBM_MESSAGE = "The OTBM file is truncated or damaged, so it was not opened. Saving a partial map would make the loss permanent. Restore the file from a backup.";
+
+	// Children under a non-Container only happen when the ID's type changed
+	// between item databases. Their dynamic type cannot be recovered, so
+	// everything but a plain Item keeps its own type and reports the loss.
+	Item* keepUnexpectedChildren(const IOMap& maphandle, Item* item, BinaryNode* node) {
+		BinaryNode* child = node->getChild();
+		if (!child) {
+			return item;
+		}
+		if (typeid(*item) != typeid(Item)) {
+			++maphandle.discardedItemChildren;
+			return item;
+		}
+		auto* container = newd Container(item->getID());
+		item->copyBaseStateTo(*container);
+		delete item;
+		if (!container->readChildNodes_OTBM(maphandle, child)) {
+			delete container;
+			return nullptr;
+		}
+		return container;
+	}
+
 	bool useDragonSoulsItemCountEncoding() {
 		return g_settings.getBoolean(Config::DRAGON_SOULS_OTBM_COUNT_UINT16);
 	}
@@ -88,6 +213,7 @@ namespace {
 		bool hasTeleportDestination = false;
 		bool hasHouseDoorId = false;
 		bool hasDepotId = false;
+		bool hasPodiumOutfit = false;
 	};
 
 	bool skipAttributeMapValue(BinaryNode* stream) {
@@ -184,6 +310,7 @@ namespace {
 					break;
 				}
 				case OTBM_ATTR_PODIUMOUTFIT:
+					hints.hasPodiumOutfit = true;
 					valid = stream->skip(15);
 					break;
 				case OTBM_ATTR_ATTRIBUTE_MAP:
@@ -246,10 +373,13 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 	// ordinary classifications (ground, border, bottom) from special attribute inspection.
 	// Converted items carrying authoritative teleport destination, house door ID, or
 	// depot ID must instantiate their corresponding dynamic derived types (Teleport, Door, Depot).
+	// A podium ID always builds a Podium: its drawer reads the Podium fields, so
+	// no attribute on the node may turn it into another class.
 	const bool canHaveSpecialAttributes = inspectSpecialAttributes
 		&& !iType.isTeleport()
 		&& !iType.isDoor()
-		&& !iType.isDepot();
+		&& !iType.isDepot()
+		&& !iType.isPodium();
 
 	const SpecialItemAttributeHints specialAttributes = canHaveSpecialAttributes
 		? inspectSpecialItemAttributes(stream, maphandle.version, iType)
@@ -266,8 +396,8 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 	}
 	// Converted IDs can point at a plain ItemType in the active items.otb. The
 	// persisted OTBM attributes are authoritative: retain the dynamic type so a
-	// reopen/save cycle cannot discard Destination, House Door ID, or the
-	// Depot/Town association.
+	// reopen/save cycle cannot discard Destination, House Door ID, the Depot/Town
+	// association, or a Podium outfit.
 	if (specialAttributes.hasTeleportDestination) {
 		return newd Teleport(_id);
 	}
@@ -276,6 +406,9 @@ Item* Item::Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemTy
 	}
 	if (specialAttributes.hasDepotId) {
 		return newd Depot(_id);
+	}
+	if (specialAttributes.hasPodiumOutfit && !iType.isPodium()) {
+		return newd Podium(_id);
 	}
 	return Item::Create(_id, _count);
 }
@@ -354,8 +487,23 @@ bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute att
 			setTier(static_cast<uint16_t>(tier));
 			break;
 		}
+		case OTBM_ATTR_WRITTENDATE: {
+			uint32_t writtenDate = 0;
+			if (!stream->getU32(writtenDate)) {
+				return false;
+			}
+			setAttribute(WRITTEN_DATE_ATTRIBUTE, static_cast<int32_t>(writtenDate));
+			break;
+		}
+		case OTBM_ATTR_WRITTENBY: {
+			std::string writer;
+			if (!stream->getString(writer)) {
+				return false;
+			}
+			setAttribute(WRITTEN_BY_ATTRIBUTE, writer);
+			break;
+		}
 		case OTBM_ATTR_DURATION:
-		case OTBM_ATTR_WRITTENDATE:
 		case OTBM_ATTR_SLEEPERGUID:
 		case OTBM_ATTR_SLEEPSTART:
 			// Runtime/deprecated server state. It is valid in older TFS maps but
@@ -363,10 +511,6 @@ bool Item::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute att
 			return stream->skip(4);
 		case OTBM_ATTR_DECAYING_STATE:
 			return stream->skip(1);
-		case OTBM_ATTR_WRITTENBY: {
-			std::string ignoredWriter;
-			return stream->getString(ignoredWriter);
-		}
 
 		// The following *should* be handled in the derived classes
 		// However, we still need to handle them here since otherwise things
@@ -419,8 +563,28 @@ void Item::serializeItemAttributes_OTBM(const IOMap& maphandle, NodeFileWriteHan
 		stream.addU8(getSubtype());
 	}
 
+	const int32_t* writtenDate = getIntegerAttribute(WRITTEN_DATE_ATTRIBUTE);
+	const std::string* writtenBy = getStringAttribute(WRITTEN_BY_ATTRIBUTE);
+	if (writtenDate) {
+		stream.addU8(OTBM_ATTR_WRITTENDATE);
+		stream.addU32(static_cast<uint32_t>(*writtenDate));
+	}
+	if (writtenBy) {
+		stream.addU8(OTBM_ATTR_WRITTENBY);
+		stream.addString(*writtenBy);
+	}
+
 	if (maphandle.version.otbm == MAP_OTBM_4 || maphandle.version.otbm > MAP_OTBM_5) {
-		if (attributes && !attributes->empty()) {
+		if (writtenDate || writtenBy) {
+			// Already written above: servers would read the map copies as custom keys.
+			ItemAttributes others(*this);
+			others.eraseAttribute(WRITTEN_DATE_ATTRIBUTE);
+			others.eraseAttribute(WRITTEN_BY_ATTRIBUTE);
+			if (!others.getAttributes().empty()) {
+				stream.addU8(OTBM_ATTR_ATTRIBUTE_MAP);
+				others.serializeAttributeMap(maphandle, stream);
+			}
+		} else if (attributes && !attributes->empty()) {
 			stream.addU8(OTBM_ATTR_ATTRIBUTE_MAP);
 			serializeAttributeMap(maphandle, stream);
 		}
@@ -504,6 +668,11 @@ bool Teleport::readItemAttribute_OTBM(const IOMap& maphandle, OTBM_ItemAttribute
 		uint8_t z;
 		if (!stream->getU16(x) || !stream->getU16(y) || !stream->getU8(z)) {
 			return false;
+		}
+		// The rest of the item is still good, so only the destination is dropped.
+		if (z > MAP_MAX_LAYER) {
+			++maphandle.invalidTeleportDestinations;
+			return true;
 		}
 		destination = Position(x, y, z);
 		return true;
@@ -602,30 +771,36 @@ bool Container::unserializeItemNode_OTBM(const IOMap& maphandle, BinaryNode* nod
 	}
 
 	BinaryNode* child = node->getChild();
-	if (child) {
-		do {
-			uint8_t type;
-			if (!child->getByte(type)) {
-				return false;
-			}
+	return !child || readChildNodes_OTBM(maphandle, child);
+}
 
-			if (type != OTBM_ITEM) {
-				return false;
-			}
+bool Container::readChildNodes_OTBM(const IOMap& maphandle, BinaryNode* child) {
+	do {
+		uint8_t type;
+		if (!child->getByte(type)) {
+			return false;
+		}
 
-			Item* item = Item::Create_OTBM(maphandle, child, nullptr, true);
-			if (!item) {
-				return false;
-			}
+		if (type != OTBM_ITEM) {
+			return false;
+		}
 
-			if (!item->unserializeItemNode_OTBM(maphandle, child)) {
-				delete item;
-				return false;
-			}
+		Item* item = Item::Create_OTBM(maphandle, child, nullptr, true);
+		if (!item) {
+			return false;
+		}
 
-			contents.push_back(item);
-		} while (child->advance());
-	}
+		if (!item->unserializeItemNode_OTBM(maphandle, child)) {
+			delete item;
+			return false;
+		}
+
+		item = keepUnexpectedChildren(maphandle, item, child);
+		if (!item) {
+			return false;
+		}
+		contents.push_back(item);
+	} while (child->advance());
 	return true;
 }
 
@@ -1011,19 +1186,22 @@ bool IOMapOTBM::getFileMetadata(NodeFileReadHandle* f, OTBMFileMetadata& metadat
 				}
 				break;
 			case OTBM_ATTR_EXT_SPAWN_FILE:
-				if (!mapHeader->getString(metadata.spawnFile)) {
+				if (!mapHeader->getString(value)) {
 					return false;
 				}
+				metadata.spawnFile = PathEncoding::SidecarBaseName(value);
 				break;
 			case OTBM_ATTR_EXT_SPAWN_NPC_FILE:
-				if (!mapHeader->getString(metadata.spawnNpcFile)) {
+				if (!mapHeader->getString(value)) {
 					return false;
 				}
+				metadata.spawnNpcFile = PathEncoding::SidecarBaseName(value);
 				break;
 			case OTBM_ATTR_EXT_ZONE_FILE:
-				if (!mapHeader->getString(metadata.zoneFile)) {
+				if (!mapHeader->getString(value)) {
 					return false;
 				}
+				metadata.zoneFile = PathEncoding::SidecarBaseName(value);
 				break;
 			default:
 				// Header attributes are not length-prefixed as a group. Stop at
@@ -1084,6 +1262,10 @@ bool IOMapOTBM::loadMapData(Map& map, const FileName& filename) {
 		if (!loadMap(map, f)) {
 			return false;
 		}
+		if (!otbmFileIsComplete(filename)) {
+			error("%s", TRUNCATED_OTBM_MESSAGE);
+			return false;
+		}
 		if (!checkMemoryBudget("after parsing the OTBM")) {
 			return false;
 		}
@@ -1113,6 +1295,12 @@ bool IOMapOTBM::loadMapData(Map& map, const FileName& filename) {
 	if (!loadMap(map, f)) {
 		return false;
 	}
+	OtbmNodeBalance balance;
+	balance.feed(otbmBuffer.data() + 4, otbmSize - 4);
+	if (!balance.isComplete()) {
+		error("%s", TRUNCATED_OTBM_MESSAGE);
+		return false;
+	}
 	if (!checkMemoryBudget("after parsing the OTBM")) {
 		return false;
 	}
@@ -1125,10 +1313,27 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 		return false;
 	}
 
+	map.housefile = resolveSidecarName(filename, map.housefile);
+	map.zonefile = resolveSidecarName(filename, map.zonefile);
+	map.spawnfile = resolveSidecarName(filename, map.spawnfile);
+	map.spawnNpcFile = resolveSidecarName(filename, map.spawnNpcFile);
+
+	const std::filesystem::path directory = sidecarDirectory(filename);
+	// A file that did not load must survive the next save, or it is replaced
+	// with empty metadata. Default names are recorded too: nothing was loaded
+	// from a file already sitting there, and saving would overwrite it.
+	auto recordUnloaded = [&](const std::string& name) {
+		if (!name.empty()) {
+			map.addUnloadedSidecar(directory / PathEncoding::FromUtf8(name));
+		}
+	};
+
 	// Read auxilliary files
 	if (!loadHouses(map, filename)) {
 		warning("Failed to load houses.");
+		recordUnloaded(map.housefile);
 		map.housefile = nstr(filename.GetName()) + "-house.xml";
+		recordUnloaded(map.housefile);
 	}
 
 	if (map.zonefile.empty()) {
@@ -1136,6 +1341,7 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 	}
 	if (!loadZones(map, filename)) {
 		warning("Failed to load zones.");
+		recordUnloaded(map.zonefile);
 	}
 
 	const SpawnLoadStatus spawnStatus = loadSpawns(map, filename);
@@ -1145,6 +1351,8 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 	}
 	if (spawnStatus == SpawnLoadStatus::Unavailable) {
 		warning("Failed to load spawns.");
+		recordUnloaded(map.spawnfile);
+		recordUnloaded(map.spawnNpcFile);
 		if (map.getStorageFormat() == MapStorageFormat::CanaryCrystal || version.otbm >= MAP_OTBM_5) {
 			map.spawnfile = nstr(filename.GetName()) + "-monster.xml";
 			map.spawnNpcFile = nstr(filename.GetName()) + "-npc.xml";
@@ -1154,6 +1362,8 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 			map.spawnNpcFile.clear();
 			map.spawnFormat = SpawnFormat::Tfs;
 		}
+		recordUnloaded(map.spawnfile);
+		recordUnloaded(map.spawnNpcFile);
 	}
 
 	if (!loadWaypoints(map, filename)) {
@@ -1163,11 +1373,44 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 	}
 	if (!loadWaypointGroups(map, filename)) {
 		warning("Failed to load waypoint groups.");
+		recordUnloaded(nstr(filename.GetName()) + "-waypoint-groups.xml");
 	}
 	return true;
 }
 
+std::string IOMapOTBM::resolveSidecarName(const FileName& mapFile, const std::string& name) {
+	if (name.empty()) {
+		return name;
+	}
+	const std::filesystem::path directory = sidecarDirectory(mapFile);
+	const std::filesystem::path reference = PathEncoding::FromUtf8(name);
+	std::error_code ec;
+	if (reference.has_parent_path() || std::filesystem::exists(directory / reference, ec)) {
+		return name;
+	}
+	const std::string wanted = as_lower_str(name);
+	std::string match;
+	int matches = 0;
+	for (std::filesystem::directory_iterator iterator(directory, ec), end; !ec && iterator != end; iterator.increment(ec)) {
+		const std::string candidate = pathToUtf8(iterator->path().filename());
+		if (as_lower_str(candidate) == wanted) {
+			match = candidate;
+			++matches;
+		}
+	}
+	return matches == 1 ? match : name;
+}
+
 void IOMapOTBM::readMapHeaderAttributes(BinaryNode* mapHeaderNode, Map& map) {
+	// These names are saved over on the next Save, so they must stay in the map's folder.
+	auto confineToMapFolder = [&](std::string& name) {
+		std::string reduced = PathEncoding::SidecarBaseName(name);
+		if (reduced != name) {
+			warning("The map header names the file \"%s\" outside the map folder, using \"%s\" there instead.", wxstr(name), wxstr(reduced));
+			name = std::move(reduced);
+		}
+	};
+
 	uint8_t attribute;
 	while (mapHeaderNode->getU8(attribute)) {
 		switch (attribute) {
@@ -1182,24 +1425,28 @@ void IOMapOTBM::readMapHeaderAttributes(BinaryNode* mapHeaderNode, Map& map) {
 				if (!mapHeaderNode->getString(map.spawnfile)) {
 					warning("Invalid map spawnfile tag");
 				}
+				confineToMapFolder(map.spawnfile);
 				break;
 			}
 			case OTBM_ATTR_EXT_HOUSE_FILE: {
 				if (!mapHeaderNode->getString(map.housefile)) {
 					warning("Invalid map housefile tag");
 				}
+				confineToMapFolder(map.housefile);
 				break;
 			}
 			case OTBM_ATTR_EXT_ZONE_FILE: {
 				if (!mapHeaderNode->getString(map.zonefile)) {
 					warning("Invalid map zonefile tag");
 				}
+				confineToMapFolder(map.zonefile);
 				break;
 			}
 			case OTBM_ATTR_EXT_SPAWN_NPC_FILE: {
 				if (!mapHeaderNode->getString(map.spawnNpcFile)) {
 					warning("Invalid map NPC spawnfile tag");
 				}
+				confineToMapFolder(map.spawnNpcFile);
 				break;
 			}
 			default: {
@@ -1256,6 +1503,10 @@ void IOMapOTBM::readTowns(BinaryNode* mapNode, Map& map) {
 		pos.x = x;
 		pos.y = y;
 		pos.z = z;
+		if (!pos.isValid()) {
+			warning("Town %d has an invalid temple position %d:%d:%d, the temple was not set", town_id, pos.x, pos.y, pos.z);
+			continue;
+		}
 		town->setTemplePosition(pos);
 		map.getOrCreateTile(pos)->getLocation()->increaseTownCount();
 	}
@@ -1301,6 +1552,12 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 	if (!mapNode->getU16(base_x) || !mapNode->getU16(base_y) || !mapNode->getU8(base_z)) {
 		warning("Invalid map node, no base coordinate");
 		return true;
+	}
+	// Refused rather than skipped: dropping the area would lose its tiles on the
+	// next save, and no valid map has one.
+	if (base_z >= MAP_LAYERS) {
+		error("The OTBM file is damaged: a tile area at %d:%d is on floor %d, the last floor is %d.", static_cast<int>(base_x), static_cast<int>(base_y), static_cast<int>(base_z), MAP_MAX_LAYER);
+		return false;
 	}
 
 	Floor* cachedFloor = nullptr;
@@ -1446,6 +1703,11 @@ bool IOMapOTBM::readTileArea(BinaryNode* mapNode, Map& map) {
 							warning("Couldn't unserialize item attributes at %d:%d:%d", pos.x, pos.y, pos.z);
 						}
 						// reform(&map, tile, item);
+						item = keepUnexpectedChildren(*this, item, itemNode);
+						if (!item) {
+							warning("Couldn't read the contents of the item at %d:%d:%d", pos.x, pos.y, pos.z);
+							continue;
+						}
 						if (itemType) {
 							if (((itemType->isGroundTile() || itemType->ground_equivalent != 0) && tile->ground) || (itemType->alwaysOnBottom && !tile->items.empty())) {
 								needsFullTileUpdate = true;
@@ -1602,13 +1864,20 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 	}
 
 	if (!f.isOk()) {
-		warning("%s", wxstr(f.getErrorMessage()));
+		error("%s (%s)", TRUNCATED_OTBM_MESSAGE, wxstr(f.getErrorMessage()));
+		return false;
+	}
+	if (discardedItemChildren != 0) {
+		warning("%llu item(s) that are not containers in the loaded items.otb held child items, and those children were discarded.", static_cast<unsigned long long>(discardedItemChildren));
+	}
+	if (invalidTeleportDestinations != 0) {
+		warning("%llu teleport(s) pointed at a floor that does not exist and were loaded without a destination.", static_cast<unsigned long long>(invalidTeleportDestinations));
 	}
 	return true;
 }
 
 IOMapOTBM::SpawnLoadStatus IOMapOTBM::loadSpawns(Map& map, const FileName& dir) {
-	const std::filesystem::path directory(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
+	const std::filesystem::path directory = sidecarDirectory(dir);
 	SpawnDetectionResult detection = SpawnFormatIO::Detect(directory, map.spawnfile, map.spawnNpcFile, nstr(dir.GetName()));
 	if (detection.conflict) {
 		static std::optional<SpawnFormat> sessionConflictChoice;
@@ -1646,6 +1915,10 @@ IOMapOTBM::SpawnLoadStatus IOMapOTBM::loadSpawns(Map& map, const FileName& dir) 
 		warnings.push_back(wxstr("IOMapOTBM::loadSpawns: " + detection.error));
 		return SpawnLoadStatus::Unavailable;
 	}
+	auto recordDetectedFiles = [&] {
+		map.addUnloadedSidecar(detection.primaryFile);
+		map.addUnloadedSidecar(detection.npcFile);
+	};
 
 	SpawnDocument document;
 	std::string loadError;
@@ -1656,13 +1929,14 @@ IOMapOTBM::SpawnLoadStatus IOMapOTBM::loadSpawns(Map& map, const FileName& dir) 
 	const bool loaded = SpawnFormatIO::Load(detection, document, loadError, defaults);
 	if (!loaded) {
 		warnings.push_back(wxstr("IOMapOTBM::loadSpawns: " + loadError));
+		recordDetectedFiles();
 		return SpawnLoadStatus::Unavailable;
 	}
 
 	map.spawnFormat = detection.format;
-	map.spawnfile = detection.primaryFile.filename().string();
+	map.spawnfile = pathToUtf8(detection.primaryFile.filename());
 	map.spawnNpcFile = detection.format == SpawnFormat::CanaryCrystal && !detection.npcFile.empty()
-		? detection.npcFile.filename().string()
+		? pathToUtf8(detection.npcFile.filename())
 		: std::string();
 	for (const std::string& message : document.warnings) {
 		warnings.push_back(wxstr(message));
@@ -1671,6 +1945,7 @@ IOMapOTBM::SpawnLoadStatus IOMapOTBM::loadSpawns(Map& map, const FileName& dir) 
 	std::vector<std::string> adapterWarnings;
 	if (!SpawnMapAdapter::Apply(map, document, adapterWarnings)) {
 		warnings.push_back("IOMapOTBM::loadSpawns: Failed to apply spawn data to the map.");
+		recordDetectedFiles();
 		return SpawnLoadStatus::Unavailable;
 	}
 	for (const std::string& message : adapterWarnings) {
@@ -1737,8 +2012,13 @@ bool IOMapOTBM::loadHouses(Map& map, pugi::xml_document& doc) {
 			houseNode.attribute("entryy").as_int(),
 			houseNode.attribute("entryz").as_int()
 		);
-		if (exitPosition.x != 0 && exitPosition.y != 0 && exitPosition.z != 0) {
-			house->setExit(exitPosition);
+		// Floor 0 is a valid exit floor; x = y = 0 is the "no exit" marker.
+		if (exitPosition.x != 0 && exitPosition.y != 0) {
+			if (exitPosition.isValid()) {
+				house->setExit(exitPosition);
+			} else {
+				warning("House %d has an invalid exit position %d:%d:%d, the exit was not set.", house->getID(), exitPosition.x, exitPosition.y, exitPosition.z);
+			}
 		}
 
 		if ((attribute = houseNode.attribute("rent"))) {
@@ -1811,7 +2091,8 @@ bool IOMapOTBM::loadWaypointGroups(Map& map, const FileName& dir) {
 
 	pugi::xml_node root = doc.child("waypointgroups");
 	if (!root) {
-		return true;
+		warnings.push_back("Invalid waypoint group sidecar: expected root <waypointgroups>.");
+		return false;
 	}
 
 	std::vector<std::string> categories;
@@ -1900,6 +2181,10 @@ bool IOMapOTBM::loadZones(Map& map, pugi::xml_document& doc) {
 				positionNode.attribute("y").as_int(),
 				positionNode.attribute("z").as_int()
 			);
+			if (!position.isValid()) {
+				warnings.push_back("IOMapOTBM::loadZones: Zone '" + name + "' has an invalid position, which was skipped.");
+				continue;
+			}
 
 			Tile* tile = map.getTile(position);
 			if (tile) {
@@ -1911,40 +2196,75 @@ bool IOMapOTBM::loadZones(Map& map, pugi::xml_document& doc) {
 }
 
 bool IOMapOTBM::saveMapData(Map& map, const FileName& identifier) {
+	FileSaveTransaction transaction;
+	if (!stageMapData(map, identifier, transaction)) {
+		return false;
+	}
+	std::string commitError;
+	if (!transaction.Commit(commitError)) {
+		error("Could not commit OTBM file %s: %s", nstr(identifier.GetFullPath()).c_str(), commitError.c_str());
+		return false;
+	}
+	return true;
+}
+
+bool IOMapOTBM::stageMapData(Map& map, const FileName& identifier, FileSaveTransaction& transaction) {
 	if (!checkMemoryBudget("before serializing the OTBM")) {
 		return false;
 	}
-	const std::filesystem::path mapFile(nstr(identifier.GetFullPath()));
-	FileSaveTransaction transaction;
-	const std::filesystem::path stagedMapFile = transaction.Stage(mapFile);
+	const std::string mapFile = nstr(identifier.GetFullPath());
+	const std::filesystem::path stagedMapFile = transaction.Stage(PathEncoding::FromUtf8(mapFile));
 	DiskNodeFileWriteHandle file(
-		stagedMapFile.string(),
+		pathToUtf8(stagedMapFile),
 		(g_settings.getInteger(Config::SAVE_WITH_OTB_MAGIC_NUMBER) ? "OTBM" : std::string(4, '\0'))
 	);
 	if (!file.isOk()) {
-		error("Cannot open OTBM file %s for writing: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
+		error("Cannot open OTBM file %s for writing: %s", mapFile.c_str(), file.getErrorMessage().c_str());
 		return false;
 	}
 	if (!saveMap(map, file) || !file.isOk()) {
 		if (errorstr.empty()) {
-			error("Could not serialize OTBM file %s: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
+			error("Could not serialize OTBM file %s: %s", mapFile.c_str(), file.getErrorMessage().c_str());
 		}
 		return false;
 	}
 	file.close();
 	if (file.error_code != FILE_NO_ERROR) {
-		error("Could not finalize OTBM file %s: %s", mapFile.string().c_str(), file.getErrorMessage().c_str());
+		error("Could not finalize OTBM file %s: %s", mapFile.c_str(), file.getErrorMessage().c_str());
 		return false;
 	}
 	if (!checkMemoryBudget("after serializing the OTBM")) {
 		return false;
 	}
-	std::string commitError;
-	if (!transaction.Commit(commitError)) {
-		error("Could not commit OTBM file %s: %s", mapFile.string().c_str(), commitError.c_str());
-		return false;
-	}
+	return true;
+}
 
+bool IOMapOTBM::checkUnloadedSidecars(const Map& map, const FileName& dir) {
+	const std::filesystem::path directory = sidecarDirectory(dir);
+	std::vector<std::filesystem::path> targets;
+	for (const std::string& name : { map.spawnfile, map.spawnNpcFile, map.housefile, map.zonefile }) {
+		if (!name.empty()) {
+			targets.push_back(directory / PathEncoding::FromUtf8(name));
+		}
+	}
+	targets.push_back(directory / PathEncoding::FromUtf8(nstr(dir.GetName()) + "-waypoint-groups.xml"));
+
+	for (const std::filesystem::path& unloaded : map.getUnloadedSidecars()) {
+		std::error_code ec;
+		if (!std::filesystem::exists(unloaded, ec)) {
+			continue;
+		}
+		for (const std::filesystem::path& target : targets) {
+			if (FileSaveTransaction::PathsReferToSameFile(unloaded, target)) {
+				error(
+					"\"%s\" could not be loaded when this map was opened, so saving would replace it with empty data.\n\n"
+					"Repair the file and reopen the map, or use Save As with a new name.",
+					wxstr(pathToUtf8(unloaded))
+				);
+				return false;
+			}
+		}
+	}
 	return true;
 }
 
@@ -1961,10 +2281,18 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 		map.zonefile = nstr(identifier.GetName()) + "-zones.xml";
 	}
 
-	// Write OTBM file using saveMapData
+	if (!checkUnloadedSidecars(map, identifier)) {
+		return failStage("sidecar check", "A sidecar that failed to load would be overwritten.");
+	}
+
+	// The map and its sidecars are all staged first and published as one unit, so
+	// a failed stage leaves every existing file untouched.
+	FileSaveTransaction transaction;
+
+	// Write OTBM file using stageMapData
 	{
 		NexaPerfScope perf("saveMapData");
-		if (!saveMapData(map, identifier)) {
+		if (!stageMapData(map, identifier, transaction)) {
 			return failStage("saveMapData", "The OTBM file could not be written.");
 		}
 	}
@@ -1972,7 +2300,7 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 	g_gui.SetLoadDone(99, "Saving spawns...");
 	{
 		NexaPerfScope perf("saveSpawns");
-		if (!saveSpawns(map, identifier)) {
+		if (!stageSpawns(map, identifier, transaction)) {
 			return failStage("saveSpawns", "The spawn XML file could not be written.");
 		}
 	}
@@ -1980,7 +2308,7 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 	g_gui.SetLoadDone(99, "Saving houses...");
 	{
 		NexaPerfScope perf("saveHouses");
-		if (!saveHouses(map, identifier)) {
+		if (!stageHouses(map, identifier, transaction)) {
 			return failStage("saveHouses", "The house XML file could not be written.");
 		}
 	}
@@ -1988,16 +2316,34 @@ bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
 	g_gui.SetLoadDone(99, "Saving zones...");
 	{
 		NexaPerfScope perf("saveZones");
-		if (!saveZones(map, identifier)) {
+		if (!stageZones(map, identifier, transaction)) {
 			return failStage("saveZones", "The zone XML file could not be written.");
 		}
 	}
 
 	g_gui.SetLoadDone(99, "Saving waypoint groups...");
-	if (!saveWaypointGroups(map, identifier)) {
-		return false;
+	wxString staleWaypointGroups;
+	if (!stageWaypointGroups(map, identifier, transaction, staleWaypointGroups)) {
+		return failStage("saveWaypointGroups", "The waypoint group XML file could not be written.");
 	}
 
+	const std::filesystem::path directory = sidecarDirectory(identifier);
+	FileSaveTransaction::RemoveStaleTemporaryFiles(PathEncoding::FromUtf8(nstr(identifier.GetFullPath())));
+	for (const std::string& name : { map.spawnfile, map.spawnNpcFile, map.housefile, map.zonefile }) {
+		if (!name.empty()) {
+			FileSaveTransaction::RemoveStaleTemporaryFiles(directory / PathEncoding::FromUtf8(name));
+		}
+	}
+
+	std::string commitError;
+	if (!transaction.Commit(commitError)) {
+		error("%s", wxstr(commitError));
+		return failStage("publish", "The saved files could not be published.");
+	}
+
+	if (!staleWaypointGroups.empty() && wxFileExists(staleWaypointGroups) && !wxRemoveFile(staleWaypointGroups)) {
+		warnings.push_back("Could not remove stale waypoint group sidecar: " + staleWaypointGroups);
+	}
 	return true;
 }
 
@@ -2178,6 +2524,15 @@ bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {
 	if (map.getStorageFormat() == MapStorageFormat::CanaryCrystal && mapVersion.otbm < MAP_OTBM_5) {
 		mapVersion.otbm = MAP_OTBM_5;
 	}
+	// Items are encoded by version.otbm, so it must always match the header.
+	if (mapVersion.otbm != version.otbm) {
+		if (version.otbm == MAP_OTBM_4) {
+			if (const uint64_t lossy = countItemsWithMapOnlyAttributes(map)) {
+				warning("%llu item(s) have custom attributes that OTBM %d cannot store; those attributes were not saved.", static_cast<unsigned long long>(lossy), static_cast<int>(mapVersion.otbm) + 1);
+			}
+		}
+		version.otbm = mapVersion.otbm;
+	}
 
 	f.addNode(0);
 	{
@@ -2314,9 +2669,8 @@ static bool fileMatchesXmlContent(const wxString& filepath, const std::string& c
 	return contentMatchesIgnoringLineEndings(existingContent, content);
 }
 
-static bool writeContentToFile(const wxString& filepath, const std::string& content, std::string& error) {
+static bool stageContentToFile(const wxString& filepath, const std::string& content, std::string& error, FileSaveTransaction& transaction) {
 	error.clear();
-	FileSaveTransaction transaction;
 	const std::filesystem::path destination(filepath.ToStdWstring());
 	const std::filesystem::path staged = transaction.Stage(destination);
 
@@ -2337,11 +2691,10 @@ static bool writeContentToFile(const wxString& filepath, const std::string& cont
 		error = "Could not flush and close staged file: " + staged.string();
 		return false;
 	}
-
-	return transaction.Commit(error);
+	return true;
 }
 
-static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath, std::string& error) {
+static bool stageXmlFileIfChanged(const pugi::xml_document& doc, const wxString& filepath, std::string& error, FileSaveTransaction& transaction) {
 	error.clear();
 	std::ostringstream stream;
 	doc.save(stream, "\t", pugi::format_default, pugi::encoding_utf8);
@@ -2351,26 +2704,17 @@ static bool saveXmlFileIfChanged(const pugi::xml_document& doc, const wxString& 
 		return true;
 	}
 
-	const wxString backupPath = filepath + "~";
-	if (!wxFileExists(filepath) && fileMatchesXmlContent(backupPath, content)) {
-		if (wxRenameFile(backupPath, filepath, false)) {
-			return true;
-		}
-		error = "Could not restore unchanged XML backup to " + nstr(filepath);
-		return false;
-	}
-
-	return writeContentToFile(filepath, content, error);
+	return stageContentToFile(filepath, content, error, transaction);
 }
 
 template <typename FillFn>
-static bool saveSidecarXml(const FileName& dir, const std::string& filename, std::string& error, FillFn fill) {
+static bool stageSidecarXml(const FileName& dir, const std::string& filename, std::string& error, FileSaveTransaction& transaction, FillFn fill) {
 	wxString filepath = dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
 	filepath += wxString(filename.c_str(), wxConvUTF8);
 
 	pugi::xml_document doc;
 	if (fill(doc)) {
-		return saveXmlFileIfChanged(doc, filepath, error);
+		return stageXmlFileIfChanged(doc, filepath, error, transaction);
 	}
 	error = "Could not build XML document for " + nstr(filepath);
 	return false;
@@ -2385,13 +2729,16 @@ bool IOMapOTBM::prependXmlDeclaration(pugi::xml_document& doc) {
 	return true;
 }
 
-bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
-	const std::filesystem::path directory(nstr(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
+bool IOMapOTBM::stageSpawns(Map& map, const FileName& dir, FileSaveTransaction& transaction) {
+	const std::filesystem::path directory = sidecarDirectory(dir);
 	const std::string mapName = nstr(dir.GetName());
 
 	// Keep full-map validation out of the save hot path. Capture already walks
 	// every registered spawn needed to produce the sidecar and must run once.
 	const SpawnDocument document = SpawnMapAdapter::Capture(map);
+	for (const std::string& message : document.warnings) {
+		warnings.push_back(wxstr(message));
+	}
 	SpawnWriteResult result;
 
 	if (map.spawnFormat == SpawnFormat::CanaryCrystal) {
@@ -2401,14 +2748,14 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 		if (map.spawnNpcFile.empty()) {
 			map.spawnNpcFile = mapName + "-npc.xml";
 		}
-		result = SpawnFormatIO::SaveCanaryCrystal(document, directory / map.spawnfile, directory / map.spawnNpcFile);
+		result = SpawnFormatIO::SaveCanaryCrystal(document, directory / PathEncoding::FromUtf8(map.spawnfile), directory / PathEncoding::FromUtf8(map.spawnNpcFile), &transaction);
 	} else {
 		map.spawnFormat = SpawnFormat::Tfs;
 		map.spawnNpcFile.clear();
 		if (map.spawnfile.empty()) {
 			map.spawnfile = mapName + "-spawn.xml";
 		}
-		result = SpawnFormatIO::SaveTfs(document, directory / map.spawnfile);
+		result = SpawnFormatIO::SaveTfs(document, directory / PathEncoding::FromUtf8(map.spawnfile), &transaction);
 	}
 
 	for (const std::string& message : result.warnings) {
@@ -2422,9 +2769,9 @@ bool IOMapOTBM::saveSpawns(Map& map, const FileName& dir) {
 	return true;
 }
 
-bool IOMapOTBM::saveHouses(Map& map, const FileName& dir) {
+bool IOMapOTBM::stageHouses(Map& map, const FileName& dir, FileSaveTransaction& transaction) {
 	std::string saveError;
-	const bool saved = saveSidecarXml(dir, map.housefile, saveError, [&](pugi::xml_document& doc) {
+	const bool saved = stageSidecarXml(dir, map.housefile, saveError, transaction, [&](pugi::xml_document& doc) {
 		return saveHouses(map, doc);
 	});
 	if (!saved) {
@@ -2468,17 +2815,6 @@ bool IOMapOTBM::saveHouses(Map& map, pugi::xml_document& doc) {
 	return true;
 }
 
-bool IOMapOTBM::saveWaypoints(Map& map, const FileName& dir) {
-	std::string saveError;
-	const bool saved = saveSidecarXml(dir, map.waypointfile, saveError, [&](pugi::xml_document& doc) {
-		return saveWaypoints(map, doc);
-	});
-	if (!saved) {
-		error("%s", wxstr(saveError));
-	}
-	return saved;
-}
-
 bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
 	if (!prependXmlDeclaration(doc)) {
 		return false;
@@ -2503,22 +2839,20 @@ bool IOMapOTBM::saveWaypoints(Map& map, pugi::xml_document& doc) {
 	return true;
 }
 
-bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
+bool IOMapOTBM::stageWaypointGroups(Map& map, const FileName& dir, FileSaveTransaction& transaction, wxString& staleFile) {
 	if (!map.waypoints.hasGroups()) {
-		const std::string fn = (const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8)) + waypointGroupsFilename(dir);
-		if (wxFileExists(wxstr(fn)) && !wxRemoveFile(wxstr(fn))) {
-			warnings.push_back("Could not remove stale waypoint group sidecar: " + fn);
-		}
+		// Removed only after the commit, so a failed save keeps the file.
+		staleFile = wxstr((const char*)(dir.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME).mb_str(wxConvUTF8)) + waypointGroupsFilename(dir));
 		return true;
 	}
 	std::string invariantError;
 	if (!map.waypoints.validateInvariants(&invariantError)) {
-		warnings.push_back("Could not save waypoint groups: " + invariantError);
+		error("Waypoint groups are inconsistent: %s", wxstr(invariantError));
 		return false;
 	}
 
 	std::string saveError;
-	const bool saved = saveSidecarXml(dir, waypointGroupsFilename(dir), saveError, [&](pugi::xml_document& doc) {
+	const bool saved = stageSidecarXml(dir, waypointGroupsFilename(dir), saveError, transaction, [&](pugi::xml_document& doc) {
 		if (!prependXmlDeclaration(doc)) {
 			return false;
 		}
@@ -2554,7 +2888,7 @@ bool IOMapOTBM::saveWaypointGroups(Map& map, const FileName& dir) {
 	return saved;
 }
 
-bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
+bool IOMapOTBM::stageZones(Map& map, const FileName& dir, FileSaveTransaction& transaction) {
 	if (map.zonefile.empty()) {
 		map.zonefile = nstr(dir.GetName()) + "-zones.xml";
 	}
@@ -2575,7 +2909,7 @@ bool IOMapOTBM::saveZones(Map& map, const FileName& dir) {
 	}
 
 	std::string saveError;
-	const bool saved = saveSidecarXml(dir, map.zonefile, saveError, [&](pugi::xml_document& doc) {
+	const bool saved = stageSidecarXml(dir, map.zonefile, saveError, transaction, [&](pugi::xml_document& doc) {
 		return saveZones(map, doc);
 	});
 	if (!saved) {

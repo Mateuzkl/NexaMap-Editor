@@ -104,9 +104,10 @@ protected:
 	bool shouldSerializeCountSubtype() const {
 		return hasSubtypeAttribute(SUBTYPE_ATTR_COUNT) || (subtypeAttributes == SUBTYPE_ATTR_NONE && (hasSubtypeKind(SUBTYPE_STACK_COUNT) || hasSubtypeKind(SUBTYPE_FLUID) || hasSubtypeKind(SUBTYPE_PERSISTED_COUNT_OR_FLUID)));
 	}
-	void copyBaseStateTo(Item& copy) const;
 
 public:
+	void copyBaseStateTo(Item& copy) const;
+
 	// Factory member to create item of right type based on type
 	static Item* Create(uint16_t _type, uint16_t _subtype = 0xFFFF);
 	static Item* Create(pugi::xml_node);

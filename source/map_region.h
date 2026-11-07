@@ -164,7 +164,7 @@ public:
 	Floor* createFloor(int x, int y, int z);
 	Floor* getFloor(uint32_t z) {
 		ASSERT(isLeaf);
-		return array[z];
+		return z < MAP_LAYERS ? array[z] : nullptr;
 	}
 	Floor** getFloors() {
 		return array;

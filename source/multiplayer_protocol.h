@@ -17,7 +17,7 @@ namespace Multiplayer {
 	using Bytes = std::vector<uint8_t>;
 	using Identity = std::array<uint8_t, 16>;
 	using Digest = std::array<uint8_t, 32>;
-	constexpr uint32_t ProtocolVersion = 1;
+	constexpr uint32_t ProtocolVersion = 2;
 	constexpr size_t MaxPacket = 1024 * 1024;
 	constexpr size_t MaxTile = 256 * 1024;
 	constexpr size_t MaxTransaction = 32 * 1024 * 1024;
@@ -30,6 +30,19 @@ namespace Multiplayer {
 	constexpr size_t MaxMetadata = 4 * 1024 * 1024;
 	constexpr size_t MaxPlayers = 16;
 	constexpr size_t MaxLocks = 256;
+	// Lock Selection takes one lease per floor, so an owner needs at least 16 plus property locks.
+	constexpr size_t MaxLocksPerOwner = 32;
+	constexpr uint64_t MaxLockArea = 512 * 512;
+	constexpr size_t MacSize = 32;
+	constexpr size_t MinHostPassword = 8;
+	// The spawn palette and properties dialog stop at MAX_SPAWN_RADIUS (default 150).
+	constexpr int MaxSpawnRadius = 150;
+	// Spawn XML may load up to 255. Those spawns still sync, but no edit can create one.
+	constexpr int MaxStoredSpawnRadius = 255;
+	constexpr uint64_t MaxTransactionSpawnArea = 4 * 1024 * 1024;
+	// Client budget for everything a host sends: snapshot and transactions together.
+	constexpr uint64_t MaxRemoteSpawnArea = 256 * 1024 * 1024;
+	constexpr uint64_t MaxRemoteTiles = 128 * 1024 * 1024;
 
 	enum class Packet : uint8_t {
 		Challenge = 1,
@@ -128,6 +141,9 @@ namespace Multiplayer {
 	};
 	Bytes frame(Packet type, std::span<const uint8_t> payload);
 	bool validText(const std::string& value, size_t max, bool allowEmpty = false);
+	std::string printableText(std::string value);
+	// Counts characters, not UTF-8 bytes. Only a loopback session may go below the minimum.
+	bool validHostPassword(const std::string& password, bool loopbackOnly);
 
 	uint64_t tileKey(uint16_t x, uint16_t y, uint8_t z);
 	bool validTileKey(uint64_t key);
@@ -139,6 +155,7 @@ namespace Multiplayer {
 		uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0;
 		uint8_t z = 7;
 		bool valid() const;
+		uint64_t area() const;
 		bool contains(uint64_t key) const;
 		bool overlaps(const Region& other) const;
 	};
@@ -155,6 +172,7 @@ namespace Multiplayer {
 		bool acquire(uint32_t owner, uint64_t id, Region region, uint64_t now);
 		void release(uint32_t owner, uint64_t id);
 		void releaseOwner(uint32_t owner);
+		void releaseOverlapping(const Region& region);
 		bool expire(uint64_t now);
 		bool permits(uint32_t owner, uint64_t key, uint64_t now) const;
 		const std::vector<Lease>& all() const {

@@ -160,6 +160,10 @@ BinaryNode* NodeFileReadHandle::getNode(BinaryNode* parent) {
 	void* mem;
 	if (unused.empty()) {
 		mem = malloc(sizeof(BinaryNode));
+		if (!mem) {
+			error_code = FILE_READ_ERROR;
+			return nullptr;
+		}
 	} else {
 		mem = unused.top();
 		unused.pop();
@@ -208,7 +212,9 @@ BinaryNode* MemoryNodeFileReadHandle::getRootNode() {
 	local_read_index++; // Skip first NODE_START
 	last_was_start = true;
 	root_node = getNode(nullptr);
-	root_node->load();
+	if (root_node) {
+		root_node->load();
+	}
 	return root_node;
 }
 
@@ -298,7 +304,9 @@ BinaryNode* DiskNodeFileReadHandle::getRootNode() {
 	}
 	if (first == NODE_START) {
 		root_node = getNode(nullptr);
-		root_node->load();
+		if (root_node) {
+			root_node->load();
+		}
 		return root_node;
 	} else {
 		error_code = FILE_SYNTAX_ERROR;
@@ -313,7 +321,8 @@ BinaryNode::BinaryNode(NodeFileReadHandle* file, BinaryNode* parent) :
 	read_offset(0),
 	file(file),
 	parent(parent),
-	child(nullptr) {
+	child(nullptr),
+	depth(parent ? parent->depth + 1 : 0) {
 	////
 }
 
@@ -323,18 +332,29 @@ BinaryNode::~BinaryNode() {
 
 BinaryNode* BinaryNode::getChild() {
 	ASSERT(file);
-	ASSERT(child == nullptr);
+
+	// An open child still owns the stream position; replacing it would leak the
+	// node and read its descendants as if they were children of this one.
+	if (child || file->error_code != FILE_NO_ERROR) {
+		return nullptr;
+	}
 
 	if (file->last_was_start) {
+		if (depth >= MAX_NODE_DEPTH) {
+			file->error_code = FILE_SYNTAX_ERROR;
+			return nullptr;
+		}
 		child = file->getNode(this);
-		child->load();
+		if (child) {
+			child->load();
+		}
 		return child;
 	}
 	return nullptr;
 }
 
 bool BinaryNode::getRAW(uint8_t* ptr, size_t sz) {
-	if (read_offset + sz > data.size()) {
+	if (sz > data.size() - read_offset) {
 		read_offset = data.size();
 		return false;
 	}
@@ -344,7 +364,7 @@ bool BinaryNode::getRAW(uint8_t* ptr, size_t sz) {
 }
 
 bool BinaryNode::getRAW(std::string& str, size_t sz) {
-	if (read_offset + sz > data.size()) {
+	if (sz > data.size() - read_offset) {
 		read_offset = data.size();
 		return false;
 	}
@@ -377,55 +397,74 @@ BinaryNode* BinaryNode::advance() {
 		return nullptr;
 	}
 
+	// We need to move the cursor to the next node, since we're still iterating our child node!
+	skipChildren();
+
+	if (file->error_code != FILE_NO_ERROR || file->last_was_start) {
+		return nullptr;
+	}
+	return readNextSibling();
+}
+
+void BinaryNode::skipChildren() {
 	if (child == nullptr) {
 		getChild();
 	}
-	// We need to move the cursor to the next node, since we're still iterating our child node!
-	while (child) {
-		// both functions modify ourselves and sets child to nullptr, so loop will be aborted
-		// possibly change to assignment ?
-		child->getChild();
-		child->advance();
-	}
 
-	if (file->last_was_start) {
-		return nullptr;
-	} else {
-		// Last was end (0xff)
-		// Read next byte to decide if there is another node following this
-		uint8_t*& cache = file->cache;
-		const size_t& cache_length = file->cache_length;
-		size_t& local_read_index = file->local_read_index;
-
-		if (local_read_index >= cache_length) {
-			if (!file->renewCache()) {
-				// Failed to renew, exit
-				parent->child = nullptr;
-				file->freeNode(this);
-				return nullptr;
+	// An explicit cursor instead of recursion: the skipped subtree comes straight
+	// from the file. On an error the stream stops, so every open node is left to
+	// its parent and the loop must not wait for child to clear.
+	BinaryNode* cursor = child;
+	while (cursor && file->error_code == FILE_NO_ERROR) {
+		if (cursor->child) {
+			cursor = cursor->child;
+		} else if (file->last_was_start) {
+			cursor = cursor->getChild();
+		} else {
+			BinaryNode* owner = cursor->parent;
+			// readNextSibling releases the node when its child-tree has ended
+			if (!cursor->readNextSibling()) {
+				cursor = owner == this ? nullptr : owner;
 			}
 		}
+	}
+}
 
-		const uint8_t op = cache[local_read_index];
-		++local_read_index;
+BinaryNode* BinaryNode::readNextSibling() {
+	// Last was end (0xff)
+	// Read next byte to decide if there is another node following this
+	uint8_t*& cache = file->cache;
+	const size_t& cache_length = file->cache_length;
+	size_t& local_read_index = file->local_read_index;
 
-		if (op == NODE_START) {
-			// Another node follows this.
-			// Load this node as the next one
-			read_offset = 0;
-			data.clear();
-			load();
-			return this;
-		} else if (op == NODE_END) {
-			// End of this child-tree
+	if (local_read_index >= cache_length) {
+		if (!file->renewCache()) {
+			// Failed to renew, exit
 			parent->child = nullptr;
-			file->last_was_start = false;
 			file->freeNode(this);
 			return nullptr;
-		} else {
-			file->error_code = FILE_SYNTAX_ERROR;
-			return nullptr;
 		}
+	}
+
+	const uint8_t op = cache[local_read_index];
+	++local_read_index;
+
+	if (op == NODE_START) {
+		// Another node follows this.
+		// Load this node as the next one
+		read_offset = 0;
+		data.clear();
+		load();
+		return this;
+	} else if (op == NODE_END) {
+		// End of this child-tree
+		parent->child = nullptr;
+		file->last_was_start = false;
+		file->freeNode(this);
+		return nullptr;
+	} else {
+		file->error_code = FILE_SYNTAX_ERROR;
+		return nullptr;
 	}
 }
 
@@ -687,24 +726,14 @@ NodeFileWriteHandle::~NodeFileWriteHandle() {
 }
 
 bool NodeFileWriteHandle::addNode(uint8_t nodetype) {
-	cache[local_write_index++] = NODE_START;
-	if (local_write_index >= cache_size) {
-		renewCache();
-	}
-
-	cache[local_write_index++] = nodetype;
-	if (local_write_index >= cache_size) {
-		renewCache();
-	}
+	writeCacheByte(NODE_START);
+	writeCacheByte(nodetype);
 
 	return error_code == FILE_NO_ERROR;
 }
 
 bool NodeFileWriteHandle::endNode() {
-	cache[local_write_index++] = NODE_END;
-	if (local_write_index >= cache_size) {
-		renewCache();
-	}
+	writeCacheByte(NODE_END);
 
 	return error_code == FILE_NO_ERROR;
 }

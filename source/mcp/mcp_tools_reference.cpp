@@ -343,15 +343,18 @@ namespace mcp {
 					{ "properties", {
 										{ "floor", { { "type", "integer" }, { "minimum", 0 }, { "maximum", 15 } } },
 										{ "includeImage", { { "type", "boolean" }, { "default", false } } },
+										{ "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } },
+										{ "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } },
 									} },
 					{ "additionalProperties", false },
 				},
-				false,
+				true,
 				[](const Json& arguments) {
 					const int requestedFloor = arguments.value("floor", -1);
 					const bool includeImage = arguments.value("includeImage", false);
 
-					return OnGui([requestedFloor, includeImage](const EditorContext& context) {
+					return StructuredResult(OnGui([arguments, requestedFloor, includeImage](const EditorContext& context) {
+						VerifyMapSession(context, arguments);
 						if (!context.editor.hasSelection()) {
 							throw Error("No map tiles are selected. Select an area in NexaMap to capture as an AI style reference.");
 						}
@@ -410,7 +413,7 @@ namespace mcp {
 						result["message"] = "Reference captured. Now select a different target area.";
 
 						return result;
-					});
+					}));
 				},
 			});
 
@@ -423,13 +426,17 @@ namespace mcp {
 					{ "properties", {
 										{ "floor", { { "type", "integer" }, { "minimum", 0 }, { "maximum", 15 } } },
 										{ "allowReferenceSourceOverwrite", { { "type", "boolean" }, { "default", false } } },
+										{ "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } },
+										{ "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } },
 									} },
 					{ "additionalProperties", false },
 				},
-				false,
+				true,
 				[](const Json& arguments) {
 					const bool allowReferenceSourceOverwrite = arguments.value("allowReferenceSourceOverwrite", false);
-					return OnGui([arguments, allowReferenceSourceOverwrite](const EditorContext& context) {
+					RequireSafetyOverrideConfirmation(arguments);
+					return StructuredResult(OnGui([arguments, allowReferenceSourceOverwrite](const EditorContext& context) {
+						VerifyMapSession(context, arguments);
 						const std::optional<ReferenceStyleSnapshot> reference = ReferenceStyleStore::Instance().getSnapshot();
 						if (!reference) {
 							throw Error("No AI style reference has been captured. Call reference_capture before target_capture.");
@@ -459,7 +466,7 @@ namespace mcp {
 						result["captured"] = true;
 						result["message"] = "Target area captured. AI writes are restricted to this exact area.";
 						return result;
-					});
+					}));
 				},
 			});
 
@@ -482,7 +489,7 @@ namespace mcp {
 					if (offset < 0 || limit < 1 || limit > 250) {
 						throw Error("Invalid target page. Use offset >= 0 and limit between 1 and 250.");
 					}
-					return OnGui([offset, limit](const EditorContext& context) {
+					return StructuredResult(OnGui([offset, limit](const EditorContext& context) {
 						const std::optional<TargetAreaSnapshot> target = ReferenceStyleStore::Instance().getTargetSnapshot();
 						if (!target) {
 							throw Error("No target area is selected. Select a target area and call target_capture first.");
@@ -494,7 +501,7 @@ namespace mcp {
 							throw Error("Target area belongs to a stale resource workspace. Capture the target again.");
 						}
 						return BoundJson(FormatTarget(*target, offset, limit));
-					});
+					}));
 				},
 			});
 
@@ -503,10 +510,10 @@ namespace mcp {
 				"target_clear",
 				"Clear the captured writable generation target without clearing the source reference.",
 				EmptyObjectSchema(),
-				false,
+				true,
 				[](const Json&) {
 					ReferenceStyleStore::Instance().clearTarget();
-					return Json { { "cleared", true } };
+					return StructuredResult({ { "cleared", true } });
 				},
 			});
 
@@ -532,7 +539,7 @@ namespace mcp {
 						throw Error("Invalid reference page. Use offset >= 0 and limit between 1 and 250.");
 					}
 
-					return OnGui([detail, offset, limit](const EditorContext& context) {
+					return StructuredResult(OnGui([detail, offset, limit](const EditorContext& context) {
 						const std::optional<ReferenceStyleSnapshot> snapshotCopy = ReferenceStyleStore::Instance().getSnapshot();
 						if (!snapshotCopy) {
 							throw Error("No AI style reference has been captured. Select a reference room in NexaMap and call reference_capture first.");
@@ -557,7 +564,7 @@ namespace mcp {
 							fullResult["borders"] = FormatBorders(snapshot, offset, limit);
 
 							Json cellsJson = Json::array();
-							for (size_t i = offset; i < snapshot.cells.size() && i - offset < limit; ++i) {
+							for (size_t i = offset; i < snapshot.cells.size() && i - offset < static_cast<size_t>(limit); ++i) {
 								const auto& cell = snapshot.cells[i];
 								cellsJson.push_back({
 									{ "x", cell.localX },
@@ -573,7 +580,7 @@ namespace mcp {
 							fullResult["cells"] = std::move(cellsJson);
 							fullResult["cellsPage"] = PageInfo(snapshot.cells.size(), offset, limit);
 							Json sourceMask = Json::array();
-							for (size_t i = offset; i < snapshot.sourceMask.size() && i - offset < limit; ++i) {
+							for (size_t i = offset; i < snapshot.sourceMask.size() && i - offset < static_cast<size_t>(limit); ++i) {
 								sourceMask.push_back(PositionJson(snapshot.sourceMask[i]));
 							}
 							fullResult["sourceMask"] = std::move(sourceMask);
@@ -583,7 +590,7 @@ namespace mcp {
 
 						// Default: summary.
 						return FormatSummary(snapshot, context);
-					});
+					}));
 				},
 			});
 
@@ -652,10 +659,10 @@ namespace mcp {
 				"reference_clear",
 				"Clear the currently captured AI style reference snapshot.",
 				EmptyObjectSchema(),
-				false,
+				true,
 				[](const Json&) {
 					ReferenceStyleStore::Instance().clear();
-					return Json { { "cleared", true } };
+					return StructuredResult({ { "cleared", true } });
 				},
 			});
 
@@ -666,7 +673,7 @@ namespace mcp {
 				EmptyObjectSchema(),
 				false,
 				[](const Json&) {
-					return Json {
+					return StructuredResult({
 						{ "workflow", Json::array({
 										  "1. Call reference_get and reference_render. They describe SOURCE STYLE ONLY and are never a writable destination.",
 										  "2. Call target_get. Its exact positions are the ONLY writable generation destination; never use reference source bounds as a target.",
@@ -687,7 +694,7 @@ namespace mcp {
 									   "Do not guess IDs from outside the loaded resource session.",
 								   }) },
 						{ "exampleCodexPrompt", "Use reference_get/reference_render as SOURCE STYLE ONLY. Call target_get and create a polished teleport room only in its exact positions; never write in the reference source bounds. Match its floors, walls, borders, and decoration density without copying protected metadata. Render and validate the target, then fix any border or path problems inside the target." },
-					};
+					});
 				},
 			});
 
@@ -708,7 +715,7 @@ namespace mcp {
 				[](const Json& arguments) {
 					const Region region = ParseRegion(arguments, 16384);
 
-					return OnGui([region](const EditorContext& context) {
+					return StructuredResult(OnGui([region](const EditorContext& context) {
 						const std::optional<ReferenceStyleSnapshot> snapshotCopy = ReferenceStyleStore::Instance().getSnapshot();
 						if (!snapshotCopy) {
 							throw Error("No AI style reference has been captured. Call reference_capture first.");
@@ -795,7 +802,7 @@ namespace mcp {
 							{ "referenceDecorDensity", std::round(refDecorDensity * 100.0) / 100.0 },
 							{ "decorationDensityDelta", std::round(densityDelta * 100.0) / 100.0 },
 						};
-					});
+					}));
 				},
 			});
 		});

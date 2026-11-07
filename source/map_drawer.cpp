@@ -885,7 +885,7 @@ void MapDrawer::DrawMap() {
 								b = b / 3 * 2;
 							}
 							if (tile->isHouseTile() && options.show_houses) {
-								if ((int)tile->getHouseID() == current_house_id) {
+								if (tile->getHouseID() == current_house_id) {
 									r /= 2;
 								} else {
 									r /= 2;
@@ -1590,7 +1590,7 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 		}
 
 		// primal light
-		if (it.clientID >= 39092 && it.clientID <= 39100 || it.clientID == 39236 || it.clientID == 39367 || it.clientID == 39368) {
+		if ((it.clientID >= 39092 && it.clientID <= 39100) || it.clientID == 39236 || it.clientID == 39367 || it.clientID == 39368) {
 			spr = g_items[SPRITE_LIGHTSOURCE].sprite;
 			red = 0;
 			alpha = 180;
@@ -1598,7 +1598,7 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 	}
 
 	// metaItem, sprite not found or not hidden
-	if (it.isMetaItem() || spr == nullptr || !ephemeral && it.pickupable && !options.show_items) {
+	if (it.isMetaItem() || spr == nullptr || (!ephemeral && it.pickupable && !options.show_items)) {
 		return;
 	}
 
@@ -1629,9 +1629,9 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 		alpha /= 2;
 	}
 
-	Podium* podium = nullptr;
-	if (it.isPodium()) {
-		podium = static_cast<Podium*>(item);
+	// The ItemType says what an ID should be; the object may predate the loaded items.otb.
+	Podium* podium = it.isPodium() ? dynamic_cast<Podium*>(item) : nullptr;
+	if (podium) {
 		if (!podium->hasShowPlatform() && !options.ingame) {
 			if (options.show_tech_items) {
 				alpha /= 2;
@@ -2085,7 +2085,7 @@ void MapDrawer::DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8
 	}
 
 	// primal light
-	if (cid >= 39092 && cid <= 39100 || cid == 39236 || cid == 39367 || cid == 39368) {
+	if ((cid >= 39092 && cid <= 39100) || cid == 39236 || cid == 39367 || cid == 39368) {
 		spr = g_items[SPRITE_LIGHTSOURCE].sprite;
 		r = 0;
 		alpha = alpha / 3 * 2;
@@ -2306,7 +2306,7 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 		}
 
 		if (options.show_houses && tile->isHouseTile()) {
-			if ((int)tile->getHouseID() == current_house_id) {
+			if (tile->getHouseID() == current_house_id) {
 				r /= 2;
 			} else {
 				r /= 2;
@@ -2396,7 +2396,7 @@ void MapDrawer::DrawTile(TileLocation* location, const MapChunkGroundQuad* groun
 					r = 255, g = 255, b = 255;
 
 					if (options.extended_house_shader && options.show_houses && tile->isHouseTile()) {
-						if ((int)tile->getHouseID() == current_house_id) {
+						if (tile->getHouseID() == current_house_id) {
 							r /= 2;
 						} else {
 							r /= 2;

@@ -53,6 +53,11 @@ enum NodeType {
 	ESCAPE_CHAR = 0xfd,
 };
 
+// Deepest node a reader accepts below the root, matching IO::Walk in the
+// migration parser. Node nesting costs 2 bytes per level in a file, and every
+// consumer recurses over it, so it has to be bounded before it reaches them.
+constexpr uint32_t MAX_NODE_DEPTH = 256;
+
 class FileHandle {
 public:
 	FileHandle() :
@@ -157,7 +162,7 @@ public:
 		return getType(u64);
 	}
 	FORCEINLINE bool skip(size_t sz) {
-		if (read_offset + sz > data.size()) {
+		if (sz > data.size() - read_offset) {
 			read_offset = data.size();
 			return false;
 		}
@@ -189,22 +194,26 @@ public:
 protected:
 	template <class T>
 	bool getType(T& ref) {
-		if (read_offset + sizeof(ref) > data.size()) {
+		if (sizeof(ref) > data.size() - read_offset) {
 			read_offset = data.size();
 			return false;
 		}
-		ref = *reinterpret_cast<const T*>(data.data() + read_offset);
+		// Node payloads are packed, so a value can start at any offset.
+		memcpy(&ref, data.data() + read_offset, sizeof(ref));
 
 		read_offset += sizeof(ref);
 		return true;
 	}
 
 	void load();
+	void skipChildren();
+	BinaryNode* readNextSibling();
 	std::string data;
 	size_t read_offset;
 	NodeFileReadHandle* file;
 	BinaryNode* parent;
 	BinaryNode* child;
+	uint32_t depth;
 
 	friend class DiskNodeFileReadHandle;
 	friend class MemoryNodeFileReadHandle;
@@ -281,7 +290,7 @@ public:
 		return local_read_index;
 	}
 	bool isOk() override {
-		return true;
+		return error_code == FILE_NO_ERROR;
 	}
 
 protected:

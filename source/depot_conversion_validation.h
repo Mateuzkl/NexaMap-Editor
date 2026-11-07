@@ -25,7 +25,7 @@ struct DepotConversionState {
 	uint16_t actionId = 0;
 	uint16_t uniqueId = 0;
 	bool townExists = false;
-	std::string townName;
+	std::string townName {};
 
 	[[nodiscard]] bool operator==(const DepotConversionState& other) const = default;
 };

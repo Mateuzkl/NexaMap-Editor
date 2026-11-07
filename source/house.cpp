@@ -220,6 +220,13 @@ void House::removeTile(Tile* tile) {
 	}
 }
 
+void House::forgetTile(const Position& position) {
+	auto it = std::find(tiles.begin(), tiles.end(), position);
+	if (it != tiles.end()) {
+		tiles.erase(it);
+	}
+}
+
 uint8_t House::getEmptyDoorID() const {
 	std::set<uint8_t> taken;
 	for (auto tile_iter = tiles.begin(); tile_iter != tiles.end(); ++tile_iter) {

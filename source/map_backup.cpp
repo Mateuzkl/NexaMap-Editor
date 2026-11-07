@@ -80,6 +80,24 @@ public:
 // MapBackupService
 // ---------------------------------------------------------------------------
 
+std::optional<ItemIdMapping::Direction> MapBackupService::storageConversion(const Map& map) {
+	const ItemIdSpace targetSpace = map.getStorageFormat() == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
+	if (map.getItemIdSpace() == targetSpace) {
+		return std::nullopt;
+	}
+	return targetSpace == ItemIdSpace::Client ? ItemIdMapping::Direction::ServerToClient : ItemIdMapping::Direction::ClientToServer;
+}
+
+void MapBackupService::configureWriter(IOMapOTBM& writer, const Map& map, std::optional<MappingItemIdCodec>& codec) {
+	if (map.getSourceItemMajorVersion() != 0 || map.getSourceItemMinorVersion() != 0) {
+		writer.useItemVersionHeader(map.getSourceItemMajorVersion(), map.getSourceItemMinorVersion());
+	}
+	if (const auto direction = storageConversion(map)) {
+		codec.emplace(*direction);
+		writer.useItemIdCodec(&*codec);
+	}
+}
+
 std::string MapBackupService::generateBackupPath(const std::string& originalPath) {
 	wxFileName fn(wxString::FromUTF8(originalPath));
 
@@ -180,6 +198,8 @@ std::string MapBackupService::createBackup(Editor& editor, wxWindow* parent) {
 
 	FileName backupFile(wxString::FromUTF8(backupPath));
 	IOMapOTBM writer(map.getVersion());
+	std::optional<MappingItemIdCodec> itemIdCodec;
+	configureWriter(writer, map, itemIdCodec);
 	bool success = false;
 	try {
 		success = writer.saveMap(map, backupFile);

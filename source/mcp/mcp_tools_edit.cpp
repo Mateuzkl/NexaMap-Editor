@@ -25,6 +25,13 @@
 
 namespace mcp {
 	namespace {
+		// Spawn, creature, house and similar brushes need a parameter or palette state that
+		// the direct draw path never supplies, and tools such as spawn_manage cover them.
+		bool IsApplicableBrush(const Brush& brush) {
+			const std::string kind = BrushKind(brush);
+			return kind == "ground" || kind == "wall" || kind == "carpet" || kind == "table" || kind == "doodad" || kind == "raw";
+		}
+
 		class ScopedBrushSelection final {
 		public:
 			explicit ScopedBrushSelection(Brush* brush) :
@@ -177,7 +184,7 @@ namespace mcp {
 			ToolRegistry& registry = ToolRegistry::Instance();
 			registry.add({
 				"brush_apply",
-				"Apply a real loaded NexaMap brush directly to explicit positions or a rectangle, preserving autoborders and one undo step.",
+				"Apply a real loaded ground, wall, carpet, table, doodad or raw brush directly to explicit positions or a rectangle, preserving autoborders and one undo step.",
 				{
 					{ "type", "object" },
 					{ "properties", {
@@ -211,11 +218,15 @@ namespace mcp {
 					const bool autoborder = arguments.value("autoborder", true);
 					const bool allowExpansion = arguments.value("allowExpansion", false);
 					const bool allowReferenceSourceOverwrite = arguments.value("allowReferenceSourceOverwrite", false);
+					RequireSafetyOverrideConfirmation(arguments);
 					return StructuredResult(OnGui([=](const EditorContext& context) {
 						VerifyWritableContext(context, arguments);
 						EnforceReferenceTargetBoundary(context, positions, allowReferenceSourceOverwrite);
 						EnforceSelectionBoundary(context, positions, allowExpansion);
 						Brush* brush = FindBrush(brushName);
+						if (!IsApplicableBrush(*brush)) {
+							throw Error("brush_apply supports ground, wall, carpet, table, doodad and raw brushes; " + BrushKind(*brush) + " brushes have their own tools or are editor-only");
+						}
 						for (const Position& position : positions) {
 							if (!brush->canDraw(&context.map, position) && !erase) {
 								throw Error("brush cannot draw at one or more requested positions");
@@ -289,6 +300,7 @@ namespace mcp {
 					const bool preserveProtected = arguments.value("preserveProtected", true);
 					const bool allowExpansion = arguments.value("allowExpansion", false);
 					const bool allowReferenceSourceOverwrite = arguments.value("allowReferenceSourceOverwrite", false);
+					RequireSafetyOverrideConfirmation(arguments);
 					return StructuredResult(OnGui([arguments, preserveProtected, allowExpansion, allowReferenceSourceOverwrite](const EditorContext& context) {
 						VerifyWritableContext(context, arguments);
 						std::vector<Position> positions;

@@ -79,16 +79,11 @@
 #if defined __DEBUG__ || defined _DEBUG || defined __DEBUG_MODE__
 	#undef __DEBUG_MODE__
 	#define __DEBUG_MODE__ 1
-	#undef _DEBUG
-	#define _DEBUG 1
 	#undef __DEBUG__
 	#define __DEBUG__ 1
 #else
 	#ifndef __RELEASE__
 		#define __RELEASE__ 1
-	#endif
-	#ifndef NDEBUG
-		#define NDEBUG 1
 	#endif
 #endif
 
@@ -145,14 +140,14 @@ constexpr int PixelFormatRGBA = 4;
 #define wxstr(str) wxString((str).c_str(), wxConvUTF8)
 
 // increment & decrement definitions
-#define IMPLEMENT_INCREMENT_OP(Type)                     \
-	namespace {                                          \
-		Type& operator++(Type& type) {                   \
-			return (type = static_cast<Type>(type + 1)); \
-		}                                                \
-		Type operator++(Type& type, int) {               \
-			return static_cast<Type>((++type) - 1);      \
-		}                                                \
+#define IMPLEMENT_INCREMENT_OP(Type)                        \
+	namespace {                                             \
+		[[maybe_unused]] Type& operator++(Type& type) {     \
+			return (type = static_cast<Type>(type + 1));    \
+		}                                                   \
+		[[maybe_unused]] Type operator++(Type& type, int) { \
+			return static_cast<Type>((++type) - 1);         \
+		}                                                   \
 	}
 
 #endif

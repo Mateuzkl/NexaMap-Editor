@@ -81,7 +81,7 @@ class ResourceSessionTabTests {
 		check(clipboard.capture(g_gui.copybuffer, source, error), "Could not capture the source session copybuffer");
 		g_gui.CaptureCrossClientCopy(g_gui.copybuffer);
 		activateWithoutUi(destination);
-		for (size_t index = 0; index < g_gui.tabbook->GetTabCount(); ++index) {
+		for (int index = 0; index < g_gui.tabbook->GetTabCount(); ++index) {
 			auto* tab = dynamic_cast<MapTab*>(g_gui.tabbook->GetTab(index));
 			if (tab && tab->GetResourceSession() == destination) {
 				g_gui.tabbook->SetFocusedTab(index);

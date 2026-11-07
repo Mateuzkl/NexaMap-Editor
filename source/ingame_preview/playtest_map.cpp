@@ -29,7 +29,8 @@ namespace Playtest {
 				result.blocked = true;
 				return;
 			}
-			unsigned flags = (type.floorChangeDown ? Down : 0) | (type.floorChangeNorth ? North : 0) | (type.floorChangeEast ? East : 0) | (type.floorChangeSouth ? South : 0) | (type.floorChangeWest ? West : 0);
+			const auto flagIf = [](bool enabled, unsigned flag) { return enabled ? flag : 0u; };
+			unsigned flags = flagIf(type.floorChangeDown, Down) | flagIf(type.floorChangeNorth, North) | flagIf(type.floorChangeEast, East) | flagIf(type.floorChangeSouth, South) | flagIf(type.floorChangeWest, West);
 			result.floorFlags |= flags;
 			if (type.isFloorChange() && flags == 0) {
 				result.use = UseKind::UnknownFloorChange;

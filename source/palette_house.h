@@ -53,6 +53,8 @@ protected:
 	void SelectHouse(size_t index);
 
 	House* GetCurrentlySelectedHouse() const;
+	House* GetHouseAt(int index) const;
+	Town* GetTownAt(size_t index) const;
 
 	void SelectHouseBrush();
 	void SelectExitBrush();
@@ -102,7 +104,7 @@ public:
 
 protected:
 	Map* map;
-	House* what_house;
+	uint32_t house_id;
 
 	wxString house_name, house_rent;
 

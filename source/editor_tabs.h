@@ -43,6 +43,7 @@ public:
 	// Events
 	void OnNotebookPageChanging(wxAuiNotebookEvent& evt);
 	void OnNotebookPageClose(wxAuiNotebookEvent& evt);
+	void OnNotebookPageClosed(wxAuiNotebookEvent& evt);
 	void OnNotebookPageChanged(wxAuiNotebookEvent& evt);
 	void OnNotebookLeftDown(wxMouseEvent& evt);
 	void OnSwitchEditorMode(EditorMode mode);
@@ -53,6 +54,7 @@ protected:
 	int GetPageIndexForTab(int tabIndex) const;
 	int GetTabIndexForPage(int pageIndex) const;
 	void RequestNewMapTab();
+	void QuerySaveAndClosePage(wxWindow* page);
 	wxAuiNotebook* notebook;
 	wxWindow* addPage = nullptr;
 	bool initializing = true;

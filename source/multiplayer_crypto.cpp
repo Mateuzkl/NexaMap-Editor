@@ -12,6 +12,7 @@
 	#include <openssl/rand.h>
 #endif
 #include <algorithm>
+#include <string_view>
 #include <vector>
 
 namespace Multiplayer {
@@ -83,30 +84,81 @@ namespace Multiplayer {
 #endif
 		return result;
 	}
-	Digest authenticate(const std::string& password, const Identity& session, std::span<const uint8_t> challenge) {
-		Digest key {}, result {};
+	Digest deriveSessionKey(const std::string& password, const Identity& session) {
+		Digest key {};
 #ifdef _WIN32
 		Algorithm alg(BCRYPT_ALG_HANDLE_HMAC_FLAG);
 		if (BCryptDeriveKeyPBKDF2(alg.handle, reinterpret_cast<PUCHAR>(const_cast<char*>(password.data())), static_cast<ULONG>(password.size()), const_cast<PUCHAR>(session.data()), static_cast<ULONG>(session.size()), 100000, key.data(), static_cast<ULONG>(key.size()), 0) < 0) {
 			throw Error("Password key derivation failed.");
 		}
-		const auto status = HashBufferWithBCrypt(alg.handle, key.data(), static_cast<ULONG>(key.size()), const_cast<PUCHAR>(challenge.data()), static_cast<ULONG>(challenge.size()), result.data(), static_cast<ULONG>(result.size()));
-		SecureZeroMemory(key.data(), key.size());
-		if (status < 0) {
-			throw Error("Authentication failed.");
-		}
 #else
 		if (PKCS5_PBKDF2_HMAC(password.data(), static_cast<int>(password.size()), session.data(), static_cast<int>(session.size()), 100000, EVP_sha256(), static_cast<int>(key.size()), key.data()) != 1) {
 			throw Error("Password key derivation failed.");
 		}
+#endif
+		return key;
+	}
+	Digest hmacSha256(const Digest& key, std::span<const uint8_t> data) {
+		Digest result {};
+#ifdef _WIN32
+		// Opening a provider is slow and this runs once per network frame.
+		static Algorithm alg(BCRYPT_ALG_HANDLE_HMAC_FLAG);
+		if (HashBufferWithBCrypt(alg.handle, const_cast<PUCHAR>(key.data()), static_cast<ULONG>(key.size()), const_cast<PUCHAR>(data.data()), static_cast<ULONG>(data.size()), result.data(), static_cast<ULONG>(result.size())) < 0) {
+			throw Error("HMAC-SHA256 failed.");
+		}
+#else
 		unsigned int size = 0;
-		auto ok = HMAC(EVP_sha256(), key.data(), static_cast<int>(key.size()), challenge.data(), challenge.size(), result.data(), &size);
-		OPENSSL_cleanse(key.data(), key.size());
-		if (!ok || size != result.size()) {
-			throw Error("Authentication failed.");
+		if (!HMAC(EVP_sha256(), key.data(), static_cast<int>(key.size()), data.data(), data.size(), result.data(), &size) || size != result.size()) {
+			throw Error("HMAC-SHA256 failed.");
 		}
 #endif
 		return result;
+	}
+	HandshakeKeys deriveHandshake(const Digest& sessionKey, const Identity& session, std::span<const uint8_t> nonce, std::span<const uint8_t> hello) {
+		Writer exchange(MaxPacket);
+		exchange.raw(session);
+		exchange.bytes(nonce);
+		exchange.bytes(hello);
+		const auto transcript = sha256(exchange.data);
+		const auto derive = [&](std::string_view label) {
+			Writer input;
+			input.raw({ reinterpret_cast<const uint8_t*>(label.data()), label.size() });
+			input.raw(transcript);
+			return hmacSha256(sessionKey, input.data);
+		};
+		return { derive("NexaMap-2 client proof"), derive("NexaMap-2 host proof"), derive("NexaMap-2 client to host"), derive("NexaMap-2 host to client") };
+	}
+	namespace {
+		Digest frameMac(const Digest& key, uint64_t sequence, std::span<const uint8_t> body) {
+			Writer input(MaxPacket + sizeof(sequence));
+			input.u64(sequence);
+			input.raw(body);
+			return hmacSha256(key, input.data);
+		}
+	}
+	Bytes sealFrame(const Digest& key, uint64_t sequence, Packet type, std::span<const uint8_t> payload) {
+		if (payload.size() + 1 + MacSize > MaxPacket) {
+			throw Error("Network packet too large.");
+		}
+		Writer out(MaxPacket + 4);
+		out.u32(static_cast<uint32_t>(payload.size() + 1 + MacSize));
+		out.u8(static_cast<uint8_t>(type));
+		out.raw(payload);
+		out.raw(frameMac(key, sequence, std::span(out.data).subspan(4)));
+		return std::move(out.data);
+	}
+	bool openFrame(const Digest& key, uint64_t sequence, Bytes& frameBody) {
+		if (frameBody.size() <= MacSize) {
+			return false;
+		}
+		const auto bodySize = frameBody.size() - MacSize;
+		Digest received;
+		std::copy(frameBody.begin() + bodySize, frameBody.end(), received.begin());
+		if (!secureEqual(received, frameMac(key, sequence, std::span(frameBody).first(bodySize)))) {
+			return false;
+		}
+		frameBody.resize(bodySize);
+		return true;
 	}
 	bool secureEqual(const Digest& a, const Digest& b) {
 		volatile uint8_t difference = 0;
@@ -114,6 +166,13 @@ namespace Multiplayer {
 			difference = static_cast<uint8_t>(difference | (a[i] ^ b[i]));
 		}
 		return difference == 0;
+	}
+	void wipe(std::span<uint8_t> secret) {
+#ifdef _WIN32
+		SecureZeroMemory(secret.data(), secret.size());
+#else
+		OPENSSL_cleanse(secret.data(), secret.size());
+#endif
 	}
 	std::string hex(std::span<const uint8_t> bytes) {
 		constexpr char digits[] = "0123456789abcdef";

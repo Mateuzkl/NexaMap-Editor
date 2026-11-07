@@ -52,6 +52,10 @@
 #include "../brushes/door_archway_small.xpm"
 
 // All 133 template colors
+// Most images one DAT object or appearance can declare. Matches the migration
+// parser (classic_resource_catalog.cpp); the real clients checked stay far below.
+static constexpr uint64_t MAX_SPRITES_PER_OBJECT = 262144;
+
 static uint32_t TemplateOutfitLookupTable[] = {
 	0xFFFFFF,
 	0xFFD4BF,
@@ -846,12 +850,11 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	uint16_t effect_count, distance_count;
 
 	uint32_t datSignature;
-	file.getU32(datSignature);
 	// get max id
-	file.getU16(item_count);
-	file.getU16(creature_count);
-	file.getU16(effect_count);
-	file.getU16(distance_count);
+	if (!file.getU32(datSignature) || !file.getU16(item_count) || !file.getU16(creature_count) || !file.getU16(effect_count) || !file.getU16(distance_count)) {
+		error += datafile.GetFullPath() + " is truncated";
+		return false;
+	}
 
 	uint32_t minID = 100; // items start with id 100
 	// We don't load distance/effects, if we would, just add effect_count & distance_count here
@@ -865,7 +868,8 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		has_frame_groups = dat_format >= DAT_FORMAT_1057;
 	}
 
-	uint16_t id = minID;
+	// maxID can exceed 65535, which a 16 bit counter would never pass
+	uint32_t id = minID;
 	// loop through all ItemDatabase until we reach the end of file
 	while (id <= maxID) {
 		auto spritePrototype = std::make_unique<GameSprite>();
@@ -904,23 +908,25 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 			GameSprite* target = parsedGroup.get();
 
 			// Size and GameSprite data
-			file.getByte(target->width);
-			file.getByte(target->height);
+			bool layoutRead = file.getByte(target->width) && file.getByte(target->height);
 
 			// Skipping the exact size
 			if ((target->width > 1) || (target->height > 1)) {
 				file.skip(1);
 			}
 
-			file.getU8(target->layers); // Number of blendframes (some sprites consist of several merged sprites)
-			file.getU8(target->pattern_x);
-			file.getU8(target->pattern_y);
+			layoutRead = layoutRead && file.getU8(target->layers); // Number of blendframes (some sprites consist of several merged sprites)
+			layoutRead = layoutRead && file.getU8(target->pattern_x) && file.getU8(target->pattern_y);
 			if (dat_format <= DAT_FORMAT_74) {
 				target->pattern_z = 1;
 			} else {
-				file.getU8(target->pattern_z);
+				layoutRead = layoutRead && file.getU8(target->pattern_z);
 			}
-			file.getU8(target->frames); // Length of animation
+			layoutRead = layoutRead && file.getU8(target->frames); // Length of animation
+			if (!layoutRead) {
+				error += datafile.GetFullPath() + " is truncated";
+				return false;
+			}
 
 			if (target->frames > 1) {
 				uint8_t async = 0;
@@ -934,8 +940,8 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 				target->animator = newd Animator(target->frames, start_frame, loop_count, async == 1);
 				if (has_frame_durations) {
 					for (int i = 0; i < target->frames; i++) {
-						uint32_t min;
-						uint32_t max;
+						uint32_t min = 0;
+						uint32_t max = 0;
 						file.getU32(min);
 						file.getU32(max);
 						FrameDuration* frame_duration = target->animator->getFrameDuration(i);
@@ -945,17 +951,29 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 				}
 			}
 
-			target->numsprites = (int)target->width * (int)target->height * (int)target->layers * (int)target->pattern_x * (int)target->pattern_y * target->pattern_z * (int)target->frames;
+			const uint64_t spriteCount = static_cast<uint64_t>(target->width) * target->height * target->layers * target->pattern_x * target->pattern_y * target->pattern_z * target->frames;
+			// The ids of a rejected object cannot be trusted to mark where the next
+			// one starts, so nothing after it can be read either.
+			if (spriteCount > MAX_SPRITES_PER_OBJECT) {
+				error += wxString::Format("Sprite %u declares %llu images, more than the supported %llu.", id, static_cast<unsigned long long>(spriteCount), static_cast<unsigned long long>(MAX_SPRITES_PER_OBJECT));
+				return false;
+			}
+			target->numsprites = static_cast<uint32_t>(spriteCount);
 
 			// Read the sprite ids
 			for (uint32_t i = 0; i < target->numsprites; ++i) {
-				uint32_t sprite_id;
+				uint32_t sprite_id = 0;
+				bool spriteIdRead;
 				if (is_extended) {
-					file.getU32(sprite_id);
+					spriteIdRead = file.getU32(sprite_id);
 				} else {
 					uint16_t u16 = 0;
-					file.getU16(u16);
+					spriteIdRead = file.getU16(u16);
 					sprite_id = u16;
+				}
+				if (!spriteIdRead) {
+					error += datafile.GetFullPath() + " is truncated";
+					return false;
 				}
 
 				if (image_space[sprite_id] == nullptr) {
@@ -964,6 +982,13 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 					image_space[sprite_id] = img;
 				}
 				target->spriteList.push_back(static_cast<GameSprite::NormalImage*>(image_space[sprite_id]));
+			}
+
+			// A zero dimension is a divisor everywhere the sprite is drawn. It reads
+			// no ids, so the objects after it are still in place.
+			if (target->numsprites == 0) {
+				warnings.push_back(wxString::Format("Sprite %u has an empty layout and was skipped.", id));
+				continue;
 			}
 
 			if (group_type == FRAME_GROUP_IDLE && !idleSprite) {
@@ -1047,6 +1072,10 @@ bool GraphicManager::loadAppearanceSprite(
 	}
 
 	const SpriteInfo& spriteInfo = frameGroup->sprite_info();
+	if (spriteInfo.sprite_id_size() == 0) {
+		warnings.push_back(wxString::Format("Appearance %u has no sprite IDs.", appearance.id()));
+		return true;
+	}
 	const ClientSpriteSheetPtr firstSheet = g_spriteAppearances.getSheetBySpriteId(spriteInfo.sprite_id(0));
 	if (!firstSheet) {
 		error = wxString::Format(
@@ -1106,6 +1135,13 @@ bool GraphicManager::loadAppearanceSprite(
 	}
 
 	const uint64_t expectedSourceCount = sourceSpritesPerFrame * sprite->frames;
+	// The ID list is not the bound here: short lists are filled by reusing IDs, so
+	// a few protobuf bytes can declare up to 255^4 sprites.
+	if (expectedSourceCount * tileWidth * tileHeight > MAX_SPRITES_PER_OBJECT) {
+		warnings.push_back(wxString::Format("Appearance %u declares %llu sprites and was skipped.", appearance.id(), static_cast<unsigned long long>(expectedSourceCount)));
+		delete sprite;
+		return true;
+	}
 	if (expectedSourceCount != static_cast<uint64_t>(spriteInfo.sprite_id_size())) {
 		warnings.push_back(wxString::Format("Appearance %u declares %llu logical sprites but contains %d sprite IDs; available IDs will be reused safely.", appearance.id(), static_cast<unsigned long long>(expectedSourceCount), spriteInfo.sprite_id_size()));
 	}
@@ -1517,6 +1553,15 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 		uint16_t u16 = 0;
 		safe_get(U16, u16);
 		total_pics = u16;
+	}
+
+	// The file holds a 4 byte offset per sprite. Checking that here sizes the
+	// table below by what is really there and not by a header value, while no
+	// count of real sprites can fail it.
+	const uint64_t headerBytes = sizeof(sprSignature) + (is_extended ? sizeof(uint32_t) : sizeof(uint16_t));
+	if (headerBytes + static_cast<uint64_t>(total_pics) * sizeof(uint32_t) > fh.size()) {
+		error = wxString::Format("%s declares %u sprites but is too small to hold them.", datafile.GetFullPath(), total_pics);
+		return false;
 	}
 
 	if (!g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
@@ -2012,7 +2057,18 @@ uint8_t GameSprite::getMiniMapColor() const {
 }
 
 int GameSprite::getIndex(int width, int height, int layer, int pattern_x, int pattern_y, int pattern_z, int frame) const {
-	return ((((((frame % this->frames) * this->pattern_z + pattern_z) * this->pattern_y + pattern_y) * this->pattern_x + pattern_x) * this->layers + layer) * this->height + height) * this->width + width;
+	const int wrappedFrame = this->frames == 0 ? 0 : frame % this->frames;
+	return (((((wrappedFrame * this->pattern_z + pattern_z) * this->pattern_y + pattern_y) * this->pattern_x + pattern_x) * this->layers + layer) * this->height + height) * this->width + width;
+}
+
+bool GameSprite::wrapImageIndex(uint32_t& index) const {
+	if (numsprites == 0) {
+		return false;
+	}
+	if (index >= numsprites) {
+		index = (numsprites == 1) ? 0 : (index % numsprites);
+	}
+	return index < spriteList.size();
 }
 
 GLuint GameSprite::getHardwareID(int _x, int _y, int _layer, int _count, int _pattern_x, int _pattern_y, int _pattern_z, int _frame) {
@@ -2022,12 +2078,8 @@ GLuint GameSprite::getHardwareID(int _x, int _y, int _layer, int _count, int _pa
 	} else {
 		v = ((((((_frame)*pattern_y + _pattern_y) * pattern_x + _pattern_x) * layers + _layer) * height + _y) * width + _x);
 	}
-	if (v >= numsprites) {
-		if (numsprites == 1) {
-			v = 0;
-		} else {
-			v %= numsprites;
-		}
+	if (!wrapImageIndex(v)) {
+		return 0;
 	}
 	return spriteList[v]->getHardwareID();
 }
@@ -2089,12 +2141,8 @@ GameSprite::TemplateImage* GameSprite::getTemplateImage(int sprite_index, const 
 
 GLuint GameSprite::getHardwareID(int _x, int _y, int _dir, int _addon, int _pattern_z, const Outfit& _outfit, int _frame) {
 	uint32_t v = getIndex(_x, _y, 0, _dir, _addon, _pattern_z, _frame);
-	if (v >= numsprites) {
-		if (numsprites == 1) {
-			v = 0;
-		} else {
-			v %= numsprites;
-		}
+	if (!wrapImageIndex(v)) {
+		return 0;
 	}
 	if (layers > 1) { // Template
 		TemplateImage* img = getTemplateImage(v, _outfit);
@@ -2105,10 +2153,11 @@ GLuint GameSprite::getHardwareID(int _x, int _y, int _dir, int _addon, int _patt
 
 GameSprite::SpriteTex GameSprite::getSpriteTex(int _x, int _y, int _dir, int _addon, int _pattern_z, const Outfit& _outfit, int _frame) {
 	uint32_t v = getIndex(_x, _y, 0, _dir, _addon, _pattern_z, _frame);
-	if (v >= numsprites) {
-		v = (numsprites == 1) ? 0 : (v % numsprites);
-	}
 	SpriteTex st;
+	if (!wrapImageIndex(v)) {
+		g_gui.gfx.markTextureMissing();
+		return st;
+	}
 	if (layers > 1) {
 		TemplateImage* img = getTemplateImage(v, _outfit);
 		st.texture = img->getHardwareID();
@@ -2138,7 +2187,10 @@ wxMemoryDC* GameSprite::getDC(SpriteSize size) {
 		for (uint8_t l = 0; l < layers; l++) {
 			for (uint8_t w = 0; w < width; w++) {
 				for (uint8_t h = 0; h < height; h++) {
-					const int i = getIndex(w, h, l, 0, 0, 0, 0);
+					const uint32_t i = getIndex(w, h, l, 0, 0, 0, 0);
+					if (i >= spriteList.size()) {
+						continue;
+					}
 					uint8_t* data = spriteList[i]->getRGBData();
 					if (data) {
 						{
@@ -2697,7 +2749,17 @@ void GameSprite::TemplateImage::colorizePixel(uint8_t color, uint8_t& red, uint8
 	blue = (uint8_t)(blue * (bo / 255.f));
 }
 
+bool GameSprite::TemplateImage::hasSourceImages() const {
+	// Indexes wrapped by the caller can land on a later layer, where the template
+	// image of the last one falls past the list.
+	const size_t templateIndex = static_cast<size_t>(sprite_index) + static_cast<size_t>(parent->height) * parent->width;
+	return sprite_index >= 0 && templateIndex < parent->spriteList.size();
+}
+
 uint8_t* GameSprite::TemplateImage::getRGBData() {
+	if (!hasSourceImages()) {
+		return nullptr;
+	}
 	uint8_t* rgbdata = parent->spriteList[sprite_index]->getRGBData();
 	uint8_t* template_rgbdata = parent->spriteList[sprite_index + parent->height * parent->width]->getRGBData();
 
@@ -2749,6 +2811,9 @@ uint8_t* GameSprite::TemplateImage::getRGBData() {
 }
 
 uint8_t* GameSprite::TemplateImage::getRGBAData() {
+	if (!hasSourceImages()) {
+		return nullptr;
+	}
 	uint8_t* rgbadata = parent->spriteList[sprite_index]->getRGBAData();
 	uint8_t* template_rgbdata = parent->spriteList[sprite_index + parent->height * parent->width]->getRGBData();
 

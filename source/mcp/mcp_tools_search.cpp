@@ -77,7 +77,7 @@ namespace mcp {
 					}
 					const size_t limit = std::min<size_t>(arguments.value("limit", 100), 1000);
 					const size_t offset = arguments.value("offset", 0);
-					return StructuredResult(OnGui([arguments, region, type, limit, offset](const EditorContext& context) {
+					return UntrustedMapResult(OnGui([arguments, region, type, limit, offset](const EditorContext& context) {
 						Json matches = Json::array();
 						size_t total = 0;
 						auto append = [&](const Position& position, Json detail) { if (total++ >= offset && matches.size() < limit){ matches.push_back({ { "position", PositionJson(position) }, { "detail", std::move(detail) } });

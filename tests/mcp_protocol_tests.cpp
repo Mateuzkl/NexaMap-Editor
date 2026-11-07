@@ -52,6 +52,9 @@ int main() {
 	Require(initialize.has_value(), "initialize should respond");
 	Require((*initialize)["result"]["protocolVersion"] == "2025-06-18", "protocol version should be advertised");
 
+	const auto structuredId = protocol.handle({ { "id", mcp::Json::array({ 1 }) }, { "method", "ping" } });
+	Require(structuredId.has_value() && (*structuredId)["error"]["code"] == -32600 && (*structuredId)["id"].is_null(), "structured ids should be rejected");
+
 	const auto listed = protocol.handle({ { "jsonrpc", "2.0" }, { "id", 2 }, { "method", "tools/list" } });
 	Require(listed.has_value() && (*listed)["result"]["tools"].size() == 3, "tools/list should return registered tools");
 

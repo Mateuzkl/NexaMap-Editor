@@ -57,6 +57,8 @@ public:
 
 	bool unserializeItemNode_OTBM(const IOMap& maphandle, BinaryNode* node) override;
 	bool serializeItemNode_OTBM(const IOMap& maphandle, NodeFileWriteHandle& f) const override;
+	// Reads the first child node and all its siblings into the contents.
+	bool readChildNodes_OTBM(const IOMap& maphandle, BinaryNode* child);
 
 protected:
 	ItemVector contents;
@@ -157,7 +159,7 @@ public:
 		outfit = newOutfit;
 	}
 
-	const uint8_t getDirection() {
+	uint8_t getDirection() {
 		return direction;
 	}
 	void setDirection(uint8_t newDirection) {

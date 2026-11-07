@@ -162,8 +162,9 @@ void Tile::merge(Tile* other) {
 	markRenderChunkChanged();
 	other->markRenderChunkChanged();
 
-	if (other->isPZ()) {
-		setPZ(true);
+	setMapFlags(getMapFlags() | other->getMapFlags());
+	for (unsigned int zone : other->zones) {
+		addZone(zone);
 	}
 	if (other->house_id) {
 		house_id = other->house_id;

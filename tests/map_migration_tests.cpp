@@ -162,7 +162,7 @@ namespace {
 			TextFile(paths.otfi, std::string("DatSpr\n  extended: ") + (extended ? "true" : "false") + "\n  transparency: " + (alpha ? "true" : "false") + "\n  frame-durations: " + (durations ? "true" : "false") + "\n  frame-groups: " + (groups ? "true" : "false") + "\n");
 		}
 	};
-	Path MapFile(const Path& root, bool nested = true, bool sidecars = true, uint16_t ground = 100, uint16_t container = 101) {
+	Path MapFile(const Path& root, bool nested = true, bool sidecars = true, uint16_t ground = 100, uint16_t container = 101, const char* spawnReference = nullptr) {
 		Node map { { 0 }, {} };
 		U32(map.data, 3);
 		U16(map.data, 512);
@@ -175,7 +175,7 @@ namespace {
 		if (sidecars) {
 			for (const auto& [attribute, name] : std::array<std::pair<uint8_t, const char*>, 4> { { { 11, "world-spawn.xml" }, { 13, "world-house.xml" }, { 23, "world-npc.xml" }, { 24, "world-zones.xml" } } }) {
 				data.data.push_back(attribute);
-				IO::AppendText(data.data, name);
+				IO::AppendText(data.data, attribute == 11 && spawnReference ? spawnReference : name);
 				TextFile(root / name, std::string("<fixture name=\"") + name + "\"/>\n");
 			}
 		}
@@ -257,6 +257,33 @@ namespace {
 		Check(FingerprintFile(plan.options.sourceMap).sha256 == sourceDigest && FingerprintFile(originalSource).sha256 == assetDigest, "source map and assets untouched");
 		Check(std::filesystem::exists(result.jsonReport) && std::filesystem::exists(result.csvReport), "JSON and CSV reports published");
 		std::cout << "PASS whole map: two floors, nested containers, action/unique IDs, text, door, teleport, sidecars, different DAT layers and RGB/RGBA\n";
+	}
+	void TestSidecarsStayInMapFolder(const Path& root) {
+		Set source(root / "source", Source);
+		const auto directory = root / "maps" / "map";
+		std::filesystem::create_directories(directory);
+		TextFile(root / "maps" / "world-spawn.xml", "<outside/>\n");
+		const auto map = MapFile(directory, true, true, 100, 101, "../world-spawn.xml");
+		const auto inventory = InspectMap(map, LoadCatalog(source.paths));
+		Check(inventory.sidecars.size() == 4 && inventory.sidecars[0].reference == "world-spawn.xml", "a traversal reference is reduced to its file name");
+		Check(inventory.sidecars[0].file.sha256 == FingerprintFile(directory / "world-spawn.xml").sha256, "the sidecar next to the map is used, not the one the header points at");
+		std::cout << "PASS sidecar references cannot leave the map folder\n";
+	}
+	void TestImplicitSidecars(const Path& root) {
+		Set source(root / "source", Source), target(root / "target", Target, true, true);
+		const auto directory = root / "map";
+		std::filesystem::create_directories(directory);
+		TextFile(directory / "world-zones.xml", "<zones/>\n");
+		TextFile(directory / "world-waypoint-groups.xml", "<waypointgroups/>\n");
+		auto plan = FixturePlan(directory, source, target, true, false);
+		Check(plan.error.empty(), plan.error.c_str());
+		Check(plan.inventory.sidecars.size() == 2, "convention-named sidecars are part of the inventory");
+		const auto result = Convert(plan);
+		Check(result.success, result.error.c_str());
+		const auto output = result.outputMap.parent_path();
+		Check(IO::ReadFile(output / "convertido-zones.xml", 100) == IO::ReadFile(directory / "world-zones.xml", 100), "zone sidecar was not copied");
+		Check(IO::ReadFile(output / "convertido-waypoint-groups.xml", 100) == IO::ReadFile(directory / "world-waypoint-groups.xml", 100), "waypoint groups were not copied");
+		std::cout << "PASS convention-named zone and waypoint group sidecars follow the map\n";
 	}
 	void TestAmbiguityAndRoles(const Path& root) {
 		Set source(root / "source", Source);
@@ -831,6 +858,8 @@ int main() {
 		Check(Sha256({}) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256 empty known vector");
 		Check(Sha256({ 'a', 'b', 'c' }) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 abc known vector");
 		TestWholeMap(root / "whole");
+		TestImplicitSidecars(root / "implicit");
+		TestSidecarsStayInMapFolder(root / "traversal");
 		TestAmbiguityAndRoles(root / "ambiguity");
 		TestAnimationAndMissing(root / "animation");
 		TestCancellationAndStale(root / "cancellation");

@@ -1,5 +1,5 @@
 #include "migration_io.h"
-#include "../ext/pugixml.hpp"
+#include <pugixml.hpp>
 #include <algorithm>
 #include <bit>
 #include <cmath>

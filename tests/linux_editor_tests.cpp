@@ -17,6 +17,7 @@
 #include "map_display.h"
 #include "gl_renderer.h"
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <wx/evtloop.h>
 #include <wx/uiaction.h>
@@ -32,10 +33,27 @@ Editor::Editor(CopyBuffer& buffer, std::nullptr_t) :
 }
 
 namespace {
+	// ctest SKIP_RETURN_CODE: everything else ran, but native input was not tested.
+	constexpr int SkippedExitCode = 77;
+
 	void require(bool condition, const char* message) {
 		if (!condition) {
 			throw std::runtime_error(message);
 		}
+	}
+
+	// A desktop Wayland compositor redirects X11 windows, so reading them back through
+	// the XWayland root window returns black even for plain GTK widgets. WSLg does not.
+	bool rootWindowCaptureAvailable() {
+		return !std::getenv("WAYLAND_DISPLAY") || std::filesystem::exists("/mnt/wslg");
+	}
+
+	bool nativeInputAvailable() {
+#if wxUSE_UIACTIONSIMULATOR
+		return true;
+#else
+		return std::system("command -v xdotool >/dev/null 2>&1") == 0;
+#endif
 	}
 
 	void roundtrip(const std::filesystem::path& directory) {
@@ -212,6 +230,9 @@ namespace {
 				wxMilliSleep(10);
 			}
 			require(painted, "selected map canvas received paint");
+			if (!rootWindowCaptureAvailable()) {
+				return;
+			}
 			// Read the displayed X11 window, not the GL backbuffer: orphaned EGL
 			// surfaces report successful swaps while their visible window is gray.
 			wxScreenDC screen;
@@ -230,7 +251,11 @@ namespace {
 		checkVisible(firstCanvas);
 		tabs->SetFocusedTab(1);
 		checkVisible(second->GetCanvas());
-		std::cout << "PASS visible OpenGL map tabs: new view, switching and resize\n";
+		if (rootWindowCaptureAvailable()) {
+			std::cout << "PASS visible OpenGL map tabs: new view, switching and resize\n";
+		} else {
+			std::cerr << "SKIP visible canvas pixels: root window capture is unavailable under Wayland\n";
+		}
 		// Dispose the canvases while the local context still exists.
 		tabs->DeleteTab(1);
 		tabs->DeleteTab(0);
@@ -260,6 +285,7 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 		std::abort();
 	});
 	int result = 0;
+	const bool testNativeInput = nativeInputAvailable();
 	{
 		wxEventLoop loop;
 		wxEventLoopActivator activate(&loop);
@@ -267,7 +293,11 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 			g_settings.load();
 			require(Settings::getConfigObject().Read("/MigrationProbe", "") == "legacy-preserved", "legacy preferences imported");
 			roundtrip(directory);
-			hotkeys();
+			if (testNativeInput) {
+				hotkeys();
+			} else {
+				std::cerr << "SKIP native GTK input: xdotool is not installed\n";
+			}
 			canvasPresentation();
 			g_settings.save(true);
 			require(std::filesystem::is_regular_file(directory / "nexamap/editor.cfg"), "migrated preferences saved under XDG_CONFIG_HOME");
@@ -279,5 +309,8 @@ int RunMultiplayerSessionTests(int argc, char** argv) {
 	}
 	std::filesystem::remove_all(directory);
 	wxEntryCleanup();
+	if (result == 0 && (!testNativeInput || !rootWindowCaptureAvailable())) {
+		return std::getenv("NEXAMAP_REQUIRE_NATIVE_INPUT_TESTS") ? 1 : SkippedExitCode;
+	}
 	return result;
 }

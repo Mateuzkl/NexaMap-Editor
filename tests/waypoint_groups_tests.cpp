@@ -52,7 +52,7 @@ namespace {
 		map.setHeight(256);
 		check(map.waypoints.addWaypoint(waypoint("spawn", Position(70, 70, 7))), "waypoint should be added");
 		Waypoint* identity = map.waypoints.getWaypoint("spawn");
-		const int count = map.getTileL(identity->pos)->getWaypointCount();
+		const size_t count = map.getTileL(identity->pos)->getWaypointCount();
 
 		check(map.waypoints.addCategory("Routes"), "category should be added");
 		check(map.waypoints.setWaypointCategory("spawn", "Routes"), "waypoint should be categorized");

@@ -275,7 +275,7 @@ namespace {
 
 		pugi::xml_document document;
 		QuickReplaceCheck(
-			document.load("<brush name='Complete statue' lookid='1600'><alternate><composite chance='100'><tile x='0' y='0'><item id='600'/></tile><tile x='1' y='0'><item id='601'/></tile></composite></alternate></brush>"),
+			document.load_string("<brush name='Complete statue' lookid='1600'><alternate><composite chance='100'><tile x='0' y='0'><item id='600'/></tile><tile x='1' y='0'><item id='601'/></tile></composite></alternate></brush>"),
 			"Doodad brush XML fixture failed"
 		);
 		DoodadBrush statue;

@@ -1,6 +1,6 @@
 #include "spawn_xml_converter.h"
 
-#include "ext/pugixml.hpp"
+#include <pugixml.hpp>
 
 #include <chrono>
 #include <filesystem>

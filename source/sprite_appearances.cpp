@@ -15,6 +15,9 @@ namespace {
 	constexpr size_t PixelBytes = SpriteSheetWidth * SpriteSheetHeight * BytesPerPixel;
 	constexpr size_t DecodeBufferBytes = PixelBytes + 256;
 	constexpr size_t MaximumResidentSheets = 64;
+	// The decoder allocates the dictionary a file declares, up to 4 GiB, before
+	// reading any data. Sheets from real clients declare 32 MiB.
+	constexpr uint64_t MaximumLzmaDecoderBytes = 256 * 1024 * 1024;
 
 	bool ReadByte(const std::vector<uint8_t>& input, size_t& offset, uint8_t& value) {
 		if (offset >= input.size()) {
@@ -187,6 +190,10 @@ bool SpriteAppearances::decodeSpriteSheet(const ClientSpriteSheetPtr& sheet, std
 		{ LZMA_FILTER_LZMA1, &options },
 		{ LZMA_VLI_UNKNOWN, nullptr },
 	};
+	if (lzma_raw_decoder_memusage(filters) > MaximumLzmaDecoderBytes) {
+		error = "Sprite sheet needs too much memory to decode: " + wxstr(sheet->file.string());
+		return false;
+	}
 	lzma_stream decoder = LZMA_STREAM_INIT;
 	const lzma_ret initResult = lzma_raw_decoder(&decoder, filters);
 	if (initResult != LZMA_OK) {

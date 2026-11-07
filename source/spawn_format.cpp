@@ -1,7 +1,9 @@
 #include "spawn_format.h"
+#include "definitions.h"
 
-#include "ext/pugixml.hpp"
+#include <pugixml.hpp>
 #include "file_transaction.h"
+#include "path_encoding.h"
 
 #include <algorithm>
 #include <cctype>
@@ -38,7 +40,7 @@ namespace {
 		if (filename.empty()) {
 			return {};
 		}
-		std::filesystem::path path(filename);
+		const std::filesystem::path path = PathEncoding::FromUtf8(filename);
 		return path.is_absolute() ? path : directory / path;
 	}
 
@@ -48,7 +50,7 @@ namespace {
 			return {};
 		}
 		pugi::xml_document doc;
-		if (!doc.load_file(file.string().c_str())) {
+		if (!doc.load_file(file.c_str())) {
 			return {};
 		}
 		return Lower(doc.document_element().name());
@@ -120,7 +122,7 @@ namespace {
 			return false;
 		}
 		area.attributes = ReadExtraAttributes(node, {"centerx", "centery", "centerz", "radius"});
-		if (area.centerX < 0 || area.centerX > 65535 || area.centerY < 0 || area.centerY > 65535 || area.centerZ < 0 || area.centerZ > 255) {
+		if (area.centerX < 0 || area.centerX > 65535 || area.centerY < 0 || area.centerY > 65535 || area.centerZ < 0 || area.centerZ > MAP_MAX_LAYER) {
 			AppendWarning(warnings, file.string() + ": spawn center is outside the server coordinate range and was skipped.");
 			return false;
 		}
@@ -154,7 +156,7 @@ namespace {
 				AppendWarning(warnings, file.string() + ": creature z differs from centerz; the real server parser uses centerz.");
 			}
 		}
-		if (absoluteX < 0 || absoluteX > 65535 || absoluteY < 0 || absoluteY > 65535 || entry.z < 0 || entry.z > 255) {
+		if (absoluteX < 0 || absoluteX > 65535 || absoluteY < 0 || absoluteY > 65535 || entry.z < 0 || entry.z > MAP_MAX_LAYER) {
 			AppendWarning(warnings, file.string() + ": creature position is outside the server coordinate range and was skipped.");
 			return false;
 		}
@@ -219,7 +221,7 @@ namespace {
 			return true;
 		}
 		pugi::xml_document doc;
-		const pugi::xml_parse_result result = doc.load_file(file.string().c_str());
+		const pugi::xml_parse_result result = doc.load_file(file.c_str());
 		if (!result) {
 			error = XmlError(file, result);
 			return false;
@@ -266,7 +268,7 @@ namespace {
 
 	bool ParseTfsFile(const std::filesystem::path& file, const SpawnLoadDefaults& defaults, SpawnDocument& document, std::string& error) {
 		pugi::xml_document doc;
-		const pugi::xml_parse_result result = doc.load_file(file.string().c_str());
+		const pugi::xml_parse_result result = doc.load_file(file.c_str());
 		if (!result) {
 			error = XmlError(file, result);
 			return false;
@@ -331,7 +333,7 @@ namespace {
 	}
 
 	bool ValidateEntry(const SpawnAreaData& area, const SpawnEntryData& entry, std::string& error) {
-		if (entry.x < 0 || entry.x > 65535 || entry.y < 0 || entry.y > 65535 || entry.z < 0 || entry.z > 255) {
+		if (entry.x < 0 || entry.x > 65535 || entry.y < 0 || entry.y > 65535 || entry.z < 0 || entry.z > MAP_MAX_LAYER) {
 			error = "Spawn entry '" + entry.name + "' is outside the supported server coordinate range.";
 			return false;
 		}
@@ -794,7 +796,7 @@ bool SpawnFormatIO::LoadCanaryCrystal(const std::filesystem::path& monsterFile, 
 	return true;
 }
 
-SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std::filesystem::path& file) {
+SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std::filesystem::path& file, FileSaveTransaction* sharedTransaction) {
 	SpawnWriteResult result;
 	result.files.push_back(file);
 	pugi::xml_document xml;
@@ -887,7 +889,8 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 	}
 
 	// Content differs or file doesn't exist - proceed with transaction
-	FileSaveTransaction transaction;
+	FileSaveTransaction ownTransaction;
+	FileSaveTransaction& transaction = sharedTransaction ? *sharedTransaction : ownTransaction;
 	const std::filesystem::path stagedFile = transaction.Stage(file);
 	
 	// Write the content (already has correct line endings from conversion above)
@@ -903,14 +906,14 @@ SpawnWriteResult SpawnFormatIO::SaveTfs(const SpawnDocument& document, const std
 		return result;
 	}
 	
-	if (!transaction.Commit(result.error)) {
+	if (!sharedTransaction && !transaction.Commit(result.error)) {
 		return result;
 	}
 	result.success = true;
 	return result;
 }
 
-SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document, const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile) {
+SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document, const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile, FileSaveTransaction* sharedTransaction) {
 	SpawnWriteResult result;
 	result.files = {monsterFile, npcFile};
 	if (FileSaveTransaction::PathsReferToSameFile(monsterFile, npcFile)) {
@@ -998,7 +1001,8 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 	}
 
 	// Content differs or files don't exist - proceed with transaction
-	FileSaveTransaction transaction;
+	FileSaveTransaction ownTransaction;
+	FileSaveTransaction& transaction = sharedTransaction ? *sharedTransaction : ownTransaction;
 	
 	// Stage and write only files that actually changed
 	std::filesystem::path stagedMonsterFile = monsterFile;
@@ -1027,7 +1031,7 @@ SpawnWriteResult SpawnFormatIO::SaveCanaryCrystal(const SpawnDocument& document,
 		return result;
 	}
 	
-	if (!transaction.Commit(result.error)) {
+	if (!sharedTransaction && !transaction.Commit(result.error)) {
 		return result;
 	}
 	result.success = true;

@@ -34,14 +34,54 @@
 #include "map_format.h"
 #include "spawn_format.h"
 #include "item_id_codec.h"
+#include "map_backup.h"
 #include "multiplayer_session.h"
+#include "path_encoding.h"
 #include "spawn_source_remap.h"
 
 #include <filesystem>
 #include <optional>
+#include <utility>
 #include <wx/choicdlg.h>
 
 namespace {
+	std::string BackupTimestamp() {
+		const time_t now = time(nullptr);
+		const tm* current_time = localtime(&now);
+		ASSERT(current_time);
+
+		std::ostringstream date;
+		date << (1900 + current_time->tm_year);
+		if (current_time->tm_mon < 9) {
+			date << "-"
+				 << "0" << current_time->tm_mon + 1;
+		} else {
+			date << "-" << current_time->tm_mon + 1;
+		}
+		date << "-" << current_time->tm_mday;
+		date << "-" << current_time->tm_hour;
+		date << "-" << current_time->tm_min;
+		date << "-" << current_time->tm_sec;
+		return date.str();
+	}
+
+	// The save replaces files by rename, so a hard link keeps the old contents
+	// without copying them. A symlink is followed first: link(2) would otherwise
+	// preserve the link and not the file behind it.
+	bool MakeDatedBackup(const std::filesystem::path& live, const std::filesystem::path& backup) {
+		std::error_code ec;
+		const std::filesystem::path target = std::filesystem::canonical(live, ec);
+		if (ec) {
+			return false;
+		}
+		std::filesystem::create_hard_link(target, backup, ec);
+		if (ec) {
+			ec.clear();
+			std::filesystem::copy_file(target, backup, ec);
+		}
+		return !ec;
+	}
+
 	MapStorageFormat ChooseMapStorageFormat(const OTBMFileMetadata& metadata, const MapFormatDetection& detection) {
 		wxArrayString choices;
 		choices.Add("TFS - Server IDs and one combined spawn XML");
@@ -201,11 +241,11 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn, EditorClientVersionPo
 	const bool keepLoadedClientVersion = clientVersionPolicy == EditorClientVersionPolicy::KeepLoaded;
 	MapStorageFormat storageFormat = g_gui.IsCanaryCrystalAssetsLoaded() ? MapStorageFormat::CanaryCrystal : MapStorageFormat::Tfs;
 	if (!keepLoadedClientVersion) {
-		const std::filesystem::path directory(nstr(fn.GetPath()));
+		const std::filesystem::path directory = PathEncoding::FromUtf8(nstr(fn.GetPath()));
 		const SpawnDetectionResult spawnDetection = SpawnFormatIO::Detect(
 			directory,
-			metadata.spawnFile,
-			metadata.spawnNpcFile,
+			IOMapOTBM::resolveSidecarName(fn, metadata.spawnFile),
+			IOMapOTBM::resolveSidecarName(fn, metadata.spawnNpcFile),
 			nstr(fn.GetName())
 		);
 		const MapFormatEvidence evidence {
@@ -336,11 +376,15 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 	}
 	const std::string originalFilename = map.filename;
 	const std::string originalName = map.name;
+	const std::string originalSpawnfile = map.spawnfile;
+	const std::string originalSpawnNpcFile = map.spawnNpcFile;
+	const std::string originalHousefile = map.housefile;
+	const std::string originalWaypointfile = map.waypointfile;
+	const std::string originalZonefile = map.zonefile;
 	const bool originallyUnnamed = map.unnamed;
 	const bool originalSpawnFilenamesExplicit = map.spawnFilenamesExplicit;
 	std::string savefile = filename.GetFullPath().mb_str(wxConvUTF8).data();
 	bool save_as = false;
-	bool save_otgz = false;
 
 	if (savefile.empty()) {
 		savefile = map.filename;
@@ -349,8 +393,32 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 	FileName c2(wxstr(map.filename));
 	save_as = c1 != c2;
 
-	// If not named yet, propagate the file name to the auxilliary files
-	if (map.unnamed) {
+	// A codec cannot fail per item, so unmapped IDs would be written as their raw
+	// value. Save As shows this up front; items placed later must be caught here.
+	if (const auto conversion = MapBackupService::storageConversion(map)) {
+		const ItemIdConversionPreview preview = AnalyzeItemIdConversion(map, *conversion);
+		const uint64_t issues = preview.missingItems + preview.ambiguousItems;
+		if (issues > map.getConfirmedItemIdIssues()) {
+			const long answer = g_gui.PopupDialog(
+				"Confirm item ID conversion",
+				wxString::Format(
+					"This map is stored in a different item ID space.\n%llu item(s) have no mapping and keep their raw ID, and %llu ambiguous item(s) use the preferred candidate.\n\nSave anyway?",
+					static_cast<unsigned long long>(preview.missingItems),
+					static_cast<unsigned long long>(preview.ambiguousItems)
+				),
+				wxYES | wxNO
+			);
+			if (answer != wxID_YES) {
+				return false;
+			}
+			map.setConfirmedItemIdIssues(issues);
+		}
+	}
+
+	// If not named yet, or saving under a new name, propagate the file name to the
+	// auxilliary files. Keeping the old names on Save As would make both maps
+	// share one set of sidecars.
+	if (map.unnamed || save_as) {
 		FileName _name(filename);
 		_name.SetExt("xml");
 
@@ -379,264 +447,106 @@ bool Editor::saveMap(const FileName& filename, bool showdialog) {
 	// File object to convert between local paths etc.
 	FileName converter;
 	converter.Assign(wxstr(savefile));
-	std::string map_path = nstr(converter.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME));
+	const std::filesystem::path map_directory = PathEncoding::FromUtf8(nstr(converter.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
 
-	// Make temporary backups
-	// converter.Assign(wxstr(savefile));
-	std::string backup_otbm, backup_house, backup_spawn, backup_spawn_npc, backup_waypoint, backup_zones, backup_waypoint_groups, waypoint_groups_filename;
-
-	if (converter.GetExt() == "otgz") {
-		save_otgz = true;
-		if (converter.FileExists()) {
-			backup_otbm = map_path + nstr(converter.GetName()) + ".otgz~";
-			std::remove(backup_otbm.c_str());
-			std::rename(savefile.c_str(), backup_otbm.c_str());
-		}
-	} else {
-		if (converter.FileExists()) {
-			backup_otbm = map_path + nstr(converter.GetName()) + ".otbm~";
-			std::remove(backup_otbm.c_str());
-			std::rename(savefile.c_str(), backup_otbm.c_str());
-		}
-
-		converter.SetFullName(wxstr(map.housefile));
-		if (converter.FileExists()) {
-			backup_house = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_house.c_str());
-			std::rename((map_path + map.housefile).c_str(), backup_house.c_str());
-		}
-
-		converter.SetFullName(wxstr(map.spawnfile));
-		if (converter.FileExists()) {
-			backup_spawn = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_spawn.c_str());
-			std::rename((map_path + map.spawnfile).c_str(), backup_spawn.c_str());
-		}
-
-		if (!map.spawnNpcFile.empty()) {
-			converter.SetFullName(wxstr(map.spawnNpcFile));
-			if (converter.FileExists()) {
-				backup_spawn_npc = map_path + nstr(converter.GetName()) + ".xml~";
-				std::remove(backup_spawn_npc.c_str());
-				std::rename((map_path + map.spawnNpcFile).c_str(), backup_spawn_npc.c_str());
-			}
-		}
-
-		converter.SetFullName(wxstr(map.waypointfile));
-		if (converter.FileExists()) {
-			backup_waypoint = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_waypoint.c_str());
-			std::rename((map_path + map.waypointfile).c_str(), backup_waypoint.c_str());
-		}
-
-		converter.SetFullName(wxstr(map.zonefile));
-		if (converter.FileExists()) {
-			backup_zones = map_path + nstr(converter.GetName()) + ".xml~";
-			std::remove(backup_zones.c_str());
-			std::rename((map_path + map.zonefile).c_str(), backup_zones.c_str());
-		}
-
-		converter.Assign(wxstr(savefile));
-		waypoint_groups_filename = map_path + nstr(converter.GetName()) + "-waypoint-groups.xml";
-		if (wxFileExists(wxstr(waypoint_groups_filename))) {
-			backup_waypoint_groups = waypoint_groups_filename + "~";
-			std::remove(backup_waypoint_groups.c_str());
-			std::rename(waypoint_groups_filename.c_str(), backup_waypoint_groups.c_str());
-		}
-	}
-
-	// Save the map
-	{
-		std::string n = nstr(g_gui.GetLocalDataDirectory()) + ".saving.txt";
-		std::ofstream f(n.c_str(), std::ios::trunc | std::ios::out);
-		f << backup_otbm << '\n'
-		  << backup_house << '\n'
-		  << backup_spawn << '\n'
-		  << backup_spawn_npc << '\n'
-		  << backup_waypoint << '\n'
-		  << backup_zones << '\n'
-		  << backup_waypoint_groups << '\n';
-	}
-
-	{
-
-		// Set up the Map paths
-		wxFileName fn = wxstr(savefile);
-		map.filename = fn.GetFullPath().mb_str(wxConvUTF8);
-		map.name = fn.GetFullName().mb_str(wxConvUTF8);
-
-		if (showdialog) {
-			g_gui.CreateLoadBar("Saving OTBM map...");
-		}
-
-		// Perform the actual save
-		IOMapOTBM mapsaver(map.getVersion());
-		if (map.sourceItemMajorVersion != 0 || map.sourceItemMinorVersion != 0) {
-			mapsaver.useItemVersionHeader(map.sourceItemMajorVersion, map.sourceItemMinorVersion);
-		}
-		std::optional<MappingItemIdCodec> itemIdCodec;
-		const ItemIdSpace targetSpace = map.storageFormat == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
-		if (map.itemIdSpace != targetSpace) {
-			const ItemIdMapping::Direction direction = targetSpace == ItemIdSpace::Client ? ItemIdMapping::Direction::ServerToClient : ItemIdMapping::Direction::ClientToServer;
-			itemIdCodec.emplace(direction);
-			mapsaver.useItemIdCodec(&*itemIdCodec);
-		}
-		bool success = mapsaver.saveMap(map, fn);
-
-		if (showdialog) {
-			g_gui.DestroyLoadBar();
-		}
-
-		// Check for errors...
-		if (!success) {
-			map.filename = originalFilename;
-			map.name = originalName;
-			map.unnamed = originallyUnnamed;
-			map.spawnFilenamesExplicit = originalSpawnFilenamesExplicit;
-			// Rename the temporary backup files back to their previous names
-			if (!backup_otbm.empty()) {
-				converter.SetFullName(wxstr(savefile));
-				std::string otbm_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_otbm.c_str(), std::string(otbm_filename + (save_otgz ? ".otgz" : ".otbm")).c_str());
-			}
-
-			if (!backup_house.empty()) {
-				converter.SetFullName(wxstr(map.housefile));
-				std::string house_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_house.c_str(), std::string(house_filename + ".xml").c_str());
-			}
-
-			if (!backup_spawn.empty()) {
-				converter.SetFullName(wxstr(map.spawnfile));
-				std::string spawn_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_spawn.c_str(), std::string(spawn_filename + ".xml").c_str());
-			}
-
-			if (!backup_spawn_npc.empty()) {
-				converter.SetFullName(wxstr(map.spawnNpcFile));
-				std::string spawn_npc_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_spawn_npc.c_str(), std::string(spawn_npc_filename + ".xml").c_str());
-			}
-
-			if (!backup_waypoint.empty()) {
-				converter.SetFullName(wxstr(map.waypointfile));
-				std::string waypoint_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_waypoint.c_str(), std::string(waypoint_filename + ".xml").c_str());
-			}
-
-			if (!backup_zones.empty()) {
-				converter.SetFullName(wxstr(map.zonefile));
-				std::string zones_filename = map_path + nstr(converter.GetName());
-				std::rename(backup_zones.c_str(), std::string(zones_filename + ".xml").c_str());
-			}
-
-			if (!backup_waypoint_groups.empty()) {
-				std::remove(waypoint_groups_filename.c_str());
-				std::rename(backup_waypoint_groups.c_str(), waypoint_groups_filename.c_str());
-			}
-
-			// Display the stage and underlying reason instead of reporting every
-			// pipeline failure as an OTBM open error.
-			wxString message = "Could not save map.";
-			if (!mapsaver.getError().empty()) {
-				message += "\n\n" + mapsaver.getError();
-			} else {
-				message += "\n\nNo detailed error was reported.";
-			}
-			g_gui.PopupDialog("Error", message, wxOK);
-		}
-
-		// Remove temporary save runfile
-		{
-			std::string n = nstr(g_gui.GetLocalDataDirectory()) + ".saving.txt";
-			std::remove(n.c_str());
-		}
-
-		// If failure, don't run the rest of the function
-		if (!success) {
-			return false;
-		}
-	}
-
-	// Move to permanent backup
+	// Take the dated copies while the old files are still in place. Live files are
+	// never moved: IOMapOTBM replaces them atomically once the new ones are durable.
+	std::vector<std::pair<std::filesystem::path, std::filesystem::path>> dated_backups;
+	wxArrayString backup_warnings;
 	if (!save_as && g_settings.getInteger(Config::ALWAYS_MAKE_BACKUP)) {
-		// Move temporary backups to their proper files
-		time_t t = time(nullptr);
-		tm* current_time = localtime(&t);
-		ASSERT(current_time);
+		const std::string date = BackupTimestamp();
+		const auto backup_file = [&](const std::string& name) {
+			const std::filesystem::path live = map_directory / PathEncoding::FromUtf8(name);
+			std::error_code ec;
+			if (name.empty() || !std::filesystem::exists(live, ec)) {
+				return;
+			}
+			std::filesystem::path backup = live;
+			backup.replace_filename(live.stem());
+			backup += PathEncoding::FromUtf8("." + date);
+			backup += live.extension();
+			if (MakeDatedBackup(live, backup)) {
+				dated_backups.emplace_back(live, backup);
+			} else {
+				const std::u8string backupName = backup.u8string();
+				backup_warnings.push_back("Could not create backup " + wxString::FromUTF8(reinterpret_cast<const char*>(backupName.c_str())));
+			}
+		};
+		backup_file(nstr(converter.GetFullName()));
+		backup_file(map.housefile);
+		backup_file(map.spawnfile);
+		backup_file(map.spawnNpcFile);
+		backup_file(map.zonefile);
+		backup_file(nstr(converter.GetName()) + "-waypoint-groups.xml");
+	}
 
-		std::ostringstream date;
-		date << (1900 + current_time->tm_year);
-		if (current_time->tm_mon < 9) {
-			date << "-"
-				 << "0" << current_time->tm_mon + 1;
+	// Set up the Map paths
+	wxFileName fn = wxstr(savefile);
+	map.filename = fn.GetFullPath().mb_str(wxConvUTF8);
+	map.name = fn.GetFullName().mb_str(wxConvUTF8);
+
+	if (showdialog) {
+		g_gui.CreateLoadBar("Saving OTBM map...");
+	}
+
+	// Perform the actual save
+	IOMapOTBM mapsaver(map.getVersion());
+	std::optional<MappingItemIdCodec> itemIdCodec;
+	MapBackupService::configureWriter(mapsaver, map, itemIdCodec);
+	const bool success = mapsaver.saveMap(map, fn);
+
+	if (showdialog) {
+		g_gui.DestroyLoadBar();
+	}
+
+	// Check for errors...
+	if (!success) {
+		map.filename = originalFilename;
+		map.name = originalName;
+		map.spawnfile = originalSpawnfile;
+		map.spawnNpcFile = originalSpawnNpcFile;
+		map.housefile = originalHousefile;
+		map.waypointfile = originalWaypointfile;
+		map.zonefile = originalZonefile;
+		map.unnamed = originallyUnnamed;
+		map.spawnFilenamesExplicit = originalSpawnFilenamesExplicit;
+		for (const auto& [live, backup] : dated_backups) {
+			std::error_code ec;
+			std::filesystem::remove(backup, ec);
+		}
+
+		// Display the stage and underlying reason instead of reporting every
+		// pipeline failure as an OTBM open error.
+		wxString message = "Could not save map.";
+		if (!mapsaver.getError().empty()) {
+			message += "\n\n" + mapsaver.getError();
 		} else {
-			date << "-" << current_time->tm_mon + 1;
+			message += "\n\nNo detailed error was reported.";
 		}
-		date << "-" << current_time->tm_mday;
-		date << "-" << current_time->tm_hour;
-		date << "-" << current_time->tm_min;
-		date << "-" << current_time->tm_sec;
+		g_gui.PopupDialog("Error", message, wxOK);
+		return false;
+	}
 
-		if (!backup_otbm.empty()) {
-			converter.SetFullName(wxstr(savefile));
-			std::string otbm_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_otbm.c_str(), std::string(otbm_filename + "." + date.str() + (save_otgz ? ".otgz" : ".otbm")).c_str());
+	// A file the save left alone is still the same inode as its backup.
+	for (const auto& [live, backup] : dated_backups) {
+		std::error_code ec;
+		if (std::filesystem::equivalent(live, backup, ec) && !ec) {
+			std::filesystem::remove(backup, ec);
 		}
-
-		if (!backup_house.empty()) {
-			converter.SetFullName(wxstr(map.housefile));
-			std::string house_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_house.c_str(), std::string(house_filename + "." + date.str() + ".xml").c_str());
-		}
-
-		if (!backup_spawn.empty()) {
-			converter.SetFullName(wxstr(map.spawnfile));
-			std::string spawn_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_spawn.c_str(), std::string(spawn_filename + "." + date.str() + ".xml").c_str());
-		}
-
-		if (!backup_spawn_npc.empty()) {
-			converter.SetFullName(wxstr(map.spawnNpcFile));
-			std::string spawn_npc_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_spawn_npc.c_str(), std::string(spawn_npc_filename + "." + date.str() + ".xml").c_str());
-		}
-
-		if (!backup_waypoint.empty()) {
-			converter.SetFullName(wxstr(map.waypointfile));
-			std::string waypoint_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_waypoint.c_str(), std::string(waypoint_filename + "." + date.str() + ".xml").c_str());
-		}
-
-		if (!backup_zones.empty()) {
-			converter.SetFullName(wxstr(map.zonefile));
-			std::string zones_filename = map_path + nstr(converter.GetName());
-			std::rename(backup_zones.c_str(), std::string(zones_filename + "." + date.str() + ".xml").c_str());
-		}
-
-		if (!backup_waypoint_groups.empty()) {
-			const std::string backup_filename = waypoint_groups_filename.substr(0, waypoint_groups_filename.size() - 4) + "." + date.str() + ".xml";
-			std::rename(backup_waypoint_groups.c_str(), backup_filename.c_str());
-		}
-	} else {
-		// Delete the temporary files
-		std::remove(backup_otbm.c_str());
-		std::remove(backup_house.c_str());
-		std::remove(backup_spawn.c_str());
-		std::remove(backup_spawn_npc.c_str());
-		std::remove(backup_waypoint.c_str());
-		std::remove(backup_zones.c_str());
-		std::remove(backup_waypoint_groups.c_str());
 	}
 
 	map.clearChanges();
+	if (showdialog) {
+		wxArrayString save_warnings = mapsaver.getWarnings();
+		for (const wxString& warning : backup_warnings) {
+			save_warnings.push_back(warning);
+		}
+		g_gui.ListDialog("Warnings", save_warnings);
+	}
 	return true;
 }
 
 bool Editor::importMap(const FileName& filename, int import_x_offset, int import_y_offset, int import_z_offset, ImportType house_import_type, ImportType spawn_import_type) {
-	selection.clear();
-	actionQueue->clear();
-
 	Map imported_map;
 	bool loaded = imported_map.open(nstr(filename.GetFullPath()));
 
@@ -644,6 +554,11 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 		g_gui.PopupDialog("Error", "Error loading map!\n" + imported_map.getError(), wxOK | wxICON_INFORMATION);
 		return false;
 	}
+
+	// The merge cannot be undone and invalidates both, but a failed load must not
+	// cost the user their undo history.
+	selection.clear();
+	actionQueue->clear();
 	g_gui.ListDialog("Warning", imported_map.getWarnings());
 
 	Position offset(import_x_offset, import_y_offset, import_z_offset);
@@ -812,41 +727,19 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 	std::map<Position, Spawn*> spawn_map;
 	if (spawn_import_type != IMPORT_DONT) {
 		for (auto siter = imported_map.spawns.begin(); siter != imported_map.spawns.end();) {
-			Position old_spawn_pos = *siter;
-			Position new_spawn_pos = *siter + offset;
-			switch (spawn_import_type) {
-				case IMPORT_SMART_MERGE:
-				case IMPORT_INSERT:
-				case IMPORT_MERGE: {
-					Tile* imported_tile = imported_map.getTile(old_spawn_pos);
-					if (imported_tile) {
-						ASSERT(imported_tile->spawn);
-						spawn_map[new_spawn_pos] = imported_tile->spawn;
-
-						auto next = siter;
-						bool cont = true;
-						Position next_spawn;
-
-						++next;
-						if (next == imported_map.spawns.end()) {
-							cont = false;
-						} else {
-							next_spawn = *next;
-						}
-						imported_map.spawns.erase(siter);
-						if (cont) {
-							siter = imported_map.spawns.find(next_spawn);
-						} else {
-							siter = imported_map.spawns.end();
-						}
-					}
-					break;
-				}
-				case IMPORT_DONT: {
-					++siter;
-					break;
-				}
+			auto next = siter;
+			++next;
+			const Position old_spawn_pos = *siter;
+			const Position new_spawn_pos = old_spawn_pos + offset;
+			Tile* imported_tile = imported_map.getTile(old_spawn_pos);
+			if (imported_tile && imported_tile->spawn && new_spawn_pos.isValid()) {
+				// spawn_map owns it from here on: the tile may yet be discarded and
+				// would take the Spawn with it.
+				spawn_map[new_spawn_pos] = imported_tile->spawn;
+				imported_tile->spawn = nullptr;
+				imported_map.spawns.erase(siter);
 			}
+			siter = next;
 		}
 	}
 
@@ -908,10 +801,15 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 			import_tile->setLocation(location);
 			house->addTile(import_tile);
 		} else {
+			// The imported house ID means nothing in this map's registry.
+			import_tile->setHouseID(0);
 			import_tile->setLocation(location);
 		}
 
 		if (offset != Position(0, 0, 0)) {
+			if (import_tile->creature && import_tile->creature->hasSpawnSource()) {
+				import_tile->creature->setSpawnSource(import_tile->creature->getSpawnSource() + offset);
+			}
 			for (auto iter = import_tile->items.begin(); iter != import_tile->items.end(); ++iter) {
 				Item* item = *iter;
 				if (auto* teleport = dynamic_cast<Teleport*>(item)) {
@@ -924,6 +822,8 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 		if (old_tile) {
 			map.removeSpawn(old_tile);
 		}
+		// Only spawns that were not imported are left on the tile.
+		delete import_tile->spawn;
 		import_tile->spawn = nullptr;
 
 		map.setTile(new_pos, import_tile, true);
@@ -931,6 +831,11 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 
 	for (auto spawn_iter = spawn_map.begin(); spawn_iter != spawn_map.end(); ++spawn_iter) {
 		Position pos = spawn_iter->first;
+		if (!resizemap && (pos.x > map.getWidth() || pos.y > map.getHeight())) {
+			// Its tile was discarded with the rest of the out-of-scope area.
+			delete spawn_iter->second;
+			continue;
+		}
 		TileLocation* location = map.createTileL(pos);
 		Tile* tile = location->get();
 		if (!tile) {
@@ -949,6 +854,7 @@ bool Editor::importMap(const FileName& filename, int import_x_offset, int import
 
 	map.setWidth(newsize_x);
 	map.setHeight(newsize_y);
+	map.doChange();
 	g_gui.PopupDialog("Success", "Map imported successfully, " + i2ws(discarded_tiles) + " tiles were discarded as invalid.", wxOK);
 
 	g_gui.RefreshPalettes();
@@ -993,6 +899,7 @@ void Editor::borderizeMap(bool showdialog) {
 	if (showdialog) {
 		g_gui.DestroyLoadBar();
 	}
+	map.doChange();
 }
 
 void Editor::randomizeSelection() {
@@ -1023,6 +930,9 @@ void Editor::randomizeSelection() {
 
 void Editor::randomizeMap(bool showdialog) {
 	MapChunkRevisionTracker::Batch chunkBatch(map.getChunkRevisionTracker());
+	// Replacing a selected ground leaves its tile flagged unselected, and undo
+	// then skips removing that tile from the selection when it is swapped out.
+	selection.clear();
 	if (showdialog) {
 		g_gui.CreateLoadBar("Randomizing map...");
 	}
@@ -1063,6 +973,7 @@ void Editor::randomizeMap(bool showdialog) {
 	if (showdialog) {
 		g_gui.DestroyLoadBar();
 	}
+	map.doChange();
 }
 
 void Editor::clearInvalidHouseTiles(bool showdialog) {
@@ -1104,6 +1015,12 @@ void Editor::clearInvalidHouseTiles(bool showdialog) {
 	if (showdialog) {
 		g_gui.DestroyLoadBar();
 	}
+
+	// Undo snapshots can still name the removed houses, and palettes and house
+	// brushes can still point at them.
+	actionQueue->clear();
+	map.doChange();
+	g_gui.RefreshPalettes();
 }
 
 size_t Editor::removeEmptySpawns(bool showdialog) {

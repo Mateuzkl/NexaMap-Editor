@@ -1,0 +1,18 @@
+---
+version: 2
+updates:
+  # Keeps the SHA pins in .github/workflows current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Bumps the builtin-baseline in vcpkg.json.
+  - package-ecosystem: vcpkg
+    directory: /
+    schedule:
+      interval: weekly

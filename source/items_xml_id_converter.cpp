@@ -4,7 +4,7 @@
 
 #include "items_xml_id_converter.h"
 
-#include "ext/pugixml.hpp"
+#include <pugixml.hpp>
 #include "file_transaction.h"
 
 #include <algorithm>

@@ -34,7 +34,7 @@ struct FavoriteEntry {
 	std::string displayName;
 	std::string definition;
 	FavoriteCategory category = FavoriteCategory::Other;
-	std::string tileset;
+	std::string tileset {};
 	uint16_t itemId = 0;
 	uint16_t clientId = 0;
 

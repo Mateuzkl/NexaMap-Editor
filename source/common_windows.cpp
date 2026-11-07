@@ -306,6 +306,12 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		map.convert(new_ver, true);
 	}
 
+	bool changed = old_ver.otbm != new_ver.otbm || old_ver.client != new_ver.client
+		|| map.getMapDescription() != nstr(description_ctrl->GetValue())
+		|| map.getHouseFilename() != nstr(house_filename_ctrl->GetValue())
+		|| map.getSpawnFilename() != nstr(spawn_filename_ctrl->GetValue())
+		|| map.getZoneFilename() != nstr(zone_filename_ctrl->GetValue());
+
 	map.setMapDescription(nstr(description_ctrl->GetValue()));
 	map.setHouseFilename(nstr(house_filename_ctrl->GetValue()));
 	map.setSpawnFilename(nstr(spawn_filename_ctrl->GetValue()));
@@ -318,6 +324,10 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		map.setWidth(new_map_width);
 		map.setHeight(new_map_height);
 		g_gui.FitViewToMap(view);
+		changed = true;
+	}
+	if (changed && map.doChange()) {
+		g_gui.UpdateTitle();
 	}
 	g_gui.RefreshPalettes();
 
@@ -1239,9 +1249,9 @@ void SortableListBox::DoSort() {
 				dataList[j - 1] = tmpData;
 			}
 
-			if (selection == j - 1) {
+			if (selection == static_cast<int>(j - 1)) {
 				selection++;
-			} else if (selection == j) {
+			} else if (selection == static_cast<int>(j)) {
 				selection--;
 			}
 

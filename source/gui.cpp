@@ -355,7 +355,7 @@ wxString GUI::GetDataDirectory() {
 	FileName exec_directory;
 	try {
 		exec_directory = dynamic_cast<wxStandardPaths&>(wxStandardPaths::Get()).GetExecutablePath();
-	} catch (const std::bad_cast) {
+	} catch (const std::bad_cast&) {
 		throw; // Crash application (this should never happend anyways...)
 	}
 
@@ -368,7 +368,7 @@ wxString GUI::GetExecDirectory() {
 	FileName exec_directory;
 	try {
 		exec_directory = dynamic_cast<wxStandardPaths&>(wxStandardPaths::Get()).GetExecutablePath();
-	} catch (const std::bad_cast) {
+	} catch (const std::bad_cast&) {
 		wxLogError("Could not fetch executable directory.");
 	}
 	return exec_directory.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
@@ -1091,6 +1091,12 @@ bool GUI::SaveCurrentMap(const FileName& filename, bool showdialog) {
 	if (mapTab) {
 		Editor* editor = mapTab->GetEditor();
 		if (editor) {
+			// Serialization consults the global item database, and a save under
+			// another session's items silently skips or misencodes them.
+			if (mapTab->GetResourceSession() != GetActiveEditorResourceSession()) {
+				PopupDialog("Error", "This map was not saved because its client resources are not active. Switch to its tab and save again.", wxOK);
+				return false;
+			}
 			if (!editor->saveMap(filename, showdialog)) {
 				return false;
 			}
@@ -1130,6 +1136,9 @@ void GUI::SetCurrentZoom(double zoom) {
 }
 
 void GUI::FitViewToMap() {
+	if (!tabbook) {
+		return;
+	}
 	for (int index = 0; index < tabbook->GetTabCount(); ++index) {
 		if (auto* tab = dynamic_cast<MapTab*>(tabbook->GetTab(index))) {
 			tab->GetView()->FitToMap();
@@ -1259,20 +1268,41 @@ bool GUI::ConfigureSpawnSaveAs(const FileName& mapFilename) {
 		return false;
 	}
 	const SpawnExportOptions options = dialog.GetOptions();
+	const MapStorageFormat previousFormat = map.getStorageFormat();
+	// OTBM 3 has no attribute map: only action/unique IDs, text, description and
+	// tier survive. Ask before any map state changes, so "No" leaves it untouched.
+	if (previousFormat == MapStorageFormat::CanaryCrystal && options.mapFormat != MapStorageFormat::CanaryCrystal) {
+		const long answer = PopupDialog(
+			root, "Custom attributes will be lost",
+			"This map is saved in the Canary/Crystal format. Saving it as TFS writes OTBM 3 for client 8.60, "
+			"which cannot store custom item attributes.\n\n"
+			"Custom attributes on items are not written to the new file. Action IDs, unique IDs, text, "
+			"descriptions and tier are kept.\n\nSave as TFS anyway?",
+			wxYES | wxNO | wxICON_WARNING
+		);
+		if (answer != wxID_YES) {
+			return false;
+		}
+	}
 	map.setSpawnSaveTarget(options.format, options.primaryFilename, options.npcFilename);
 	map.setStorageFormat(options.mapFormat);
+	map.setConfirmedItemIdIssues(options.confirmedItemIdIssues);
 	map.zonefile = nstr(mapFilename.GetName()) + "-zones.xml";
-	MapVersion targetVersion = map.getVersion();
-	if (options.mapFormat == MapStorageFormat::CanaryCrystal) {
-		targetVersion.otbm = std::max(targetVersion.otbm, MAP_OTBM_5);
-		targetVersion.client = g_gui.IsCanaryCrystalAssetsLoaded() ? g_gui.GetCurrentVersionID() : ClientVersion::getLatestVersion()->getID();
-		map.setSourceItemVersion(4, 4);
-	} else {
-		targetVersion.otbm = MAP_OTBM_3;
-		targetVersion.client = CLIENT_VERSION_860;
-		map.setSourceItemVersion(3, CLIENT_VERSION_860);
+	// Saving to the same format keeps the map's versions: the OTBM version selects
+	// the attribute encoding, and the client selects the database on reopen.
+	if (options.mapFormat != previousFormat) {
+		MapVersion targetVersion = map.getVersion();
+		if (options.mapFormat == MapStorageFormat::CanaryCrystal) {
+			targetVersion.otbm = std::max(targetVersion.otbm, MAP_OTBM_5);
+			targetVersion.client = g_gui.IsCanaryCrystalAssetsLoaded() ? g_gui.GetCurrentVersionID() : ClientVersion::getLatestVersion()->getID();
+			map.setSourceItemVersion(4, 4);
+		} else {
+			targetVersion.otbm = MAP_OTBM_3;
+			targetVersion.client = CLIENT_VERSION_860;
+			map.setSourceItemVersion(3, CLIENT_VERSION_860);
+		}
+		map.mapVersion = targetVersion;
 	}
-	map.mapVersion = targetVersion;
 	return true;
 }
 
@@ -1399,8 +1429,11 @@ void GUI::AddPendingCanvasEvent(wxEvent& event) {
 }
 
 void GUI::CloseCurrentEditor() {
-	RefreshPalettes();
+	// Deleting the rightmost tab selects the '+' page, which is vetoed, so no
+	// page-changed event is there to move the palettes off the dying map.
+	RefreshPalettes(nullptr, false);
 	tabbook->DeleteTab(tabbook->GetSelection());
+	RefreshPalettes();
 	root->UpdateMenubar();
 }
 
@@ -1412,18 +1445,22 @@ bool GUI::CloseAllEditors(bool querySave) {
 		if (mapTab) {
 			if (querySave && mapTab->IsUniqueReference() && mapTab->GetMap() && mapTab->GetMap()->hasChanged()) {
 				tabbook->SetFocusedTab(i);
-				if (!root->DoQuerySave(false)) {
+				// Tab events are ignored while the application closes, and a refused
+				// switch leaves another tab current. Either way, do not save it here.
+				if (!ActivateResourceSession(mapTab->GetResourceSession()) || !root->DoQuerySave(false)) {
 					closingAllEditors = wasClosingAllEditors;
 					return false;
 				} else {
-					RefreshPalettes();
+					RefreshPalettes(nullptr, false);
 					tabbook->DeleteTab(i--);
 				}
 			} else {
+				RefreshPalettes(nullptr, false);
 				tabbook->DeleteTab(i--);
 			}
 		}
 	}
+	RefreshPalettes();
 	if (root) {
 		root->UpdateMenubar();
 	}
@@ -2937,6 +2974,11 @@ long GUI::PopupDialog(wxWindow* parent, const wxString& title, const wxString& t
 	if (text.empty()) {
 		return wxID_ANY;
 	}
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	if (testDialogAnswer) {
+		return *testDialogAnswer;
+	}
+#endif
 
 	wxMessageDialog dlg(parent, text, title, style);
 	return dlg.ShowModal();
@@ -2950,6 +2992,11 @@ void GUI::ListDialog(wxWindow* parent, const wxString& title, const wxArrayStrin
 	if (param_items.empty()) {
 		return;
 	}
+#ifdef NEXAMAP_MULTIPLAYER_TESTS
+	if (testDialogAnswer) {
+		return;
+	}
+#endif
 
 	wxArrayString list_items(param_items);
 

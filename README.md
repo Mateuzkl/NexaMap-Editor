@@ -17,11 +17,12 @@
   <img src="https://img.shields.io/badge/UI-wxWidgets-007ACC?style=flat-square" alt="wxWidgets" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-44545F?style=flat-square" alt="Windows and Linux" />
   <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml/badge.svg" alt="Windows builds" /></a>
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-linux.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-linux.yml/badge.svg" alt="Linux builds" /></a>
   <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml/badge.svg" alt="Code style" /></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml"><strong>Download</strong></a> ·
+  <a href="https://github.com/Mateuzkl/NexaMap-Editor/releases/latest"><strong>Download</strong></a> ·
   <a href="https://mateuzkl.github.io/NexaMap-Showcase/"><strong>Showcase</strong></a> ·
   <a href="https://github.com/Mateuzkl/NexaMap-Editor/issues"><strong>Report a bug</strong></a> ·
   <a href="https://github.com/Mateuzkl/NexaMap-Editor/pulls"><strong>Contribute</strong></a>
@@ -55,7 +56,7 @@ NexaMap Editor is an open-source C++ desktop editor for creating, maintaining, t
 - Local Playtest mode using the active map renderer.
 - Dockable minimap, Favorites 2.0, Command Palette, and Map Diagnostics.
 - Safer ownership, callbacks, threading, socket shutdown, and OpenGL teardown.
-- Windows x86/x64 CI builds, clang-format 16 checks, and an expanded native test suite.
+- Windows x86/x64 and Linux CI builds, clang-format 16 checks, and an expanded native test suite.
 
 ## Compatibility
 
@@ -73,18 +74,20 @@ Client assets, item identifiers, and server data must use compatible versions. M
 
 ## Download and first launch
 
-Successful GitHub Actions runs provide ready-to-use **Windows x86** and **Windows x64** Release artifacts:
+Download **Windows x86** and **Windows x64** builds from [GitHub Releases](https://github.com/Mateuzkl/NexaMap-Editor/releases):
 
-1. Open [Build Windows](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml).
-2. Select the latest successful run.
-3. Download the artifact for your architecture.
+1. Open the [latest release](https://github.com/Mateuzkl/NexaMap-Editor/releases/latest).
+2. Download the ZIP for your architecture, and `SHA256SUMS.txt`.
+3. Compare the ZIP's hash with `SHA256SUMS.txt`. In PowerShell: `Get-FileHash NexaMap-Editor-Windows-x64-Release.zip`.
 4. Extract the complete ZIP before starting `NexaMap Editor.exe`.
+
+Binaries are not code signed, so Windows may warn about an unknown publisher. Files attached to a release never change after publication. Do not run builds from pull request CI artifacts: they contain unreviewed code.
 
 On first launch, select a compatible client folder and server folder in the Workspace. NexaMap will discover available maps and resources. Keep a backup before converting or saving important projects.
 
 ## Build from source
 
-Requirements: Git, CMake 3.10+, a C++20 compiler, OpenGL, and the dependencies declared in [`vcpkg.json`](vcpkg.json).
+Requirements: Git, CMake 3.19+, a C++20 compiler, OpenGL, and the dependencies declared in [`vcpkg.json`](vcpkg.json).
 
 <details>
 <summary><strong>Windows — CMake + vcpkg</strong></summary>
@@ -96,11 +99,11 @@ cd NexaMap-Editor
 $env:VCPKG_ROOT = "C:\vcpkg"
 cmake -S . -B build `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-  -DVCPKG_TARGET_TRIPLET=x64-windows
+  -DVCPKG_TARGET_TRIPLET=x64-windows-static
 cmake --build build --config Release --parallel
 ```
 
-The Visual Studio solution is also available at `vcproj/Editor.sln`.
+This is the configuration CI tests. Use `x86-windows-static` for a 32-bit build. The Visual Studio solution at `vcproj/Editor.sln` uses the same static libraries.
 
 </details>
 
@@ -111,11 +114,11 @@ The Visual Studio solution is also available at `vcproj/Editor.sln`.
 git clone https://github.com/Mateuzkl/NexaMap-Editor.git
 cd NexaMap-Editor
 
-cmake -S . -B build -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-cmake --build build --parallel
+bash tools/build-linux.sh --print-deps   # prints the Ubuntu packages to install
+bash tools/build-linux.sh --jobs 4 --prefix "$HOME/.local"
 ```
+
+The script fetches vcpkg at the pinned baseline and builds against your system GTK3. Add `--tests` to run the test suite under Xvfb, or `--package` to produce a `.deb`. CI tests Ubuntu 24.04; run the script with `--help` for all options.
 
 </details>
 
@@ -138,7 +141,7 @@ Bug reports and focused pull requests are welcome.
 |---|---|
 | Website | [NexaMap 5.0 Showcase](https://mateuzkl.github.io/NexaMap-Showcase/) |
 | Source | [Mateuzkl/NexaMap-Editor](https://github.com/Mateuzkl/NexaMap-Editor) |
-| Windows builds | [GitHub Actions artifacts](https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml) |
+| Downloads | [GitHub Releases](https://github.com/Mateuzkl/NexaMap-Editor/releases) |
 | Feedback | [Issues](https://github.com/Mateuzkl/NexaMap-Editor/issues) |
 | Development | [Pull requests](https://github.com/Mateuzkl/NexaMap-Editor/pulls) |
 

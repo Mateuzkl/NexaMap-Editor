@@ -5,13 +5,18 @@ on:
   pull_request:
     paths:
       - "source/**"
+      - "tests/**"
+      - "tools/**"
       - ".clang-format"
       - ".github/workflows/clang-format.yml"
   push:
     branches:
       - main
+      - master
     paths:
       - "source/**"
+      - "tests/**"
+      - "tools/**"
       - ".clang-format"
       - ".github/workflows/clang-format.yml"
 permissions:
@@ -26,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -50,14 +55,14 @@ jobs:
           fi
 
           mapfile -t files < <(
-            git diff --name-only --diff-filter=ACMRT "${DIFF_RANGE}" -- source |
-              awk '/^source\/.*\.(cpp|hpp|h)$/ && $0 !~ /^source\/ext\//'
+            git diff --name-only --diff-filter=ACMRT "${DIFF_RANGE}" -- source tests tools |
+              awk '/^(source|tests|tools)\/.*\.(cpp|hpp|h)$/'
           )
           printf 'files=%s\n' "${files[*]}" >> "${GITHUB_OUTPUT}"
 
       - name: Check clang-format
         if: steps.changed-files.outputs.files != ''
-        uses: DoozyX/clang-format-lint-action@v0.20
+        uses: DoozyX/clang-format-lint-action@bcb4eb2cb0d707ee4f3e5cc3b456eb075f12cf73 # v0.20
         with:
           source: ${{ steps.changed-files.outputs.files }}
           extensions: "cpp,hpp,h"

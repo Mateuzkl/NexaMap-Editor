@@ -38,11 +38,11 @@ TableBrush::~TableBrush() {
 
 bool TableBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 	if (const pugi::xml_attribute attribute = node.attribute("server_lookid")) {
-		look_id = g_items[attribute.as_ushort()].clientID;
+		look_id = g_items[xmlAttributeAsUint16(attribute)].clientID;
 	}
 
 	if (look_id == 0) {
-		look_id = node.attribute("lookid").as_ushort();
+		look_id = xmlAttributeAsUint16(node.attribute("lookid"));
 	}
 
 	for (pugi::xml_node childNode = node.first_child(); childNode; childNode = childNode.next_sibling()) {
@@ -81,7 +81,7 @@ bool TableBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				continue;
 			}
 
-			const uint16_t id = subChildNode.attribute("id").as_ushort();
+			const uint16_t id = xmlAttributeAsUint16(subChildNode.attribute("id"));
 			if (id == 0) {
 				warnings.push_back("Could not read id tag of item node\n");
 				break;

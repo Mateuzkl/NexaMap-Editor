@@ -289,8 +289,12 @@ bool IOMinimap::exportMinimap(const std::string& directory, const std::string& n
 
 		wxImage image(width, height, pixels.data(), true);
 		wxFileName file = wxString::Format("%s_%d.%s", wxstr(name), z, extension);
-		file.Normalize(wxPATH_NORM_ENV_VARS | wxPATH_NORM_DOTS | wxPATH_NORM_TILDE | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG | wxPATH_NORM_SHORTCUT, wxstr(directory));
-		image.SaveFile(file.GetFullPath(), type);
+		// Only the name comes from the caller: no variable, tilde or shortcut expansion.
+		file.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG, wxstr(directory));
+		if (!image.SaveFile(file.GetFullPath(), type)) {
+			m_error = "Unable to save the minimap image.";
+			return false;
+		}
 	}
 
 	return true;
@@ -380,8 +384,11 @@ bool IOMinimap::exportSelection(const std::string& directory, const std::string&
 		if (!empty) {
 			image.SetData(pixels.data(), true);
 			wxFileName file = wxString::Format("%s-%d.%s", wxstr(name), z, extension);
-			file.Normalize(wxPATH_NORM_ENV_VARS | wxPATH_NORM_DOTS | wxPATH_NORM_TILDE | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG | wxPATH_NORM_SHORTCUT, wxstr(directory));
-			image.SaveFile(file.GetFullPath(), type);
+			file.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG, wxstr(directory));
+			if (!image.SaveFile(file.GetFullPath(), type)) {
+				m_error = "Unable to save the minimap image.";
+				return false;
+			}
 		}
 	}
 

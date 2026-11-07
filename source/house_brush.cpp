@@ -65,6 +65,9 @@ void HouseBrush::undraw(BaseMap* map, Tile* tile) {
 
 void HouseBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	ASSERT(draw_house);
+	if (!draw_house) {
+		return;
+	}
 	uint32_t old_house_id = tile->getHouseID();
 	tile->setHouse(draw_house);
 	tile->setPZ(true);

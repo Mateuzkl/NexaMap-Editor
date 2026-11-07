@@ -39,7 +39,7 @@ bool WallBrush::parseWallItems(pugi::xml_node childNode, uint32_t alignment, wxA
 	for (pugi::xml_node subChildNode = childNode.first_child(); subChildNode; subChildNode = subChildNode.next_sibling()) {
 		const std::string& subChildName = as_lower_str(subChildNode.name());
 		if (subChildName == "item") {
-			uint16_t id = subChildNode.attribute("id").as_ushort();
+			uint16_t id = xmlAttributeAsUint16(subChildNode.attribute("id"));
 			if (id == 0) {
 				warnings.push_back("Could not read id tag of item node\n");
 				break;
@@ -66,7 +66,7 @@ bool WallBrush::parseWallItems(pugi::xml_node childNode, uint32_t alignment, wxA
 
 			wall_items[alignment].items.push_back(wt);
 		} else if (subChildName == "door") {
-			uint16_t id = subChildNode.attribute("id").as_ushort();
+			uint16_t id = xmlAttributeAsUint16(subChildNode.attribute("id"));
 			if (id == 0) {
 				warnings.push_back("Could not read id tag of door node\n");
 				break;
@@ -184,11 +184,11 @@ bool WallBrush::parseWallItems(pugi::xml_node childNode, uint32_t alignment, wxA
 bool WallBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 	pugi::xml_attribute attribute;
 	if ((attribute = node.attribute("lookid"))) {
-		look_id = attribute.as_ushort();
+		look_id = xmlAttributeAsUint16(attribute);
 	}
 
 	if ((attribute = node.attribute("server_lookid"))) {
-		look_id = g_items[attribute.as_ushort()].clientID;
+		look_id = g_items[xmlAttributeAsUint16(attribute)].clientID;
 	}
 
 	for (pugi::xml_node childNode = node.first_child(); childNode; childNode = childNode.next_sibling()) {
