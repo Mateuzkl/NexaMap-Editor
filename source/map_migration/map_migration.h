@@ -130,6 +130,9 @@ namespace MapMigration {
 		std::vector<std::array<uint16_t, 8>> adjacentGrounds;
 		std::vector<uint64_t> patternOccurrences;
 	};
+	// Attribute value of a convention-named file the OTBM header does not list.
+	inline constexpr uint8_t WaypointGroupsSidecar = 0;
+	inline constexpr uint8_t ZoneFileAttribute = 24;
 	struct Sidecar {
 		uint8_t attribute = 0;
 		std::string reference;

@@ -24,10 +24,18 @@ if ($files.Count -eq 0) {
 	throw "Package is empty: $($package.FullName)"
 }
 
-$requiredFiles = @('NexaMap Editor.exe', 'LICENSE.rtf', 'README.md')
+$requiredFiles = @('NexaMap Editor.exe', 'LICENSE.rtf', 'README.md', 'THIRD_PARTY_NOTICES.txt')
 foreach ($requiredFile in $requiredFiles) {
 	if (-not (Test-Path -LiteralPath (Join-Path $package.FullName $requiredFile) -PathType Leaf)) {
 		throw "Required package file is missing: $requiredFile"
+	}
+}
+
+# The notices must list what is linked statically, not just exist.
+$notices = Get-Content -LiteralPath (Join-Path $package.FullName 'THIRD_PARTY_NOTICES.txt') -Raw
+foreach ($requiredNotice in @('pugixml', 'nlohmann-json', 'protobuf', 'wxwidgets')) {
+	if ($notices -notmatch "(?m)^$([regex]::Escape($requiredNotice)) ") {
+		throw "THIRD_PARTY_NOTICES.txt has no section for $requiredNotice."
 	}
 }
 
@@ -98,8 +106,10 @@ try {
 	}
 
 	$entryNames = @($entries | ForEach-Object { $_.FullName.Replace('\', '/') })
-	if ($entryNames -notcontains 'NexaMap Editor.exe') {
-		throw 'Archive does not contain NexaMap Editor.exe at its root.'
+	foreach ($requiredEntry in @('NexaMap Editor.exe', 'THIRD_PARTY_NOTICES.txt')) {
+		if ($entryNames -notcontains $requiredEntry) {
+			throw "Archive does not contain $requiredEntry at its root."
+		}
 	}
 	foreach ($requiredDirectory in $requiredDirectories) {
 		if (-not ($entryNames | Where-Object { $_.StartsWith("$requiredDirectory/") } | Select-Object -First 1)) {

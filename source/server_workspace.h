@@ -46,7 +46,7 @@ struct ResourceFingerprint {
 struct DetectedMap {
 	std::filesystem::path path;
 	ResourceFingerprint fingerprint;
-	std::filesystem::path serverRootPath;
+	std::filesystem::path serverRootPath {};
 	ServerType serverType = ServerType::UnknownGeneric;
 };
 

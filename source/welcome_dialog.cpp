@@ -433,7 +433,6 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxString& ti
 	const wxColour subtle = WelcomeThemeStyle::Get(Theme::Role::TextSubtle);
 	const wxColour accent(116, 76, 238);
 	const wxColour cyan(38, 211, 230);
-	const wxColour green(69, 201, 105);
 
 	auto makeText = [&](wxWindow* parent, const wxString& value, int pointDelta = 0, bool bold = false, const wxColour& colour = wxNullColour) {
 		auto* label = newd wxStaticText(parent, wxID_ANY, value, wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);

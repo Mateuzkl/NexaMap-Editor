@@ -62,7 +62,7 @@ enum {
 	EDITOR_SPRITE_SPAWNS
 };
 
-static const char* selection_marker_xpm16x16[] = {
+[[maybe_unused]] static const char* selection_marker_xpm16x16[] = {
 	// columns rows colors chars-per-pixel
 	"16 16 2 1",
 	"  c None",
@@ -86,7 +86,7 @@ static const char* selection_marker_xpm16x16[] = {
 	". . . . . . . . "
 };
 
-static const char* selection_marker_xpm32x32[] = {
+[[maybe_unused]] static const char* selection_marker_xpm32x32[] = {
 	// columns rows colors chars-per-pixel
 	"32 32 2 1",
 	"  c None",

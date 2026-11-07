@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.19)
 
 # Let CMake select the MSVC runtime through CMAKE_MSVC_RUNTIME_LIBRARY. This
 # must be set before project() so static vcpkg triplets can use /MT consistently.
@@ -6,10 +6,12 @@ if(POLICY CMP0091)
 	cmake_policy(SET CMP0091 NEW)
 endif()
 
-project(rme)
+project(nexamap)
 
 include(CTest)
 include(GNUInstallDirs)
+include(CheckCXXCompilerFlag)
+include(CheckPIESupported)
 if(UNIX AND NOT APPLE)
 	# Keep vcpkg's static codec symbols private. GTK's shared pixbuf loaders
 	# must resolve PNG/JPEG functions from their own system libraries.
@@ -32,10 +34,76 @@ if(NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+option(ENABLE_HARDENING "Enable compiler and linker hardening flags" ON)
+option(ENABLE_SANITIZERS "Build with ASan and UBSan; turns hardening off (Linux)" OFF)
+option(ENABLE_LTO "Enable link-time optimization in optimized builds" OFF)
+
+# ASSERT() and the wxWidgets-independent debug helpers follow __DEBUG__. Release
+# stays NDEBUG through CMAKE_CXX_FLAGS_RELEASE; test targets opt in further down.
+add_compile_definitions($<$<CONFIG:Debug>:__DEBUG__>)
+
+if(ENABLE_SANITIZERS)
+	if(MSVC)
+		message(FATAL_ERROR "ENABLE_SANITIZERS supports GCC and Clang only")
+	endif()
+	add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+	add_link_options(-fsanitize=address,undefined)
+endif()
+
+if(ENABLE_LTO)
+	include(CheckIPOSupported)
+	check_ipo_supported()
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+endif()
+
+# Warnings stay advisory: there is no -Werror or /WX. Unused parameters are
+# mostly wx event handlers and virtual overrides, so they are not reported.
+add_library(nexamap_warnings INTERFACE)
+if(MSVC)
+	target_compile_options(nexamap_warnings INTERFACE /W4 /wd4100)
+else()
+	target_compile_options(nexamap_warnings INTERFACE -Wall -Wextra -Wno-unused-parameter)
+endif()
+
+# Explicit so that the result does not depend on a distribution's compiler
+# defaults. FORTIFY cannot be combined with ASan, so sanitizer builds skip this.
+add_library(nexamap_hardening INTERFACE)
+if(ENABLE_HARDENING AND NOT ENABLE_SANITIZERS)
+	if(MSVC)
+		# /sdl turns C4996 into an error, and wx deprecations are not actionable here.
+		target_compile_options(nexamap_hardening INTERFACE /GS /sdl /wd4996 $<$<NOT:$<CONFIG:Debug>>:/guard:cf>)
+		target_compile_definitions(nexamap_hardening INTERFACE _CRT_SECURE_NO_WARNINGS)
+		target_link_options(nexamap_hardening INTERFACE /DYNAMICBASE /NXCOMPAT /CETCOMPAT $<$<NOT:$<CONFIG:Debug>>:/guard:cf>)
+		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+			target_link_options(nexamap_hardening INTERFACE /HIGHENTROPYVA)
+		endif()
+	elseif(UNIX)
+		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+		check_pie_supported()
+		target_compile_options(nexamap_hardening INTERFACE
+			-fstack-protector-strong
+			$<$<NOT:$<CONFIG:Debug>>:-U_FORTIFY_SOURCE>
+			$<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=3>
+		)
+		foreach(flag IN ITEMS -fstack-clash-protection -fcf-protection)
+			string(MAKE_C_IDENTIFIER "NEXAMAP_HAS${flag}" flag_variable)
+			check_cxx_compiler_flag(${flag} ${flag_variable})
+			if(${flag_variable})
+				target_compile_options(nexamap_hardening INTERFACE ${flag})
+			endif()
+		endforeach()
+		if(NOT APPLE)
+			target_link_options(nexamap_hardening INTERFACE LINKER:-z,relro LINKER:-z,now LINKER:-z,noexecstack)
+		endif()
+	endif()
+endif()
+
 find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(liblzma CONFIG REQUIRED)
+find_package(pugixml CONFIG REQUIRED)
 find_package(Protobuf CONFIG QUIET)
 if(NOT Protobuf_FOUND)
 	find_package(Protobuf REQUIRED)
@@ -62,17 +130,21 @@ if(wxWidgets_USE_FILE)
 	include(${wxWidgets_USE_FILE})
 endif()
 
+# The editor never needs XPath, so its API stays out of reach of project code.
+add_library(nexamap_pugixml INTERFACE)
+target_link_libraries(nexamap_pugixml INTERFACE pugixml::pugixml)
+target_compile_definitions(nexamap_pugixml INTERFACE PUGIXML_NO_XPATH)
+
 add_library(map_migration_core STATIC
 	source/map_migration/migration_io.cpp
 	source/map_migration/classic_resource_catalog.cpp
 	source/map_migration/map_inventory.cpp
 	source/map_migration/cross_client_matcher.cpp
 	source/map_migration/map_migration_engine.cpp
-	source/ext/pugixml.cpp
 )
 target_include_directories(map_migration_core PUBLIC source)
 target_compile_features(map_migration_core PUBLIC cxx_std_20)
-target_link_libraries(map_migration_core PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(map_migration_core PUBLIC nexamap_pugixml PRIVATE nlohmann_json::nlohmann_json)
 if(MSVC)
 	target_compile_options(map_migration_core PRIVATE /utf-8 /bigobj)
 endif()
@@ -136,6 +208,10 @@ target_link_libraries(${PROJECT_NAME}
 	nexamap_protobuf
 	map_migration_core
 )
+if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+	# 32-bit builds load large maps, so use the full 4 GB user address space.
+	target_link_options(${PROJECT_NAME} PRIVATE /LARGEADDRESSAWARE)
+endif()
 
 if(UNIX AND NOT APPLE)
 	install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -195,9 +271,19 @@ if(BUILD_TESTING)
 	add_executable(mcp_security_tests
 		tests/mcp_security_tests.cpp
 		source/mcp/mcp_common.cpp
+		source/mcp/mcp_protocol.cpp
+		source/mcp/mcp_registry.cpp
+		source/mcp/mcp_server.cpp
+		source/multiplayer_crypto.cpp
+		source/multiplayer_protocol.cpp
 	)
 	target_include_directories(mcp_security_tests PRIVATE source)
 	target_link_libraries(mcp_security_tests PRIVATE nlohmann_json::nlohmann_json)
+	if(WIN32)
+		target_link_libraries(mcp_security_tests PRIVATE bcrypt ws2_32)
+	else()
+		target_link_libraries(mcp_security_tests PRIVATE OpenSSL::Crypto)
+	endif()
 	target_compile_features(mcp_security_tests PRIVATE cxx_std_20)
 	if(MSVC)
 		target_compile_options(mcp_security_tests PRIVATE /utf-8)
@@ -229,6 +315,11 @@ if(BUILD_TESTING)
 	target_link_libraries(waypoint_groups_tests PRIVATE editor_test_objects)
 	add_test(NAME waypoint_groups_tests COMMAND waypoint_groups_tests)
 	set_tests_properties(waypoint_groups_tests PROPERTIES TIMEOUT 30)
+
+	add_executable(data_safety_tests tests/data_safety_tests.cpp)
+	target_link_libraries(data_safety_tests PRIVATE editor_test_objects)
+	add_test(NAME data_safety_tests COMMAND data_safety_tests)
+	set_tests_properties(data_safety_tests PROPERTIES TIMEOUT 60)
 
 	option(ENABLE_MULTIPLAYER_SESSION_TESTS "Build full editor wxSocket session integration tests (no visible windows)" OFF)
 	if(ENABLE_MULTIPLAYER_SESSION_TESTS)
@@ -330,17 +421,51 @@ install(FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/README.md"
 	DESTINATION "${NEXAMAP_RESOURCE_DESTINATION}"
 )
+# Binary packages must carry the notices of the libraries linked into them.
+if(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+	set(NEXAMAP_NOTICES_FILE "${CMAKE_CURRENT_BINARY_DIR}/THIRD_PARTY_NOTICES.txt")
+	add_custom_command(
+		OUTPUT "${NEXAMAP_NOTICES_FILE}"
+		COMMAND "${CMAKE_COMMAND}"
+			"-DINSTALLED_DIR=${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}"
+			"-DOUTPUT=${NEXAMAP_NOTICES_FILE}"
+			"-DEXTRA_NOTICE=${CMAKE_CURRENT_SOURCE_DIR}/data/PNGtoOTBMConverter-LICENSE.txt"
+			-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateThirdPartyNotices.cmake"
+		DEPENDS
+			"${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateThirdPartyNotices.cmake"
+			"${CMAKE_CURRENT_SOURCE_DIR}/vcpkg.json"
+		COMMENT "Generating THIRD_PARTY_NOTICES.txt from vcpkg copyright files"
+		VERBATIM
+	)
+	add_custom_target(third_party_notices ALL DEPENDS "${NEXAMAP_NOTICES_FILE}")
+	install(FILES "${NEXAMAP_NOTICES_FILE}" DESTINATION "${NEXAMAP_RESOURCE_DESTINATION}")
+else()
+	message(WARNING "No vcpkg install tree: THIRD_PARTY_NOTICES.txt will not be generated or installed")
+endif()
 if(WIN32)
 	install(FILES NexaMap-Debug.cmd DESTINATION .)
 elseif(UNIX AND NOT APPLE)
 	install(PROGRAMS packaging/nexamap-editor DESTINATION ${CMAKE_INSTALL_BINDIR})
 	install(FILES packaging/nexamap-editor.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 	install(FILES brushes/icon/editor_icon.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/32x32/apps RENAME nexamap-editor.png)
+	# Debian policy location. This only points at the files that state the terms.
+	file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/debian-copyright"
+		"NexaMap Editor\n"
+		"Source: https://github.com/Mateuzkl/NexaMap-Editor\n\n"
+		"The terms that apply to this package are in\n"
+		"/usr/share/nexamap/LICENSE.rtf\n\n"
+		"Notices for bundled third-party libraries are in\n"
+		"/usr/share/nexamap/THIRD_PARTY_NOTICES.txt\n"
+	)
+	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/debian-copyright"
+		DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/nexamap-editor RENAME copyright)
 	set(CPACK_GENERATOR "DEB;TGZ")
 	set(CPACK_PACKAGE_NAME "nexamap-editor")
 	file(STRINGS source/version_info.h NEXAMAP_VERSION_LINE REGEX "^#define NEXAMAP_VERSION_STRING")
 	string(REGEX REPLACE ".*\"([^\"]+)\".*" "\\1" CPACK_PACKAGE_VERSION "${NEXAMAP_VERSION_LINE}")
-	set(CPACK_PACKAGE_CONTACT "NexaMap maintainers <https://github.com/Mateuzkl/NexaMap-Editor/issues>")
+	set(CPACK_PACKAGE_CONTACT "Mateuzkl <Mateuzkl@users.noreply.github.com>")
+	set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/Mateuzkl/NexaMap-Editor")
+	set(CPACK_STRIP_FILES ON)
 	set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NexaMap OpenTibia map editor")
 	set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
 	set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
@@ -365,7 +490,8 @@ if(BUILD_TESTING)
 		add_executable(linux_editor_tests tests/linux_editor_tests.cpp)
 		target_link_libraries(linux_editor_tests PRIVATE editor_test_objects)
 		add_test(NAME linux_editor_tests COMMAND linux_editor_tests)
-		set_tests_properties(linux_editor_tests PROPERTIES TIMEOUT 60)
+		# 77 means xdotool is unavailable, so native input cannot be injected.
+		set_tests_properties(linux_editor_tests PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 	endif()
 
 	add_executable(house_paste_hardening_tests
@@ -544,7 +670,7 @@ if(BUILD_TESTING)
 		source/otb_item_id_mapping_provider.cpp
 	)
 	target_include_directories(custom_server_converter_tests PRIVATE source)
-	target_link_libraries(custom_server_converter_tests PRIVATE ${wxWidgets_LIBRARIES})
+	target_link_libraries(custom_server_converter_tests PRIVATE ${wxWidgets_LIBRARIES} nexamap_pugixml)
 	set_target_properties(custom_server_converter_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON
@@ -655,6 +781,7 @@ if(BUILD_TESTING)
 		source/spawn_format.cpp
 	)
 	target_include_directories(spawn_format_tests PRIVATE source)
+	target_link_libraries(spawn_format_tests PRIVATE nexamap_pugixml)
 	set_target_properties(spawn_format_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON
@@ -677,13 +804,21 @@ if(BUILD_TESTING)
 	)
 	add_test(NAME filehandle_tests COMMAND filehandle_tests)
 
+	add_executable(xml_attribute_tests tests/xml_attribute_tests.cpp)
+	target_include_directories(xml_attribute_tests PRIVATE source)
+	target_link_libraries(xml_attribute_tests PRIVATE nexamap_pugixml)
+	set_target_properties(xml_attribute_tests PROPERTIES
+		CXX_STANDARD 20
+		CXX_STANDARD_REQUIRED ON
+	)
+	add_test(NAME xml_attribute_tests COMMAND xml_attribute_tests)
+
 	add_executable(creature_cache_tests
 		tests/creature_cache_tests.cpp
 		source/creature_cache.cpp
-		source/ext/pugixml.cpp
 	)
 	target_include_directories(creature_cache_tests PRIVATE source)
-	target_link_libraries(creature_cache_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
+	target_link_libraries(creature_cache_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json nexamap_pugixml)
 	set_target_properties(creature_cache_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON
@@ -698,7 +833,7 @@ if(BUILD_TESTING)
 		source/spawn_source_remap_core.cpp
 	)
 	target_include_directories(spawn_persistence_tests PRIVATE source)
-	target_link_libraries(spawn_persistence_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
+	target_link_libraries(spawn_persistence_tests PRIVATE ${wxWidgets_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json nexamap_pugixml)
 	set_target_properties(spawn_persistence_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON
@@ -712,6 +847,7 @@ if(BUILD_TESTING)
 		source/spawn_xml_converter.cpp
 	)
 	target_include_directories(spawn_xml_converter_tests PRIVATE source)
+	target_link_libraries(spawn_xml_converter_tests PRIVATE nexamap_pugixml)
 	set_target_properties(spawn_xml_converter_tests PROPERTIES
 		CXX_STANDARD 20
 		CXX_STANDARD_REQUIRED ON
@@ -781,9 +917,11 @@ if(BUILD_TESTING)
 	add_test(NAME palette_toolbar_tests COMMAND palette_toolbar_tests)
 
 	# Release tests must execute their assertions, including calls inside assert().
+	# __DEBUG__ also enables the editor's ASSERT() macro in these targets.
 	get_property(build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 	foreach(test_target IN LISTS build_targets)
 		if(test_target MATCHES "_tests$" OR test_target STREQUAL "editor_test_objects")
+			target_compile_definitions(${test_target} PRIVATE __DEBUG__)
 			if(MSVC)
 				target_compile_options(${test_target} PRIVATE /UNDEBUG)
 			else()
@@ -792,3 +930,14 @@ if(BUILD_TESTING)
 		endif()
 	endforeach()
 endif()
+
+# Applies to everything built from this directory. The generated protobuf code
+# lives in a subdirectory and takes hardening only, see source/protobuf.
+target_link_libraries(${PROJECT_NAME} nexamap_warnings nexamap_hardening)
+get_property(build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(project_target IN LISTS build_targets)
+	get_target_property(project_target_type ${project_target} TYPE)
+	if(project_target_type MATCHES "^(EXECUTABLE|STATIC_LIBRARY|OBJECT_LIBRARY)$" AND NOT project_target STREQUAL PROJECT_NAME)
+		target_link_libraries(${project_target} PRIVATE nexamap_warnings nexamap_hardening)
+	endif()
+endforeach()

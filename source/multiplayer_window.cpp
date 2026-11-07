@@ -32,6 +32,13 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 	auto* password = new wxTextCtrl(&dialog, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
 	password->SetMaxLength(256);
 	field("Session password", password);
+	wxCheckBox* loopback = nullptr;
+	if (hosting) {
+		password->SetHint(wxString::Format("At least %zu characters", Multiplayer::MinHostPassword));
+		loopback = new wxCheckBox(&dialog, wxID_ANY, "Only this PC can connect (the password is then optional)");
+		loopback->SetValue(options.loopbackOnly);
+		field("Access", loopback);
+	}
 	wxSpinCtrl* maxPlayers = nullptr;
 	wxChoice* role = nullptr;
 	wxCheckBox* approvals = nullptr;
@@ -85,13 +92,25 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 		field("", copy);
 	}
 	layout->Add(form, 1, wxEXPAND | wxALL, 16);
-	auto* help = new wxStaticText(&dialog, wxID_ANY, "Use the same NexaMap build and client/item definitions on every PC.\nSame PC: 127.0.0.1. LAN: host IPv4. VPN: host VPN IP.\nDirect Internet: configure firewall, NAT and port forwarding.\nThe host starts listening after OK. Password authentication does not encrypt map/chat traffic.");
+	auto* help = new wxStaticText(&dialog, wxID_ANY, "Use the same NexaMap build and client/item definitions on every PC.\nSame PC: 127.0.0.1. LAN: host IPv4. VPN: host VPN IP.\nFor trusted LAN or VPN use only: do not expose this port to the Internet.\nThe host starts listening after OK. The password authenticates peers and each network frame, but map/chat traffic is not encrypted, and anyone who captures a login can try to guess the password offline. Use a long, unique password.");
 	help->Wrap(dialog.FromDIP(540));
 	layout->Add(help, 0, wxLEFT | wxRIGHT | wxBOTTOM, 16);
 	layout->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxALL, 12);
 	dialog.SetSizerAndFit(layout);
 	dialog.SetMinSize(dialog.GetSize());
 	dialog.CentreOnParent();
+	if (hosting) {
+		dialog.Bind(
+			wxEVT_BUTTON, [&](wxCommandEvent& event) {
+				if (Multiplayer::validHostPassword(nstr(password->GetValue()), loopback->GetValue())) {
+					event.Skip();
+				} else {
+					wxMessageBox(wxString::Format("Use a session password of at least %zu characters, or allow only this PC to connect.", Multiplayer::MinHostPassword), "Host multiplayer session", wxOK | wxICON_WARNING, &dialog);
+				}
+			},
+			wxID_OK
+		);
+	}
 	if (dialog.ShowModal() != wxID_OK) {
 		return false;
 	}
@@ -113,6 +132,7 @@ bool MultiplayerWindow::configure(wxWindow* parent, bool hosting, MultiplayerSes
 		options.maxPlayers = maxPlayers->GetValue();
 		options.defaultRole = static_cast<Multiplayer::Role>(role->GetSelection() + 1);
 		options.approvals = approvals->GetValue();
+		options.loopbackOnly = loopback->GetValue();
 		options.autosaveMinutes = autosave->GetValue();
 		options.maxBackupSets = backupSets->GetValue();
 	}
@@ -126,8 +146,10 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 	layout->Add(diagnostics, 0, wxEXPAND | wxALL, 12);
 	if (live.isHost()) {
 		auto* endpoints = new wxChoice(panel, wxID_ANY);
-		for (const auto& ip : Multiplayer::localIPv4Addresses()) {
-			endpoints->Append(wxstr(ip + ":" + std::to_string(live.settings().port)));
+		if (!live.settings().loopbackOnly) {
+			for (const auto& ip : Multiplayer::localIPv4Addresses()) {
+				endpoints->Append(wxstr(ip + ":" + std::to_string(live.settings().port)));
+			}
 		}
 		endpoints->Append(wxstr("127.0.0.1:" + std::to_string(live.settings().port) + " (same PC only)"));
 		endpoints->SetSelection(0);
@@ -186,6 +208,9 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 	auto* kick = button(playerPage, buttons, "Kick", [this](wxCommandEvent&) { if (session){ session->kick(selectedPlayer());
 } });
 	kick->Enable(live.isHost());
+	auto* clearBans = button(playerPage, buttons, "Clear bans", [this](wxCommandEvent&) { if (session){ session->clearBans();
+} });
+	clearBans->Enable(live.isHost());
 	button(playerPage, buttons, "Resync", [this](wxCommandEvent&) { if (session){ session->requestResync();
 } });
 	playerBackupButton = button(playerPage, buttons, "Backup now", [this](wxCommandEvent&) {
@@ -216,7 +241,7 @@ MultiplayerWindow::MultiplayerWindow(wxWindow* parent, MultiplayerSession& live)
 	approvals = new wxListCtrl(approvalPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
 	approvals->AppendColumn("Request", wxLIST_FORMAT_LEFT, 70);
 	approvals->AppendColumn("Requester", wxLIST_FORMAT_LEFT, 150);
-	approvals->AppendColumn("Type", wxLIST_FORMAT_LEFT, 270);
+	approvals->AppendColumn("Details", wxLIST_FORMAT_LEFT, 420);
 	approvals->AppendColumn("Position", wxLIST_FORMAT_LEFT, 140);
 	approvals->AppendColumn("Status", wxLIST_FORMAT_LEFT, 100);
 	approvalLayout->Add(approvals, 1, wxEXPAND | wxALL, 8);

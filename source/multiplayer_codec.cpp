@@ -28,10 +28,15 @@ namespace Multiplayer {
 				return false;
 			}
 		};
-		void position(Writer& out, const Position& pos) {
+		// Both directions share this check: anything accepted here must stay encodable.
+		const Position& checkedPosition(const Position& pos) {
 			if (!pos.isValid()) {
 				throw Error("Invalid map position.");
 			}
+			return pos;
+		}
+		void position(Writer& out, const Position& value) {
+			const auto& pos = checkedPosition(value);
 			out.u64(tileKey(static_cast<uint16_t>(pos.x), static_cast<uint16_t>(pos.y), static_cast<uint8_t>(pos.z)));
 		}
 		Position position(Reader& in) {
@@ -39,7 +44,8 @@ namespace Multiplayer {
 			if (!validTileKey(key)) {
 				throw Error("Invalid map position.");
 			}
-			return { tileX(key), tileY(key), tileZ(key) };
+			const Position pos(tileX(key), tileY(key), tileZ(key));
+			return checkedPosition(pos);
 		}
 		void attributes(Writer& out, const SpawnAttributeMap& values) {
 			if (values.size() > 256) {
@@ -174,7 +180,7 @@ namespace Multiplayer {
 			std::set<std::string> categoryNames;
 			while (catCount--) {
 				const auto category = in.string(1024);
-				if (category.empty() || !categoryNames.insert(category).second) {
+				if (category.empty() || !categoryNames.insert(as_lower_str(category)).second) {
 					throw Error("Duplicate/invalid waypoint category.");
 				}
 				data.waypoint_categories.push_back(category);
@@ -261,10 +267,9 @@ namespace Multiplayer {
 			while (count--) {
 				auto name = in.string(1024);
 				auto pos = position(in);
-				if (name.empty() || !data.waypoints.emplace(name, pos).second) {
+				if (name.empty() || !waypointKeys.insert(as_lower_str(name)).second || !data.waypoints.emplace(name, pos).second) {
 					throw Error("Duplicate waypoint.");
 				}
-				waypointKeys.insert(as_lower_str(name));
 				if (formatVersion >= 2) {
 					const auto category = in.string(1024);
 					data.waypoint_category[name] = category;
@@ -274,17 +279,24 @@ namespace Multiplayer {
 				readWaypointGroups(in, data, waypointKeys);
 				const std::set<std::string> categoryNames(data.waypoint_categories.begin(), data.waypoint_categories.end());
 				std::set<std::string> ordered;
-				for (const auto& name : data.uncategorized_order) {
-					if (!ordered.insert(as_lower_str(name)).second) {
-						throw Error("Duplicate waypoint ordering.");
+				std::map<std::string, std::string> categoryByKey;
+				for (const auto& [name, category] : data.waypoint_category) {
+					categoryByKey[as_lower_str(name)] = category;
+				}
+				const auto expectCategory = [&](const std::string& name, const std::string& category) {
+					// Waypoints::applyOrderingFromMetadata refuses these after the map already changed.
+					const auto key = as_lower_str(name);
+					const auto found = categoryByKey.find(key);
+					if (!ordered.insert(key).second || found == categoryByKey.end() || found->second != category) {
+						throw Error("Duplicate or mismatched waypoint ordering.");
 					}
+				};
+				for (const auto& name : data.uncategorized_order) {
+					expectCategory(name, {});
 				}
 				for (const auto& [category, order] : data.category_waypoint_order) {
-					(void)category;
 					for (const auto& name : order) {
-						if (!ordered.insert(as_lower_str(name)).second) {
-							throw Error("Duplicate waypoint ordering.");
-						}
+						expectCategory(name, category);
 					}
 				}
 				for (const auto& [name, category] : data.waypoint_category) {
@@ -310,6 +322,19 @@ namespace Multiplayer {
 			}
 			in.finish();
 			return data;
+		}
+		void checkTeleports(const Item* item) {
+			if (!item) {
+				return;
+			}
+			if (const auto* teleport = dynamic_cast<const Teleport*>(item); teleport && (teleport->getZ() < 0 || teleport->getZ() > MAP_MAX_LAYER)) {
+				throw Error("Invalid teleport destination.");
+			}
+			if (const auto* container = dynamic_cast<const Container*>(item)) {
+				for (const auto* child : container->getVector()) {
+					checkTeleports(child);
+				}
+			}
 		}
 		void collectItems(const Item* item, std::map<uint16_t, uint32_t>& uids, std::vector<const Item*>& all) {
 			if (!item) {
@@ -398,7 +423,7 @@ namespace Multiplayer {
 		}
 		return std::move(out.data);
 	}
-	std::unique_ptr<Tile> decodeTile(Map& map, uint64_t key, std::span<const uint8_t> data) {
+	std::unique_ptr<Tile> decodeTile(Map& map, uint64_t key, std::span<const uint8_t> data, int maxSpawnRadius) {
 		if (!validTileKey(key) || data.size() > MaxTile) {
 			throw Error("Invalid tile.");
 		}
@@ -406,8 +431,7 @@ namespace Multiplayer {
 		if (in.u8() != 1) {
 			throw Error("Unknown tile format.");
 		}
-		auto* loc = map.createTileL(tileX(key), tileY(key), tileZ(key));
-		std::unique_ptr<Tile> tile(map.allocator(loc));
+		std::unique_ptr<Tile> tile(newd Tile(tileX(key), tileY(key), tileZ(key)));
 		tile->setMapFlags(in.u32());
 		tile->house_id = in.u32();
 		auto zones = in.u16();
@@ -423,6 +447,7 @@ namespace Multiplayer {
 		uint32_t objects = 0;
 		if (in.boolean()) {
 			tile->ground = readItem(in, objects).release();
+			checkTeleports(tile->ground);
 		}
 		auto items = in.u16();
 		if (items > MaxObjects) {
@@ -430,9 +455,18 @@ namespace Multiplayer {
 		}
 		while (items--) {
 			tile->items.push_back(readItem(in, objects).release());
+			checkTeleports(tile->items.back());
 		}
 		if (in.boolean()) {
-			tile->spawn = new Spawn(in.u8());
+			const int radius = in.u8();
+			if (radius > maxSpawnRadius) {
+				// A large spawn loaded from XML stays editable, it just cannot be created.
+				const auto* existing = map.getTile(tileX(key), tileY(key), tileZ(key));
+				if (!existing || !existing->spawn || existing->spawn->getSize() != radius) {
+					throw Error("Spawn radius exceeds the multiplayer limit.");
+				}
+			}
+			tile->spawn = new Spawn(radius);
 			for (auto kind : { SpawnAreaKind::Mixed, SpawnAreaKind::Monsters, SpawnAreaKind::Npcs }) {
 				if (in.boolean()) {
 					tile->spawn->setSourceAttributes(kind, attributes(in));
@@ -554,7 +588,7 @@ namespace Multiplayer {
 	void applyMetadata(Map& map, std::span<const uint8_t> bytes) {
 		const auto data = readMetadata(bytes);
 		std::set<uint32_t> towns, houses;
-		std::set<std::string> waypoints, zones;
+		std::set<std::string> waypoints;
 		for (const auto& t : data.towns) {
 			towns.insert(t.id);
 			auto* town = map.towns.getTown(t.id);
@@ -594,7 +628,7 @@ namespace Multiplayer {
 			}
 		}
 		for (const auto& [name, pos] : data.waypoints) {
-			waypoints.insert(name);
+			waypoints.insert(as_lower_str(name)); // Registry keys are lowercase.
 			const std::string category = data.format_version >= 2 && data.waypoint_category.count(name) != 0 ? data.waypoint_category.at(name) : std::string();
 			if (Waypoint* waypoint = map.waypoints.getWaypoint(name)) {
 				if (waypoint->pos != pos) {
@@ -639,6 +673,68 @@ namespace Multiplayer {
 			map.zones.addZone(name, id);
 		}
 	}
+	std::string describeMetadataChange(std::span<const uint8_t> before, std::span<const uint8_t> after) {
+		using Summary = std::map<std::string, std::string>;
+		const auto pos = [](const Position& p) {
+			return std::to_string(p.x) + "," + std::to_string(p.y) + "," + std::to_string(p.z);
+		};
+		struct Lists {
+			Summary towns, houses, waypoints, zones;
+		};
+		const auto summarize = [&](const Metadata& data) {
+			Lists lists;
+			for (const auto& t : data.towns) {
+				lists.towns["#" + std::to_string(t.id) + " " + t.name] = pos(t.temple);
+			}
+			for (const auto& h : data.houses) {
+				lists.houses["#" + std::to_string(h.id) + " " + h.name] = pos(h.exit) + " town " + std::to_string(h.townid) + " rent " + std::to_string(h.rent) + " reset " + std::to_string(h.requiredReset) + " beds " + std::to_string(h.beds) + (h.guildhall ? " guildhall" : "");
+			}
+			for (const auto& [name, position] : data.waypoints) {
+				const auto category = data.waypoint_category.find(name);
+				lists.waypoints[name] = pos(position) + (category == data.waypoint_category.end() ? "" : " " + category->second);
+			}
+			for (const auto& [name, id] : data.zones) {
+				lists.zones[name] = std::to_string(id);
+			}
+			return lists;
+		};
+		const auto oldLists = summarize(readMetadata(before));
+		const auto newLists = summarize(readMetadata(after));
+		std::string text;
+		const auto compare = [&text](const char* label, const Summary& oldValues, const Summary& newValues) {
+			constexpr size_t MaxListed = 4;
+			size_t listed = 0, hidden = 0;
+			std::string entries;
+			const auto add = [&](char mark, const std::string& name, const std::string& value) {
+				if (listed++ >= MaxListed) {
+					++hidden;
+					return;
+				}
+				entries += std::string(entries.empty() ? " " : ", ") + mark + name + (value.empty() ? "" : " (" + value + ")");
+			};
+			for (const auto& [name, value] : newValues) {
+				const auto old = oldValues.find(name);
+				if (old == oldValues.end()) {
+					add('+', name, value);
+				} else if (old->second != value) {
+					add('~', name, value);
+				}
+			}
+			for (const auto& [name, value] : oldValues) {
+				if (!newValues.contains(name)) {
+					add('-', name, {});
+				}
+			}
+			if (listed) {
+				text += (text.empty() ? "" : "; ") + std::string(label) + entries + (hidden ? ", and " + std::to_string(hidden) + " more" : "");
+			}
+		};
+		compare("Towns", oldLists.towns, newLists.towns);
+		compare("Houses", oldLists.houses, newLists.houses);
+		compare("Waypoints", oldLists.waypoints, newLists.waypoints);
+		compare("Zones", oldLists.zones, newLists.zones);
+		return printableText(text.empty() ? "Metadata order or waypoint groups only" : text);
+	}
 	Digest assetSignature() {
 		Writer out(16 * 1024 * 1024);
 		out.u32(g_items.MajorVersion);
@@ -665,7 +761,21 @@ namespace Multiplayer {
 		}
 		return sha256(out.data);
 	}
-	std::string validateTiles(Map& map, const std::vector<std::unique_ptr<Tile>>& tiles, bool allowSensitive, std::span<const uint8_t> metadata) {
+	uint64_t newSpawnArea(Map& map, const std::vector<DecodedTile>& tiles) {
+		uint64_t area = 0;
+		for (const auto& [key, tile] : tiles) {
+			if (!tile->spawn) {
+				continue;
+			}
+			const auto* old = map.getTile(tileX(key), tileY(key), tileZ(key));
+			if (!old || !old->spawn || old->spawn->getSize() != tile->spawn->getSize()) {
+				const uint64_t side = uint64_t(tile->spawn->getSize()) * 2 + 1;
+				area += side * side;
+			}
+		}
+		return area;
+	}
+	std::string validateTiles(Map& map, const std::vector<DecodedTile>& tiles, bool allowSensitive, std::span<const uint8_t> metadata, bool snapshot) {
 		std::set<uint32_t> houses, zones;
 		if (!metadata.empty()) {
 			const auto proposed = readMetadata(metadata);
@@ -676,9 +786,12 @@ namespace Multiplayer {
 				zones.insert(id);
 			}
 		}
+		if (!snapshot && newSpawnArea(map, tiles) > MaxTransactionSpawnArea) {
+			return "This edit creates too much spawn area at once. Split it into smaller edits.";
+		}
 		std::map<uint16_t, uint32_t> oldIds, newIds;
 		std::vector<const Item*> oldItems, newItems;
-		for (const auto& tile : tiles) {
+		for (const auto& [key, tile] : tiles) {
 			if (tile->house_id && (metadata.empty() ? !map.houses.getHouse(tile->house_id) : !houses.contains(tile->house_id))) {
 				return "Unknown house ID.";
 			}
@@ -687,7 +800,7 @@ namespace Multiplayer {
 					return "Unknown zone ID.";
 				}
 			}
-			if (auto* old = map.getTile(tile->getPosition())) {
+			if (auto* old = map.getTile(tileX(key), tileY(key), tileZ(key))) {
 				collectItems(old->ground, oldIds, oldItems);
 				for (const auto* item : old->items) {
 					collectItems(item, oldIds, oldItems);
@@ -698,11 +811,17 @@ namespace Multiplayer {
 				collectItems(item, newIds, newItems);
 			}
 		}
+		if (snapshot) {
+			return {};
+		}
 		for (const auto& [uid, count] : newIds) {
-			if (count > 1 || map.getUniqueIdCount(uid) > oldIds[uid]) {
+			const auto old = oldIds.find(uid);
+			const uint32_t replaced = old == oldIds.end() ? 0 : old->second;
+			// Duplicates a loaded map already has stay editable; only a new instance is refused.
+			if (count > replaced && map.getUniqueIdCount(uid) + count > replaced + 1) {
 				return "Unique ID already exists on another tile.";
 			}
-			if (!allowSensitive && !oldIds.contains(uid)) {
+			if (!allowSensitive && old == oldIds.end()) {
 				return "Creating a Unique ID requires host approval.";
 			}
 		}

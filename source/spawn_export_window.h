@@ -20,6 +20,8 @@ struct SpawnExportOptions {
 	std::filesystem::path directory;
 	std::string primaryFilename;
 	std::string npcFilename;
+	// Unmapped or ambiguous item IDs accepted in the confirmation step.
+	uint64_t confirmedItemIdIssues = 0;
 };
 
 class SpawnExportWindow final : public wxDialog {

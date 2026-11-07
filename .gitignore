@@ -7,6 +7,15 @@ build/
 build.*/
 build-debug
 build-release
+build-x86/
+build-x64/
+package-*/
+out/
+.vcpkg/
+vcpkg-downloads/
+vcpkg-binary-cache/
+build.*.log
+*.zip
 vcproj/.vs/
 vcpkg_installed/
 CMakeLists.txt.user*
@@ -17,7 +26,6 @@ rme.cfg
 data/user
 /rme.log
 nexamap.log
-nexamap-crash-*.dmp
 /performance.log
 /tmp/
 

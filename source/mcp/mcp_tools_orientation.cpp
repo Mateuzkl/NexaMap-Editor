@@ -5,6 +5,7 @@
 #include "mcp_gui_call.h"
 #include "mcp_item_identity.h"
 #include "mcp_registry.h"
+#include "mcp_tool_utils.h"
 
 #include "../brush.h"
 #include "../carpet_brush.h"
@@ -65,7 +66,7 @@ namespace mcp {
 			return path.empty() ? std::string() : path.filename().string();
 		}
 
-		std::string BrushKind(const Brush& brush) {
+		std::string SearchBrushKind(const Brush& brush) {
 			if (dynamic_cast<const GroundBrush*>(&brush)) {
 				return "ground";
 			}
@@ -85,13 +86,6 @@ namespace mcp {
 				return "raw";
 			}
 			return "other";
-		}
-
-		Json OnGui(std::function<Json(const EditorContext&)> function) {
-			return CallJsonOnGui([function = std::move(function)] {
-				const EditorContext context = ResolveEditorContext();
-				return function(context);
-			});
 		}
 	}
 
@@ -149,7 +143,7 @@ namespace mcp {
 				EmptySchema(),
 				false,
 				[](const Json&) {
-					return StructuredResult(OnGui([](const EditorContext& context) {
+					return UntrustedMapResult(OnGui([](const EditorContext& context) {
 						return Json {
 							{ "name", context.map.getName() },
 							{ "file", FileBasename(std::filesystem::path(context.map.getFilename())) },
@@ -159,6 +153,7 @@ namespace mcp {
 							{ "changed", context.map.hasChanged() },
 							{ "changeGeneration", context.map.getChangeGeneration() },
 							{ "sessionId", context.mapSessionId },
+							{ "mapSessionId", context.mapSessionId },
 							{ "assetMode", AssetModeName(context.assetMode) },
 							{ "itemIdMode", McpItemIdModeName(context.itemIdMode) },
 						};
@@ -326,7 +321,7 @@ namespace mcp {
 								continue;
 							}
 							const std::string brushName = brush->getName().empty() ? name : brush->getName();
-							const std::string brushKind = BrushKind(*brush);
+							const std::string brushKind = SearchBrushKind(*brush);
 							if ((!query.empty() && LowerToolText(brushName).find(query) == std::string::npos) || (!kind.empty() && brushKind != kind)) {
 								continue;
 							}
@@ -363,11 +358,13 @@ namespace mcp {
 										{ "prompt", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 4000 } } },
 										{ "width", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 512 }, { "default", 50 } } },
 										{ "height", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 512 }, { "default", 50 } } },
+										{ "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } },
+										{ "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } },
 									} },
 					{ "required", Json::array({ "prompt" }) },
 					{ "additionalProperties", false },
 				},
-				false,
+				true,
 				[](const Json& arguments) {
 					if (!arguments.contains("prompt") || !arguments["prompt"].is_string()) {
 						throw Error("prompt must be a string");
@@ -381,15 +378,23 @@ namespace mcp {
 					if (width < 1 || width > 512 || height < 1 || height > 512) {
 						throw Error("width and height must be between 1 and 512");
 					}
-					return StructuredResult(OnGui([prompt, width, height](const EditorContext& context) {
+					return StructuredResult(OnGui([arguments, prompt, width, height](const EditorContext& context) {
+						VerifyMapSession(context, arguments);
+						// Set only on the GUI thread; stops a batch stacking up dialogs.
+						static bool generatorPending = false;
+						if (generatorPending) {
+							throw Error("the Procedural Map Generator is already opening");
+						}
 						if (context.editor.selection.size() == 0 && (width > context.map.getWidth() || height > context.map.getHeight())) {
 							throw Error("The requested rectangle exceeds the open map bounds.");
 						}
 						const SessionId expectedSession = context.mapSessionId;
 						const bool usesSelection = context.editor.selection.size() != 0;
+						generatorPending = true;
 						wxTheApp->CallAfter([prompt, expectedSession, width, height] {
+							generatorPending = false;
 							Editor* editor = g_gui.GetCurrentEditor();
-							if (!editor || editor->map.getSessionId() != expectedSession) {
+							if (!editor || editor->map.getSessionId() != expectedSession || IsModalDialogOpen()) {
 								return;
 							}
 							RunProceduralMapGenerator(g_gui.root, *editor, g_gui.GetCurrentFloor(), prompt, width, height);

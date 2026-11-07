@@ -1,0 +1,15 @@
+# Only code the editor does not own belongs here. Run with LSAN_OPTIONS=suppressions=...
+
+# Fontconfig keeps its configuration and font patterns for the life of the process,
+# and wxWidgets has no API to release them. Function names also match static builds.
+leak:Fc*
+leak:libfontconfig
+
+# Mesa driver screens stay loaded until process exit.
+leak:driCreateNewScreen
+leak:libgallium
+leak:wxGLCanvasEGL::InitConfig
+
+# GLib's process-wide tables. These stacks stop at g_realloc, and the editor itself
+# allocates with new, so this does not hide editor leaks.
+leak:g_realloc

@@ -611,7 +611,7 @@ bool Action::commit() {
 						// oooooomggzzz we need to add it to the appropriate house!
 						House* house = editor.map.houses.getHouse(oldtile->getHouseID());
 						if (house) {
-							house->removeTile(oldtile);
+							house->forgetTile(oldtile->getPosition());
 						}
 
 						house = editor.map.houses.getHouse(newtile->getHouseID());
@@ -777,7 +777,7 @@ bool Action::undo() {
 					// oooooomggzzz we need to remove it from the appropriate house!
 					House* house = editor.map.houses.getHouse(newtile->getHouseID());
 					if (house) {
-						house->removeTile(newtile);
+						house->forgetTile(newtile->getPosition());
 					} else {
 						// Set tile house to 0, house has been removed
 						newtile->setHouse(nullptr);
@@ -1257,6 +1257,9 @@ bool ActionQueue::undo() {
 			return false;
 		}
 		--current;
+		if (editor.map.doChange()) {
+			g_gui.UpdateTitle();
+		}
 		return true;
 	}
 	return false;
@@ -1272,6 +1275,9 @@ bool ActionQueue::redo() {
 			return false;
 		}
 		++current;
+		if (editor.map.doChange()) {
+			g_gui.UpdateTitle();
+		}
 		return true;
 	}
 	return false;

@@ -53,8 +53,11 @@ SpawnExportWindow::SpawnExportWindow(wxWindow* parent, Map& map, const wxString&
 	form->Add(directoryPicker, 1, wxEXPAND);
 
 	const std::string baseName = nstr(mapBaseName).empty() ? "world" : nstr(mapBaseName);
-	const std::string currentPrimary = map.getSpawnFilename();
-	const std::string currentNpc = map.getSpawnNpcFilename();
+	// Save As under a new name starts from new spawn files: reusing the current
+	// names would make both maps write to the same sidecars.
+	const bool startsNewFiles = saveAsMode && (!map.hasFile() || wxFileName(wxstr(map.getFilename())).GetName() != mapBaseName);
+	const std::string currentPrimary = startsNewFiles ? std::string() : map.getSpawnFilename();
+	const std::string currentNpc = startsNewFiles ? std::string() : map.getSpawnNpcFilename();
 	form->Add(newd wxStaticText(this, wxID_ANY, "TFS filename:"), 0, wxALIGN_CENTER_VERTICAL);
 	tfsFilename = newd wxTextCtrl(this, wxID_ANY, wxstr(map.getSpawnFormat() == SpawnFormat::Tfs && !currentPrimary.empty() ? currentPrimary : baseName + "-spawn.xml"));
 	form->Add(tfsFilename, 1, wxEXPAND);
@@ -97,6 +100,11 @@ SpawnExportOptions SpawnExportWindow::GetOptions() const {
 		options.npcFilename = EnsureXmlExtension(nstr(npcFilename->GetValue()));
 	} else {
 		options.primaryFilename = EnsureXmlExtension(nstr(tfsFilename->GetValue()));
+	}
+	const ItemIdSpace targetSpace = options.mapFormat == MapStorageFormat::CanaryCrystal ? ItemIdSpace::Client : ItemIdSpace::Server;
+	if (targetSpace != map.getItemIdSpace()) {
+		const ItemIdConversionPreview& conversion = targetSpace == ItemIdSpace::Client ? serverToClientPreview : clientToServerPreview;
+		options.confirmedItemIdIssues = conversion.missingItems + conversion.ambiguousItems;
 	}
 	return options;
 }

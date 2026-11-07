@@ -19,7 +19,8 @@ namespace Multiplayer {
 	std::shared_ptr<AddressResolution> resolveIPv4(const std::string& hostname);
 	// Takes ownership. Preserves a partially written frame before the rejection.
 	// An independent, bounded event handler finishes even if the session is gone.
-	void closeSocket(wxSocketBase* socket, std::deque<Bytes> writes, size_t offset, const std::string& reason);
+	// lastFrame is the caller's Disconnect, sealed by the caller on an authenticated link.
+	void closeSocket(wxSocketBase* socket, std::deque<Bytes> writes, size_t offset, Bytes lastFrame);
 	std::vector<std::string> localIPv4Addresses();
 	std::string socketFailure(wxSocketBase& socket, bool connecting);
 }

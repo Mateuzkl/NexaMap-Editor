@@ -51,7 +51,7 @@ int main() {
 		auto json = nlohmann::json::parse(input);
 		json["favorites"].push_back(json["favorites"][0]);
 		json["favorites"].push_back({ { "id", "broken" } });
-		for (const auto badKind : { nlohmann::json(4294967296ULL), nlohmann::json(0.5), nlohmann::json(-1) }) {
+		for (const auto& badKind : { nlohmann::json(4294967296ULL), nlohmann::json(0.5), nlohmann::json(-1) }) {
 			auto badEntry = json["favorites"][0];
 			badEntry["kind"] = badKind;
 			badEntry["context"] = "invalid-kind";

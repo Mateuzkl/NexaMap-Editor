@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "ext/pugixml.hpp"
+#include <pugixml.hpp>
 #include "custom_server_converter.h"
 #include "file_transaction.h"
 #include "path_encoding.h"
@@ -257,32 +257,32 @@ namespace {
 	void TestXmlRangesAndCollisions() {
 		auto mapping = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 30 }, { 3, 31 }, { 4, 40 } });
 		pugi::xml_document expanded;
-		expanded.load("<items><item fromid='1' toid='3'/></items>");
+		expanded.load_string("<items><item fromid='1' toid='3'/></items>");
 		const auto expandedReport = ConvertItemsXmlDocument(expanded, *mapping.provider, true);
 		check(expandedReport.success && expandedReport.expandedRanges == 1, "non-contiguous ranges expand deterministically");
 
 		pugi::xml_document malformed;
-		malformed.load("<items><item fromid='bad' toid='3'/></items>");
+		malformed.load_string("<items><item fromid='bad' toid='3'/></items>");
 		check(!ConvertItemsXmlDocument(malformed, *mapping.provider, true).success, "malformed range is blocked");
 		auto aliases = OtbItemIdMappingProvider::FromPairs({ { 1, 10 }, { 2, 10 } }, "allowed aliases", true);
 		pugi::xml_document malformedWithAliases;
-		malformedWithAliases.load("<items><item fromid='bad' toid='2'/></items>");
+		malformedWithAliases.load_string("<items><item fromid='bad' toid='2'/></items>");
 		check(!ConvertItemsXmlDocument(malformedWithAliases, *aliases.provider, true).success, "alias mode cannot permit a malformed range");
 		pugi::xml_document compatibleMalformed;
-		compatibleMalformed.load("<items><item fromid='bad' toid='2'/></items>");
+		compatibleMalformed.load_string("<items><item fromid='bad' toid='2'/></items>");
 		check(ConvertItemsXmlDocument(compatibleMalformed, *aliases.provider, true, true, true).success, "explicit compatibility override preserves malformed ranges");
 
 		pugi::xml_document collision;
-		collision.load("<items><item id='1'/><item id='2'/></items>");
+		collision.load_string("<items><item id='1'/><item id='2'/></items>");
 		const auto collisionReport = ConvertItemsXmlDocument(collision, *aliases.provider, true);
 		check(!collisionReport.success && collisionReport.collisions == 1, "ClientID alias declarations remain blocking");
 		pugi::xml_document compatibleCollision;
-		compatibleCollision.load("<items><item id='1'/><item id='2'/></items>");
+		compatibleCollision.load_string("<items><item id='1'/><item id='2'/></items>");
 		const auto compatibleCollisionReport = ConvertItemsXmlDocument(compatibleCollision, *aliases.provider, true, true, true);
 		check(compatibleCollisionReport.success && compatibleCollisionReport.collisions == 1, "explicit compatibility override allows ClientID alias declarations");
 
 		pugi::xml_document duplicateSource;
-		duplicateSource.load("<items><item id='4'/><item id='4'/></items>");
+		duplicateSource.load_string("<items><item id='4'/><item id='4'/></items>");
 		check(!ConvertItemsXmlDocument(duplicateSource, *mapping.provider, true).success, "duplicate destination IDs block even when source IDs are identical");
 	}
 

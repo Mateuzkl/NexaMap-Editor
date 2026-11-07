@@ -218,6 +218,16 @@ ${CMAKE_CURRENT_LIST_DIR}/terrain_stamp/terrain_stamp_library.h
 ${CMAKE_CURRENT_LIST_DIR}/tileset_window.h
 ${CMAKE_CURRENT_LIST_DIR}/add_tileset_window.h
 ${CMAKE_CURRENT_LIST_DIR}/add_item_window.h
+${CMAKE_CURRENT_LIST_DIR}/cross_client_match_policy.h
+${CMAKE_CURRENT_LIST_DIR}/editor_resource_session.h
+${CMAKE_CURRENT_LIST_DIR}/lua_parser.h
+${CMAKE_CURRENT_LIST_DIR}/multiplayer_peer.h
+${CMAKE_CURRENT_LIST_DIR}/new_map_tab_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/path_encoding.h
+${CMAKE_CURRENT_LIST_DIR}/profiling.h
+${CMAKE_CURRENT_LIST_DIR}/profiling_perf.h
+${CMAKE_CURRENT_LIST_DIR}/runtime_paths.h
+${CMAKE_CURRENT_LIST_DIR}/xml_attribute.h
 )
 
 set(rme_SRC
@@ -347,7 +357,6 @@ ${CMAKE_CURRENT_LIST_DIR}/minimap_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_canvas.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_style.cpp
 ${CMAKE_CURRENT_LIST_DIR}/minimap_page_cache.cpp
-${CMAKE_CURRENT_LIST_DIR}/mkpch.cpp
 ${CMAKE_CURRENT_LIST_DIR}/mt_rand.cpp
 ${CMAKE_CURRENT_LIST_DIR}/new_map_tab_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/numbertextctrl.cpp

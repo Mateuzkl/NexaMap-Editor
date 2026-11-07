@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <functional>
+#include <set>
 #include <filesystem>
 #include <wx/window.h>
 
@@ -39,6 +40,7 @@ public:
 		uint32_t maxPlayers = 8;
 		Multiplayer::Role defaultRole = Multiplayer::Role::Editor;
 		bool approvals = true;
+		bool loopbackOnly = false;
 		uint32_t autosaveMinutes = 0;
 		uint32_t maxBackupSets = 10;
 	};
@@ -104,6 +106,7 @@ public:
 	bool deferPropertyEdit(wxWindow* owner, const Position& position, std::function<void()> callback);
 	void changeRole(uint32_t id, Multiplayer::Role role);
 	void kick(uint32_t id);
+	void clearBans();
 	void approve(uint64_t id, bool accept, uint16_t replacementUniqueId = 0);
 	void requestResync();
 	void showWindow();
@@ -201,6 +204,12 @@ private:
 		uint32_t id;
 		uint64_t generation;
 		Multiplayer::Role role;
+		uint64_t lastSeen;
+	};
+	struct LoginBackoff {
+		uint32_t failures = 0;
+		uint64_t blockedUntil = 0;
+		uint64_t lastFailure = 0;
 	};
 	void onSocket(wxSocketEvent& event);
 	void onTimer(wxTimerEvent& event);
@@ -208,6 +217,12 @@ private:
 	void finishResolve();
 	void setStatus(const std::string& status);
 	void configureSocket(Peer& peer);
+	void accept(wxSocketBase* socket);
+	std::string admissionRefusal(const std::string& source, uint64_t now) const;
+	bool loginAllowed(const std::string& source, uint64_t now);
+	void recordLoginFailure(const std::string& source, uint64_t now);
+	void pruneIdentities();
+	Multiplayer::Bytes closingFrame(const Peer& peer, const std::string& reason) const;
 	void read(Peer& peer);
 	void write(Peer& peer);
 	void send(Peer& peer, Multiplayer::Packet type, const Multiplayer::Writer& payload);
@@ -224,7 +239,7 @@ private:
 	void resetClientMap();
 	void submit(Multiplayer::Transaction tx, PendingKind kind = PendingKind::Edit, std::optional<History> history = {});
 	void accept(Peer* peer, Multiplayer::Transaction tx, bool approved = false);
-	void apply(const Multiplayer::Transaction& tx);
+	void apply(const Multiplayer::Transaction& tx, bool snapshot = false);
 	void receiveTransaction(Peer& peer, Multiplayer::Transaction tx);
 	void completePending(const Multiplayer::Transaction& tx);
 	void reject(Peer* peer, uint64_t id, const std::string& reason);
@@ -244,7 +259,11 @@ private:
 	std::shared_ptr<Multiplayer::AddressResolution> resolution;
 	uint64_t resolveDeadline = 0;
 	std::map<wxSocketBase*, std::unique_ptr<Peer>> peers;
-	std::map<Multiplayer::Identity, IdentityState> identities;
+	std::map<Multiplayer::Identity, IdentityState> identities; // By host-minted reconnect token.
+	std::set<Multiplayer::Identity> bannedTokens;
+	std::set<std::string> bannedSources;
+	std::map<std::string, Multiplayer::Role> roleCeilings;
+	std::map<std::string, LoginBackoff> loginBackoff;
 	std::map<uint32_t, Participant> participants;
 	std::map<uint64_t, Approval> approvals;
 	std::vector<Multiplayer::Lease> visibleLocks;
@@ -255,8 +274,8 @@ private:
 	std::deque<std::string> logLines;
 	std::shared_ptr<EditorResourceSession> resources;
 	MultiplayerWindow* window = nullptr;
-	Multiplayer::Identity identity {}, session {};
-	Multiplayer::Digest signature {};
+	Multiplayer::Identity reconnectToken {}, tokenSession {}, session {}, keySession {};
+	Multiplayer::Digest signature {}, sessionKey {};
 	Multiplayer::Revisions revisions;
 	Multiplayer::Locks regionLocks;
 	Multiplayer::Journal journal;
@@ -270,6 +289,8 @@ private:
 	uint64_t reconnectAt = 0, reconnectDelay = 1000, lastHeartbeat = 0, lastCursorSent = 0, lastActivity = 0, lastBackup = 0, lastRefresh = 0;
 	uint64_t snapshotRevision = 0;
 	uint64_t lastAcceptedTransaction = 0;
+	uint64_t loginWindowStart = 0, lastRefusalLog = 0, remoteSpawnArea = 0;
+	uint32_t loginWindowCount = 0, refusedConnections = 0;
 	uint32_t metadataSize = 0;
 	Position cursor;
 	bool synchronizedBaseline = false;

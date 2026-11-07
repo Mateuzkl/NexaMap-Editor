@@ -33,6 +33,33 @@
 #include "house_exit_brush.h"
 #include "spawn_brush.h"
 
+namespace {
+	// wx client data outlives what it points at: multiplayer metadata and undo can
+	// delete a House or Town before the next rebuild, so the controls keep IDs and
+	// every access looks the object up. Null stays reserved for "No Town".
+	void* IdToClientData(uint32_t id) {
+		return reinterpret_cast<void*>(static_cast<uintptr_t>(id) + 1);
+	}
+
+	uint32_t ClientDataToId(void* data) {
+		return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(data) - 1);
+	}
+
+	void markMapChanged(Map* map) {
+		if (map->doChange()) {
+			g_gui.UpdateTitle();
+		}
+	}
+
+	void clearUndoHistory(Map* map) {
+		Editor* editor = g_gui.GetCurrentEditor();
+		if (editor && &editor->map == map) {
+			editor->actionQueue->clear();
+			g_gui.UpdateMenus();
+		}
+	}
+}
+
 // ============================================================================
 // House palette
 
@@ -154,12 +181,12 @@ bool HousePalettePanel::SelectBrush(const Brush* whatbrush) {
 		for (auto house_iter = map->houses.begin(); house_iter != map->houses.end(); ++house_iter) {
 			if (house_iter->second && house_iter->second->getID() == house_brush->getHouseID()) {
 				for (uint32_t i = 0; i < town_choice->GetCount(); ++i) {
-					Town* town = reinterpret_cast<Town*>(town_choice->GetClientData(i));
+					Town* town = GetTownAt(i);
 					// If it's "No Town" (nullptr) select it, or if it has the same town ID as the house
 					if (town == nullptr || town->getID() == house_iter->second->townid) {
 						SelectTown(i);
 						for (uint32_t j = 0; j < house_list->GetCount(); ++j) {
-							if (house_iter->second->getID() == reinterpret_cast<House*>(house_list->GetClientData(j))->getID()) {
+							if (house_iter->second->getID() == ClientDataToId(house_list->GetClientData(j))) {
 								SelectHouse(j);
 								return true;
 							}
@@ -190,7 +217,7 @@ void HousePalettePanel::SelectTown(size_t index) {
 		house_list->Clear();
 		SelectHouse(0);
 	} else {
-		Town* what_town = reinterpret_cast<Town*>(town_choice->GetClientData(index));
+		Town* what_town = GetTownAt(index);
 
 		// Clear the old houselist
 		house_list->Clear();
@@ -201,13 +228,13 @@ void HousePalettePanel::SelectTown(size_t index) {
 			}
 			if (what_town) {
 				if (house_iter->second->townid == what_town->getID()) {
-					house_list->Append(wxstr(house_iter->second->getDescription()), house_iter->second);
+					house_list->Append(wxstr(house_iter->second->getDescription()), IdToClientData(house_iter->second->getID()));
 				}
 			} else {
 				// "No Town" selected!
 				if (map->towns.getTown(house_iter->second->townid) == nullptr) {
 					// The town doesn't exist
-					house_list->Append(wxstr(house_iter->second->getDescription()), house_iter->second);
+					house_list->Append(wxstr(house_iter->second->getDescription()), IdToClientData(house_iter->second->getID()));
 				}
 			}
 		}
@@ -247,9 +274,18 @@ void HousePalettePanel::SelectHouse(size_t index) {
 House* HousePalettePanel::GetCurrentlySelectedHouse() const {
 	int selection = house_list->GetSelection();
 	if (house_list->GetCount() > 0 && selection != wxNOT_FOUND) {
-		return reinterpret_cast<House*>(house_list->GetClientData(selection));
+		return GetHouseAt(selection);
 	}
 	return nullptr;
+}
+
+House* HousePalettePanel::GetHouseAt(int index) const {
+	return map && index >= 0 ? map->houses.getHouse(ClientDataToId(house_list->GetClientData(index))) : nullptr;
+}
+
+Town* HousePalettePanel::GetTownAt(size_t index) const {
+	void* data = town_choice->GetClientData(static_cast<unsigned int>(index));
+	return map && data ? map->towns.getTown(ClientDataToId(data)) : nullptr;
 }
 
 void HousePalettePanel::SelectHouseBrush() {
@@ -295,7 +331,7 @@ void HousePalettePanel::OnUpdate() {
 	if (map->towns.count() != 0) {
 		// Create choice control
 		for (auto town_iter = map->towns.begin(); town_iter != map->towns.end(); ++town_iter) {
-			town_choice->Append(wxstr(town_iter->second->getName()), town_iter->second);
+			town_choice->Append(wxstr(town_iter->second->getName()), IdToClientData(town_iter->second->getID()));
 		}
 		town_choice->Append("No Town", (void*)(nullptr));
 		if (old_town_selection <= 0) {
@@ -332,7 +368,7 @@ void HousePalettePanel::OnListBoxChange(wxCommandEvent& event) {
 }
 
 void HousePalettePanel::OnListBoxDoubleClick(wxCommandEvent& event) {
-	auto* house = reinterpret_cast<House*>(event.GetClientData());
+	House* house = GetHouseAt(event.GetSelection());
 	// I find it extremly unlikely that one actually wants the exit at 0,0,0, so just treat it as the null value
 	if (house && house->getExit() != Position(0, 0, 0)) {
 		g_gui.SetScreenCenterPosition(house->getExit());
@@ -369,7 +405,7 @@ void HousePalettePanel::OnClickAddHouse(wxCommandEvent& event) {
 		delete new_house;
 		return;
 	}
-	Town* town = reinterpret_cast<Town*>(town_choice->GetClientData(town_selection));
+	Town* town = GetTownAt(town_selection);
 	if (!town) {
 		delete new_house;
 		return;
@@ -380,10 +416,11 @@ void HousePalettePanel::OnClickAddHouse(wxCommandEvent& event) {
 		delete new_house;
 		return;
 	}
-	house_list->Append(wxstr(new_house->getDescription()), new_house);
+	house_list->Append(wxstr(new_house->getDescription()), IdToClientData(new_house->getID()));
 	SelectHouse(house_list->FindString(wxstr(new_house->getDescription())));
 	g_gui.SelectBrush();
 	refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
+	markMapChanged(map);
 }
 
 void HousePalettePanel::OnClickEditHouse(wxCommandEvent& event) {
@@ -397,7 +434,7 @@ void HousePalettePanel::OnClickEditHouse(wxCommandEvent& event) {
 	if (selection == wxNOT_FOUND) {
 		return;
 	}
-	auto* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
+	House* house = GetHouseAt(selection);
 	if (house) {
 		EditHouseDialog dialog(g_gui.root, map, house);
 		MultiplayerSession::MetadataEdit multiplayerEdit(map, house);
@@ -407,14 +444,12 @@ void HousePalettePanel::OnClickEditHouse(wxCommandEvent& event) {
 		int ret = dialog.ShowModal();
 		if (ret == 1) {
 			g_gui.house_exit_brush->setHouse(nullptr);
-			// Something changed, change name of house
-			house_list->SetString(selection, wxstr(house->getDescription()));
-			house_list->Sort();
 
 			// refresh house list for town
 			SelectTown(town_choice->GetSelection());
 			g_gui.SelectBrush();
 			refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
+			markMapChanged(map);
 		}
 	}
 }
@@ -422,7 +457,10 @@ void HousePalettePanel::OnClickEditHouse(wxCommandEvent& event) {
 void HousePalettePanel::OnClickRemoveHouse(wxCommandEvent& event) {
 	int selection = house_list->GetSelection();
 	if (selection != wxNOT_FOUND) {
-		auto* house = reinterpret_cast<House*>(house_list->GetClientData(selection));
+		House* house = GetHouseAt(selection);
+		if (!house) {
+			return;
+		}
 		g_gui.house_brush->setHouse(nullptr);
 		MultiplayerSession::MetadataEdit multiplayerEdit(map, house);
 		if (!multiplayerEdit.allowed()) {
@@ -432,6 +470,8 @@ void HousePalettePanel::OnClickRemoveHouse(wxCommandEvent& event) {
 		map->houses.removeHouse(house);
 		house_list->Delete(selection);
 		refresh_timer.Start(PALETTE_DELAYED_REFRESH_MS, true);
+		clearUndoHistory(map);
+		markMapChanged(map);
 
 		if (int(house_list->GetCount()) <= selection) {
 			selection -= 1;
@@ -482,7 +522,7 @@ EditHouseDialog::EditHouseDialog(wxWindow* parent, Map* map, House* house) :
 	// window title
 	wxDialog(parent, wxID_ANY, "House Properties", wxDefaultPosition, wxSize(250, 160)),
 	map(map),
-	what_house(house) {
+	house_id(house->getID()) {
 	ASSERT(map);
 	ASSERT(house);
 
@@ -589,6 +629,15 @@ void EditHouseDialog::OnFocusChange(wxFocusEvent& event) {
 
 void EditHouseDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 	if (Validate() && TransferDataFromWindow()) {
+		// The dialog pumps events, and a multiplayer metadata update can delete the
+		// house while it is open.
+		House* what_house = map->houses.getHouse(house_id);
+		if (!what_house) {
+			g_gui.PopupDialog(this, "Error", "This house no longer exists.", wxOK);
+			EndModal(0);
+			return;
+		}
+
 		// Verify the new rent information
 		long new_house_rent = 0;
 		if (!house_rent.ToLong(&new_house_rent)) {
@@ -659,6 +708,8 @@ void EditHouseDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 				return;
 			}
 			map->convertHouseTiles(old_house_id, new_house_id);
+			// Older undo snapshots still carry the old ID and would restore orphans.
+			clearUndoHistory(map);
 		}
 
 		// Transfer to house

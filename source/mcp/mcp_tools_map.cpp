@@ -106,7 +106,7 @@ namespace mcp {
 						throw Error("position is required");
 					}
 					const Position position = ParsePosition(arguments["position"]);
-					return StructuredResult(OnGui([position](const EditorContext& context) { return TileJson(position, context.map.getTile(position), context); }));
+					return UntrustedMapResult(OnGui([position](const EditorContext& context) { return TileJson(position, context.map.getTile(position), context); }));
 				},
 			});
 
@@ -123,7 +123,7 @@ namespace mcp {
 					if (mode != "summary" && mode != "ascii" && mode != "tiles") {
 						throw Error("mode must be summary, ascii or tiles");
 					}
-					return StructuredResult(OnGui([region, mode, limit, offset](const EditorContext& context) {
+					return UntrustedMapResult(OnGui([region, mode, limit, offset](const EditorContext& context) {
 						Json result {
 							{ "from", PositionJson(region.from) },
 							{ "to", PositionJson(region.to) },

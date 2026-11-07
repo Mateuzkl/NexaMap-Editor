@@ -116,6 +116,33 @@
     <ClInclude Include="..\..\source\definitions.h">
       <Filter>common</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\cross_client_match_policy.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\editor_disposal.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\lua_parser.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\multiplayer_peer.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\path_encoding.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\profiling.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\profiling_perf.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\runtime_paths.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\xml_attribute.h">
+      <Filter>common</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\editor.h">
       <Filter>editor</Filter>
     </ClInclude>

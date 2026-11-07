@@ -174,11 +174,11 @@ bool DoodadBrush::loadAlternative(pugi::xml_node node, wxArrayString& warnings, 
 bool DoodadBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 	pugi::xml_attribute attribute;
 	if ((attribute = node.attribute("lookid"))) {
-		look_id = attribute.as_ushort();
+		look_id = xmlAttributeAsUint16(attribute);
 	}
 
 	if ((attribute = node.attribute("server_lookid"))) {
-		look_id = g_items[attribute.as_ushort()].clientID;
+		look_id = g_items[xmlAttributeAsUint16(attribute)].clientID;
 	}
 
 	if ((attribute = node.attribute("on_blocking"))) {

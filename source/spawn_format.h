@@ -108,6 +108,8 @@ struct SpawnLoadDefaults {
 	uint32_t monsterWeight = 1;
 };
 
+class FileSaveTransaction;
+
 class SpawnFormatIO {
 public:
 	static const char* GetFormatName(SpawnFormat format);
@@ -120,8 +122,10 @@ public:
 	static bool Load(const SpawnDetectionResult& detection, SpawnDocument& document, std::string& error, const SpawnLoadDefaults& defaults = {});
 	static bool LoadTfs(const std::filesystem::path& file, SpawnDocument& document, std::string& error, const SpawnLoadDefaults& defaults = {});
 	static bool LoadCanaryCrystal(const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile, SpawnDocument& document, std::string& error, const SpawnLoadDefaults& defaults = {});
-	static SpawnWriteResult SaveTfs(const SpawnDocument& document, const std::filesystem::path& file);
-	static SpawnWriteResult SaveCanaryCrystal(const SpawnDocument& document, const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile);
+	// With a shared transaction the files are only staged and validated, so the
+	// caller can publish them together with the rest of a map save.
+	static SpawnWriteResult SaveTfs(const SpawnDocument& document, const std::filesystem::path& file, FileSaveTransaction* sharedTransaction = nullptr);
+	static SpawnWriteResult SaveCanaryCrystal(const SpawnDocument& document, const std::filesystem::path& monsterFile, const std::filesystem::path& npcFile, FileSaveTransaction* sharedTransaction = nullptr);
 	static bool SemanticallyEqual(const SpawnDocument& lhs, const SpawnDocument& rhs, bool compareWeights, std::string& difference);
 };
 

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "mcp_tools_editor.h"
 
+#include "mcp_gui_call.h"
 #include "mcp_registry.h"
 #include "mcp_tool_utils.h"
 
+#include "../action.h"
 #include "../editor.h"
 #include "../gui.h"
 #include "../map.h"
@@ -36,10 +38,24 @@ namespace mcp {
 						throw Error("action must be a string");
 					}
 					const std::string action = arguments["action"].get<std::string>();
-					return StructuredResult(OnGui([arguments, action](const EditorContext& context) {
+					bool approvedUserUndo = false;
+					if (action == "undo") {
+						const Json userAction = OnGui([arguments](const EditorContext& context) {
+							VerifyWritableContext(context, arguments);
+							return Json(context.editor.actionQueue->canUndo() && context.editor.actionQueue->getUndoType() != ACTION_MCP);
+						});
+						if (userAction.get<bool>()) {
+							RequireMapConfirmation(arguments, "Undo the most recent edit, which was not made by an MCP map tool and may be your own work.");
+							approvedUserUndo = true;
+						}
+					}
+					return StructuredResult(OnGui([arguments, action, approvedUserUndo](const EditorContext& context) {
 						bool success = true;
 						if (action == "undo") {
 							VerifyWritableContext(context, arguments);
+							if (!approvedUserUndo && context.editor.actionQueue->canUndo() && context.editor.actionQueue->getUndoType() != ACTION_MCP) {
+								throw Error("the undo history changed; retry to review the new edit");
+							}
 							success = context.editor.actionQueue->undo();
 						} else if (action == "redo") {
 							VerifyWritableContext(context, arguments);
@@ -88,7 +104,11 @@ namespace mcp {
 					if (operation == "delete" && !arguments.value("confirm", false)) {
 						throw Error("delete requires confirm=true");
 					}
+					if (operation == "delete") {
+						RequireMapConfirmation(arguments, "Delete everything on the selected tiles.");
+					}
 					return StructuredResult(OnGui([arguments, operation, region](const EditorContext& context) {
+						VerifyMapSession(context, arguments);
 						if (operation == "select-region") {
 							context.editor.selection.start();
 							context.editor.selection.clear();

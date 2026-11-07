@@ -64,8 +64,8 @@ void SpawnBrush::undraw(BaseMap* map, Tile* tile) {
 
 void SpawnBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 	ASSERT(tile);
-	ASSERT(parameter); // Should contain an int which is the size of the newd spawn
-	if (tile->spawn == nullptr) {
+	// parameter holds the int size of the new spawn; paths without one have no size to use.
+	if (parameter && tile->spawn == nullptr) {
 		tile->spawn = newd Spawn(max(1, *(int*)parameter));
 	}
 }

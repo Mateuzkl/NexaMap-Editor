@@ -282,7 +282,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	// Tie all events to this handler!
 
 	for (auto ai = actions.begin(); ai != actions.end(); ++ai) {
-		frame->Connect(MAIN_FRAME_MENU + ai->second->id, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)(wxEventFunction)(ai->second->handler), nullptr, this);
+		frame->Bind(wxEVT_COMMAND_MENU_SELECTED, ai->second->handler, this, MAIN_FRAME_MENU + ai->second->id);
 	}
 	for (size_t i = 0; i < 10; ++i) {
 		frame->Connect(static_cast<int>(recentFiles.GetBaseId() + i), wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(MainMenuBar::OnOpenRecent), nullptr, this);
@@ -2384,6 +2384,7 @@ void MainMenuBar::OnMapCleanup(wxCommandEvent& WXUNUSED(event)) {
 	if (ok == wxID_YES) {
 		Editor* editor = g_gui.GetCurrentEditor();
 		editor->map.cleanInvalidTiles(true);
+		editor->map.doChange();
 		size_t removed = editor->removeEmptySpawns(true);
 
 		wxString msg;

@@ -51,8 +51,8 @@ do NexaMap; não transplanta os arquivos Live nem remove créditos existentes.
 
 * `multiplayer_protocol`: protocolo binário limitado, leitura estrita, framing,
   revisões, identidades, locks e journal; independente da GUI para testes.
-* `multiplayer_crypto`: SHA-256, números aleatórios e HMAC de bibliotecas do
-  sistema (CNG no Windows, OpenSSL nas outras plataformas).
+* `multiplayer_crypto`: SHA-256, PBKDF2, HMAC-SHA256 e números aleatórios de
+  bibliotecas do sistema (CNG no Windows, OpenSSL nas outras plataformas).
 * `multiplayer_codec`: serialização do estado completo de cada tile e dos
   metadados próprios do NexaMap. IDs internos seguem o codec do editor, sem
   conversão implícita entre ClientID e ServerID.
@@ -74,10 +74,9 @@ O autor recebe confirmação autoritativa; alterações remotas não entram no u
 local. Undo/redo envia outra transação com precondições, em vez de rebobinar
 o histórico de outro participante.
 
-Cada conexão tem fila limitada e dono único. Identidade é aleatória, independente
-de IP; gerações distinguem reconexões. Senha não é enviada nem salva em texto.
-Autenticação por desafio HMAC usa nonce novo em cada conexão. O transporte TCP
-é destinado a LAN/VPN; autenticação não equivale a criptografia do tráfego.
+Cada conexão tem fila limitada e dono único. A identidade de reconexão é um token
+aleatório emitido pelo host; gerações distinguem reconexões. Senha não é enviada
+nem salva em texto. Autenticação e integridade estão descritas na seção seguinte.
 
 O snapshot inicial percorre a QTree e envia lotes de tiles com sequência/revisão,
 sem criar arquivos OTBM temporários nem serializar o mapa a cada alteração.
@@ -85,6 +84,76 @@ Um journal limitado permite recuperar o intervalo de revisões e reconectar;
 quando ele não contém o intervalo completo, inicia-se outro snapshot.
 Compressão e interesse por viewport são otimizações futuras que precisam de
 medição, não condições para a consistência do protocolo.
+
+## Segurança da sessão (protocolo 2)
+
+**Escopo: somente LAN confiável ou VPN.** Não exponha a porta diretamente à
+Internet. O protocolo autentica os participantes e cada frame, mas **não cifra
+nada**: mapa, chat, nomes e tokens de reconexão trafegam legíveis. Quem captura um
+login (sniffer) ou se passa pelo host pode testar senhas offline contra a prova
+HMAC, limitado apenas pelo custo do PBKDF2 (100 mil iterações). Só uma senha longa
+e única reduz esse risco; TLS-PSK ou um PAKE continuam sendo o caminho para
+qualquer uso fora de LAN/VPN.
+
+Hospedar exige senha de pelo menos 8 caracteres, exceto na opção *somente este PC*,
+que escuta apenas em 127.0.0.1 e aceita senha vazia.
+
+**Handshake.** O host deriva `K = PBKDF2-HMAC-SHA256(senha, sessão, 100000)` uma
+única vez em `host()` e descarta a senha, de modo que cada login custa um HMAC, sem
+PBKDF2 alcançável antes da autenticação. O cliente deriva a mesma chave e a guarda
+enquanto a sessão não muda.
+
+1. `Challenge`: versão, ID da sessão e nonce de 32 bytes do host.
+2. `Hello`: corpo com versões, assinatura de assets, nonce de 32 bytes do cliente,
+   token, geração, base de resume e nome, seguido da prova do cliente.
+3. `Welcome`: primeiro frame com MAC; traz o token e a prova do host.
+
+Com `T = SHA-256(sessão, nonce do host, corpo do Hello)`, cada valor é
+`HMAC(K, rótulo || T)` com rótulo próprio: prova do cliente, prova do host, chave
+cliente→host e chave host→cliente. O nonce do cliente impede repetir uma prova de
+host gravada. Até a prova do host ser verificada, o cliente não altera sessão,
+histórico nem ID local.
+
+**Integridade.** Depois do `Welcome`, todo frame termina com
+`HMAC(chave da direção, sequência || tipo || conteúdo)`. A sequência de 64 bits não
+vai no fio: replay, reordenação, remoção ou frame injetado falham no MAC, e a
+conexão é encerrada antes de o conteúdo ser processado. A verificação ocorre na
+leitura, também para frames adiados. Um relay ainda obtém um socket autenticado,
+mas sem as chaves ele não consegue enviar nenhum frame válido. O MAC não impede
+derrubar a conexão TCP.
+
+Antes da autenticação não há MAC: `Disconnect` vindo do host só é exibido se for
+uma recusa conhecida, e o host registra tentativas pré-autenticação apenas como
+contagem periódica.
+
+**Limites antes da autenticação.** Prazo absoluto de 15 s desde o accept; 32
+handshakes pendentes no total e 4 por IP, fora da contagem de jogadores; espera
+exponencial por IP após senha errada (1 s a 60 s); 32 tentativas de login a cada
+10 s no total. Esse limite global também pode atrasar logins legítimos durante uma
+inundação vinda de muitos IPs.
+
+**Identidade.** O host emite o token no `Welcome`, e o papel fica ligado a ele.
+Como a senha é compartilhada, nada impede alguém de descartar o token e entrar como
+novo participante; por isso o rebaixamento também limita o papel de identidades
+novas do mesmo IP, e kick bane o token e o IP até o host usar **Clear bans**. Trocar
+de IP contorna essas duas medidas: elas limitam abuso casual, não substituem contas
+individuais. Atrás de NAT/VPN com IP compartilhado, afetam todos desse IP. A tabela
+de identidades descarta as mais antigas desconectadas ao chegar a 1024 entradas.
+
+**Limites de edição.** Raio de spawn em transações: até 150, o máximo padrão da
+paleta e das propriedades (`MAX_SPAWN_RADIUS`). O XML pode carregar até 255: esses
+spawns sincronizam por snapshot e continuam editáveis, mas nenhuma edição cria um.
+Spawns novos ou com raio alterado somam até 4 Mi de células por transação, verificado
+antes do commit; o cliente aceita 256 Mi de células e 128 Mi de tiles vindos do host.
+Editores não criam tiles além de 32 posições após as dimensões do mapa. Tiles
+decodificados não alocam nada no mapa até a validação terminar.
+
+Locks: até 512×512 tiles por lease e 32 leases por dono. O host ignora locks de
+clientes e pode quebrá-los. Unique IDs novos exigem aprovação, e `uidRefCount`
+acompanha commit e undo. Snapshot não rejeita duplicatas, pois elas já existem no
+mapa do host; editar um tile com duplicata antiga é permitido, criar outra não. Os
+metadados usam a mesma validação de posição ao codificar e decodificar, e a
+aprovação mostra o que muda.
 
 ## Ordem de implementação e verificação
 
@@ -129,8 +198,8 @@ durante o tick n�o pode ganhar um timeout imediato por underflow.
 
 Um snapshot interrompido invalida a base para resume. Uma reconex�o s� usa o
 journal quando houve sincroniza��o completa; caso contr�rio recebe novo snapshot.
-Pap�is persistem na identidade autenticada e a contagem m�xima tamb�m vale para
-uma identidade conhecida que retorna ap�s sair.
+Pap�is persistem no token de reconex�o emitido pelo host e a contagem m�xima tamb�m
+vale para uma identidade conhecida que retorna ap�s sair.
 
 Propriedades aguardam o lock por eventos e revalidam posi��o/sele��o antes do
 di�logo; callbacks guardam janela/sess�o por refer�ncia fraca. Locks s�o liberados

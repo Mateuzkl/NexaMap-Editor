@@ -315,6 +315,7 @@ namespace MapMigration {
 				control.update(3, "Copiando arquivos externos...");
 				const std::string suffix = sidecar.attribute == 11 ? "-spawn.xml" : sidecar.attribute == 13 ? "-house.xml"
 					: sidecar.attribute == 23																? "-npc-spawn.xml"
+					: sidecar.attribute == WaypointGroupsSidecar											? "-waypoint-groups.xml"
 																											: "-zones.xml";
 				const auto name = IO::Utf8(result.outputMap.stem()) + suffix;
 				if (!sidecarNames.emplace(sidecar.attribute, name).second) {

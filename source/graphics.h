@@ -156,6 +156,8 @@ protected:
 
 	wxMemoryDC* getDC(SpriteSize size);
 	TemplateImage* getTemplateImage(int sprite_index, const Outfit& outfit);
+	// Wraps index into spriteList; false when the sprite has no image to index
+	bool wrapImageIndex(uint32_t& index) const;
 
 	class Image {
 	public:
@@ -252,6 +254,7 @@ protected:
 
 	protected:
 		void colorizePixel(uint8_t color, uint8_t& r, uint8_t& b, uint8_t& g);
+		bool hasSourceImages() const;
 
 		void createGLTexture(GLuint ignored = 0) override;
 		void unloadGLTexture(GLuint ignored = 0) override;

@@ -20,6 +20,7 @@
 #include "gui.h"
 
 #include "about_window.h"
+#include <fmt/format.h>
 #include <fstream>
 #include <typeinfo>
 #include <memory>

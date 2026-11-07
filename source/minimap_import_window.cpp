@@ -462,7 +462,7 @@ namespace {
 			if (colorList_->GetItemCount() != 0) {
 				long selectedRow = 0;
 				for (long row = 0; row < colorList_->GetItemCount(); ++row) {
-					if (colorList_->GetItemData(row) == colorToSelect) {
+					if (colorList_->GetItemData(row) == static_cast<wxUIntPtr>(colorToSelect)) {
 						selectedRow = row;
 						break;
 					}

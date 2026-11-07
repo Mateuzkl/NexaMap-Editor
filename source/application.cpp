@@ -340,16 +340,14 @@ int main(int argc, char** argv) {
 #ifdef NEXAMAP_MULTIPLAYER_TESTS
 	return RunMultiplayerSessionTests(argc, argv);
 #else
+	// main() is the entry point on every platform: Windows builds use the Console
+	// subsystem. wx assert dialogs stay available for diagnostic runs.
+	if (!std::getenv("NEXAMAP_DIAGNOSTICS")) {
+		wxDISABLE_DEBUG_SUPPORT();
+	}
 	return RunApplication([&] { return wxEntry(argc, argv); });
 #endif
 }
-
-#ifdef __WINDOWS__
-extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wxCmdLineArgType commandLine, int showCommand) {
-	wxDISABLE_DEBUG_SUPPORT();
-	return RunApplication([&] { return wxEntry(hInstance, hPrevInstance, commandLine, showCommand); });
-}
-#endif
 
 Application::~Application() {
 	// Destroy
@@ -815,7 +813,9 @@ MainFrame::MainFrame(const wxString& title, const wxPoint& pos, const wxSize& si
 	UpdateMenubar();
 }
 
-MainFrame::~MainFrame() = default;
+MainFrame::~MainFrame() {
+	delete tool_bar;
+}
 
 void MainFrame::OnIdle(wxIdleEvent& event) {
 	////
@@ -1000,7 +1000,9 @@ void MainFrame::OnExit(wxCloseEvent& event) {
 		}
 		prompted.insert(mapTab->GetMap());
 		g_gui.tabbook->SetFocusedTab(i);
-		if (!DoQuerySave(false)) {
+		// Tab events are ignored while closing, so the session has to follow here:
+		// a save under another tab's item database silently corrupts the map.
+		if (!g_gui.ActivateResourceSession(mapTab->GetResourceSession()) || !DoQuerySave(false)) {
 			if (event.CanVeto()) {
 				g_gui.SetApplicationClosing(false);
 				event.Veto();

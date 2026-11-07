@@ -23,6 +23,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 
 #include "copybuffer.h"
 #include "dcbutton.h"
@@ -72,7 +73,7 @@ extern const wxEventType EVT_UPDATE_MENUS;
 #define EVT_ON_UPDATE_MENUS(id, fn)                                                             \
 	DECLARE_EVENT_TABLE_ENTRY(                                                                  \
 		EVT_UPDATE_MENUS, id, wxID_ANY,                                                         \
-		(wxObjectEventFunction)(wxEventFunction)wxStaticCastEvent(wxCommandEventFunction, &fn), \
+		wxCommandEventHandler(fn),                                                              \
 		(wxObject*)nullptr                                                                      \
 	),
 
@@ -539,6 +540,12 @@ protected:
 	friend class RenderingLock;
 	friend class EditorResourceSession;
 #ifdef NEXAMAP_MULTIPLAYER_TESTS
+public:
+	// Set by tests that run code which asks the user: answers every popup, and
+	// list dialogs are skipped. Modal windows would otherwise wait forever.
+	std::optional<long> testDialogAnswer;
+
+private:
 	friend class CollectionsPaletteTests;
 	friend class ResourceSessionTabTests;
 #endif

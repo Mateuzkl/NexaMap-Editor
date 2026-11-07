@@ -146,6 +146,12 @@ namespace mcp {
 			return { { "position", PositionJson(center) }, { "radius", radius }, { "creatures", std::move(creatures) } };
 		}
 
+		void ConfirmEntityDelete(const Json& arguments, const std::string& operation, const std::string& entity) {
+			if (operation == "delete" && arguments.value("confirm", false)) {
+				RequireMapConfirmation(arguments, "Delete " + entity + ".");
+			}
+		}
+
 		Json MutationResult(const EditorContext& context, const std::string& operation) {
 			return { { "operation", operation }, { "changed", true }, { "mapSessionId", context.mapSessionId }, { "changeGeneration", context.map.getChangeGeneration() }, { "undoAvailable", context.editor.actionQueue->canUndo() } };
 		}
@@ -165,7 +171,7 @@ namespace mcp {
 				"List houses from the active map with bounded pagination.",
 				{ { "type", "object" }, { "properties", paginationProperties }, { "additionalProperties", false } },
 				false,
-				[](const Json& arguments) { return StructuredResult(OnGui([arguments](const EditorContext& context) {
+				[](const Json& arguments) { return UntrustedMapResult(OnGui([arguments](const EditorContext& context) {
 												auto [offset, limit] = Pagination(arguments);
 												Json houses = Json::array();
 												size_t index = 0;
@@ -183,7 +189,7 @@ namespace mcp {
 				"Inspect one house and its tile positions.",
 				{ { "type", "object" }, { "properties", { { "id", { { "type", "integer" }, { "minimum", 1 } } }, { "offset", paginationProperties["offset"] }, { "limit", paginationProperties["limit"] } } }, { "required", Json::array({ "id" }) }, { "additionalProperties", false } },
 				false,
-				[](const Json& arguments) { return StructuredResult(OnGui([arguments](const EditorContext& context) {
+				[](const Json& arguments) { return UntrustedMapResult(OnGui([arguments](const EditorContext& context) {
 												if (!arguments.contains("id") || !arguments["id"].is_number_unsigned()) {
 													throw Error("id must be an unsigned integer");
 												}
@@ -234,7 +240,7 @@ namespace mcp {
 				  { "required", Json::array({ "operation" }) },
 				  { "additionalProperties", false } },
 				true,
-				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); return StructuredResult(OnGui([arguments, operation](const EditorContext& context) {
+				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); ConfirmEntityDelete(arguments, operation, "house " + std::to_string(arguments.value("id", uint32_t(0)))); return StructuredResult(OnGui([arguments, operation](const EditorContext& context) {
 					VerifyWritableContext(context, arguments); std::unique_ptr<Action> action(context.editor.actionQueue->createAction(ACTION_MCP));
 					if (operation == "create") {
 						HouseSnapshot snapshot = HouseFromArguments(arguments); if (snapshot.id == 0){ snapshot.id = context.map.houses.getEmptyID();
@@ -261,7 +267,7 @@ namespace mcp {
 				"List towns and temple positions from the active map.",
 				{ { "type", "object" }, { "properties", paginationProperties }, { "additionalProperties", false } },
 				false,
-				[](const Json& arguments) { return StructuredResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json towns = Json::array(); size_t index = 0; for (const auto& [id, town] : context.map.towns){ if (index++ >= offset && towns.size() < limit && town){ towns.push_back({ { "id", id }, { "name", town->getName() }, { "templePosition", PositionJson(town->getTemplePosition()) } });
+				[](const Json& arguments) { return UntrustedMapResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json towns = Json::array(); size_t index = 0; for (const auto& [id, town] : context.map.towns){ if (index++ >= offset && towns.size() < limit && town){ towns.push_back({ { "id", id }, { "name", town->getName() }, { "templePosition", PositionJson(town->getTemplePosition()) } });
 }} return PageResult(std::move(towns), offset, limit, context.map.towns.count(), "towns"); })); },
 			});
 
@@ -270,7 +276,7 @@ namespace mcp {
 				"Create, update or delete a town as one undoable action.",
 				{ { "type", "object" }, { "properties", { { "operation", { { "type", "string" }, { "enum", Json::array({ "create", "update", "delete" }) } } }, { "id", { { "type", "integer" }, { "minimum", 1 } } }, { "name", { { "type", "string" }, { "maxLength", 255 } } }, { "templePosition", PositionSchema() }, { "confirm", { { "type", "boolean" }, { "default", false } } }, { "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } }, { "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } } } }, { "required", Json::array({ "operation" }) }, { "additionalProperties", false } },
 				true,
-				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); return StructuredResult(OnGui([arguments, operation](const EditorContext& context) { VerifyWritableContext(context, arguments); uint32_t id = arguments.value("id", uint32_t(0)); if (operation == "create" && id == 0){ id = context.map.towns.getEmptyID();
+				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); ConfirmEntityDelete(arguments, operation, "town " + std::to_string(arguments.value("id", uint32_t(0)))); return StructuredResult(OnGui([arguments, operation](const EditorContext& context) { VerifyWritableContext(context, arguments); uint32_t id = arguments.value("id", uint32_t(0)); if (operation == "create" && id == 0){ id = context.map.towns.getEmptyID();
 } Town* existing = id ? context.map.towns.getTown(id) : nullptr; std::unique_ptr<Action> action(context.editor.actionQueue->createAction(ACTION_MCP)); if (operation == "create") { if (existing){ throw Error("town id already exists");
 } if (!arguments.contains("name") || !arguments.contains("templePosition")){ throw Error("create requires name and templePosition");
 } action->addChange(Change::CreateTown(id, arguments["name"].get<std::string>(), ParsePosition(arguments["templePosition"], "templePosition"), true)); } else { if (!existing){ throw Error("town not found");
@@ -286,7 +292,7 @@ namespace mcp {
 				"List map waypoints with bounded pagination.",
 				{ { "type", "object" }, { "properties", paginationProperties }, { "additionalProperties", false } },
 				false,
-				[](const Json& arguments) { return StructuredResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json values = Json::array(); size_t index = 0; for (const auto& [key, waypoint] : context.map.waypoints){ if (index++ >= offset && values.size() < limit && waypoint){ values.push_back({ { "name", waypoint->name }, { "position", PositionJson(waypoint->pos) } });
+				[](const Json& arguments) { return UntrustedMapResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json values = Json::array(); size_t index = 0; for (const auto& [key, waypoint] : context.map.waypoints){ if (index++ >= offset && values.size() < limit && waypoint){ values.push_back({ { "name", waypoint->name }, { "position", PositionJson(waypoint->pos) } });
 }} return PageResult(std::move(values), offset, limit, context.map.waypoints.size(), "waypoints"); })); },
 			});
 
@@ -295,7 +301,7 @@ namespace mcp {
 				"Create, update or delete a waypoint as one undoable action.",
 				{ { "type", "object" }, { "properties", { { "operation", { { "type", "string" }, { "enum", Json::array({ "create", "update", "delete" }) } } }, { "name", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 128 } } }, { "newName", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 128 } } }, { "position", PositionSchema() }, { "confirm", { { "type", "boolean" }, { "default", false } } }, { "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } }, { "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } } } }, { "required", Json::array({ "operation", "name" }) }, { "additionalProperties", false } },
 				true,
-				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); const std::string name = arguments.value("name", ""); return StructuredResult(OnGui([arguments, operation, name](const EditorContext& context) { VerifyWritableContext(context, arguments); Waypoint* existing = context.map.waypoints.getWaypoint(name); std::unique_ptr<Action> action(context.editor.actionQueue->createAction(ACTION_MCP)); if (operation == "create") { if (existing){ throw Error("waypoint already exists");
+				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); ConfirmEntityDelete(arguments, operation, "waypoint " + arguments.value("name", std::string())); const std::string name = arguments.value("name", ""); return StructuredResult(OnGui([arguments, operation, name](const EditorContext& context) { VerifyWritableContext(context, arguments); Waypoint* existing = context.map.waypoints.getWaypoint(name); std::unique_ptr<Action> action(context.editor.actionQueue->createAction(ACTION_MCP)); if (operation == "create") { if (existing){ throw Error("waypoint already exists");
 } if (!arguments.contains("position")){ throw Error("create requires position");
 } const Position position = ParsePosition(arguments["position"]); if (!context.map.getTile(position)){ throw Error("waypoint position must already be mapped");
 } action->addChange(Change::CreateWaypoint(name, position, true)); } else { if (!existing){ throw Error("waypoint not found");
@@ -311,7 +317,7 @@ namespace mcp {
 				"List zone names and IDs from the active map.",
 				{ { "type", "object" }, { "properties", paginationProperties }, { "additionalProperties", false } },
 				false,
-				[](const Json& arguments) { return StructuredResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json values = Json::array(); size_t index = 0; for (const auto& [name, id] : context.map.zones){ if (index++ >= offset && values.size() < limit){ values.push_back({ { "id", id }, { "name", name } });
+				[](const Json& arguments) { return UntrustedMapResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json values = Json::array(); size_t index = 0; for (const auto& [name, id] : context.map.zones){ if (index++ >= offset && values.size() < limit){ values.push_back({ { "id", id }, { "name", name } });
 }} return PageResult(std::move(values), offset, limit, context.map.zones.size(), "zones"); })); },
 			});
 
@@ -320,7 +326,7 @@ namespace mcp {
 				"Create, rename or delete a zone through the native zone registry and undo queue.",
 				{ { "type", "object" }, { "properties", { { "operation", { { "type", "string" }, { "enum", Json::array({ "create", "rename", "delete" }) } } }, { "name", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 128 } } }, { "newName", { { "type", "string" }, { "minLength", 1 }, { "maxLength", 128 } } }, { "id", { { "type", "integer" }, { "minimum", 1 } } }, { "confirm", { { "type", "boolean" }, { "default", false } } }, { "mapSessionId", { { "type", "integer" }, { "minimum", 1 } } }, { "workspaceGeneration", { { "type", "integer" }, { "minimum", 0 } } } } }, { "required", Json::array({ "operation", "name" }) }, { "additionalProperties", false } },
 				true,
-				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); const std::string name = arguments.value("name", ""); return StructuredResult(OnGui([arguments, operation, name](const EditorContext& context) { VerifyWritableContext(context, arguments); std::unique_ptr<Action> action(context.editor.actionQueue->createAction(ACTION_MCP)); if (operation == "create") { const unsigned int id = arguments.value("id", context.map.zones.getEmptyID()); if (!Zones::isValidName(name) || context.map.zones.hasZone(name) || context.map.zones.hasZone(id)){ throw Error("invalid or duplicate zone name/id");
+				[](const Json& arguments) { const std::string operation = arguments.value("operation", ""); ConfirmEntityDelete(arguments, operation, "zone " + arguments.value("name", std::string())); const std::string name = arguments.value("name", ""); return StructuredResult(OnGui([arguments, operation, name](const EditorContext& context) { VerifyWritableContext(context, arguments); std::unique_ptr<Action> action(context.editor.actionQueue->createAction(ACTION_MCP)); if (operation == "create") { const unsigned int id = arguments.value("id", context.map.zones.getEmptyID()); if (!Zones::isValidName(name) || context.map.zones.hasZone(name) || context.map.zones.hasZone(id)){ throw Error("invalid or duplicate zone name/id");
 } action->addChange(Change::CreateZone(name, id, true)); } else if (operation == "rename") { if (!context.map.zones.hasZone(name) || !arguments.contains("newName")){ throw Error("zone not found or newName missing");
 } const std::string newName = arguments["newName"].get<std::string>(); if (!Zones::isValidName(newName) || context.map.zones.hasZone(newName)){ throw Error("new zone name is invalid or already exists");
 } action->addChange(Change::RenameZone(name, newName)); } else if (operation == "delete") { if (!arguments.value("confirm", false)){ throw Error("delete requires confirm=true");
@@ -334,7 +340,7 @@ namespace mcp {
 				"List spawn centers, radii and creatures with bounded pagination.",
 				{ { "type", "object" }, { "properties", paginationProperties }, { "additionalProperties", false } },
 				false,
-				[](const Json& arguments) { return StructuredResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json values = Json::array(); size_t index = 0; for (const Position& position : context.map.spawns){ if (index++ >= offset && values.size() < limit){ values.push_back(SpawnJson(context.map, position));
+				[](const Json& arguments) { return UntrustedMapResult(OnGui([arguments](const EditorContext& context) { auto [offset, limit] = Pagination(arguments); Json values = Json::array(); size_t index = 0; for (const Position& position : context.map.spawns){ if (index++ >= offset && values.size() < limit){ values.push_back(SpawnJson(context.map, position));
 }} return PageResult(std::move(values), offset, limit, std::distance(context.map.spawns.begin(), context.map.spawns.end()), "spawns"); })); },
 			});
 
@@ -346,6 +352,7 @@ namespace mcp {
 				[](const Json& arguments) {
 					const std::string operation = arguments.value("operation", "");
 					const Position center = ParsePosition(arguments["position"]);
+					ConfirmEntityDelete(arguments, operation, "the spawn at " + std::to_string(center.x) + "," + std::to_string(center.y) + "," + std::to_string(center.z) + " and its creatures");
 					return StructuredResult(OnGui([arguments, operation, center](const EditorContext& context) {
 						VerifyWritableContext(context, arguments);
 						std::map<Position, std::unique_ptr<Tile>> changed;

@@ -18,9 +18,14 @@
 #ifndef RME_MAP_BACKUP_H_
 #define RME_MAP_BACKUP_H_
 
+#include "item_id_codec.h"
+
+#include <optional>
 #include <string>
 
 class Editor;
+class IOMapOTBM;
+class Map;
 class wxWindow;
 
 // ---------------------------------------------------------------------------
@@ -37,6 +42,15 @@ public:
 
 	// Generate a collision-resistant timestamped backup filename from the original path.
 	static std::string generateBackupPath(const std::string& originalPath);
+
+	// The conversion a save must apply when the IDs held in memory are not the
+	// ones the map's storage format uses.
+	static std::optional<ItemIdMapping::Direction> storageConversion(const Map& map);
+
+	// Sets up a writer the way a normal save does, so every copy of a map carries
+	// the right item version header and item IDs. The codec, when one is needed,
+	// is placed in `codec`, which must outlive the save.
+	static void configureWriter(IOMapOTBM& writer, const Map& map, std::optional<MappingItemIdCodec>& codec);
 
 	class StateGuard;
 };

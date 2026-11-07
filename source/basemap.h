@@ -37,6 +37,7 @@ public:
 	MapIterator(BaseMap* _map = nullptr);
 	~MapIterator();
 	MapIterator(const MapIterator& other);
+	MapIterator& operator=(const MapIterator& other) = default;
 
 	TileLocation* operator*();
 	TileLocation* operator->();

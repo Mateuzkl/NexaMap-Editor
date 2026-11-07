@@ -1,0 +1,81 @@
+---
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      cold_cache: true
+
+  linux:
+    name: Linux
+    uses: ./.github/workflows/build-linux.yml
+
+  publish:
+    name: Publish release
+    needs: [windows, linux]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Refuse to change an existing release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists. Published assets are immutable; tag a new version." >&2
+            exit 1
+          fi
+
+      - name: Download packages and SBOMs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: NexaMap-Editor-Windows-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Compute SHA256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          mapfile -t archives < <(find . -maxdepth 1 -type f -name 'NexaMap-Editor-Windows-*-Release.zip' -printf '%f\n' | sort)
+          mapfile -t sboms < <(find . -maxdepth 1 -type f -name 'NexaMap-Editor-Windows-*-SBOM.zip' -printf '%f\n' | sort)
+          if [[ "${#archives[@]}" -ne 2 || "${#sboms[@]}" -ne 2 ]]; then
+            echo "Expected two archives and two SBOMs, found ${#archives[@]} and ${#sboms[@]}." >&2
+            exit 1
+          fi
+          sha256sum "${archives[@]}" "${sboms[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: release-assets/SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t assets < <(find release-assets -maxdepth 1 -type f | sort)
+          gh release create "${GITHUB_REF_NAME}" "${assets[@]}" --verify-tag --generate-notes --repo "${GITHUB_REPOSITORY}"

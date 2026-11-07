@@ -58,7 +58,7 @@ namespace Multiplayer {
 		unsigned closingSockets = 0; // GUI thread only; also bounds peers which never acknowledge FIN.
 		class ClosingSocket final : public wxEvtHandler {
 		public:
-			ClosingSocket(wxSocketBase* socket, std::deque<Bytes> writes, size_t offset, const std::string& reason) :
+			ClosingSocket(wxSocketBase* socket, std::deque<Bytes> writes, size_t offset, Bytes lastFrame) :
 				socket(socket), writes(std::move(writes)), offset(offset), timer(this), deadline(std::chrono::steady_clock::now() + std::chrono::seconds(2)) {
 				// Never interrupt the frame already on the wire, but discard all later work.
 				if (offset && !this->writes.empty()) {
@@ -67,9 +67,7 @@ namespace Multiplayer {
 					this->writes.clear();
 					this->offset = 0;
 				}
-				Writer out;
-				out.string(reason.substr(0, MaxChat), MaxChat);
-				this->writes.push_back(frame(Packet::Disconnect, out.data));
+				this->writes.push_back(std::move(lastFrame));
 				socket->SetFlags(wxSOCKET_NOWAIT);
 				socket->SetEventHandler(*this);
 				socket->SetNotify(wxSOCKET_OUTPUT_FLAG | wxSOCKET_LOST_FLAG);
@@ -150,7 +148,7 @@ namespace Multiplayer {
 			bool shutdownSent = false;
 		};
 	}
-	void closeSocket(wxSocketBase* socket, std::deque<Bytes> writes, size_t offset, const std::string& reason) {
+	void closeSocket(wxSocketBase* socket, std::deque<Bytes> writes, size_t offset, Bytes lastFrame) {
 		if (!socket) {
 			return;
 		}
@@ -159,7 +157,7 @@ namespace Multiplayer {
 			socket->Destroy();
 			return;
 		}
-		new ClosingSocket(socket, std::move(writes), offset, reason);
+		new ClosingSocket(socket, std::move(writes), offset, std::move(lastFrame));
 	}
 	std::string socketFailure(wxSocketBase& socket, bool connecting) {
 		int error = 0;

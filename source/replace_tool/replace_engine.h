@@ -26,10 +26,10 @@ struct ReplaceExecutionOptions {
 	DoodadBrush* doodadReplacementBrush = nullptr;
 	int doodadVariation = 0;
 	const CompositeTileList* doodadComposite = nullptr;
-	PositionVector doodadAllowedPositions;
+	PositionVector doodadAllowedPositions {};
 	bool enforceDoodadSelectionScope = false;
 	bool allowDoodadOutsideScope = false;
-	std::function<bool(const Tile&, const Item&)> matchFilter;
+	std::function<bool(const Tile&, const Item&)> matchFilter {};
 };
 
 struct ReplaceExecutionResult {

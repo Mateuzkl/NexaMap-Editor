@@ -30,9 +30,11 @@ namespace mcp {
 		void appendLog(bool error, const std::string& message);
 		void onEnable(wxCommandEvent& event);
 		void onWrite(wxCommandEvent& event);
+		void onBrowserOrigins(wxCommandEvent& event);
 		void onRestart(wxCommandEvent& event);
 		void onCopyConfig(wxCommandEvent& event);
 		void onCopyCodexCommand(wxCommandEvent& event);
+		void onCopyToken(wxCommandEvent& event);
 		void onClose(wxCommandEvent& event);
 
 		static Window* current_;
@@ -40,10 +42,12 @@ namespace mcp {
 		wxCheckBox* enabled_ = nullptr;
 		wxSpinCtrl* port_ = nullptr;
 		wxCheckBox* write_ = nullptr;
+		wxCheckBox* browserOrigins_ = nullptr;
 		wxStaticText* status_ = nullptr;
 		wxButton* restart_ = nullptr;
 		wxButton* copy_ = nullptr;
 		wxButton* copyCodex_ = nullptr;
+		wxButton* copyToken_ = nullptr;
 		wxButton* close_ = nullptr;
 		wxTextCtrl* log_ = nullptr;
 	};

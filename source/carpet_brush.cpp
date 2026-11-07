@@ -39,11 +39,11 @@ CarpetBrush::~CarpetBrush() {
 bool CarpetBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 	pugi::xml_attribute attribute;
 	if ((attribute = node.attribute("lookid"))) {
-		look_id = attribute.as_ushort();
+		look_id = xmlAttributeAsUint16(attribute);
 	}
 
 	if ((attribute = node.attribute("server_lookid"))) {
-		look_id = g_items[attribute.as_ushort()].clientID;
+		look_id = g_items[xmlAttributeAsUint16(attribute)].clientID;
 	}
 
 	for (pugi::xml_node childNode = node.first_child(); childNode; childNode = childNode.next_sibling()) {
@@ -116,7 +116,7 @@ bool CarpetBrush::load(pugi::xml_node node, wxArrayString& warnings) {
 				continue;
 			}
 
-			const uint16_t id = attribute.as_ushort();
+			const uint16_t id = xmlAttributeAsUint16(attribute);
 
 			ItemType& it = g_items[id];
 			if (it.id == 0) {

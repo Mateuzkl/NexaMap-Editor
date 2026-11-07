@@ -1,4 +1,5 @@
 #include "migration_io.h"
+#include "../path_encoding.h"
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -167,15 +168,15 @@ namespace MapMigration {
 						const auto value = fields.text();
 						normalized.push_back(attribute);
 						if (attribute == 11 || attribute == 13 || attribute == 23 || attribute == 24) {
-							if (value.empty()) {
+							const std::string reference = PathEncoding::SidecarBaseName(value);
+							if (reference.empty()) {
 								throw std::runtime_error("Referência vazia a arquivo externo.");
 							}
 							Sidecar sidecar;
 							sidecar.attribute = attribute;
-							sidecar.reference = value;
-							const auto source = IO::FromUtf8(value);
+							sidecar.reference = reference;
 							if (fingerprintSidecars) {
-								sidecar.file = FingerprintFile(source.is_absolute() ? source : path.parent_path() / source, control);
+								sidecar.file = FingerprintFile(path.parent_path() / IO::FromUtf8(reference), control);
 							}
 							inventory.sidecars.push_back(std::move(sidecar));
 							IO::AppendText(normalized, "");
@@ -368,6 +369,25 @@ namespace MapMigration {
 					}
 				}
 			}
+		}
+		if (fingerprintSidecars) {
+			// TFS maps do not name their zone file in the header and nothing names
+			// the waypoint groups file: the editor finds both by the map's name.
+			const auto addImplicit = [&](uint8_t attribute, const char* suffix) {
+				const bool referenced = std::any_of(inventory.sidecars.begin(), inventory.sidecars.end(), [&](const Sidecar& sidecar) { return sidecar.attribute == attribute; });
+				const auto file = path.parent_path() / IO::FromUtf8(IO::Utf8(path.stem()) + suffix);
+				std::error_code ec;
+				if (referenced || !std::filesystem::exists(file, ec)) {
+					return;
+				}
+				Sidecar sidecar;
+				sidecar.attribute = attribute;
+				sidecar.reference = IO::Utf8(file.filename());
+				sidecar.file = FingerprintFile(file, control);
+				inventory.sidecars.push_back(std::move(sidecar));
+			};
+			addImplicit(ZoneFileAttribute, "-zones.xml");
+			addImplicit(WaypointGroupsSidecar, "-waypoint-groups.xml");
 		}
 		return inventory;
 	}

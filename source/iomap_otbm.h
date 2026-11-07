@@ -24,6 +24,8 @@
 #include <string>
 #include <utility>
 
+class FileSaveTransaction;
+
 using OTBMMemoryBudgetCheck = std::function<bool(const char* phase, uint64_t pendingBytes, std::string& error)>;
 
 struct OTBMFileMetadata {
@@ -167,6 +169,11 @@ public:
 
 	static bool saveZones(Map& map, pugi::xml_document& doc);
 
+	// Header references can differ from the disk in case only. Windows hides
+	// that and Linux does not, so the on-disk spelling is looked up when the
+	// exact name is missing. Returns the name unchanged unless one file matches.
+	static std::string resolveSidecarName(const FileName& mapFile, const std::string& name);
+
 protected:
 	enum class SpawnLoadStatus {
 		Loaded,
@@ -195,13 +202,14 @@ protected:
 	bool loadZones(Map& map, pugi::xml_document& doc);
 
 	virtual bool saveMap(Map& map, NodeFileWriteHandle& handle);
-	bool saveSpawns(Map& map, const FileName& dir);
-	bool saveHouses(Map& map, const FileName& dir);
+	bool stageMapData(Map& map, const FileName& identifier, FileSaveTransaction& transaction);
+	bool stageSpawns(Map& map, const FileName& dir, FileSaveTransaction& transaction);
+	bool stageHouses(Map& map, const FileName& dir, FileSaveTransaction& transaction);
 	bool saveHouses(Map& map, pugi::xml_document& doc);
-	bool saveWaypoints(Map& map, const FileName& dir);
 	bool saveWaypoints(Map& map, pugi::xml_document& doc);
-	bool saveWaypointGroups(Map& map, const FileName& dir);
-	bool saveZones(Map& map, const FileName& dir);
+	bool stageWaypointGroups(Map& map, const FileName& dir, FileSaveTransaction& transaction, wxString& staleFile);
+	bool stageZones(Map& map, const FileName& dir, FileSaveTransaction& transaction);
+	bool checkUnloadedSidecars(const Map& map, const FileName& dir);
 
 private:
 	bool checkMemoryBudget(const char* phase, uint64_t pendingBytes = 0);

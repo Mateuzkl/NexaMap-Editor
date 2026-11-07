@@ -7,6 +7,7 @@ prefix=''
 jobs=2
 tests=OFF
 package=0
+sanitize=OFF
 vcpkg_root=${VCPKG_ROOT:-}
 dependencies_dir=${NEXAMAP_DEPENDENCIES_DIR:-}
 triplet=${NEXAMAP_VCPKG_TRIPLET:-x64-linux-release}
@@ -19,6 +20,7 @@ Usage: bash tools/build-linux.sh [options]
   --dependencies-dir PATH  vcpkg install directory (default: cache inside vcpkg)
   --jobs NUMBER       Parallel build jobs (default: 2; full editor tests use RAM)
   --tests             Build and run all tests, including wxGTK/OpenGL tests
+  --sanitize          Build with ASan and UBSan; use with --tests
   --package           Produce a .deb with automatically detected dependencies
   --print-deps        Print the Ubuntu system dependency installation command
   --help              Show this help
@@ -47,6 +49,7 @@ while (($#)); do
     --help|-h) usage; exit 0 ;;
     --print-deps) dependencies; exit 0 ;;
     --tests) tests=ON; shift ;;
+    --sanitize) sanitize=ON; shift ;;
     --package) package=1; shift ;;
     --build-dir|--prefix|--vcpkg-root|--dependencies-dir|--jobs)
       (($# >= 2)) || { echo "Missing value for $1" >&2; exit 2; }
@@ -67,8 +70,8 @@ export VCPKG_MAX_CONCURRENCY=${VCPKG_MAX_CONCURRENCY:-$jobs}
 if [[ -r /etc/os-release ]]; then
   . /etc/os-release
   echo "Distribution: ${PRETTY_NAME:-unknown}"
-  if [[ ${ID:-} != ubuntu || ! ${VERSION_ID:-} =~ ^(22\.04|24\.04)$ ]]; then
-    echo 'This distribution is outside the Ubuntu 22.04/24.04 verification matrix.' >&2
+  if [[ ${ID:-} != ubuntu || ${VERSION_ID:-} != 24.04 ]]; then
+    echo 'CI only tests Ubuntu 24.04. This distribution may need other packages.' >&2
   fi
 fi
 for command in git cmake ninja g++ pkg-config curl tar zip unzip desktop-file-validate; do
@@ -118,7 +121,7 @@ for candidate in sccache ccache; do
     break
   fi
 done
-echo "Source SHA: $(git -C "$root" rev-parse HEAD)"
+echo "Source SHA: $(git -C "$root" rev-parse HEAD 2>/dev/null || echo 'not a git checkout')"
 g++ --version | head -1
 cmake -S "$root" -B "$build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" \
@@ -127,7 +130,7 @@ cmake -S "$root" -B "$build" -G Ninja \
   -DVCPKG_OVERLAY_TRIPLETS="$root/cmake/triplets" -DVCPKG_TARGET_TRIPLET="$triplet" \
   -DVCPKG_HOST_TRIPLET="$triplet" \
   -DVCPKG_OVERLAY_PORTS="$overlay" \
-  -DENABLE_UNITY_BUILD=ON -DBUILD_TESTING="$tests" \
+  -DENABLE_UNITY_BUILD=ON -DBUILD_TESTING="$tests" -DENABLE_SANITIZERS="$sanitize" \
   -DENABLE_MULTIPLAYER_SESSION_TESTS="$tests" -DENABLE_GL_CACHE_TESTS="$tests" \
   "${compiler_cache_args[@]}"
 build_start=$SECONDS
@@ -139,13 +142,17 @@ fi
 if [[ $tests == ON ]]; then
   command -v xvfb-run >/dev/null || { echo 'Install xvfb and xauth to run GTK tests.' >&2; exit 1; }
   mkdir -p "$build/test-user"/{config,data,state,cache}
+  # Only the leaks of system libraries are suppressed, see tools/lsan.supp.
+  export LSAN_OPTIONS="suppressions=$root/tools/lsan.supp:print_suppressions=0"
+  export UBSAN_OPTIONS='print_stacktrace=1:halt_on_error=1'
   XDG_CONFIG_HOME="$build/test-user/config" XDG_DATA_HOME="$build/test-user/data" \
   XDG_STATE_HOME="$build/test-user/state" XDG_CACHE_HOME="$build/test-user/cache" \
   GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x960x24' \
     ctest --test-dir "$build" --output-on-failure --no-tests=error --timeout 180
 fi
-cmake --install "$build"
+cmake --install "$build" --strip
 desktop-file-validate "$prefix/share/applications/nexamap-editor.desktop"
+[[ -s $prefix/share/nexamap/THIRD_PARTY_NOTICES.txt ]] || { echo 'THIRD_PARTY_NOTICES.txt was not installed' >&2; exit 1; }
 if ((package)); then
   cpack --config "$build/CPackConfig.cmake" -G DEB -B "$build/packages"
 fi

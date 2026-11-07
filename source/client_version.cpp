@@ -255,15 +255,19 @@ void ClientVersion::loadVersion(pugi::xml_node versionNode) {
 				continue;
 			}
 
-			if (!(attribute = childNode.attribute("dat")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong((unsigned long*)&client_data.datSignature, 16)) {
+			// unsigned long is 8 bytes on Linux and the signatures are 4.
+			unsigned long signature = 0;
+			if (!(attribute = childNode.attribute("dat")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong(&signature, 16)) {
 				wxLogError("Node 'data' 'dat' tag is not hex-formatted.");
 				continue;
 			}
+			client_data.datSignature = static_cast<uint32_t>(signature);
 
-			if (!(attribute = childNode.attribute("spr")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong((unsigned long*)&client_data.sprSignature, 16)) {
+			if (!(attribute = childNode.attribute("spr")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong(&signature, 16)) {
 				wxLogError("Node 'data' 'spr' tag is not hex-formatted.");
 				continue;
 			}
+			client_data.sprSignature = static_cast<uint32_t>(signature);
 
 			version->data_versions.push_back(client_data);
 		}
@@ -440,8 +444,8 @@ ClientVersion* ClientVersion::detectFromPath(const FileName& requestedPath, wxSt
 		return nullptr;
 	}
 
-	FileReadHandle metadataFile(static_cast<const char*>(metadata.GetFullPath().mb_str()));
-	FileReadHandle spritesFile(static_cast<const char*>(sprites.GetFullPath().mb_str()));
+	FileReadHandle metadataFile(nstr(metadata.GetFullPath()));
+	FileReadHandle spritesFile(nstr(sprites.GetFullPath()));
 	uint32_t metadataSignature = 0;
 	uint32_t spritesSignature = 0;
 	if (!metadataFile.isOk() || !metadataFile.getU32(metadataSignature) || !spritesFile.isOk() || !spritesFile.getU32(spritesSignature)) {

@@ -59,6 +59,9 @@ public:
 	void clean();
 	void addTile(Tile* tile);
 	void removeTile(Tile* tile);
+	// Drops a position from the house only. Tiles swapped out of the map are undo
+	// snapshots and must keep their house ID, so removeTile would corrupt them.
+	void forgetTile(const Position& position);
 	size_t size() const;
 	size_t tileCount() const {
 		return tiles.size();

@@ -19,6 +19,7 @@
 
 #include "editor_tabs.h"
 #include "gui.h"
+#include "application.h"
 #include "map_tab.h"
 #include <wx/weakref.h>
 
@@ -33,6 +34,7 @@ EditorTab::~EditorTab() {
 BEGIN_EVENT_TABLE(MapTabbook, wxPanel)
 EVT_AUINOTEBOOK_PAGE_CHANGING(wxID_ANY, MapTabbook::OnNotebookPageChanging)
 EVT_AUINOTEBOOK_PAGE_CLOSE(wxID_ANY, MapTabbook::OnNotebookPageClose)
+EVT_AUINOTEBOOK_PAGE_CLOSED(wxID_ANY, MapTabbook::OnNotebookPageClosed)
 EVT_AUINOTEBOOK_PAGE_CHANGED(wxID_ANY, MapTabbook::OnNotebookPageChanged)
 END_EVENT_TABLE()
 
@@ -105,7 +107,11 @@ void MapTabbook::OnNotebookPageChanging(wxAuiNotebookEvent& evt) {
 	}
 
 	if (auto* mapTab = dynamic_cast<MapTab*>(GetInternalTabByPageIndex(newSelection))) {
-		g_gui.ActivateResourceSession(mapTab->GetResourceSession());
+		// Showing a tab under another session's globals would corrupt its edits.
+		if (!g_gui.ActivateResourceSession(mapTab->GetResourceSession())) {
+			evt.Veto();
+			return;
+		}
 	}
 	evt.Skip();
 }
@@ -115,17 +121,52 @@ void MapTabbook::OnNotebookPageClose(wxAuiNotebookEvent& evt) {
 		evt.Skip();
 		return;
 	}
-	if (addPage && evt.GetInt() == static_cast<int>(notebook->GetPageIndex(addPage))) {
+	const int pageIndex = evt.GetSelection();
+	if (addPage && pageIndex == static_cast<int>(notebook->GetPageIndex(addPage))) {
 		evt.Veto();
 		return;
 	}
-	EditorTab* editorTab = GetInternalTabByPageIndex(evt.GetInt());
+	EditorTab* editorTab = GetInternalTabByPageIndex(pageIndex);
 
 	auto* mapTab = dynamic_cast<MapTab*>(editorTab);
-	if (mapTab && evt.GetInt() == notebook->GetSelection() && mapTab->IsUniqueReference() && mapTab->GetMap()) {
-		g_gui.RefreshPalettes(nullptr, false);
+	if (mapTab && mapTab->IsUniqueReference() && mapTab->GetMap()) {
+		if (mapTab->GetMap()->hasChanged()) {
+			// The prompt pumps events and may delete this page, which must not
+			// happen inside the notebook's own close handling.
+			evt.Veto();
+			wxWindow* page = notebook->GetPage(static_cast<size_t>(pageIndex));
+			wxWeakRef<MapTabbook> weak(this);
+			CallAfter([weak, page] {
+				if (weak) {
+					weak->QuerySaveAndClosePage(page);
+				}
+			});
+			return;
+		}
+		if (pageIndex == notebook->GetSelection()) {
+			g_gui.RefreshPalettes(nullptr, false);
+			g_gui.UpdateMenus();
+		}
+	}
+}
+
+void MapTabbook::OnNotebookPageClosed(wxAuiNotebookEvent& evt) {
+	evt.Skip();
+	if (!g_gui.IsApplicationClosing()) {
+		g_gui.RefreshPalettes();
 		g_gui.UpdateMenus();
+	}
+}
+
+void MapTabbook::QuerySaveAndClosePage(wxWindow* page) {
+	// The pointer is only compared: the page may be gone by now.
+	const int pageIndex = notebook ? notebook->GetPageIndex(page) : wxNOT_FOUND;
+	if (pageIndex == wxNOT_FOUND || g_gui.IsApplicationClosing()) {
 		return;
+	}
+	notebook->SetSelection(static_cast<size_t>(pageIndex));
+	if (notebook->GetSelection() == pageIndex) {
+		g_gui.root->DoQuerySave(true);
 	}
 }
 

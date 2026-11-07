@@ -4,7 +4,7 @@
 
 1. Use a mesma build do NexaMap, o mesmo client e as mesmas definições de itens nos dois PCs.
 2. No PC A, abra uma cópia do mapa e escolha **Multiplayer > Host Session**.
-3. Configure **Listening port: 49171**, **Maximum players: 2**, papel Editor e uma senha de teste. A contagem inclui o host.
+3. Configure **Listening port: 49171**, **Maximum players: 2**, papel Editor e uma senha de teste com pelo menos 8 caracteres. A contagem inclui o host.
 4. Confirme. Na janela de multiplayer do host, confira a porta em escuta e copie um endereço LAN/VPN. Endereços de interfaces virtuais também podem aparecer: escolha a interface acessível pelo PC B.
 5. No PC B, escolha **Join Session**, informe apenas o IP/hostname do PC A no campo Host/IP, a porta no campo Port e a mesma senha. Join usa uma aba vazia para proteger mapas existentes.
 6. Confira `Connecting to IP:PORT`, `Authenticating`, `Synchronizing`, `Connected` no log. Aguarde o snapshot concluir antes de editar.
@@ -15,13 +15,13 @@
 
 **Mesmo PC:** `127.0.0.1`. Isso nunca identifica outro PC.
 **LAN:** IPv4 da interface LAN do host. **VPN:** IP do host dentro da VPN.
-**Internet direto:** endereço público do host, regra de firewall e redirecionamento TCP/NAT para a porta configurada. O editor não consulta serviços externos de IP nem configura o roteador.
+**Escopo:** use somente em LAN confiável ou VPN; não abra esta porta para a Internet. A senha autentica os participantes e cada frame, mas mapa e chat não são cifrados, e quem capturar um login pode testar senhas offline. Detalhes em [Segurança da sessão](../multiplayer-design.md#segurança-da-sessão-protocolo-2).
 
 O botão copia `IP:PORT`; os campos de Join continuam separados. A lista do formulário mostra os endereços candidatos; a janela de participantes mostra a porta após o bind bem-sucedido.
 
 ## Falhas esperadas
 
-Teste senha incorreta, client diferente, definições de itens diferentes, terceira pessoa numa sessão limitada a dois, hostname inválido e porta sem host. Rejeições de protocolo devem chegar ao cliente com seu motivo, sem congelar a interface. A implementação aguarda por eventos por até dois segundos para concluir o frame parcialmente enviado e a mensagem de encerramento.
+Teste senha incorreta, client diferente, definições de itens diferentes, terceira pessoa numa sessão limitada a dois, hostname inválido e porta sem host. Hospedar com senha vazia ou com menos de 8 caracteres deve ser recusado, exceto com **Only this PC can connect**. Depois de uma senha errada, o mesmo IP espera de 1 a 60 s (`Too many login attempts`). Um participante expulso continua recusado, mesmo com identidade nova, até o host usar **Clear bans**. Rejeições de protocolo devem chegar ao cliente com seu motivo, sem congelar a interface. A implementação aguarda por eventos por até dois segundos para concluir o frame parcialmente enviado e a mensagem de encerramento.
 
 O wxWidgets nem sempre preserva o erro nativo do TCP até o evento de perda. Quando `SO_ERROR` está disponível, mostramos recusa/timeout específicos; caso contrário, a mensagem informa falha por recusa ou host inacessível, sem inventar uma causa exata. Falhas iniciais não ficam tentando conectar para sempre. Perda de uma conexão autenticada usa a política de reconexão existente.
 
@@ -76,6 +76,22 @@ parentesco em static boxes nem de largura insuficiente dos campos numéricos.
 A auditoria confirmou seleção/tile/lista de itens sem validação nos comandos Go To Destination, Copy Destination, Rotate, Switch Door e Copy Server ID/Client ID/Name; dereferência de brush ausente nos seletores Wall/Carpet/Table; ponteiros de Item mantidos pelo seletor modal de borders; cópias de tiles sem dono nos caminhos de cancelamento/propriedades. Todos os callbacks do popup agora conferem o editor ativo, e comandos que alteram o mapa verificam permissão. Move To Tileset deixou de recolocar uma cópia antiga do tile após um diálogo que só altera configuração local.
 
 Também foram corrigidos `SetOption` antes de `Connect`, falhas imediatas ignoradas, perda do motivo de rejeição, acesso à transferência depois de limpar a fila, timeout por subtração sem sinal de timestamps, destruição de sockets/timers em background, renovação de locks durante invalidação da coleção e callbacks de operações após destruir a sessão. Não houve mudança no formato do protocolo, HMAC, renderer, minimap ou caches gráficos.
+
+## Resultado local — 2026-11-07 (protocolo 2)
+
+Linux x64, Release: compilação concluída. `ctest` passou em 54 de 55 testes; a falha foi `linux_editor_tests`, que depende de `xdotool` e não executou neste ambiente. `multiplayer_session_tests` passou mais três vezes seguidas, com HOME isolado. As suítes passaram a cobrir, em sockets wx reais:
+
+- recusa de senha vazia ou curta, sessão somente neste PC e host sem guardar a senha;
+- prova do host (Welcome sem MAC, chave desconhecida, MAC certo com prova errada), host sem prova incapaz de alterar um cliente sincronizado e login retransmitido (relay) sem capacidade de enviar frames;
+- frame repetido, adulterado ou injetado sem MAC, e `Disconnect` selado depois de descartar frames da fila;
+- limite de handshakes pendentes, prazo absoluto, espera por IP, limite global e motivos pré-autenticação nunca exibidos literalmente;
+- rebaixamento mantido após descartar o token, kick com ban até **Clear bans** e tabela de identidades cheia;
+- limites de raio e de área de spawn, spawn de raio 255 vindo de XML ainda sincronizado e editável, e `addSpawn` sem dar a volta na borda do mapa;
+- portão de aprovação de Unique ID, contagens em commit, undo e redo (inclusive em containers) e mapa com Unique IDs duplicados ainda sincronizado;
+- limites de lock, host isento e capaz de quebrar locks; metadados, waypoints com maiúsculas, limites do mapa e ordem de frames adiados;
+- resume com intervalo de 1.100 transações.
+
+O caminho CNG do Windows não foi compilado nem executado nesta rodada: HMAC, PBKDF2 e limpeza de chaves só foram testados com OpenSSL, e a janela de Host/Join apenas foi compilada, sem interação visual. Os testes usam loopback em um processo; o roteiro em dois PCs continua necessário. Sem criptografia, a captura de um login ainda permite testar senhas offline.
 
 ## Arquivos desta correção
 

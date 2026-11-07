@@ -56,9 +56,59 @@ int main() {
 	Identity session = randomIdentity();
 	check(session != randomIdentity(), "Session identities");
 	check(hex(sha256({})) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256 vector");
+	Digest vectorKey;
+	for (size_t i = 0; i < vectorKey.size(); ++i) {
+		vectorKey[i] = static_cast<uint8_t>(i);
+	}
+	const std::string vectorText = "NexaMap";
+	check(hex(hmacSha256(vectorKey, { reinterpret_cast<const uint8_t*>(vectorText.data()), vectorText.size() })) == "11c6438ed067c4e21705d153269edbdaf8a12201e97f8269e815113a01016258", "HMAC-SHA256 vector");
+	Identity vectorSalt;
+	for (size_t i = 0; i < vectorSalt.size(); ++i) {
+		vectorSalt[i] = static_cast<uint8_t>(i);
+	}
+	check(hex(deriveSessionKey("secret", vectorSalt)) == "9fb9dd3c8e2944366b788c7e795a5a6350d58845b2a3d21ad65f07b55181f837", "PBKDF2 vector");
 	auto challenge = randomIdentity();
-	auto proof = authenticate("secret", session, challenge);
-	check(secureEqual(proof, authenticate("secret", session, challenge)) && !secureEqual(proof, authenticate("wrong", session, challenge)) && !secureEqual(proof, authenticate("secret", session, randomIdentity())), "Password/challenge binding");
+	auto hello = randomIdentity();
+	auto sessionKey = deriveSessionKey("secret", session);
+	auto keys = deriveHandshake(sessionKey, session, challenge, hello);
+	auto sameKeys = deriveHandshake(deriveSessionKey("secret", session), session, challenge, hello);
+	check(secureEqual(keys.clientProof, sameKeys.clientProof) && secureEqual(keys.hostProof, sameKeys.hostProof) && secureEqual(keys.clientToHost, sameKeys.clientToHost) && secureEqual(keys.hostToClient, sameKeys.hostToClient), "Handshake keys must be reproducible");
+	check(!secureEqual(keys.clientProof, keys.hostProof) && !secureEqual(keys.clientToHost, keys.hostToClient) && !secureEqual(keys.clientProof, keys.clientToHost), "Proofs and directions must be separated");
+	check(!secureEqual(keys.clientProof, deriveHandshake(deriveSessionKey("wrong", session), session, challenge, hello).clientProof), "Password binding");
+	check(!secureEqual(keys.hostProof, deriveHandshake(sessionKey, session, randomIdentity(), hello).hostProof), "Host nonce binding");
+	check(!secureEqual(keys.hostProof, deriveHandshake(sessionKey, session, challenge, randomIdentity()).hostProof), "Client hello binding");
+	check(!secureEqual(keys.hostProof, deriveHandshake(sessionKey, randomIdentity(), challenge, hello).hostProof), "Session binding");
+
+	auto sealedFrame = [&](const Digest& key, uint64_t sequence, std::span<const uint8_t> payload) {
+		auto sealed = sealFrame(key, sequence, Packet::Chat, payload);
+		FrameReader reader;
+		reader.append(std::span(sealed).first(4));
+		reader.append(std::span(sealed).subspan(4));
+		return reader.take();
+	};
+	const auto original = sealedFrame(keys.clientToHost, 7, fields.data);
+	auto opened = original;
+	check(openFrame(keys.clientToHost, 7, opened) && opened.size() == fields.data.size() + 1 && opened[0] == uint8_t(Packet::Chat) && std::equal(fields.data.begin(), fields.data.end(), opened.begin() + 1), "Sealed frame roundtrip");
+	for (size_t n = 0; n < original.size(); ++n) {
+		auto tampered = original;
+		tampered[n] ^= 1;
+		check(!openFrame(keys.clientToHost, 7, tampered) && tampered == [&] { auto copy = original; copy[n] ^= 1; return copy; }(), "Tampered frame accepted or modified");
+	}
+	auto replayed = original;
+	check(!openFrame(keys.clientToHost, 8, replayed) && !openFrame(keys.clientToHost, 6, replayed), "Frame accepted under another sequence number");
+	check(!openFrame(keys.hostToClient, 7, replayed), "Frame accepted in the other direction");
+	Bytes tooShort(MacSize, 0);
+	check(!openFrame(keys.clientToHost, 0, tooShort), "Frame without a body accepted");
+	check(sealedFrame(keys.clientToHost, 0, {}).size() == MacSize + 1, "Empty payload frame size");
+	Bytes largest(MaxPacket - MacSize - 1, 0);
+	check(sealFrame(keys.clientToHost, 0, Packet::Chat, largest).size() == MaxPacket + 4, "Largest sealed frame must still pass FrameReader");
+	largest.push_back(0);
+	rejects([&] { sealFrame(keys.clientToHost, 0, Packet::Chat, largest); });
+
+	check(!validHostPassword("", false) && !validHostPassword("1234567", false) && validHostPassword("12345678", false), "Host password length");
+	check(validHostPassword("", true) && validHostPassword("short", true), "Loopback session password");
+	check(!validHostPassword("żółć12", false) && validHostPassword("żółć1234", false), "Host password length counts characters, not bytes");
+	check(printableText("plain text") == "plain text" && printableText("João") == "João" && printableText("a\nb") == "a?b" && printableText(std::string("\xff", 1)) == "?", "Log text cleaning");
 	Revisions revisions;
 	Locks locks;
 	Transaction a;
@@ -88,6 +138,32 @@ int main() {
 	check(locks.permits(2, b.tiles[0].key, 0), "Disconnect didn't release locks");
 	locks.acquire(1, 1, { 10, 20, 30, 40, 7 }, 0);
 	check(locks.expire(30000) && locks.all().empty(), "Lease expiry");
+	Locks capped;
+	check(capped.acquire(1, 1, { 0, 0, 511, 511, 7 }, 0), "Largest allowed lock rejected");
+	check(!capped.acquire(1, 2, { 0, 0, 512, 511, 7 }, 0), "Oversized lock accepted");
+	check(!capped.acquire(1, 3, { 0, 0, 65535, 65535, 7 }, 0), "Whole-floor lock accepted");
+	check(!capped.acquire(1, 1, { 0, 0, 1023, 1023, 7 }, 0), "Renewal grew a lock past the area cap");
+	for (uint16_t z = 0; z < 16; ++z) {
+		check(capped.acquire(2, z + 1, { 2000, 2000, 2100, 2100, static_cast<uint8_t>(z) }, 0), "Multi-floor Lock Selection must fit the owner cap");
+	}
+	for (uint64_t id = 2; id <= MaxLocksPerOwner; ++id) {
+		check(capped.acquire(1, id, { static_cast<uint16_t>(id * 10), 1000, static_cast<uint16_t>(id * 10), 1000, 7 }, 0), "Lock under the owner cap rejected");
+	}
+	check(!capped.acquire(1, 999, { 9000, 9000, 9000, 9000, 7 }, 0), "Owner exceeded the lease cap");
+	check(capped.acquire(1, 2, { 20, 1000, 20, 1000, 7 }, 25000), "Renewal at the owner cap rejected");
+	check(capped.acquire(3, 1, { 9000, 9000, 9000, 9000, 7 }, 0), "One owner's cap blocked another owner");
+	Revisions hostEdits;
+	Transaction hostEdit;
+	hostEdit.session = session;
+	hostEdit.id = 1;
+	hostEdit.tiles.push_back({ tileKey(100, 100, 7), {}, { 1 } });
+	Locks hostLocked;
+	check(hostLocked.acquire(1, 1, { 0, 0, 511, 511, 7 }, 0), "Host exemption lock");
+	check(hostEdits.validate(hostEdit, session, Role::Host, 0, hostLocked, 0).empty(), "A client lock blocked the host");
+	hostEdit.author = 2;
+	check(!hostEdits.validate(hostEdit, session, Role::Editor, 2, hostLocked, 0).empty(), "A client lock stopped protecting other editors");
+	hostLocked.releaseOverlapping({ 100, 100, 100, 100, 7 });
+	check(hostLocked.all().empty(), "Host could not break an overlapping lock");
 	auto encoded = encodeTransaction(b);
 	check(encodeTransaction(decodeTransaction(encoded)) == encoded, "Transaction roundtrip");
 	for (size_t n = 0; n < encoded.size(); ++n) {

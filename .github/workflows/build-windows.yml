@@ -3,12 +3,17 @@ name: Build Windows
 
 on:
   workflow_dispatch:
+  # Tagged releases call this workflow from release.yml with cold_cache enabled.
+  workflow_call:
+    inputs:
+      cold_cache:
+        description: Build without restoring any dependency or compiler cache.
+        type: boolean
+        default: false
   push:
     branches:
       - main
       - master
-    tags:
-      - "v*"
     paths:
       - ".github/workflows/build-windows.yml"
       - "CMakeLists.txt"
@@ -22,6 +27,8 @@ on:
       - "data/**"
       - "extensions/**"
       - "icons/**"
+      - "packaging/**"
+      - "tools/**"
       - "LICENSE.rtf"
       - "README.md"
   pull_request:
@@ -38,6 +45,8 @@ on:
       - "data/**"
       - "extensions/**"
       - "icons/**"
+      - "packaging/**"
+      - "tools/**"
       - "LICENSE.rtf"
       - "README.md"
 
@@ -70,21 +79,23 @@ jobs:
       ARCHIVE_NAME: NexaMap-Editor-Windows-${{ matrix.arch }}-Release.zip
       NEXAMAP_VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
       VCPKG_DOWNLOADS: ${{ github.workspace }}\vcpkg-downloads\${{ matrix.arch }}
-      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-binary-cache\${{ matrix.arch }},readwrite
+      # A release must not inherit packages from a shared cache.
+      VCPKG_BINARY_SOURCES: ${{ inputs.cold_cache && 'clear' || format('clear;files,{0}\vcpkg-binary-cache\{1},readwrite', github.workspace, matrix.arch) }}
       VCPKG_FEATURE_FLAGS: manifests,binarycaching
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       SCCACHE_LOG: warn
       SCCACHE_ERROR_LOG: ${{ github.workspace }}\build-${{ matrix.arch }}\diagnostics\sccache.log
+      COLD_CACHE: ${{ inputs.cold_cache }}
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Configure MSVC for ${{ matrix.arch }}
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
         with:
           arch: ${{ matrix.msvc_arch }}
 
@@ -96,7 +107,8 @@ jobs:
 
       - name: Restore vcpkg caches
         id: vcpkg-cache
-        uses: actions/cache/restore@v4
+        if: ${{ !inputs.cold_cache }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             vcpkg-binary-cache/${{ matrix.arch }}
@@ -146,6 +158,7 @@ jobs:
           New-Item -ItemType Directory -Force $binaryCache | Out-Null
 
       - name: Set up compiler cache
+        if: ${{ !inputs.cold_cache }}
         uses: Mozilla-Actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
           version: "v0.16.0"
@@ -158,22 +171,24 @@ jobs:
           cmake --version
           ninja --version
 
-          & ./cmake/InvokeBuildStage.ps1 configure cmake -CommandArguments @(
+          $compilerCache = if ($env:COLD_CACHE -eq 'true') { @() } else {
+            @('-DCMAKE_C_COMPILER_LAUNCHER=sccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=sccache')
+          }
+
+          & ./cmake/InvokeBuildStage.ps1 configure cmake -CommandArguments (@(
             '-S', '.', '-B', $env:BUILD_DIR, '-G', 'Ninja',
             '-DCMAKE_BUILD_TYPE=Release',
             "-DCMAKE_TOOLCHAIN_FILE=$env:NEXAMAP_VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake",
             '-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}',
-            '-DCMAKE_C_COMPILER_LAUNCHER=sccache',
-            '-DCMAKE_CXX_COMPILER_LAUNCHER=sccache',
             '-DBUILD_TESTING=ON', '-DENABLE_UNITY_BUILD=ON'
-          )
+          ) + $compilerCache)
           if ($LASTEXITCODE -ne 0) {
             throw "CMake configure failed with exit code $LASTEXITCODE."
           }
 
       - name: Save vcpkg caches
-        if: steps.configure.outcome == 'success' && steps.vcpkg-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        if: ${{ !inputs.cold_cache && steps.configure.outcome == 'success' && steps.vcpkg-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             vcpkg-binary-cache/${{ matrix.arch }}
@@ -257,8 +272,24 @@ jobs:
             }
           }
 
+      - name: Collect dependency SBOM
+        if: ${{ inputs.cold_cache }}
+        shell: pwsh
+        run: |
+          $installed = Join-Path $env:BUILD_DIR "vcpkg_installed\${{ matrix.triplet }}\share"
+          $sbomDirectory = "sbom-${{ matrix.arch }}"
+          New-Item -ItemType Directory -Force $sbomDirectory | Out-Null
+          $documents = @(Get-ChildItem $installed -Recurse -Filter 'vcpkg.spdx.json' -File)
+          if ($documents.Count -eq 0) {
+            throw 'vcpkg did not produce any SPDX documents.'
+          }
+          foreach ($document in $documents) {
+            Copy-Item -LiteralPath $document.FullName -Destination (Join-Path $sbomDirectory "$($document.Directory.Name).spdx.json")
+          }
+          Compress-Archive -Path "$sbomDirectory/*" -DestinationPath 'NexaMap-Editor-Windows-${{ matrix.arch }}-SBOM.zip'
+
       - name: Record compiler cache statistics
-        if: always()
+        if: ${{ always() && !inputs.cold_cache }}
         shell: pwsh
         run: |
           if (Get-Command sccache -ErrorAction SilentlyContinue) {
@@ -267,7 +298,7 @@ jobs:
 
       - name: Upload build diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Windows-${{ matrix.arch }}-diagnostics
           path: |
@@ -282,10 +313,20 @@ jobs:
           retention-days: 7
 
       - name: Upload ${{ matrix.arch }} artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: NexaMap-Editor-Windows-${{ matrix.arch }}-Release
           path: ${{ env.ARCHIVE_NAME }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload ${{ matrix.arch }} SBOM
+        if: ${{ inputs.cold_cache }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: NexaMap-Editor-Windows-${{ matrix.arch }}-SBOM
+          path: NexaMap-Editor-Windows-${{ matrix.arch }}-SBOM.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -296,7 +337,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Test case-sensitive resource discovery
@@ -305,36 +346,3 @@ jobs:
           set -euo pipefail
           g++ -std=c++20 -O2 -Wall -Wextra -pedantic -Isource tests/server_workspace_tests.cpp source/server_workspace.cpp -o server_workspace_tests
           ./server_workspace_tests
-
-  release:
-    name: Publish tagged release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, resource-discovery]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: NexaMap-Editor-Windows-*-Release
-          path: release-assets
-          merge-multiple: true
-
-      - name: Create or update GitHub Release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mapfile -t archives < <(find release-assets -maxdepth 1 -type f -name 'NexaMap-Editor-Windows-*-Release.zip' -print | sort)
-          if [[ "${#archives[@]}" -ne 2 ]]; then
-            echo "Expected two Windows archives, found ${#archives[@]}." >&2
-            exit 1
-          fi
-
-          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" "${archives[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
-          else
-            gh release create "${GITHUB_REF_NAME}" "${archives[@]}" --verify-tag --generate-notes --repo "${GITHUB_REPOSITORY}"
-          fi

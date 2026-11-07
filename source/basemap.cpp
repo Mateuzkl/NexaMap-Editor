@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include <memory>
+#include <stdexcept>
 
 #include "tile.h"
 #include "basemap.h"
@@ -50,7 +51,6 @@ void BaseMap::clearVisible(uint32_t mask) {
 }
 
 Tile* BaseMap::createTile(int x, int y, int z) {
-	ASSERT(z < MAP_LAYERS);
 	QTreeNode* leaf = root.getLeafForce(x, y);
 	TileLocation* loc = leaf->createTile(x, y, z);
 	if (loc->get()) {
@@ -72,7 +72,7 @@ Tile* BaseMap::getOrCreateTile(const Position& pos) {
 }
 
 TileLocation* BaseMap::getTileL(int x, int y, int z) {
-	ASSERT(z < MAP_LAYERS);
+	// A floor outside the map has no tiles: getFloor() returns nullptr for it.
 	QTreeNode* leaf = root.getLeaf(x, y);
 	if (leaf) {
 		Floor* floor = leaf->getFloor(z);
@@ -99,8 +99,6 @@ const TileLocation* BaseMap::getTileL(const Position& pos) const {
 }
 
 TileLocation* BaseMap::createTileL(int x, int y, int z) {
-	ASSERT(z < MAP_LAYERS);
-
 	QTreeNode* leaf = root.getLeafForce(x, y);
 	Floor* floor = leaf->createFloor(x, y, z);
 	const uint32_t offsetX = x & 3;
@@ -114,7 +112,9 @@ TileLocation* BaseMap::createTileL(const Position& pos) {
 }
 
 void BaseMap::setTile(TileLocation* location, Tile* newtile, bool remove) {
-	ASSERT(location);
+	if (!location) {
+		throw std::invalid_argument("BaseMap::setTile requires a tile location");
+	}
 	ASSERT(!newtile || newtile->getX() == location->getX());
 	ASSERT(!newtile || newtile->getY() == location->getY());
 	ASSERT(!newtile || newtile->getZ() == location->getZ());
@@ -156,13 +156,14 @@ void BaseMap::setTile(int x, int y, int z, Tile* newtile, bool remove) {
 }
 
 Tile* BaseMap::swapTile(int x, int y, int z, Tile* newtile, MapChunkChange change) {
-	ASSERT(z < MAP_LAYERS);
 	ASSERT(!newtile || newtile->getX() == int(x));
 	ASSERT(!newtile || newtile->getY() == int(y));
 	ASSERT(!newtile || newtile->getZ() == int(z));
 
 	QTreeNode* leaf = root.getLeafForce(x, y);
-	return leaf->setTile(x, y, z, newtile, change);
+	Tile* old = leaf->setTile(x, y, z, newtile, change);
+	updateUniqueIds(old, newtile);
+	return old;
 }
 
 void BaseMap::markRenderChunkChanged(const Position& pos, MapChunkChange change) {

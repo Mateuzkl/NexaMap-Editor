@@ -317,40 +317,38 @@ void Map::convertHouseTiles(uint32_t fromId, uint32_t toId) {
 	g_gui.DestroyLoadBar();
 }
 
-void Map::updateUniqueIds(Tile* old_tile, Tile* new_tile) {
-	if (old_tile && old_tile->hasUniqueItem()) {
-		if (old_tile->ground) {
-			uint16_t uid = old_tile->ground->getUniqueID();
-			if (uid != 0) {
-				removeUniqueId(uid);
-			}
+namespace {
+	template <typename Callback>
+	void forEachUniqueId(const Item* item, const Callback& callback) {
+		if (!item) {
+			return;
 		}
-		for (const Item* item : old_tile->items) {
-			if (item) {
-				uint16_t uid = item->getUniqueID();
-				if (uid != 0) {
-					removeUniqueId(uid);
-				}
+		if (const uint16_t uid = item->getUniqueID(); uid != 0) {
+			callback(uid);
+		}
+		if (const auto* container = dynamic_cast<const Container*>(item)) {
+			for (const Item* child : container->getVector()) {
+				forEachUniqueId(child, callback);
 			}
 		}
 	}
 
-	if (new_tile && new_tile->hasUniqueItem()) {
-		if (new_tile->ground) {
-			uint16_t uid = new_tile->ground->getUniqueID();
-			if (uid != 0) {
-				addUniqueId(uid);
-			}
+	template <typename Callback>
+	void forEachUniqueId(const Tile* tile, const Callback& callback) {
+		if (!tile) {
+			return;
 		}
-		for (const Item* item : new_tile->items) {
-			if (item) {
-				uint16_t uid = item->getUniqueID();
-				if (uid != 0) {
-					addUniqueId(uid);
-				}
-			}
+		forEachUniqueId(tile->ground, callback);
+		for (const Item* item : tile->items) {
+			forEachUniqueId(item, callback);
 		}
 	}
+}
+
+void Map::updateUniqueIds(Tile* old_tile, Tile* new_tile) {
+	// Reads the items, not TILESTATE_UNIQUE: swapTile runs before Tile::update on a new tile.
+	forEachUniqueId(old_tile, [this](uint16_t uid) { removeUniqueId(uid); });
+	forEachUniqueId(new_tile, [this](uint16_t uid) { addUniqueId(uid); });
 }
 
 void Map::addUniqueId(uint16_t uid) {
@@ -446,11 +444,12 @@ void Map::setZoneFilename(const std::string& new_zonefile) {
 bool Map::addSpawn(Tile* tile) {
 	Spawn* spawn = tile->spawn;
 	if (spawn) {
+		// Coordinates past the map edge would wrap in the QTree; removeSpawnInternal clips the same way.
 		int z = tile->getZ();
-		int start_x = tile->getX() - spawn->getSize();
-		int start_y = tile->getY() - spawn->getSize();
-		int end_x = tile->getX() + spawn->getSize();
-		int end_y = tile->getY() + spawn->getSize();
+		int start_x = std::max(tile->getX() - spawn->getSize(), 0);
+		int start_y = std::max(tile->getY() - spawn->getSize(), 0);
+		int end_x = std::min(tile->getX() + spawn->getSize(), MAP_MAX_WIDTH);
+		int end_y = std::min(tile->getY() + spawn->getSize(), MAP_MAX_HEIGHT);
 
 		for (int y = start_y; y <= end_y; ++y) {
 			for (int x = start_x; x <= end_x; ++x) {
@@ -469,10 +468,10 @@ void Map::removeSpawnInternal(Tile* tile) {
 	ASSERT(spawn);
 
 	int z = tile->getZ();
-	int start_x = tile->getX() - spawn->getSize();
-	int start_y = tile->getY() - spawn->getSize();
-	int end_x = tile->getX() + spawn->getSize();
-	int end_y = tile->getY() + spawn->getSize();
+	int start_x = std::max(tile->getX() - spawn->getSize(), 0);
+	int start_y = std::max(tile->getY() - spawn->getSize(), 0);
+	int end_x = std::min(tile->getX() + spawn->getSize(), MAP_MAX_WIDTH);
+	int end_y = std::min(tile->getY() + spawn->getSize(), MAP_MAX_HEIGHT);
 
 	for (int y = start_y; y <= end_y; ++y) {
 		for (int x = start_x; x <= end_x; ++x) {
