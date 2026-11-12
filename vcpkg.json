@@ -1,17 +1,33 @@
 {
-	"$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-	"builtin-baseline": "67972e92edd181d433927b42d8ab4bfa52ac164a",
-	"dependencies": [
-		{ "name": "openssl", "platform": "!windows" },
-		"fmt",
-		"nlohmann-json",
-		{ "name": "wxwidgets", "platform": "!linux" },
-		{ "name": "libwebp", "platform": "windows" },
-		{ "name": "wxwidgets", "platform": "linux", "default-features": false, "features": ["debug-support"] },
-		"pugixml",
-		"glad",
-		"opengl",
-		"protobuf",
-		"liblzma"
-	]
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "builtin-baseline": "9eec002df1cd109f8f104cd966a763daf9751489",
+  "dependencies": [
+    {
+      "name": "openssl",
+      "platform": "!windows"
+    },
+    "fmt",
+    "nlohmann-json",
+    {
+      "name": "wxwidgets",
+      "platform": "!linux"
+    },
+    {
+      "name": "libwebp",
+      "platform": "windows"
+    },
+    {
+      "name": "wxwidgets",
+      "platform": "linux",
+      "default-features": false,
+      "features": [
+        "debug-support"
+      ]
+    },
+    "pugixml",
+    "glad",
+    "opengl",
+    "protobuf",
+    "liblzma"
+  ]
 }
