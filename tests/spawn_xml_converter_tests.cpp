@@ -72,23 +72,21 @@ namespace {
 		const std::filesystem::path monsters = temporary.path / "world-monster.xml";
 		const std::filesystem::path npcs = temporary.path / "world-npc.xml";
 		const std::filesystem::path output = temporary.path / "world-spawn.xml";
-		Write(monsters,
-			"<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-			"<monsters>"
-			"<monster centerx=\"238\" centery=\"644\" centerz=\"0\" radius=\"0\" customArea=\"keep\">"
-			"<monster name=\"Cobra &amp; Assassin\" x=\"-1\" y=\"0\" z=\"0\" spawntime=\"60\" custom=\"\xC3\xA1\xC3\xA9\"/>"
-			"<monster name=\"Cobra &amp; Assassin\" x=\"-1\" y=\"0\" z=\"0\" spawntime=\"60\" custom=\"\xC3\xA1\xC3\xA9\"/>"
-			"</monster>"
-			"<monster centerx=\"500\" centery=\"600\" centerz=\"7\" radius=\"5\">"
-			"<monster name=\"Dragon\" x=\"3\" y=\"-4\" z=\"7\" spawntime=\"120\" direction=\"1\"/>"
-			"</monster>"
-			"</monsters>");
-		Write(npcs,
-			"<?xml version=\"1.0\"?><npcs>"
-			"<npc centerx=\"388\" centery=\"419\" centerz=\"5\" radius=\"5\" zone=\"market\">"
-			"<npc name=\"Julian\" x=\"0\" y=\"-5\" z=\"5\" spawntime=\"60\" direction=\"2\" script=\"julian.lua\"/>"
-			"<npc name=\"Orlan\" x=\"0\" y=\"0\" z=\"5\" spawntime=\"60\"/>"
-			"</npc></npcs>");
+		Write(monsters, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+						"<monsters>"
+						"<monster centerx=\"238\" centery=\"644\" centerz=\"0\" radius=\"0\" customArea=\"keep\">"
+						"<monster name=\"Cobra &amp; Assassin\" x=\"-1\" y=\"0\" z=\"0\" spawntime=\"60\" custom=\"\xC3\xA1\xC3\xA9\"/>"
+						"<monster name=\"Cobra &amp; Assassin\" x=\"-1\" y=\"0\" z=\"0\" spawntime=\"60\" custom=\"\xC3\xA1\xC3\xA9\"/>"
+						"</monster>"
+						"<monster centerx=\"500\" centery=\"600\" centerz=\"7\" radius=\"5\">"
+						"<monster name=\"Dragon\" x=\"3\" y=\"-4\" z=\"7\" spawntime=\"120\" direction=\"1\"/>"
+						"</monster>"
+						"</monsters>");
+		Write(npcs, "<?xml version=\"1.0\"?><npcs>"
+					"<npc centerx=\"388\" centery=\"419\" centerz=\"5\" radius=\"5\" zone=\"market\">"
+					"<npc name=\"Julian\" x=\"0\" y=\"-5\" z=\"5\" spawntime=\"60\" direction=\"2\" script=\"julian.lua\"/>"
+					"<npc name=\"Orlan\" x=\"0\" y=\"0\" z=\"5\" spawntime=\"60\"/>"
+					"</npc></npcs>");
 
 		const SpawnXmlConversionResult result = SpawnXmlConverter::ConvertCanaryToTfs(monsters, npcs, output, false);
 		Check(result.success && result.report.validationPassed, "Canary monster.xml and npc.xml convert and reopen successfully");
@@ -132,17 +130,16 @@ namespace {
 		const std::filesystem::path source = temporary.path / "mixed-spawn.xml";
 		const std::filesystem::path monsters = temporary.path / "mixed-monster.xml";
 		const std::filesystem::path npcs = temporary.path / "mixed-npc.xml";
-		Write(source,
-			"<spawns>"
-			"<spawn centerx=\"100\" centery=\"200\" centerz=\"4\" radius=\"6\" region=\"one\">"
-			"<monster name=\"First\" x=\"-2\" y=\"3\" z=\"4\" spawntime=\"10\" direction=\"3\" loot=\"yes\"/>"
-			"<npc name=\"Middle\" x=\"0\" y=\"0\" z=\"4\" spawntime=\"20\" direction=\"2\"/>"
-			"<monster name=\"Last\" x=\"2\" y=\"-3\" z=\"4\" spawntime=\"30\"/>"
-			"</spawn>"
-			"<spawn centerx=\"300\" centery=\"400\" centerz=\"8\" radius=\"1\"><npc name=\"Only NPC\" x=\"0\" y=\"0\" z=\"8\" spawntime=\"60\"/></spawn>"
-			"<spawn centerx=\"500\" centery=\"600\" centerz=\"9\" radius=\"2\"><monster name=\"Only Monster\" x=\"1\" y=\"1\" z=\"9\" spawntime=\"60\"/></spawn>"
-			"<spawn centerx=\"700\" centery=\"800\" centerz=\"10\" radius=\"0\"/>"
-			"</spawns>");
+		Write(source, "<spawns>"
+					  "<spawn centerx=\"100\" centery=\"200\" centerz=\"4\" radius=\"6\" region=\"one\">"
+					  "<monster name=\"First\" x=\"-2\" y=\"3\" z=\"4\" spawntime=\"10\" direction=\"3\" loot=\"yes\"/>"
+					  "<npc name=\"Middle\" x=\"0\" y=\"0\" z=\"4\" spawntime=\"20\" direction=\"2\"/>"
+					  "<monster name=\"Last\" x=\"2\" y=\"-3\" z=\"4\" spawntime=\"30\"/>"
+					  "</spawn>"
+					  "<spawn centerx=\"300\" centery=\"400\" centerz=\"8\" radius=\"1\"><npc name=\"Only NPC\" x=\"0\" y=\"0\" z=\"8\" spawntime=\"60\"/></spawn>"
+					  "<spawn centerx=\"500\" centery=\"600\" centerz=\"9\" radius=\"2\"><monster name=\"Only Monster\" x=\"1\" y=\"1\" z=\"9\" spawntime=\"60\"/></spawn>"
+					  "<spawn centerx=\"700\" centery=\"800\" centerz=\"10\" radius=\"0\"/>"
+					  "</spawns>");
 
 		const SpawnXmlConversionResult result = SpawnXmlConverter::ConvertTfsToCanary(source, monsters, npcs, false);
 		Check(result.success && result.report.validationPassed, "TFS combined XML splits and validates");

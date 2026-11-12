@@ -20,14 +20,10 @@ jobs:
     with:
       cold_cache: true
 
-  linux:
-    name: Linux
-    uses: ./.github/workflows/build-linux.yml
-
   publish:
     name: Publish release
-    needs: [windows, linux]
-    runs-on: ubuntu-24.04
+    needs: windows
+    runs-on: windows-2022
     timeout-minutes: 15
     permissions:
       attestations: write
@@ -35,15 +31,15 @@ jobs:
       id-token: write
     steps:
       - name: Refuse to change an existing release
-        shell: bash
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} already exists. Published assets are immutable; tag a new version." >&2
-            exit 1
-          fi
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $env:GITHUB_REF_NAME already exists. Published assets are immutable. Tag a new version."
+          }
+          exit 0
 
       - name: Download packages and SBOMs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -53,18 +49,20 @@ jobs:
           merge-multiple: true
 
       - name: Compute SHA256 checksums
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          cd release-assets
-          mapfile -t archives < <(find . -maxdepth 1 -type f -name 'NexaMap-Editor-Windows-*-Release.zip' -printf '%f\n' | sort)
-          mapfile -t sboms < <(find . -maxdepth 1 -type f -name 'NexaMap-Editor-Windows-*-SBOM.zip' -printf '%f\n' | sort)
-          if [[ "${#archives[@]}" -ne 2 || "${#sboms[@]}" -ne 2 ]]; then
-            echo "Expected two archives and two SBOMs, found ${#archives[@]} and ${#sboms[@]}." >&2
-            exit 1
-          fi
-          sha256sum "${archives[@]}" "${sboms[@]}" > SHA256SUMS.txt
-          cat SHA256SUMS.txt >> "${GITHUB_STEP_SUMMARY}"
+          Set-Location release-assets
+          $archives = @(Get-ChildItem -File -Filter 'NexaMap-Editor-Windows-*-Release.zip')
+          $sboms = @(Get-ChildItem -File -Filter 'NexaMap-Editor-Windows-*-SBOM.zip')
+          if ($archives.Count -ne 2 -or $sboms.Count -ne 2) {
+            throw "Expected two archives and two SBOMs, found $($archives.Count) and $($sboms.Count)."
+          }
+          $checksums = foreach ($file in ($archives + $sboms | Sort-Object Name)) {
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $checksums | Set-Content -Encoding ascii SHA256SUMS.txt
+          $checksums >> $env:GITHUB_STEP_SUMMARY
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -72,10 +70,10 @@ jobs:
           subject-checksums: release-assets/SHA256SUMS.txt
 
       - name: Create GitHub Release
-        shell: bash
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          mapfile -t assets < <(find release-assets -maxdepth 1 -type f | sort)
-          gh release create "${GITHUB_REF_NAME}" "${assets[@]}" --verify-tag --generate-notes --repo "${GITHUB_REPOSITORY}"
+          $assets = @(Get-ChildItem -LiteralPath release-assets -File | Sort-Object Name | Select-Object -ExpandProperty FullName)
+          gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes --repo $env:GITHUB_REPOSITORY
+          exit $LASTEXITCODE

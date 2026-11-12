@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   clang-format:
-    runs-on: ubuntu-latest
+    runs-on: windows-2022
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,33 +38,36 @@ jobs:
 
       - name: Find changed source files
         id: changed-files
-        shell: bash
+        shell: pwsh
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          if [[ -z "${BASE_SHA}" || "${BASE_SHA}" =~ ^0+$ ]]; then
-            BASE_SHA="$(git rev-list --max-parents=0 "${HEAD_SHA}")"
-          fi
+          $base = $env:BASE_SHA
+          if (!$base -or $base -match '^0+$') {
+            $base = git rev-list --max-parents=0 $env:HEAD_SHA
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
-          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
-            DIFF_RANGE="${BASE_SHA}...${HEAD_SHA}"
-          else
-            DIFF_RANGE="${BASE_SHA}..${HEAD_SHA}"
-          fi
-
-          mapfile -t files < <(
-            git diff --name-only --diff-filter=ACMRT "${DIFF_RANGE}" -- source tests tools |
-              awk '/^(source|tests|tools)\/.*\.(cpp|hpp|h)$/'
-          )
-          printf 'files=%s\n' "${files[*]}" >> "${GITHUB_OUTPUT}"
+          $separator = if ($env:EVENT_NAME -eq 'pull_request') { '...' } else { '..' }
+          $changed = @(git -c core.quotepath=false diff --name-only --diff-filter=ACMRT "$base$separator$env:HEAD_SHA" -- source tests tools)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $files = @($changed | Where-Object { $_ -match '\.(cpp|hpp|h)$' })
+          if ($files.Count -gt 0) {
+            $files | Set-Content -LiteralPath "$env:RUNNER_TEMP/clang-format-files.txt"
+          }
+          "has_files=$($files.Count -gt 0)" >> $env:GITHUB_OUTPUT
 
       - name: Check clang-format
-        if: steps.changed-files.outputs.files != ''
-        uses: DoozyX/clang-format-lint-action@bcb4eb2cb0d707ee4f3e5cc3b456eb075f12cf73 # v0.20
-        with:
-          source: ${{ steps.changed-files.outputs.files }}
-          extensions: "cpp,hpp,h"
-          clangFormatVersion: 16
-          inplace: false
+        if: steps.changed-files.outputs.has_files == 'True'
+        shell: pwsh
+        run: |
+          $venv = Join-Path $env:RUNNER_TEMP clang-format
+          py -3 -m venv $venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$venv/Scripts/python.exe" -m pip install --disable-pip-version-check clang-format==16.0.6
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $files = @(Get-Content -LiteralPath "$env:RUNNER_TEMP/clang-format-files.txt")
+          & "$venv/Scripts/clang-format.exe" --dry-run --Werror --style=file @files
+          exit $LASTEXITCODE

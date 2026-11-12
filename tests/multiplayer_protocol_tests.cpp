@@ -92,7 +92,9 @@ int main() {
 	for (size_t n = 0; n < original.size(); ++n) {
 		auto tampered = original;
 		tampered[n] ^= 1;
-		check(!openFrame(keys.clientToHost, 7, tampered) && tampered == [&] { auto copy = original; copy[n] ^= 1; return copy; }(), "Tampered frame accepted or modified");
+		check(
+			!openFrame(keys.clientToHost, 7, tampered) && tampered == [&] { auto copy = original; copy[n] ^= 1; return copy; }(), "Tampered frame accepted or modified"
+		);
 	}
 	auto replayed = original;
 	check(!openFrame(keys.clientToHost, 8, replayed) && !openFrame(keys.clientToHost, 6, replayed), "Frame accepted under another sequence number");

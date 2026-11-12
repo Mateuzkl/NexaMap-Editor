@@ -172,7 +172,9 @@ namespace mcp {
 	std::string SanitizeDialogText(const std::string& text, size_t maximumBytes) {
 		// Paths and map names reach this from the client; they must not fake dialog lines.
 		std::string value = text.substr(0, maximumBytes);
-		std::replace_if(value.begin(), value.end(), [](unsigned char character) { return character < 0x20 || character == 0x7F; }, ' ');
+		std::replace_if(
+			value.begin(), value.end(), [](unsigned char character) { return character < 0x20 || character == 0x7F; }, ' '
+		);
 		return value;
 	}
 

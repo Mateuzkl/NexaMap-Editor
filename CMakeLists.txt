@@ -123,6 +123,11 @@ endif()
 # find_package(LibArchive REQUIRED)
 
 find_package(wxWidgets COMPONENTS html aui gl adv core net base REQUIRED)
+if(WIN32)
+	# FindwxWidgets does not propagate the WebP dependencies of static wxWidgets.
+	find_package(WebP CONFIG REQUIRED)
+	list(APPEND wxWidgets_LIBRARIES WebP::webpdemux)
+endif()
 
 find_package(ZLIB REQUIRED)
 
@@ -242,11 +247,6 @@ if(BUILD_TESTING)
 	add_test(NAME map_migration_tests COMMAND map_migration_tests)
 	if(MSVC)
 		target_compile_options(map_migration_tests PRIVATE /utf-8)
-	endif()
-	add_executable(map_migration_tool tools/map_migration_tool.cpp)
-	target_link_libraries(map_migration_tool PRIVATE map_migration_core)
-	if(MSVC)
-		target_compile_options(map_migration_tool PRIVATE /utf-8)
 	endif()
 
 	add_executable(playtest_controller_tests tests/playtest_controller_tests.cpp source/ingame_preview/playtest_controller.cpp source/ingame_preview/playtest_weather.cpp)

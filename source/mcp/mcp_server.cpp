@@ -239,7 +239,7 @@ namespace mcp {
 				}
 				throw Error("could not open the MCP token file, or it is a symlink");
 			}
-			struct stat info {};
+			struct stat info { };
 			std::string token(TokenBytes * 2, '\0');
 			const bool valid = fstat(descriptor, &info) == 0 && S_ISREG(info.st_mode) && info.st_uid == geteuid();
 			const ssize_t count = valid ? read(descriptor, token.data(), token.size()) : -1;

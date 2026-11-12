@@ -785,7 +785,7 @@ class MultiplayerSessionTests {
 			pumpUntil([&] { return hasMessage(f.client(), "outside the map"); });
 			pumpUntil([&] { return f.client().status() == "Connected"; });
 			check(!f.hostEditor.map.getTileL(outside), "Rejected edit outside the map allocated host memory");
-			auto tx = tileEdit(f.client(), untouched, [](Tile&) { });
+			auto tx = tileEdit(f.client(), untouched, [](Tile&) {});
 			tx.tiles.front().after = { 9, 9, 9 };
 			f.client().submit(std::move(tx));
 			pumpUntil([&] { return hasMessage(f.client(), "Unknown tile format"); });

@@ -339,22 +339,23 @@ int main() {
 	check(temporaries() == 0, "rollback leaves no temporary files");
 	std::filesystem::remove(blocked, cleanupError);
 
-	// FAT and exFAT refuse hard links with EPERM; publication must still work.
+	// Filesystems without hard links still need exclusive publication.
 	const std::filesystem::path noLinks = scratch / "no-links.otbm";
+	const FileSaveTransaction::HardLinkFunction refuse = [](const std::filesystem::path&, const std::filesystem::path&, std::error_code& error) {
+#ifdef _WIN32
+		error = std::error_code(ERROR_NOT_SUPPORTED, std::system_category());
+#else
+		error = std::make_error_code(std::errc::operation_not_permitted);
+#endif
+	};
 	{
-		const FileSaveTransaction::HardLinkFunction refuse = [](const std::filesystem::path&, const std::filesystem::path&, std::error_code& error) {
-			error = std::make_error_code(std::errc::operation_not_permitted);
-		};
 		FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly, refuse);
 		write(transaction.Stage(noLinks), "new");
 		std::string error;
-		check(transaction.Commit(error), "create-only publication survives EPERM from link");
+		check(transaction.Commit(error), "create-only publication survives an unsupported hard link");
 		check(read(noLinks) == "new", "the exclusive fallback publishes the file");
 	}
 	{
-		const FileSaveTransaction::HardLinkFunction refuse = [](const std::filesystem::path&, const std::filesystem::path&, std::error_code& error) {
-			error = std::make_error_code(std::errc::operation_not_permitted);
-		};
 		FileSaveTransaction transaction(FileSaveTransaction::PublicationMode::CreateOnly, refuse);
 		write(transaction.Stage(noLinks), "other");
 		std::string error;

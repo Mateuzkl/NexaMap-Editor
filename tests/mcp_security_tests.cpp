@@ -128,12 +128,16 @@ namespace {
 			return "Authorization: Bearer " + token + "\r\n";
 		}
 
-		[[nodiscard]] std::string raw(const std::string& headers, const std::string& body) const {
+		[[nodiscard]] std::string request(const std::string& text) const {
 			const TestSocket connection = Connect(port);
-			SendText(connection, "POST /mcp HTTP/1.1\r\n" + headers + "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body);
+			SendText(connection, text);
 			std::string response = ReadAll(connection);
 			CloseTestSocket(connection);
 			return response;
+		}
+
+		[[nodiscard]] std::string raw(const std::string& headers, const std::string& body) const {
+			return request("POST /mcp HTTP/1.1\r\n" + headers + "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body);
 		}
 
 		[[nodiscard]] std::string post(const std::string& body, const std::string& extraHeaders = {}) const {
@@ -299,7 +303,7 @@ namespace {
 		Require(mcp::Server::LoadOrCreateToken(path) == token, "token should persist across launches");
 		Require(mcp::Server::LoadOrCreateToken(scratch / "other-token") != token, "tokens should differ per install");
 #ifndef _WIN32
-		struct stat info {};
+		struct stat info { };
 		Require(stat(path.c_str(), &info) == 0 && (info.st_mode & 0777) == 0600, "token file should be mode 0600");
 
 		std::filesystem::permissions(path, std::filesystem::perms::group_read | std::filesystem::perms::others_read, std::filesystem::perm_options::add);
@@ -371,7 +375,10 @@ namespace {
 		const mcp::Json structuredId = mcp::Json::parse(Body(client.post("{\"id\":[1],\"method\":\"ping\"}")));
 		Require(structuredId["error"]["code"] == -32600 && structuredId["id"].is_null(), "structured id should be invalid");
 
-		Require(HasStatus(client.post(std::string(1024 * 1024 + 1, ' ')), 413), "oversized body should be rejected");
+		// The server rejects the length before reading the body. Sending the body can race the
+		// close and cause Windows to reset the connection before the client reads the reply.
+		const std::string oversized = "POST /mcp HTTP/1.1\r\n" + client.goodHost() + client.goodAuth() + "Content-Type: application/json\r\nContent-Length: " + std::to_string(1024 * 1024 + 1) + "\r\n\r\n";
+		Require(HasStatus(client.request(oversized), 413), "oversized declared body should be rejected");
 
 		const std::string raw = client.post("{\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"fake_raw_latin1\"}}");
 		Require(HasStatus(raw, 200), "non-UTF-8 tool output should not fail the request");

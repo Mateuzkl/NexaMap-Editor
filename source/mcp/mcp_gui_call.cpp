@@ -129,7 +129,7 @@ namespace mcp {
 				wxMessageDialog dialog(wxTheApp->GetTopWindow(), message, "NexaMap MCP confirmation", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
 				return Json(dialog.ShowModal() == wxID_YES);
 			},
-				ConfirmationTimeout);
+									 ConfirmationTimeout);
 		} catch (const Error& error) {
 			// The dialog may still be open, but its answer no longer reaches anything.
 			if (std::string(error.what()).rfind("outcome unknown", 0) == 0) {

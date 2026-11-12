@@ -17,7 +17,6 @@
   <img src="https://img.shields.io/badge/UI-wxWidgets-007ACC?style=flat-square" alt="wxWidgets" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-44545F?style=flat-square" alt="Windows and Linux" />
   <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-windows.yml/badge.svg" alt="Windows builds" /></a>
-  <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-linux.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/build-linux.yml/badge.svg" alt="Linux builds" /></a>
   <a href="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml"><img src="https://github.com/Mateuzkl/NexaMap-Editor/actions/workflows/clang-format.yml/badge.svg" alt="Code style" /></a>
 </p>
 

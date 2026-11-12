@@ -87,7 +87,7 @@ void ItemAttributes::eraseAttribute(const std::string& key) {
 		return;
 	}
 
-	auto const iter = attributes->find(key);
+	const auto iter = attributes->find(key);
 
 	if (iter != attributes->end()) {
 		attributes->erase(iter);
@@ -99,7 +99,7 @@ const std::string* ItemAttributes::getStringAttribute(const std::string& key) co
 		return nullptr;
 	}
 
-	auto const iter = attributes->find(key);
+	const auto iter = attributes->find(key);
 	if (iter != attributes->end()) {
 		return iter->second.getString();
 	}
@@ -111,7 +111,7 @@ const int32_t* ItemAttributes::getIntegerAttribute(const std::string& key) const
 		return nullptr;
 	}
 
-	auto const iter = attributes->find(key);
+	const auto iter = attributes->find(key);
 	if (iter != attributes->end()) {
 		return iter->second.getInteger();
 	}
@@ -123,7 +123,7 @@ const double* ItemAttributes::getFloatAttribute(const std::string& key) const {
 		return nullptr;
 	}
 
-	auto const iter = attributes->find(key);
+	const auto iter = attributes->find(key);
 	if (iter != attributes->end()) {
 		return iter->second.getFloat();
 	}
@@ -135,7 +135,7 @@ const bool* ItemAttributes::getBooleanAttribute(const std::string& key) const {
 		return nullptr;
 	}
 
-	auto const iter = attributes->find(key);
+	const auto iter = attributes->find(key);
 	if (iter != attributes->end()) {
 		return iter->second.getBoolean();
 	}
@@ -148,7 +148,7 @@ const bool* ItemAttributes::getBooleanAttribute(const std::string& key) const {
 
 ItemAttribute::ItemAttribute() :
 	type(ItemAttribute::NONE),
-	data{} {
+	data {} {
 	////
 }
 
@@ -334,7 +334,9 @@ bool ItemAttribute::unserialize(const IOMap& maphandle, BinaryNode* stream) {
 			if (!stream->getU32(u32)) {
 				return false;
 			}
-			int32_t i32; std::memcpy(&i32, &u32, sizeof(i32)); set(i32);
+			int32_t i32;
+			std::memcpy(&i32, &u32, sizeof(i32));
+			set(i32);
 			break;
 		}
 		case FLOAT: {
@@ -342,7 +344,9 @@ bool ItemAttribute::unserialize(const IOMap& maphandle, BinaryNode* stream) {
 			if (!stream->getU32(u32)) {
 				return false;
 			}
-			float f; std::memcpy(&f, &u32, sizeof(f)); set((double)f);
+			float f;
+			std::memcpy(&f, &u32, sizeof(f));
+			set((double)f);
 			break;
 		}
 		case DOUBLE: {
@@ -350,7 +354,9 @@ bool ItemAttribute::unserialize(const IOMap& maphandle, BinaryNode* stream) {
 			if (!stream->getU64(u64)) {
 				return false;
 			}
-			double d; std::memcpy(&d, &u64, sizeof(d)); set(d);
+			double d;
+			std::memcpy(&d, &u64, sizeof(d));
+			set(d);
 			break;
 		}
 		case BOOLEAN: {
@@ -376,13 +382,19 @@ void ItemAttribute::serialize(const IOMap& maphandle, NodeFileWriteHandle& f) co
 			f.addLongString(*getString());
 			break;
 		case INTEGER:
-			uint32_t u32; std::memcpy(&u32, getInteger(), sizeof(u32)); f.addU32(u32);
+			uint32_t u32;
+			std::memcpy(&u32, getInteger(), sizeof(u32));
+			f.addU32(u32);
 			break;
 		case DOUBLE:
-			uint64_t u64; std::memcpy(&u64, getFloat(), sizeof(u64)); f.addU64(u64);
+			uint64_t u64;
+			std::memcpy(&u64, getFloat(), sizeof(u64));
+			f.addU64(u64);
 			break;
 		case BOOLEAN:
-			uint8_t u8; std::memcpy(&u8, getBoolean(), sizeof(u8)); f.addU8(u8);
+			uint8_t u8;
+			std::memcpy(&u8, getBoolean(), sizeof(u8));
+			f.addU8(u8);
 			break;
 		default:
 			break;

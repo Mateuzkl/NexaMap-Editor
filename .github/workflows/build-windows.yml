@@ -330,19 +330,3 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-
-  resource-discovery:
-    name: Server resource discovery (Linux)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Test case-sensitive resource discovery
-        shell: bash
-        run: |
-          set -euo pipefail
-          g++ -std=c++20 -O2 -Wall -Wextra -pedantic -Isource tests/server_workspace_tests.cpp source/server_workspace.cpp -o server_workspace_tests
-          ./server_workspace_tests

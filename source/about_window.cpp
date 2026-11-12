@@ -109,7 +109,7 @@ protected:
 		int x, y;
 	} block;
 
-	static const wxBrush& GetBrush(Color color) ;
+	static const wxBrush& GetBrush(Color color);
 	bool BlockCollisionTest(int mx, int my) const;
 	void RemoveRow(int row);
 	void NewBlock();
@@ -229,7 +229,7 @@ AboutWindow::AboutWindow(wxWindow* parent) :
 	entries[0].Set(wxACCEL_NORMAL, WXK_ESCAPE, wxID_CANCEL);
 	entries[1].Set(wxACCEL_NORMAL, 't', ABOUT_RUN_TETRIS);
 	entries[2].Set(wxACCEL_NORMAL, 's', ABOUT_RUN_SNAKE);
-	wxAcceleratorTable const accel(3, entries);
+	const wxAcceleratorTable accel(3, entries);
 	SetAcceleratorTable(accel);
 
 	SetSizerAndFit(topsizer);
@@ -343,7 +343,7 @@ void GamePanel::OnKeyUp(wxKeyEvent& event) {
 }
 
 void GamePanel::OnIdle(wxIdleEvent& event) {
-	int const time = game_timer.Time();
+	const int time = game_timer.Time();
 	if (time > 1000 / getFPS()) {
 		game_timer.Start();
 		if (!paused()) {
@@ -513,8 +513,8 @@ void TetrisPanel::GameLoop(int time) {
 }
 
 bool TetrisPanel::BlockCollisionTest(int mx, int my) const {
-	int const nx = block.x + mx;
-	int const ny = block.y + my;
+	const int nx = block.x + mx;
+	const int ny = block.y + my;
 
 	for (int y = 0; y < 4; ++y) {
 		for (int x = 0; x < 4; ++x) {
@@ -711,11 +711,11 @@ void SnakePanel::Render(wxDC& pdc) {
 	pdc.Clear();
 
 	wxBrush snakebrush(wxColor(0, 0, 255));
-	wxBrush const applebrush(wxColor(255, 0, 0));
+	const wxBrush applebrush(wxColor(255, 0, 0));
 
-	double const lblue = 1.0;
-	double const lred = 0.5;
-	double const lgreen = 0.0;
+	const double lblue = 1.0;
+	const double lred = 0.5;
+	const double lgreen = 0.0;
 
 	for (int y = 0; y < SNAKE_MAPHEIGHT; ++y) {
 		for (int x = 0; x < SNAKE_MAPWIDTH; ++x) {
@@ -723,7 +723,7 @@ void SnakePanel::Render(wxDC& pdc) {
 				pdc.SetBrush(applebrush);
 				pdc.DrawRectangle(x * 16, y * 16, 16, 16);
 			} else if (map[x][y] > 0) { // Snake
-				double const snook = double(map[x][y]) / length;
+				const double snook = double(map[x][y]) / length;
 				snakebrush.SetColour(wxColor(
 					int(255.0 * (1.0 - abs(lred - snook))),
 					int(255.0 * (1.0 - abs(lgreen - snook))),
@@ -742,7 +742,7 @@ void SnakePanel::OnKey(wxKeyEvent& event, bool down) {
 		return;
 	}
 
-	int const keyCode = event.GetKeyCode();
+	const int keyCode = event.GetKeyCode();
 	if (keyCode == WXK_SPACE) {
 		if (paused()) {
 			unpause();
@@ -825,8 +825,8 @@ void SnakePanel::NewApple() {
 
 	if (possible) {
 		while (true) {
-			int const x = random(0, SNAKE_MAPWIDTH - 1);
-			int const y = random(0, SNAKE_MAPHEIGHT - 1);
+			const int x = random(0, SNAKE_MAPWIDTH - 1);
+			const int y = random(0, SNAKE_MAPHEIGHT - 1);
 			if (map[x][y] == 0) {
 				map[x][y] = -1;
 				break;

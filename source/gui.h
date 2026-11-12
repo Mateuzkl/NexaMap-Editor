@@ -70,11 +70,11 @@ class ItemButton;
 
 extern const wxEventType EVT_UPDATE_MENUS;
 
-#define EVT_ON_UPDATE_MENUS(id, fn)                                                             \
-	DECLARE_EVENT_TABLE_ENTRY(                                                                  \
-		EVT_UPDATE_MENUS, id, wxID_ANY,                                                         \
-		wxCommandEventHandler(fn),                                                              \
-		(wxObject*)nullptr                                                                      \
+#define EVT_ON_UPDATE_MENUS(id, fn)     \
+	DECLARE_EVENT_TABLE_ENTRY(          \
+		EVT_UPDATE_MENUS, id, wxID_ANY, \
+		wxCommandEventHandler(fn),      \
+		(wxObject*)nullptr              \
 	),
 
 class Hotkey {

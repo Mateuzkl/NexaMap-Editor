@@ -484,6 +484,7 @@
     <ClInclude Include="..\..\source\gl_renderer.h" />
     <ClCompile Include="..\..\source\gl_renderer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <IncludeInUnityFile>false</IncludeInUnityFile>
     </ClCompile>
     <ClInclude Include="..\..\source\border_learning.h" />
     <ClCompile Include="..\..\source\border_learning.cpp" />

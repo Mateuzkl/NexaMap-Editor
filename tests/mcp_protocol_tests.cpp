@@ -36,10 +36,10 @@ int main() {
 		{
 			{ "type", "object" },
 			{ "properties", {
-				{ "name", { { "type", "string" }, { "minLength", 2 }, { "maxLength", 4 } } },
-				{ "count", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 3 } } },
-				{ "values", { { "type", "array" }, { "minItems", 1 }, { "maxItems", 2 }, { "items", { { "type", "boolean" } } } } },
-			} },
+								{ "name", { { "type", "string" }, { "minLength", 2 }, { "maxLength", 4 } } },
+								{ "count", { { "type", "integer" }, { "minimum", 1 }, { "maximum", 3 } } },
+								{ "values", { { "type", "array" }, { "minItems", 1 }, { "maxItems", 2 }, { "items", { { "type", "boolean" } } } } },
+							} },
 			{ "required", mcp::Json::array({ "name", "count" }) },
 			{ "additionalProperties", false },
 		},

@@ -6,6 +6,7 @@
 		"fmt",
 		"nlohmann-json",
 		{ "name": "wxwidgets", "platform": "!linux" },
+		{ "name": "libwebp", "platform": "windows" },
 		{ "name": "wxwidgets", "platform": "linux", "default-features": false, "features": ["debug-support"] },
 		"pugixml",
 		"glad",

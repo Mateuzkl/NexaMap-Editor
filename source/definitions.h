@@ -30,7 +30,7 @@
 #define __RME_SUBVERSION__ NEXAMAP_VERSION_PATCH
 
 #define MAKE_VERSION_ID(major, minor, subversion) \
-	((major) * 10000000 + (minor) * 100000 + (subversion) * 1000)
+	((major)*10000000 + (minor)*100000 + (subversion)*1000)
 
 #define __RME_VERSION_ID__ MAKE_VERSION_ID( \
 	__RME_VERSION_MAJOR__,                  \
@@ -56,7 +56,6 @@
 	#define __W_RME_VERSION__ (wxString() << __RME_VERSION_MAJOR__ << "." << __RME_VERSION_MINOR__ << "." << __RME_SUBVERSION__)
 #endif
 // OS
-
 
 #define ASSETS_NAME "Tibia"
 
