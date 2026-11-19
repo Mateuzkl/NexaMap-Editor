@@ -70,7 +70,7 @@ private:
 	void NotifyStateChanged();
 
 	struct SpecialItemData {
-		uint16_t itemId = 0;
+		uint32_t itemId = 0;
 		uint16_t actionId = 0;
 		uint16_t uniqueId = 0;
 	};

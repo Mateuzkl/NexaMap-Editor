@@ -25,7 +25,7 @@
 //=============================================================================
 // RAW brush
 
-RAWBrush::RAWBrush(uint16_t itemid) :
+RAWBrush::RAWBrush(uint32_t itemid) :
 	Brush() {
 	ItemType& it = g_items[itemid];
 	if (it.id == 0) {
@@ -41,13 +41,13 @@ RAWBrush::~RAWBrush() {
 
 int RAWBrush::getLookID() const {
 	if (itemtype) {
-		return itemtype->clientID;
+		return static_cast<int>(itemtype->clientID);
 	}
 	return 0;
 }
 
-uint16_t RAWBrush::getItemID() const {
-	return itemtype->id;
+uint32_t RAWBrush::getItemID() const {
+	return itemtype ? itemtype->id : 0;
 }
 
 std::string RAWBrush::getName() const {
@@ -55,13 +55,14 @@ std::string RAWBrush::getName() const {
 		return "RAWBrush";
 	}
 
+	const std::string idStr = std::to_string(itemtype->id);
 	if (itemtype->hookSouth) {
-		return i2s(itemtype->id) + " - " + itemtype->name + " (Hook South)";
+		return idStr + " - " + itemtype->name + " (Hook South)";
 	} else if (itemtype->hookEast) {
-		return i2s(itemtype->id) + " - " + itemtype->name + " (Hook East)";
+		return idStr + " - " + itemtype->name + " (Hook East)";
 	}
 
-	return i2s(itemtype->id) + " - " + itemtype->name + itemtype->editorsuffix;
+	return idStr + " - " + itemtype->name + itemtype->editorsuffix;
 }
 
 void RAWBrush::undraw(BaseMap* map, Tile* tile) {
@@ -70,7 +71,7 @@ void RAWBrush::undraw(BaseMap* map, Tile* tile) {
 		tile->ground = nullptr;
 	}
 	for (auto iter = tile->items.begin(); iter != tile->items.end();) {
-		Item const* item = *iter;
+		const Item* item = *iter;
 		if (item->getID() == itemtype->id) {
 			delete item;
 			iter = tile->items.erase(iter);
@@ -85,10 +86,10 @@ void RAWBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 		return;
 	}
 
-	bool const b = parameter ? *reinterpret_cast<bool*>(parameter) : false;
+	const bool b = parameter ? *reinterpret_cast<bool*>(parameter) : false;
 	if ((g_settings.getInteger(Config::RAW_LIKE_SIMONE) && !b) && itemtype->alwaysOnBottom && itemtype->alwaysOnTopOrder == 2) {
 		for (auto iter = tile->items.begin(); iter != tile->items.end();) {
-			Item const* item = *iter;
+			const Item* item = *iter;
 			if (item->getTopOrder() == itemtype->alwaysOnTopOrder) {
 				delete item;
 				iter = tile->items.erase(iter);

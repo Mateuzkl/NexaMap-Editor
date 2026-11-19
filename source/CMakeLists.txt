@@ -38,6 +38,7 @@ ${CMAKE_CURRENT_LIST_DIR}/editor_disposal.h
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
 ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h
+${CMAKE_CURRENT_LIST_DIR}/find_item_search.h
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.h
 ${CMAKE_CURRENT_LIST_DIR}/file_transaction.h
 ${CMAKE_CURRENT_LIST_DIR}/favorites_manager.h
@@ -294,6 +295,7 @@ ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.cpp
 ${CMAKE_CURRENT_LIST_DIR}/eraser_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/find_item_search.cpp
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp

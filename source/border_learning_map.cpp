@@ -30,11 +30,11 @@ namespace {
 		std::vector<BorderLearningGroundFamily>& families,
 		std::map<uint64_t, BorderGroundFamilyIndex>& familyIndices
 	) {
-		if (!ground) {
+		if (!ground || ground->getID() > std::numeric_limits<uint16_t>::max()) {
 			return BORDER_GROUND_FAMILY_NONE;
 		}
 
-		const uint16_t groundItemId = ground->getID();
+		const uint16_t groundItemId = static_cast<uint16_t>(ground->getID());
 		GroundBrush* brush = ground->getGroundBrush();
 		const uint64_t key = brush ? static_cast<uint64_t>(brush->getID()) : unknownGroundKeyFlag | groundItemId;
 		auto found = familyIndices.find(key);
@@ -82,16 +82,21 @@ BorderLearningSnapshot BorderLearningScanner::capture(const Selection& selection
 	for (const Tile* tile : selectedTiles) {
 		BorderLearningTile captured;
 		captured.position = tile->getPosition();
-		captured.groundItemId = tile->ground ? tile->ground->getID() : 0;
+		captured.groundItemId = (tile->ground && tile->ground->getID() <= std::numeric_limits<uint16_t>::max())
+			? static_cast<uint16_t>(tile->ground->getID())
+			: 0;
 		captured.groundFamily = captureGroundFamily(tile->ground, snapshot.groundFamilies, familyIndices);
 
 		captured.items.reserve(tile->items.size());
 		for (size_t stackIndex = 0; stackIndex < tile->items.size(); ++stackIndex) {
 			const Item* item = tile->items[stackIndex];
 			const ItemType& itemType = g_items[item->getID()];
+			if (item->getID() > std::numeric_limits<uint16_t>::max() || itemType.clientID > std::numeric_limits<uint16_t>::max()) {
+				continue;
+			}
 			captured.items.push_back({
-				item->getID(),
-				itemType.clientID,
+				static_cast<uint16_t>(item->getID()),
+				static_cast<uint16_t>(itemType.clientID),
 				static_cast<uint16_t>(std::min<size_t>(stackIndex, std::numeric_limits<uint16_t>::max())),
 				itemType.isBorder,
 				itemType.alwaysOnBottom,

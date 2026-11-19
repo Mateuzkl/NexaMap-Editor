@@ -29,10 +29,13 @@ public:
 
 	void Clear();
 	void SetDuplicateMode(bool duplicateMode);
+	void SetSummary(const wxString& summary);
 	void AddPosition(wxString description, Position pos);
-	void AddDuplicateItem(const Position& pos, uint16_t itemId, uint16_t count);
+	void AddDuplicateItem(const Position& pos, uint32_t itemId, uint16_t count);
 
 	void OnClickResult(wxCommandEvent&);
+	void OnClickPrevious(wxCommandEvent&);
+	void OnClickNext(wxCommandEvent&);
 	void OnClickExport(wxCommandEvent&);
 	void OnClickClear(wxCommandEvent&);
 	void OnClickRemove(wxCommandEvent&);
@@ -43,12 +46,16 @@ protected:
 
 	void DeleteResultData(uint32_t index);
 	ResultData* GetResultData(int32_t index) const;
+	void NavigateToIndex(int32_t index);
 	void UpdateButtons();
 	void UpdateDuplicateLabel(int32_t index, ResultData* data);
 	bool RemoveDuplicateItem(ResultData* data, uint16_t amount);
-	uint16_t RemoveDuplicateItemsFromTile(Tile* tile, uint16_t itemId, uint16_t amount);
+	uint16_t RemoveDuplicateItemsFromTile(Tile* tile, uint32_t itemId, uint16_t amount);
 
+	wxStaticText* summary_label;
 	wxListBox* result_list;
+	wxButton* prev_button;
+	wxButton* next_button;
 	wxButton* export_button;
 	wxButton* clear_button;
 	wxButton* remove_button;

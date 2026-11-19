@@ -18,10 +18,12 @@
 #ifndef RME_FIND_ITEM_WINDOW_H_
 #define RME_FIND_ITEM_WINDOW_H_
 
+#include "find_item_search.h"
+
 #include <wx/radiobox.h>
-#include <wx/spinctrl.h>
 #include <wx/sizer.h>
 #include <wx/statbox.h>
+#include <wx/stattext.h>
 #include <wx/textctrl.h>
 #include <wx/checkbox.h>
 #include <wx/button.h>
@@ -34,6 +36,7 @@ public:
 	enum SearchMode {
 		ServerIDs = 0,
 		ClientIDs,
+		SpriteIDs,
 		Names,
 		Types,
 		Properties,
@@ -58,8 +61,14 @@ public:
 	Brush* getResult() const {
 		return result_brush;
 	}
-	uint16_t getResultID() const {
+	uint32_t getResultID() const {
 		return result_id;
+	}
+	ItemIdSearchKind getMapSearchKind() const {
+		return map_search_kind;
+	}
+	uint32_t getMapSearchTargetID() const {
+		return map_search_target_id;
 	}
 
 	SearchMode getSearchMode() const;
@@ -68,10 +77,12 @@ public:
 private:
 	void EnableProperties(bool enable);
 	void RefreshContentsInternal();
+	void SetStatusMessage(const wxString& message, bool isError = false);
 
 	void OnOptionChange(wxCommandEvent& event);
 	void OnServerIdChange(wxCommandEvent& event);
 	void OnClientIdChange(wxCommandEvent& event);
+	void OnSpriteIdChange(wxCommandEvent& event);
 	void OnText(wxCommandEvent& event);
 	void OnTypeChange(wxCommandEvent& event);
 	void OnPropertyChange(wxCommandEvent& event);
@@ -83,8 +94,10 @@ private:
 
 	wxRadioBox* types_radio_box;
 
-	wxSpinCtrl* server_id_spin;
-	wxSpinCtrl* client_id_spin;
+	wxTextCtrl* server_id_input;
+	wxTextCtrl* client_id_input;
+	wxTextCtrl* sprite_id_input;
+	wxStaticText* id_status_label;
 	wxTextCtrl* name_text_input;
 	wxTimer input_timer;
 	wxCheckBox* unpassable;
@@ -109,7 +122,10 @@ private:
 	wxButton* ok_button;
 	wxButton* cancel_button;
 	Brush* result_brush;
-	uint16_t result_id;
+	uint32_t result_id;
+	ItemIdSearchKind map_search_kind;
+	uint32_t map_search_target_id;
+	bool parsed_id_valid;
 	bool only_pickupables;
 
 	DECLARE_EVENT_TABLE()

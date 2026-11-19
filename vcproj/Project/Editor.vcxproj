@@ -260,6 +260,7 @@
     </ClCompile>
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
+    <ClCompile Include="..\..\source\find_item_search.cpp" />
     <ClCompile Include="..\..\source\find_item_window.cpp" />
     <ClCompile Include="..\..\source\light_drawer.cpp" />
     <ClCompile Include="..\..\source\replace_items_window.cpp" />
@@ -800,6 +801,7 @@
     <ClCompile Include="..\..\source\zone_brush.cpp" />
     <ClInclude Include="..\..\source\zones.h" />
     <ClCompile Include="..\..\source\zones.cpp" />
+    <ClInclude Include="..\..\source\find_item_search.h" />
     <ClInclude Include="..\..\source\find_item_window.h" />
 	<ClInclude Include="..\..\source\welcome_dialog.h" />
 	<ClInclude Include="..\..\source\server_workspace.h" />

@@ -34,7 +34,7 @@ struct OTBM_TeleportDestination {
 
 class Container : public Item {
 public:
-	Container(const uint16_t type);
+	Container(const uint32_t type);
 	~Container() override;
 
 	Item* deepCopy() const override;
@@ -66,7 +66,7 @@ protected:
 
 class Teleport : public Item {
 public:
-	Teleport(const uint16_t type);
+	Teleport(const uint32_t type);
 
 	Item* deepCopy() const override;
 
@@ -105,7 +105,7 @@ protected:
 
 class Door : public Item {
 public:
-	Door(const uint16_t type);
+	Door(const uint32_t type);
 
 	Item* deepCopy() const override;
 
@@ -126,7 +126,7 @@ protected:
 
 class Depot : public Item {
 public:
-	Depot(const uint16_t _type);
+	Depot(const uint32_t _type);
 
 	Item* deepCopy() const override;
 
@@ -148,7 +148,7 @@ protected:
 
 class Podium : public Item {
 public:
-	Podium(const uint16_t _type);
+	Podium(const uint32_t _type);
 
 	Item* deepCopy() const override;
 

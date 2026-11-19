@@ -21,6 +21,11 @@
 #include "filehandle.h"
 #include "brush_enums.h"
 
+#include <cstdint>
+#include <limits>
+#include <map>
+#include <vector>
+
 class Brush;
 class GroundBrush;
 class WallBrush;
@@ -333,8 +338,8 @@ public:
 	bool isFloorChange() const;
 
 	GameSprite* sprite;
-	uint16_t id;
-	uint16_t clientID;
+	uint32_t id;
+	uint32_t clientID;
 	Brush* brush;
 	Brush* doodad_brush;
 	Brush* collection_brush;
@@ -355,7 +360,7 @@ public:
 	uint16_t slot_position;
 	uint8_t weapon_type;
 	uint8_t classification = 0; // 12.81
-	uint16_t ground_equivalent;
+	uint32_t ground_equivalent;
 	uint32_t border_group;
 	bool has_equivalent; // True if any item has this as ground_equivalent
 	bool wall_hate_me; // (For wallbrushes, regard this as not part of the wall)
@@ -411,8 +416,107 @@ public:
 	bool hasElevation;
 
 	int alwaysOnTopOrder;
-	uint16_t rotateTo;
+	uint32_t rotateTo;
 	BorderType border_alignment;
+};
+
+// Hybrid dense (0..65535) + sparse (>= 65536) storage so full uint32_t item IDs
+// work with O(1) lookup for classic IDs and minimal memory for high custom IDs.
+class SparseItemMap {
+public:
+	static constexpr uint32_t DENSE_LIMIT = 65536;
+
+	SparseItemMap(size_t startSize = 7) :
+		dense(startSize, nullptr) { }
+	~SparseItemMap() = default;
+
+	SparseItemMap(const SparseItemMap&) = delete;
+	SparseItemMap& operator=(const SparseItemMap&) = delete;
+
+	void swap(SparseItemMap& other) noexcept {
+		dense.swap(other.dense);
+		sparse.swap(other.sparse);
+	}
+
+	void clear() {
+		for (ItemType*& ptr : dense) {
+			delete ptr;
+			ptr = nullptr;
+		}
+		for (auto& entry : sparse) {
+			delete entry.second;
+		}
+		sparse.clear();
+	}
+
+	size_t size() const {
+		return dense.size();
+	}
+
+	size_t count() const {
+		size_t total = sparse.size();
+		for (const ItemType* ptr : dense) {
+			if (ptr) {
+				++total;
+			}
+		}
+		return total;
+	}
+
+	void set(uint32_t index, ItemType* value) {
+		if (index < DENSE_LIMIT) {
+			if (index >= dense.size()) {
+				dense.resize(static_cast<size_t>(index) + 1, nullptr);
+			}
+			dense[index] = value;
+			return;
+		}
+		if (value == nullptr) {
+			sparse.erase(index);
+		} else {
+			sparse[index] = value;
+		}
+	}
+
+	ItemType* operator[](uint32_t index) const {
+		if (index < DENSE_LIMIT) {
+			return index < dense.size() ? dense[index] : nullptr;
+		}
+		const auto it = sparse.find(index);
+		return it != sparse.end() ? it->second : nullptr;
+	}
+
+	template <typename Fn>
+	void forEach(Fn&& fn) const {
+		for (ItemType* ptr : dense) {
+			if (ptr) {
+				fn(*ptr);
+			}
+		}
+		for (const auto& entry : sparse) {
+			if (entry.second) {
+				fn(*entry.second);
+			}
+		}
+	}
+
+	template <typename Fn>
+	void forEachConst(Fn&& fn) const {
+		for (const ItemType* ptr : dense) {
+			if (ptr) {
+				fn(*ptr);
+			}
+		}
+		for (const auto& entry : sparse) {
+			if (entry.second) {
+				fn(*entry.second);
+			}
+		}
+	}
+
+private:
+	std::vector<ItemType*> dense;
+	std::map<uint32_t, ItemType*> sparse;
 };
 
 class ItemDatabase {
@@ -424,23 +528,54 @@ public:
 	void swap(ItemDatabase& other) noexcept;
 
 	ItemType& operator[](size_t id) {
-		return getItemType(id);
+		if (id > std::numeric_limits<uint32_t>::max()) {
+			return getDummyItemType();
+		}
+		return getItemType(static_cast<uint32_t>(id));
 	}
-	uint16_t getMaxID() const {
+	const ItemType& operator[](size_t id) const {
+		if (id > std::numeric_limits<uint32_t>::max()) {
+			return getDummyItemType();
+		}
+		return getItemType(static_cast<uint32_t>(id));
+	}
+	uint32_t getMaxID() const {
 		return max_item_id;
 	}
+	size_t getLoadedItemCount() const {
+		return items.count();
+	}
 
-	bool typeExists(int id) const;
-	ItemType& getItemType(int id);
+	bool typeExists(uint32_t id) const;
+	bool typeExists(int id) const {
+		return id >= 0 && typeExists(static_cast<uint32_t>(id));
+	}
+	ItemType& getItemType(uint32_t id);
+	const ItemType& getItemType(uint32_t id) const;
+	ItemType& getItemType(int id) {
+		return id >= 0 ? getItemType(static_cast<uint32_t>(id)) : getDummyItemType();
+	}
+	const ItemType& getItemType(int id) const {
+		return id >= 0 ? getItemType(static_cast<uint32_t>(id)) : getDummyItemType();
+	}
+
+	template <typename Fn>
+	void forEachItemType(Fn&& fn) {
+		items.forEach(std::forward<Fn>(fn));
+	}
+
+	template <typename Fn>
+	void forEachItemType(Fn&& fn) const {
+		items.forEachConst(std::forward<Fn>(fn));
+	}
 
 	bool loadFromOtb(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadFromAppearances(const rme::protobuf::appearances::Appearances& appearances, wxString& error, wxArrayString& warnings);
 	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings, bool serverIdsToClientIds = false);
-	bool loadItemFromGameXml(pugi::xml_node itemNode, int id, bool serverIdsToClientIds = false);
+	bool loadItemFromGameXml(pugi::xml_node itemNode, uint32_t id, bool serverIdsToClientIds = false);
 	bool loadMetaItem(pugi::xml_node node);
 
-	// typedef std::map<int32_t, ItemType*> ItemMap;
-	typedef contigous_vector<ItemType*> ItemMap;
+	typedef SparseItemMap ItemMap;
 	typedef std::map<std::string, ItemType*> ItemNameMap;
 	ItemMap items;
 
@@ -450,6 +585,8 @@ public:
 	uint32_t BuildNumber;
 
 protected:
+	static ItemType& getDummyItemType();
+
 	bool loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 	bool loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 	bool loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
@@ -464,9 +601,9 @@ protected:
 
 protected:
 	// Count of GameSprite types
-	uint16_t item_count;
+	uint32_t item_count;
 
-	uint16_t max_item_id;
+	uint32_t max_item_id;
 
 	friend class GameSprite;
 	friend class Item;

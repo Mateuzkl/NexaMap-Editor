@@ -20,7 +20,7 @@
 #include "complexitem.h"
 
 // Container
-Container::Container(const uint16_t type) :
+Container::Container(const uint32_t type) :
 	Item(type, 0) {
 	////
 }
@@ -55,7 +55,7 @@ double Container::getWeight() const {
 }
 
 // Teleport
-Teleport::Teleport(const uint16_t type) :
+Teleport::Teleport(const uint32_t type) :
 	Item(type, 0),
 	destination(0, 0, 0) {
 	////
@@ -71,7 +71,7 @@ Item* Teleport::deepCopy() const {
 }
 
 // Door
-Door::Door(const uint16_t type) :
+Door::Door(const uint32_t type) :
 	Item(type, 0),
 	doorId(0) {
 	////
@@ -86,7 +86,7 @@ Item* Door::deepCopy() const {
 }
 
 // Depot
-Depot::Depot(const uint16_t type) :
+Depot::Depot(const uint32_t type) :
 	Item(type, 0),
 	depotId(0) {
 	////
@@ -102,7 +102,7 @@ Item* Depot::deepCopy() const {
 }
 
 // Podium
-Podium::Podium(const uint16_t type) :
+Podium::Podium(const uint32_t type) :
 	Item(type, 0),
 	outfit(Outfit()), direction(0), showOutfit(true), showMount(true), showPlatform(true) {
 	////

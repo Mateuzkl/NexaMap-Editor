@@ -65,7 +65,7 @@ private:
 	// Cache signature of the last createOtherTileset() build, so we can skip the
 	// expensive full item-DB + creature rescan when nothing changed.
 	size_t other_tileset_creature_count = static_cast<size_t>(-1);
-	int32_t other_tileset_item_maxid = -1;
+	int64_t other_tileset_item_maxid = -1;
 	Materials(const Materials&);
 	Materials& operator=(const Materials&);
 };

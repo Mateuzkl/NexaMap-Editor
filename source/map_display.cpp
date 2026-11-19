@@ -85,7 +85,7 @@ namespace {
 		return PopupContextIsCurrent(editor) && (!editor.multiplayer || !editor.multiplayer->active() || editor.multiplayer->canEdit());
 	}
 	struct BorderItemCandidate {
-		uint16_t itemId = 0;
+		uint32_t itemId = 0;
 		uint32_t clientId = 0;
 		std::string name;
 		int stackPosition = 0;
@@ -106,9 +106,9 @@ namespace {
 			}
 		}
 
-		int GetSelectedItemId() const {
+		uint32_t GetSelectedItemId() const {
 			const int selection = GetSelection();
-			return selection == wxNOT_FOUND ? 0 : candidates_[selection].itemId;
+			return selection == wxNOT_FOUND ? 0u : candidates_[selection].itemId;
 		}
 
 	protected:
@@ -118,7 +118,7 @@ namespace {
 				sprite->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX() + FromDIP(6), rect.GetY() + FromDIP(4), FromDIP(32), FromDIP(32));
 			}
 			dc.SetTextForeground(IsSelected(index) ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::Text));
-			wxString title = wxString::Format("Item ID %d", candidate.itemId);
+			wxString title = wxString::Format("Item ID %u", candidate.itemId);
 			if (!candidate.name.empty()) {
 				title << " - " << candidate.name;
 			}
@@ -153,7 +153,7 @@ namespace {
 			list_->Bind(wxEVT_LISTBOX_DCLICK, [this](wxCommandEvent&) { EndModal(wxID_OK); });
 		}
 
-		int GetSelectedItemId() const {
+		uint32_t GetSelectedItemId() const {
 			return list_->GetSelectedItemId();
 		}
 
@@ -2762,8 +2762,8 @@ void MapCanvas::OnOpenBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {
 				if (dialog.ShowModal() != wxID_OK) {
 					return;
 				}
-				const int itemId = dialog.GetSelectedItemId();
-				if (itemId > 0) {
+				const uint32_t itemId = dialog.GetSelectedItemId();
+				if (itemId != 0) {
 					itemCounts[itemId] = 1;
 				}
 			} else if (Item* item = tile->getTopSelectedItem()) {

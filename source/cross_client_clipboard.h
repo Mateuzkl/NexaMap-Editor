@@ -45,7 +45,7 @@ struct CrossClientItemSnapshot {
 
 struct CrossClientItemRecommendation {
 	uint16_t destinationId = 0;
-	uint16_t destinationClientId = 0;
+	uint32_t destinationClientId = 0;
 	std::string destinationName;
 	uint8_t confidence = 0;
 	bool automatic = false;
@@ -57,7 +57,7 @@ struct CrossClientItemRecommendation {
 struct CrossClientPasteRow {
 	CrossClientItemSnapshot source;
 	uint16_t destinationId = 0;
-	uint16_t destinationClientId = 0;
+	uint32_t destinationClientId = 0;
 	std::string destinationName;
 	CrossClientMatchState state = CrossClientMatchState::Missing;
 	wxString detail;

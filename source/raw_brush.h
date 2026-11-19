@@ -25,7 +25,7 @@
 
 class RAWBrush : public Brush {
 public:
-	RAWBrush(uint16_t itemid); // Create a RAWBrush of the specified type
+	RAWBrush(uint32_t itemid); // Create a RAWBrush of the specified type
 	~RAWBrush() override;
 
 	bool isRaw() const override {
@@ -49,7 +49,7 @@ public:
 	ItemType* getItemType() const {
 		return itemtype;
 	}
-	uint16_t getItemID() const;
+	uint32_t getItemID() const;
 
 protected:
 	ItemType* itemtype;

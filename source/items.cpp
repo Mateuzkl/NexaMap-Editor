@@ -128,10 +128,7 @@ ItemDatabase::~ItemDatabase() {
 }
 
 void ItemDatabase::clear() {
-	for (uint32_t i = 0; i < items.size(); i++) {
-		delete items[i];
-		items.set(i, nullptr);
-	}
+	items.clear();
 	MajorVersion = 0;
 	MinorVersion = 0;
 	BuildNumber = 0;
@@ -156,7 +153,7 @@ bool ItemDatabase::loadFromAppearances(const rme::protobuf::appearances::Appeara
 	MinorVersion = 4;
 
 	for (const Appearance& object : appearances.object()) {
-		if (!object.has_id() || object.id() == 0 || object.id() > std::numeric_limits<uint16_t>::max()) {
+		if (!object.has_id() || object.id() == 0) {
 			warnings.push_back(wxString::Format("Ignored Canary/Crystal item appearance with unsupported ID %u.", object.id()));
 			continue;
 		}
@@ -165,7 +162,7 @@ bool ItemDatabase::loadFromAppearances(const rme::protobuf::appearances::Appeara
 			continue;
 		}
 
-		const uint16_t id = static_cast<uint16_t>(object.id());
+		const uint32_t id = object.id();
 		auto* item = newd ItemType();
 		item->id = id;
 		item->clientID = id;
@@ -213,7 +210,7 @@ bool ItemDatabase::loadFromAppearances(const rme::protobuf::appearances::Appeara
 			delete item;
 			return false;
 		}
-		item->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(id));
+		item->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(static_cast<int64_t>(id)));
 		if (!item->sprite) {
 			warnings.push_back(wxString::Format("Canary/Crystal item %u has no drawable sprite metadata.", id));
 		}
@@ -245,12 +242,23 @@ bool ItemDatabase::readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxSt
 
 		switch (attribute) {
 			case ITEM_ATTR_SERVERID: {
-				if (datalen != sizeof(uint16_t)) {
-					error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
+				if (datalen == sizeof(uint16_t)) {
+					uint16_t id16 = 0;
+					if (!itemNode->getU16(id16)) {
+						warnings.push_back("Invalid item type property (2)");
+					} else {
+						t->id = id16;
+					}
+				} else if (datalen == sizeof(uint32_t)) {
+					uint32_t id32 = 0;
+					if (!itemNode->getU32(id32)) {
+						warnings.push_back("Invalid item type property (2)");
+					} else {
+						t->id = id32;
+					}
+				} else {
+					error = "items.otb: Unexpected data length of server id block (Should be 2 or 4 bytes)";
 					return false;
-				}
-				if (!itemNode->getU16(t->id)) {
-					warnings.push_back("Invalid item type property (2)");
 				}
 
 				if (max_item_id < t->id) {
@@ -260,16 +268,26 @@ bool ItemDatabase::readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxSt
 			}
 
 			case ITEM_ATTR_CLIENTID: {
-				if (datalen != sizeof(uint16_t)) {
-					error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
+				if (datalen == sizeof(uint16_t)) {
+					uint16_t cid16 = 0;
+					if (!itemNode->getU16(cid16)) {
+						warnings.push_back("Invalid item type property (2)");
+					} else {
+						t->clientID = cid16;
+					}
+				} else if (datalen == sizeof(uint32_t)) {
+					uint32_t cid32 = 0;
+					if (!itemNode->getU32(cid32)) {
+						warnings.push_back("Invalid item type property (2)");
+					} else {
+						t->clientID = cid32;
+					}
+				} else {
+					error = "items.otb: Unexpected data length of client id block (Should be 2 or 4 bytes)";
 					return false;
 				}
 
-				if (!itemNode->getU16(t->clientID)) {
-					warnings.push_back("Invalid item type property (2)");
-				}
-
-				t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
+				t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(static_cast<int64_t>(t->clientID)));
 				break;
 			}
 
@@ -380,18 +398,24 @@ bool ItemDatabase::readOtbItemAttributes(BinaryNode* itemNode, ItemType* t, wxSt
 			}
 
 			case ITEM_ATTR_ROTATETO: {
-				if (datalen != sizeof(unsigned short)) {
-					warnings.push_back("items.otb: Unexpected data length of item rotateTo block (Should be 2 bytes)");
-					break;
+				if (datalen == sizeof(uint16_t)) {
+					uint16_t rotate = 0;
+					if (!itemNode->getU16(rotate)) {
+						warnings.push_back("Invalid item type property (8)");
+						break;
+					}
+					t->rotateTo = rotate;
+				} else if (datalen == sizeof(uint32_t)) {
+					uint32_t rotate = 0;
+					if (!itemNode->getU32(rotate)) {
+						warnings.push_back("Invalid item type property (8)");
+						break;
+					}
+					t->rotateTo = rotate;
+				} else {
+					warnings.push_back("items.otb: Unexpected data length of item rotateTo block (Should be 2 or 4 bytes)");
+					itemNode->skip(datalen);
 				}
-
-				uint16_t rotate;
-				if (!itemNode->getU16(rotate)) {
-					warnings.push_back("Invalid item type property (8)");
-					break;
-				}
-
-				t->rotateTo = rotate;
 				break;
 			}
 
@@ -522,13 +546,23 @@ bool ItemDatabase::loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArra
 ItemDatabase::OtbAttributeResult ItemDatabase::parseCommonOtbItemAttribute(BinaryNode* itemNode, ItemType* t, uint8_t attribute, uint16_t datalen, wxString& error, wxArrayString& warnings) {
 	switch (attribute) {
 		case ITEM_ATTR_SERVERID: {
-			if (datalen != sizeof(uint16_t)) {
-				error = "items.otb: Unexpected data length of server id block (Should be 2 bytes)";
+			if (datalen == sizeof(uint16_t)) {
+				uint16_t id16 = 0;
+				if (!itemNode->getU16(id16)) {
+					warnings.push_back("Invalid item type property (2)");
+				} else {
+					t->id = id16;
+				}
+			} else if (datalen == sizeof(uint32_t)) {
+				uint32_t id32 = 0;
+				if (!itemNode->getU32(id32)) {
+					warnings.push_back("Invalid item type property (2)");
+				} else {
+					t->id = id32;
+				}
+			} else {
+				error = "items.otb: Unexpected data length of server id block (Should be 2 or 4 bytes)";
 				return OtbAttributeResult::FatalError;
-			}
-
-			if (!itemNode->getU16(t->id)) {
-				warnings.push_back("Invalid item type property (2)");
 			}
 
 			if (max_item_id < t->id) {
@@ -538,16 +572,26 @@ ItemDatabase::OtbAttributeResult ItemDatabase::parseCommonOtbItemAttribute(Binar
 		}
 
 		case ITEM_ATTR_CLIENTID: {
-			if (datalen != sizeof(uint16_t)) {
-				error = "items.otb: Unexpected data length of client id block (Should be 2 bytes)";
+			if (datalen == sizeof(uint16_t)) {
+				uint16_t cid16 = 0;
+				if (!itemNode->getU16(cid16)) {
+					warnings.push_back("Invalid item type property (2)");
+				} else {
+					t->clientID = cid16;
+				}
+			} else if (datalen == sizeof(uint32_t)) {
+				uint32_t cid32 = 0;
+				if (!itemNode->getU32(cid32)) {
+					warnings.push_back("Invalid item type property (2)");
+				} else {
+					t->clientID = cid32;
+				}
+			} else {
+				error = "items.otb: Unexpected data length of client id block (Should be 2 or 4 bytes)";
 				return OtbAttributeResult::FatalError;
 			}
 
-			if (!itemNode->getU16(t->clientID)) {
-				warnings.push_back("Invalid item type property (2)");
-			}
-
-			t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
+			t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(static_cast<int64_t>(t->clientID)));
 			return OtbAttributeResult::Handled;
 		}
 
@@ -943,7 +987,29 @@ static void parseFloorChange(ItemType& it, const std::string& value) {
 	}
 }
 
-bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id, bool serverIdsToClientIds) {
+static bool parseXmlUint32(const pugi::xml_attribute& attribute, uint32_t& out) {
+	if (!attribute) {
+		return false;
+	}
+	const char* text = attribute.value();
+	if (!text || *text == '\0') {
+		return false;
+	}
+	uint64_t acc = 0;
+	for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p != '\0'; ++p) {
+		if (*p < '0' || *p > '9') {
+			return false;
+		}
+		acc = acc * 10u + static_cast<uint64_t>(*p - '0');
+		if (acc > std::numeric_limits<uint32_t>::max()) {
+			return false;
+		}
+	}
+	out = static_cast<uint32_t>(acc);
+	return true;
+}
+
+bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, uint32_t id, bool serverIdsToClientIds) {
 	ClientVersionID clientVersion = g_gui.GetCurrentVersionID();
 	if (clientVersion < CLIENT_VERSION_980 && id > 20000 && id < 20100) {
 		itemNode = itemNode.next_sibling();
@@ -1031,8 +1097,14 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id, bool ser
 			}
 		} else if (key == "rotateto") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
-				const uint16_t rotateTo = xmlAttributeAsUint16(attribute);
-				it.rotateTo = serverIdsToClientIds ? ItemIdMapping::serverToClient(rotateTo).converted : rotateTo;
+				uint32_t rotateTo = 0;
+				if (parseXmlUint32(attribute, rotateTo)) {
+					if (serverIdsToClientIds && rotateTo <= std::numeric_limits<uint16_t>::max()) {
+						it.rotateTo = ItemIdMapping::serverToClient(static_cast<uint16_t>(rotateTo)).converted;
+					} else {
+						it.rotateTo = rotateTo;
+					}
+				}
 			}
 		} else if (key == "containersize") {
 			if ((attribute = itemAttributesNode.attribute("value"))) {
@@ -1095,30 +1167,52 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 			continue;
 		}
 
-		uint16_t fromId = 0;
-		uint16_t toId = 0;
+		uint32_t fromId = 0;
+		uint32_t toId = 0;
 		if (const pugi::xml_attribute attribute = itemNode.attribute("id")) {
-			fromId = toId = xmlAttributeAsUint16(attribute);
+			if (!parseXmlUint32(attribute, fromId)) {
+				error = "Could not read item id from item node.";
+				return false;
+			}
+			toId = fromId;
 		} else {
-			fromId = xmlAttributeAsUint16(itemNode.attribute("fromid"));
-			toId = xmlAttributeAsUint16(itemNode.attribute("toid"));
+			if (!parseXmlUint32(itemNode.attribute("fromid"), fromId) || !parseXmlUint32(itemNode.attribute("toid"), toId)) {
+				error = "Could not read item id from item node.";
+				return false;
+			}
 		}
 
-		if (fromId == 0 || toId == 0) {
+		if (fromId == 0 || toId == 0 || fromId > toId) {
 			error = "Could not read item id from item node.";
 			return false;
 		}
 
-		for (uint32_t sourceId = fromId; sourceId <= toId; ++sourceId) {
-			const ItemIdMapping::Result mapping = ItemIdMapping::serverToClient(static_cast<uint16_t>(sourceId));
-			const uint16_t id = serverIdsToClientIds ? mapping.converted : static_cast<uint16_t>(sourceId);
-			if (serverIdsToClientIds && !mapping.found) {
-				continue;
+		if (serverIdsToClientIds) {
+			const uint32_t mappedEnd = std::min<uint32_t>(toId, std::numeric_limits<uint16_t>::max());
+			for (uint32_t sourceId = fromId; sourceId <= mappedEnd; ++sourceId) {
+				const ItemIdMapping::Result mapping = ItemIdMapping::serverToClient(static_cast<uint16_t>(sourceId));
+				if (!mapping.found || !typeExists(mapping.converted)) {
+					continue;
+				}
+				if (!loadItemFromGameXml(itemNode, mapping.converted, serverIdsToClientIds)) {
+					return false;
+				}
 			}
-			if (!typeExists(id)) {
-				continue;
+		} else if (fromId == toId) {
+			if (typeExists(fromId) && !loadItemFromGameXml(itemNode, fromId, false)) {
+				return false;
 			}
-			if (!loadItemFromGameXml(itemNode, id, serverIdsToClientIds)) {
+		} else {
+			bool xmlOk = true;
+			forEachItemType([&](ItemType& existing) {
+				if (!xmlOk || existing.id < fromId || existing.id > toId) {
+					return;
+				}
+				if (!loadItemFromGameXml(itemNode, existing.id, false)) {
+					xmlOk = false;
+				}
+			});
+			if (!xmlOk) {
 				return false;
 			}
 		}
@@ -1128,29 +1222,43 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 
 bool ItemDatabase::loadMetaItem(pugi::xml_node node) {
 	if (const pugi::xml_attribute attribute = node.attribute("id")) {
-		const uint16_t id = xmlAttributeAsUint16(attribute);
-		if (id == 0 || items[id]) {
+		uint32_t id = 0;
+		if (!parseXmlUint32(attribute, id) || id == 0 || items[id]) {
 			return false;
 		}
 		items.set(id, newd ItemType());
 		items[id]->is_metaitem = true;
 		items[id]->id = id;
+		if (max_item_id < id) {
+			max_item_id = id;
+		}
 		return true;
 	}
 	return false;
 }
 
-ItemType& ItemDatabase::getItemType(int id) {
+ItemType& ItemDatabase::getDummyItemType() {
+	static ItemType dummyItemType; // use this for invalid ids
+	return dummyItemType;
+}
+
+ItemType& ItemDatabase::getItemType(uint32_t id) {
 	ItemType* it = items[id];
 	if (it) {
 		return *it;
-	} else {
-		static ItemType dummyItemType; // use this for invalid ids
-		return dummyItemType;
 	}
+	return getDummyItemType();
 }
 
-bool ItemDatabase::typeExists(int id) const {
+const ItemType& ItemDatabase::getItemType(uint32_t id) const {
+	ItemType* it = items[id];
+	if (it) {
+		return *it;
+	}
+	return getDummyItemType();
+}
+
+bool ItemDatabase::typeExists(uint32_t id) const {
 	ItemType* it = items[id];
 	return it != nullptr;
 }
