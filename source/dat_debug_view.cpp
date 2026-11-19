@@ -46,8 +46,9 @@ DatDebugViewListBox::DatDebugViewListBox(wxWindow* parent, wxWindowID id) :
 	SetForegroundColour(Theme::Get(Theme::Role::Text));
 	SetSelectionBackground(Theme::Get(Theme::Role::SelectionFill));
 	int n = 0;
-	for (int id = 0; id < g_gui.gfx.getItemSpriteMaxID(); ++id) {
-		Sprite* spr = g_gui.gfx.getSprite(id);
+	const uint32_t maxSpriteId = std::min<uint32_t>(g_gui.gfx.getItemSpriteMaxID(), 65536u);
+	for (uint32_t spriteId = 0; spriteId < maxSpriteId; ++spriteId) {
+		Sprite* spr = g_gui.gfx.getSprite(static_cast<int64_t>(spriteId));
 		if (spr) {
 			sprites[n] = spr;
 			++n;

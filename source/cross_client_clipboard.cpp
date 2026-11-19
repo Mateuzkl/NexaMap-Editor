@@ -579,7 +579,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			if (!item.clientID) {
 				continue;
 			}
-			const TargetCandidate candidate { static_cast<uint16_t>(id), item.clientID,
+			const TargetCandidate candidate { static_cast<uint16_t>(id), static_cast<uint16_t>(item.clientID),
 											  static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name };
 			const auto found = missingByRole.find({ candidate.group, candidate.type, candidate.semanticFlags & CrossClientMatchPolicy::RequiredRoleMask });
 			if (found == missingByRole.end()) {

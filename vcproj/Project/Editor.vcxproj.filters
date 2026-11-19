@@ -515,6 +515,9 @@
     <ClInclude Include="..\..\source\positionctrl.h">
       <Filter>gui\controls</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\find_item_search.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\find_item_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -1044,6 +1047,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\positionctrl.cpp">
       <Filter>gui\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\find_item_search.cpp">
+      <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\find_item_window.cpp">
       <Filter>gui\dialogs</Filter>
