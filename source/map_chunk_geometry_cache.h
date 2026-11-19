@@ -16,7 +16,7 @@ struct MapChunkGroundQuad {
 	int offsetY = 0;
 	int elevation = 0;
 	uint32_t imageIndex = 0;
-	uint16_t itemId = 0; // zero means this ground stays on the live path
+	uint32_t itemId = 0; // zero means this ground stays on the live path
 };
 
 struct MapChunkGeometry {

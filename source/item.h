@@ -109,13 +109,13 @@ public:
 	void copyBaseStateTo(Item& copy) const;
 
 	// Factory member to create item of right type based on type
-	static Item* Create(uint16_t _type, uint16_t _subtype = 0xFFFF);
+	static Item* Create(uint32_t _type, uint16_t _subtype = 0xFFFF);
 	static Item* Create(pugi::xml_node);
 	static Item* Create_OTBM(const IOMap& maphandle, BinaryNode* stream, const ItemType** itemType = nullptr, bool inspectSpecialAttributes = false);
 
 protected:
 	// Constructor for items
-	Item(unsigned short _type, unsigned short _count);
+	Item(uint32_t _type, uint16_t _count);
 
 public:
 	static void* operator new(size_t size);
@@ -162,15 +162,15 @@ public:
 	static std::string LiquidID2Name(uint16_t id);
 
 	// IDs
-	uint16_t getID() const {
+	uint32_t getID() const {
 		return id;
 	}
-	uint16_t getClientID() const {
+	uint32_t getClientID() const {
 		return g_items[id].clientID;
 	}
 	// NOTE: This is very volatile, do NOT use this unless you know exactly what you're doing
 	// which you probably don't so avoid it like the plague!
-	void setID(uint16_t id);
+	void setID(uint32_t id);
 
 	bool typeExists() const {
 		return g_items.typeExists(id);
@@ -226,7 +226,7 @@ public:
 	bool hasCollectionBrush() const {
 		return g_items[id].collection_brush;
 	}
-	uint16_t getGroundEquivalent() const {
+	uint32_t getGroundEquivalent() const {
 		return g_items[id].ground_equivalent;
 	}
 	uint16_t hasBorderEquivalent() const {
@@ -430,7 +430,7 @@ public:
 	}
 
 protected:
-	uint16_t id; // the same id as in ItemType
+	uint32_t id; // the same id as in ItemType
 	// Subtype is either fluid type, count, subtype or charges
 	uint16_t subtype;
 	uint8_t subtypeKinds;
@@ -448,7 +448,7 @@ private:
 typedef std::vector<Item*> ItemVector;
 typedef std::list<Item*> ItemList;
 
-Item* transformItem(Item* old_item, uint16_t new_id, Tile* parent = nullptr);
+Item* transformItem(Item* old_item, uint32_t new_id, Tile* parent = nullptr);
 
 inline int Item::getCount() const {
 	if (hasSubtypeKind(SUBTYPE_STACK_COUNT) || hasSubtypeKind(SUBTYPE_CHARGES)) {

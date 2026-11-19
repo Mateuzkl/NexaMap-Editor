@@ -26,6 +26,7 @@
 #include "dat_debug_view.h"
 #include "result_window.h"
 #include "extension_window.h"
+#include "find_item_search.h"
 #include "find_item_window.h"
 #include "border_learning_window.h"
 #include "border_workspace_window.h"
@@ -299,10 +300,10 @@ MainMenuBar::~MainMenuBar() {
 
 namespace OnMapRemoveItems {
 	struct RemoveItemCondition {
-		RemoveItemCondition(uint16_t itemId) :
+		RemoveItemCondition(uint32_t itemId) :
 			itemId(itemId) { }
 
-		uint16_t itemId;
+		uint32_t itemId;
 
 		bool operator()(Map& map, Item* item, int64_t removed, int64_t done) {
 			if (done % 0x8000 == 0) {
@@ -1198,32 +1199,37 @@ void MainMenuBar::OnRedo(wxCommandEvent& WXUNUSED(event)) {
 }
 
 namespace OnSearchForItem {
-	struct Finder {
-		Finder(uint16_t itemId, uint32_t maxCount) :
-			itemId(itemId), maxCount(maxCount) { }
-
-		uint16_t itemId;
-		uint32_t maxCount;
-		std::vector<std::pair<Tile*, Item*>> result;
-
-		bool limitReached() const {
-			return result.size() >= (size_t)maxCount;
+	void PresentResults(const MapItemSearchSummary& summary, ItemIdSearchKind kind, uint32_t targetId, uint32_t maxCount, bool onSelection) {
+		if (summary.limitReached) {
+			wxString msg;
+			msg << "The configured limit has been reached. Showing " << maxCount << " of " << summary.totalOccurrences << " occurrences.";
+			g_gui.PopupDialog("Notice", msg, wxOK);
 		}
 
-		void operator()(Map& map, Tile* tile, Item* item, long long done) {
-			if (result.size() >= (size_t)maxCount) {
-				return;
-			}
+		SearchResultWindow* window = g_gui.ShowSearchWindow();
+		window->Clear();
 
-			if (done % 0x8000 == 0) {
-				g_gui.SetLoadDone(static_cast<int32_t>((unsigned int)(100 * done / map.getTileCount())));
-			}
-
-			if (item->getID() == itemId) {
-				result.push_back(std::make_pair(tile, item));
-			}
+		wxString summaryText = wxString::Format(
+			"%llu occurrence%s across %llu tile%s (%s: %u%s)",
+			static_cast<unsigned long long>(summary.totalOccurrences),
+			summary.totalOccurrences == 1 ? "" : "s",
+			static_cast<unsigned long long>(summary.matchedTiles),
+			summary.matchedTiles == 1 ? "" : "s",
+			ItemIdSearchKindLabel(kind),
+			targetId,
+			onSelection ? ", selection" : ""
+		);
+		if (summary.limitReached) {
+			summaryText << wxString::Format(" [showing %zu]", summary.matches.size());
 		}
-	};
+		window->SetSummary(summaryText);
+
+		for (const MapItemSearchResult& match : summary.matches) {
+			window->AddPosition(wxstr(FormatSearchResultDescription(match, kind, targetId)), match.position);
+		}
+
+		g_gui.SetStatusText(summaryText);
+	}
 }
 
 void MainMenuBar::OnSearchForItem(wxCommandEvent& WXUNUSED(event)) {
@@ -1234,28 +1240,27 @@ void MainMenuBar::OnSearchForItem(wxCommandEvent& WXUNUSED(event)) {
 	FindItemDialog dialog(frame, "Search for Item");
 	dialog.setSearchMode((FindItemDialog::SearchMode)g_settings.getInteger(Config::FIND_ITEM_MODE));
 	if (dialog.ShowModal() == wxID_OK) {
-		OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
+		const ItemIdSearchKind searchKind = dialog.getMapSearchKind();
+		const uint32_t targetId = dialog.getMapSearchTargetID();
+		const uint32_t maxCount = static_cast<uint32_t>(std::max<int>(0, g_settings.getInteger(Config::REPLACE_SIZE)));
+
 		g_gui.CreateLoadBar("Searching map...");
-
-		foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, false);
-		std::vector<std::pair<Tile*, Item*>>& result = finder.result;
-
+		const MapItemSearchSummary summary = SearchItemsOnMap(
+			g_gui.GetCurrentMap(),
+			g_items,
+			searchKind,
+			targetId,
+			false,
+			maxCount,
+			[](uint64_t done, uint64_t total) {
+				if (total > 0) {
+					g_gui.SetLoadDone(static_cast<int32_t>(100 * done / total));
+				}
+			}
+		);
 		g_gui.DestroyLoadBar();
 
-		if (finder.limitReached()) {
-			wxString msg;
-			msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
-			g_gui.PopupDialog("Notice", msg, wxOK);
-		}
-
-		SearchResultWindow* window = g_gui.ShowSearchWindow();
-		window->Clear();
-		for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
-			Tile* tile = iter->first;
-			Item* item = iter->second;
-			window->AddPosition(wxstr(item->getName()), tile->getPosition());
-		}
-
+		OnSearchForItem::PresentResults(summary, searchKind, targetId, maxCount, false);
 		g_settings.setInteger(Config::FIND_ITEM_MODE, (int)dialog.getSearchMode());
 	}
 	dialog.Destroy();
@@ -1417,7 +1422,7 @@ void MainMenuBar::OnSearchForWallsUponWallsOnMap(wxCommandEvent& WXUNUSED(event)
 namespace CorpseSearch {
 	struct Occurrence {
 		Position position;
-		uint16_t id = 0;
+		uint32_t id = 0;
 		std::string name;
 	};
 
@@ -1502,7 +1507,7 @@ void MainMenuBar::OnSearchForCorpsesOnMap(wxCommandEvent& WXUNUSED(event)) {
 		return;
 	}
 
-	std::map<uint16_t, CorpseSearch::Summary> summaries;
+	std::map<uint32_t, CorpseSearch::Summary> summaries;
 	for (const CorpseSearch::Occurrence& occurrence : occurrences) {
 		auto [iterator, inserted] = summaries.try_emplace(occurrence.id);
 		CorpseSearch::Summary& summary = iterator->second;
@@ -1589,28 +1594,27 @@ void MainMenuBar::OnSearchForItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
 	FindItemDialog dialog(frame, "Search on Selection");
 	dialog.setSearchMode((FindItemDialog::SearchMode)g_settings.getInteger(Config::FIND_ITEM_MODE));
 	if (dialog.ShowModal() == wxID_OK) {
-		OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
+		const ItemIdSearchKind searchKind = dialog.getMapSearchKind();
+		const uint32_t targetId = dialog.getMapSearchTargetID();
+		const uint32_t maxCount = static_cast<uint32_t>(std::max<int>(0, g_settings.getInteger(Config::REPLACE_SIZE)));
+
 		g_gui.CreateLoadBar("Searching on selected area...");
-
-		foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, true);
-		std::vector<std::pair<Tile*, Item*>>& result = finder.result;
-
+		const MapItemSearchSummary summary = SearchItemsOnMap(
+			g_gui.GetCurrentMap(),
+			g_items,
+			searchKind,
+			targetId,
+			true,
+			maxCount,
+			[](uint64_t done, uint64_t total) {
+				if (total > 0) {
+					g_gui.SetLoadDone(static_cast<int32_t>(100 * done / total));
+				}
+			}
+		);
 		g_gui.DestroyLoadBar();
 
-		if (finder.limitReached()) {
-			wxString msg;
-			msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
-			g_gui.PopupDialog("Notice", msg, wxOK);
-		}
-
-		SearchResultWindow* window = g_gui.ShowSearchWindow();
-		window->Clear();
-		for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
-			Tile* tile = iter->first;
-			Item* item = iter->second;
-			window->AddPosition(wxstr(item->getName()), tile->getPosition());
-		}
-
+		OnSearchForItem::PresentResults(summary, searchKind, targetId, maxCount, true);
 		g_settings.setInteger(Config::FIND_ITEM_MODE, (int)dialog.getSearchMode());
 	}
 
@@ -1863,7 +1867,7 @@ void MainMenuBar::OnMapRemoveItems(wxCommandEvent& WXUNUSED(event)) {
 
 	FindItemDialog dialog(frame, "Item Type to Remove");
 	if (dialog.ShowModal() == wxID_OK) {
-		uint16_t itemid = dialog.getResultID();
+		uint32_t itemid = dialog.getResultID();
 
 		g_gui.GetCurrentEditor()->selection.clear();
 		g_gui.GetCurrentEditor()->actionQueue->clear();

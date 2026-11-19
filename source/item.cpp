@@ -30,7 +30,7 @@
 #include "wall_brush.h"
 #include "object_pool.h"
 
-Item* Item::Create(uint16_t _type, uint16_t _subtype /*= 0xFFFF*/) {
+Item* Item::Create(uint32_t _type, uint16_t _subtype /*= 0xFFFF*/) {
 	if (_type == 0) {
 		return nullptr;
 	}
@@ -85,7 +85,7 @@ void Item::operator delete(void* ptr, const char*, int) noexcept {
 	rme::deallocatePooledObject(ptr);
 }
 
-Item::Item(unsigned short _type, unsigned short _count) :
+Item::Item(uint32_t _type, uint16_t _count) :
 	id(_type),
 	subtype(1),
 	subtypeKinds(SUBTYPE_NONE),
@@ -130,7 +130,7 @@ void Item::copyBaseStateTo(Item& copy) const {
 	}
 }
 
-Item* transformItem(Item* old_item, uint16_t new_id, Tile* parent) {
+Item* transformItem(Item* old_item, uint32_t new_id, Tile* parent) {
 	if (old_item == nullptr) {
 		return nullptr;
 	}
@@ -192,7 +192,7 @@ uint32_t Item::memsize() const {
 	return mem;
 }
 
-void Item::setID(uint16_t newid) {
+void Item::setID(uint32_t newid) {
 	id = newid;
 	last_ready_frame = -1;
 }
@@ -515,12 +515,12 @@ std::string Item::LiquidID2Name(uint16_t id) {
 Item* Item::Create(pugi::xml_node xml) {
 	pugi::xml_attribute attribute;
 
-	int16_t id = 0;
+	uint32_t id = 0;
 	if ((attribute = xml.attribute("id"))) {
-		id = xmlAttributeAsUint16(attribute);
+		id = attribute.as_uint();
 	}
 
-	int16_t count = 1;
+	uint16_t count = 1;
 	if ((attribute = xml.attribute("count")) || (attribute = xml.attribute("subtype"))) {
 		count = xmlAttributeAsUint16(attribute);
 	}

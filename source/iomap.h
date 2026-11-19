@@ -21,6 +21,7 @@
 #include "client_version.h"
 
 #include <cstdint>
+#include <limits>
 #include <utility>
 
 enum ImportType {
@@ -89,12 +90,16 @@ public:
 		}
 		return itemIdCodec->Decode(storedId, serverId);
 	}
-	bool encodeStoredItemId(uint16_t serverId, uint16_t& storedId) const {
+	bool encodeStoredItemId(uint32_t serverId, uint16_t& storedId) const {
+		if (serverId > std::numeric_limits<uint16_t>::max()) {
+			return false;
+		}
+		const uint16_t id16 = static_cast<uint16_t>(serverId);
 		if (!itemIdCodec) {
-			storedId = serverId;
+			storedId = id16;
 			return true;
 		}
-		return itemIdCodec->Encode(serverId, storedId);
+		return itemIdCodec->Encode(id16, storedId);
 	}
 
 	virtual bool loadMap(Map& map, const FileName& identifier) = 0;

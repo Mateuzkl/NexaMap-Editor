@@ -342,8 +342,9 @@ void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& pr
 	// last build. This runs on every palette refresh (CreaturePalettePanel::OnUpdate),
 	// so rebuilding unconditionally re-scans every item id and every creature each time.
 	const size_t cur_creature_count = g_creatures.size();
-	const int32_t cur_item_maxid = g_items.getMaxID();
-	const size_t total = static_cast<size_t>(cur_item_maxid) + 1 + cur_creature_count;
+	const uint32_t cur_item_maxid = g_items.getMaxID();
+	const size_t cur_item_count = g_items.getLoadedItemCount();
+	const size_t total = cur_item_count + cur_creature_count;
 	auto lastPump = std::chrono::steady_clock::now();
 	auto report = [&](size_t completed, bool force = false) {
 		const auto now = std::chrono::steady_clock::now();
@@ -355,7 +356,7 @@ void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& pr
 	report(0, true);
 	if (tilesets.count("Others") && tilesets.count("NPCs")
 		&& cur_creature_count == other_tileset_creature_count
-		&& cur_item_maxid == other_tileset_item_maxid) {
+		&& static_cast<int64_t>(cur_item_maxid) == static_cast<int64_t>(other_tileset_item_maxid)) {
 		report(total, true);
 		return;
 	}
@@ -379,19 +380,18 @@ void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& pr
 		tilesets["NPCs"] = npc_tileset;
 	}
 
-	// There should really be an iterator to do this
-	for (int32_t id = 0; id <= g_items.getMaxID(); ++id) {
-		report(static_cast<size_t>(id));
-		ItemType& it = g_items[id];
+	size_t completed = 0;
+	g_items.forEachItemType([&](ItemType& it) {
+		report(completed++);
 		if (it.id == 0) {
-			continue;
+			return;
 		}
 
 		if (!it.isMetaItem()) {
 			Brush* brush;
 			if (it.in_other_tileset) {
 				others->getCategory(TILESET_RAW)->brushlist.push_back(it.raw_brush);
-				continue;
+				return;
 			} else if (it.raw_brush == nullptr) {
 				brush = it.raw_brush = newd RAWBrush(it.id);
 				it.has_raw = true;
@@ -399,16 +399,15 @@ void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& pr
 			} else if (!it.has_raw) {
 				brush = it.raw_brush;
 			} else {
-				continue;
+				return;
 			}
 
 			brush->flagAsVisible();
 			others->getCategory(TILESET_RAW)->brushlist.push_back(it.raw_brush);
 			it.in_other_tileset = true;
 		}
-	}
+	});
 
-	size_t completed = static_cast<size_t>(cur_item_maxid) + 1;
 	for (auto iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
 		report(completed++);
 		CreatureType* type = iter->second;

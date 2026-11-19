@@ -517,7 +517,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			cached->second.available = previewMatches && sprite && sprite->getRenderedFingerprint(cached->second.visual, pending, false);
 		}
 		if (cached->second.available) {
-			candidates[cached->second.visual].push_back({ static_cast<uint16_t>(id), item.clientID,
+			candidates[cached->second.visual].push_back({ static_cast<uint16_t>(id), static_cast<uint16_t>(item.clientID),
 														  static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name });
 		}
 	}

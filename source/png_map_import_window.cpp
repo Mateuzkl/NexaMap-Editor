@@ -195,16 +195,15 @@ namespace {
 
 	private:
 		void BuildGroundCatalog() {
-			for (int id = 1; id <= g_items.getMaxID(); ++id) {
-				if (!g_items.typeExists(id)) {
-					continue;
+			g_items.forEachItemType([&](const ItemType& type) {
+				if (type.id == 0 || type.id > std::numeric_limits<uint16_t>::max() || type.clientID > std::numeric_limits<uint16_t>::max()) {
+					return;
 				}
-				const ItemType& type = g_items[id];
 				if (!type.isGroundTile() || !type.sprite || type.sprite->minimap_color > 255) {
-					continue;
+					return;
 				}
-				grounds_.push_back({ static_cast<uint16_t>(id), type.clientID, MinimapRgb(static_cast<uint8_t>(type.sprite->minimap_color)), type.name });
-			}
+				grounds_.push_back({ static_cast<uint16_t>(type.id), static_cast<uint16_t>(type.clientID), MinimapRgb(static_cast<uint8_t>(type.sprite->minimap_color)), type.name });
+			});
 		}
 
 		void BuildInterface() {

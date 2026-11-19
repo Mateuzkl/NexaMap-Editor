@@ -2408,6 +2408,38 @@ bool IOMapOTBM::writeTiles(Map& map, NodeFileWriteHandle& f) {
 			f.addU32(save_tile->getMapFlags());
 		}
 
+	std::function<bool(const Item*, uint32_t&)> findUnsupported16BitItemId = [&](const Item* item, uint32_t& outId) -> bool {
+		if (!item) {
+			return false;
+		}
+		if (item->getID() > std::numeric_limits<uint16_t>::max()) {
+			outId = item->getID();
+			return true;
+		}
+		if (const auto* container = dynamic_cast<const Container*>(item)) {
+			for (const Item* child : container->getVector()) {
+				if (findUnsupported16BitItemId(child, outId)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+
+	auto reportItemSerializeFailure = [&](const Item* item) {
+		uint32_t unsupportedId = 0;
+		if (findUnsupported16BitItemId(item, unsupportedId)) {
+			error(
+				"Cannot save item ID %u at (%d, %d, %d): this OTBM format only supports 16-bit item IDs (0-65535). "
+				"Save aborted to prevent ID truncation or file corruption.",
+				unsupportedId,
+				pos.x,
+				pos.y,
+				pos.z
+			);
+		}
+	};
+
 		if (save_tile->ground) {
 			Item* ground = save_tile->ground;
 			if (ground->isMetaItem()) {
@@ -2425,16 +2457,19 @@ bool IOMapOTBM::writeTiles(Map& map, NodeFileWriteHandle& f) {
 
 				if (!found) {
 					if (!ground->serializeItemNode_OTBM(self, f)) {
+						reportItemSerializeFailure(ground);
 						return false;
 					}
 				}
 			} else if (ground->isComplex() || ground->hasSubtype()) {
 				if (!ground->serializeItemNode_OTBM(self, f)) {
+					reportItemSerializeFailure(ground);
 					return false;
 				}
 			} else {
 				f.addByte(OTBM_ATTR_ITEM);
 				if (!ground->serializeItemCompact_OTBM(self, f)) {
+					reportItemSerializeFailure(ground);
 					return false;
 				}
 			}
@@ -2443,6 +2478,7 @@ bool IOMapOTBM::writeTiles(Map& map, NodeFileWriteHandle& f) {
 		for (Item* item : save_tile->items) {
 			if (!item->isMetaItem()) {
 				if (!item->serializeItemNode_OTBM(self, f)) {
+					reportItemSerializeFailure(item);
 					return false;
 				}
 			}

@@ -1012,25 +1012,23 @@ void FindBrushDialog::OnClickOKInternal() {
 				// Did we not find a matching brush?
 				if (!result_brush) {
 					// Then let's search the RAWs
-					for (int id = 0; id <= g_items.getMaxID(); ++id) {
-						ItemType& it = g_items[id];
-						if (it.id == 0) {
-							continue;
+					g_items.forEachItemType([&](ItemType& it) {
+						if (result_brush || it.id == 0) {
+							return;
 						}
 
 						RAWBrush* raw_brush = it.raw_brush;
 						if (!raw_brush) {
-							continue;
+							return;
 						}
 
 						if (as_lower_str(raw_brush->getName()).find(search_string) == std::string::npos) {
-							continue;
+							return;
 						}
 
 						// Found one!
 						result_brush = raw_brush;
-						break;
-					}
+					});
 				}
 				// Done!
 			}
@@ -1071,24 +1069,23 @@ void FindBrushDialog::RefreshContentsInternal() {
 			item_list->AddBrush(const_cast<Brush*>(brush));
 		}
 
-		for (int id = 0; id <= g_items.getMaxID(); ++id) {
-			ItemType& it = g_items[id];
+		g_items.forEachItemType([&](ItemType& it) {
 			if (it.id == 0) {
-				continue;
+				return;
 			}
 
 			RAWBrush* raw_brush = it.raw_brush;
 			if (!raw_brush) {
-				continue;
+				return;
 			}
 
 			if (as_lower_str(raw_brush->getName()).find(search_string) == std::string::npos) {
-				continue;
+				return;
 			}
 
 			found_search_results = true;
 			item_list->AddBrush(raw_brush);
-		}
+		});
 
 		while (raws.size() > 0) {
 			item_list->AddBrush(const_cast<RAWBrush*>(raws.front()));

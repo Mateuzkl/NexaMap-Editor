@@ -406,21 +406,20 @@ namespace {
 				list.clear();
 			}
 			mappings_.fill(0);
-			for (int id = 0; id <= g_items.getMaxID(); ++id) {
-				if (!g_items.typeExists(id)) {
-					continue;
+			g_items.forEachItemType([&](const ItemType& type) {
+				if (type.id > std::numeric_limits<uint16_t>::max() || type.clientID > std::numeric_limits<uint16_t>::max()) {
+					return;
 				}
-				ItemType& type = g_items[id];
 				if (!type.isGroundTile() || !type.sprite || type.sprite->minimap_color > 255) {
-					continue;
+					return;
 				}
 				GroundCandidate candidate;
-				candidate.serverId = static_cast<uint16_t>(id);
-				candidate.clientId = type.clientID;
+				candidate.serverId = static_cast<uint16_t>(type.id);
+				candidate.clientId = static_cast<uint16_t>(type.clientID);
 				candidate.minimapSpeed = static_cast<uint8_t>(std::min<int>(255, static_cast<int>(std::ceil(type.sprite->ground_speed / 10.0))));
 				candidate.name = type.name;
 				candidates_[static_cast<uint8_t>(type.sprite->minimap_color)].push_back(std::move(candidate));
-			}
+			});
 			const auto& stats = document_->getColorStats();
 			for (size_t color = 0; color < candidates_.size(); ++color) {
 				const uint8_t speed = stats[color].dominantSpeed();

@@ -145,6 +145,26 @@ public:
 	const SpriteLight& getLight() const noexcept {
 		return light;
 	}
+	bool hasSpriteId(uint32_t spriteId) const noexcept {
+		for (const NormalImage* img : spriteList) {
+			if (img && img->id == spriteId) {
+				return true;
+			}
+		}
+		return false;
+	}
+	std::vector<uint32_t> getUniqueSpriteIds() const {
+		std::vector<uint32_t> ids;
+		for (const NormalImage* img : spriteList) {
+			if (!img || img->id == 0) {
+				continue;
+			}
+			if (std::find(ids.begin(), ids.end(), img->id) == ids.end()) {
+				ids.push_back(img->id);
+			}
+		}
+		return ids;
+	}
 	static GameSprite* createFromBitmap(const wxArtID& bitmapId);
 
 protected:
@@ -374,7 +394,7 @@ public:
 		return resourceIdentity;
 	}
 
-	Sprite* getSprite(int id);
+	Sprite* getSprite(int64_t id);
 	GameSprite* getCreatureSprite(int id, FrameGroupType group = FRAME_GROUP_DEFAULT);
 	GameSprite* getEditorSprite(int id);
 
@@ -382,7 +402,7 @@ public:
 		return (animation_timer.TimeInMicro() / 1000).ToLong();
 	}
 
-	uint16_t getItemSpriteMaxID() const;
+	uint32_t getItemSpriteMaxID() const;
 
 	// Get an unused texture id (this is acquired by simply increasing a value starting from 0x10000000)
 	GLuint getFreeTextureID();
@@ -469,15 +489,17 @@ private:
 	GameSprite::NormalImage* getOrCreateAssetImage(uint32_t spriteId, uint8_t cropX, uint8_t cropY);
 	bool loadAppearanceSprite(
 		const rme::protobuf::appearances::Appearance& appearance,
-		int spriteSpaceId,
+		int64_t spriteSpaceId,
 		wxString& error,
 		wxArrayString& warnings,
 		const rme::protobuf::appearances::FrameGroup* explicitGroup = nullptr,
 		GameSprite** outSprite = nullptr
 	);
 
-	typedef std::map<int, Sprite*> SpriteMap;
+	typedef std::map<int64_t, Sprite*> SpriteMap;
 	SpriteMap sprite_space;
+	typedef std::map<int, GameSprite*> CreatureSpriteMap;
+	CreatureSpriteMap creature_sprite_space;
 	typedef std::map<int, GameSprite*> MovingCreatureMap;
 	MovingCreatureMap moving_creature_space;
 	typedef std::map<uint64_t, GameSprite::Image*> ImageMap;
@@ -485,7 +507,7 @@ private:
 	std::deque<GameSprite*> cleanup_list;
 
 	DatFormat dat_format;
-	uint16_t item_count;
+	uint32_t item_count;
 	uint16_t creature_count;
 	bool otfi_found;
 	bool is_extended;

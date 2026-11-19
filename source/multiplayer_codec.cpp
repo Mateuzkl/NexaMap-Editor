@@ -741,13 +741,12 @@ namespace Multiplayer {
 		out.u32(g_items.MinorVersion);
 		out.u32(g_items.BuildNumber);
 		out.u8(g_settings.getBoolean(Config::DRAGON_SOULS_OTBM_COUNT_UINT16));
-		for (uint32_t id = 1; id <= g_items.getMaxID(); ++id) {
-			if (!g_items.typeExists(id)) {
-				continue;
+		g_items.forEachItemType([&](const ItemType& t) {
+			if (t.id == 0 || t.id > std::numeric_limits<uint16_t>::max()) {
+				return;
 			}
-			const auto& t = g_items[id];
-			out.u16(id);
-			out.u16(t.clientID);
+			out.u16(static_cast<uint16_t>(t.id));
+			out.u16(static_cast<uint16_t>(std::min<uint32_t>(t.clientID, std::numeric_limits<uint16_t>::max())));
 			out.u8(t.group);
 			out.u8(t.type);
 			out.u16(t.volume);
@@ -758,7 +757,7 @@ namespace Multiplayer {
 			out.u8(t.alwaysOnBottom);
 			out.u8(t.unpassable);
 			out.string(t.name, 4096);
-		}
+		});
 		return sha256(out.data);
 	}
 	uint64_t newSpawnArea(Map& map, const std::vector<DecodedTile>& tiles) {

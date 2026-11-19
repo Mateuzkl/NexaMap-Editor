@@ -85,7 +85,7 @@ namespace {
 		return PopupContextIsCurrent(editor) && (!editor.multiplayer || !editor.multiplayer->active() || editor.multiplayer->canEdit());
 	}
 	struct BorderItemCandidate {
-		uint16_t itemId = 0;
+		uint32_t itemId = 0;
 		uint32_t clientId = 0;
 		std::string name;
 		int stackPosition = 0;
@@ -118,7 +118,7 @@ namespace {
 				sprite->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX() + FromDIP(6), rect.GetY() + FromDIP(4), FromDIP(32), FromDIP(32));
 			}
 			dc.SetTextForeground(IsSelected(index) ? Theme::Get(Theme::Role::TextOnAccent) : Theme::Get(Theme::Role::Text));
-			wxString title = wxString::Format("Item ID %d", candidate.itemId);
+			wxString title = wxString::Format("Item ID %u", candidate.itemId);
 			if (!candidate.name.empty()) {
 				title << " - " << candidate.name;
 			}

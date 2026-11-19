@@ -27,6 +27,9 @@
 
 BEGIN_EVENT_TABLE(SearchResultWindow, wxPanel)
 EVT_LISTBOX(wxID_ANY, SearchResultWindow::OnClickResult)
+EVT_LISTBOX_DCLICK(wxID_ANY, SearchResultWindow::OnClickResult)
+EVT_BUTTON(wxID_BACKWARD, SearchResultWindow::OnClickPrevious)
+EVT_BUTTON(wxID_FORWARD, SearchResultWindow::OnClickNext)
 EVT_BUTTON(wxID_FILE, SearchResultWindow::OnClickExport)
 EVT_BUTTON(wxID_CLEAR, SearchResultWindow::OnClickClear)
 EVT_BUTTON(wxID_DELETE, SearchResultWindow::OnClickRemove)
@@ -41,7 +44,7 @@ struct SearchResultWindow::ResultData {
 		duplicate(false) {
 	}
 
-	ResultData(const Position& position, uint16_t itemId, uint16_t count) :
+	ResultData(const Position& position, uint32_t itemId, uint16_t count) :
 		position(position),
 		itemId(itemId),
 		count(count),
@@ -49,28 +52,39 @@ struct SearchResultWindow::ResultData {
 	}
 
 	Position position;
-	uint16_t itemId;
+	uint32_t itemId;
 	uint16_t count;
 	bool duplicate;
 };
 
 SearchResultWindow::SearchResultWindow(wxWindow* parent) :
 	wxPanel(parent, wxID_ANY),
+	summary_label(nullptr),
+	prev_button(nullptr),
+	next_button(nullptr),
 	export_button(nullptr),
 	clear_button(nullptr),
 	remove_button(nullptr),
 	remove_all_button(nullptr),
 	duplicate_mode(false) {
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+	summary_label = newd wxStaticText(this, wxID_ANY, wxEmptyString);
+	summary_label->Hide();
+	sizer->Add(summary_label, wxSizerFlags(0).Expand().Border(wxLEFT | wxRIGHT | wxTOP, 5));
+
 	result_list = newd wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(200, 330), 0, nullptr, wxLB_SINGLE | wxLB_ALWAYS_SB);
 	sizer->Add(result_list, wxSizerFlags(1).Expand());
 
 	wxSizer* buttonsSizer = newd wxBoxSizer(wxHORIZONTAL);
+	prev_button = newd wxButton(this, wxID_BACKWARD, "Prev");
+	next_button = newd wxButton(this, wxID_FORWARD, "Next");
 	export_button = newd wxButton(this, wxID_FILE, "Export");
 	clear_button = newd wxButton(this, wxID_CLEAR, "Clear");
 	remove_button = newd wxButton(this, wxID_DELETE, "Remove");
 	remove_all_button = newd wxButton(this, wxID_APPLY, "Remove All");
 
+	buttonsSizer->Add(prev_button, wxSizerFlags(0).Center().Border(wxRIGHT, 4));
+	buttonsSizer->Add(next_button, wxSizerFlags(0).Center().Border(wxRIGHT, 8));
 	buttonsSizer->Add(export_button, wxSizerFlags(0).Center());
 	buttonsSizer->Add(clear_button, wxSizerFlags(0).Center());
 	buttonsSizer->Add(remove_button, wxSizerFlags(0).Center());
@@ -91,7 +105,17 @@ void SearchResultWindow::Clear() {
 		DeleteResultData(n);
 	}
 	result_list->Clear();
+	SetSummary(wxEmptyString);
 	UpdateButtons();
+}
+
+void SearchResultWindow::SetSummary(const wxString& summary) {
+	if (!summary_label) {
+		return;
+	}
+	summary_label->SetLabel(summary);
+	summary_label->Show(!summary.IsEmpty());
+	Layout();
 }
 
 void SearchResultWindow::SetDuplicateMode(bool duplicateMode) {
@@ -111,9 +135,20 @@ void SearchResultWindow::AddPosition(wxString description, Position pos) {
 	UpdateButtons();
 }
 
-void SearchResultWindow::AddDuplicateItem(const Position& pos, uint16_t itemId, uint16_t count) {
+void SearchResultWindow::AddDuplicateItem(const Position& pos, uint32_t itemId, uint16_t count) {
 	auto* data = newd ResultData(pos, itemId, count);
-	result_list->Append(wxString::Format("item: %d, count: %d, pos: (%d,%d,%d)", itemId, count, pos.x, pos.y, pos.z), data);
+	result_list->Append(wxString::Format("item: %u, count: %u, pos: (%d,%d,%d)", itemId, count, pos.x, pos.y, pos.z), data);
+	UpdateButtons();
+}
+
+void SearchResultWindow::NavigateToIndex(int32_t index) {
+	ResultData* data = GetResultData(index);
+	if (!data) {
+		return;
+	}
+	result_list->SetSelection(index);
+	result_list->EnsureVisible(index);
+	g_gui.SetScreenCenterPosition(data->position);
 	UpdateButtons();
 }
 
@@ -123,6 +158,34 @@ void SearchResultWindow::OnClickResult(wxCommandEvent& event) {
 		g_gui.SetScreenCenterPosition(data->position);
 	}
 	UpdateButtons();
+}
+
+void SearchResultWindow::OnClickPrevious(wxCommandEvent& WXUNUSED(event)) {
+	const uint32_t count = result_list->GetCount();
+	if (count == 0) {
+		return;
+	}
+	int32_t selection = result_list->GetSelection();
+	if (selection == wxNOT_FOUND || selection <= 0) {
+		selection = static_cast<int32_t>(count - 1);
+	} else {
+		--selection;
+	}
+	NavigateToIndex(selection);
+}
+
+void SearchResultWindow::OnClickNext(wxCommandEvent& WXUNUSED(event)) {
+	const uint32_t count = result_list->GetCount();
+	if (count == 0) {
+		return;
+	}
+	int32_t selection = result_list->GetSelection();
+	if (selection == wxNOT_FOUND || static_cast<uint32_t>(selection + 1) >= count) {
+		selection = 0;
+	} else {
+		++selection;
+	}
+	NavigateToIndex(selection);
 }
 
 void SearchResultWindow::OnClickExport(wxCommandEvent& WXUNUSED(event)) {
@@ -248,11 +311,13 @@ SearchResultWindow::ResultData* SearchResultWindow::GetResultData(int32_t index)
 }
 
 void SearchResultWindow::UpdateButtons() {
-	if (!export_button || !clear_button || !remove_button || !remove_all_button) {
+	if (!prev_button || !next_button || !export_button || !clear_button || !remove_button || !remove_all_button) {
 		return;
 	}
 
 	const bool hasResults = result_list->GetCount() > 0;
+	prev_button->Enable(hasResults);
+	next_button->Enable(hasResults);
 	export_button->Enable(hasResults);
 	clear_button->Enable(hasResults);
 	remove_button->Enable(duplicate_mode && GetResultData(result_list->GetSelection()) != nullptr);
@@ -263,7 +328,7 @@ void SearchResultWindow::UpdateDuplicateLabel(int32_t index, ResultData* data) {
 	result_list->SetString(
 		index,
 		wxString::Format(
-			"item: %d, count: %d, pos: (%d,%d,%d)",
+			"item: %u, count: %u, pos: (%d,%d,%d)",
 			data->itemId,
 			data->count,
 			data->position.x,
@@ -303,7 +368,7 @@ bool SearchResultWindow::RemoveDuplicateItem(ResultData* data, uint16_t amount) 
 	return true;
 }
 
-uint16_t SearchResultWindow::RemoveDuplicateItemsFromTile(Tile* tile, uint16_t itemId, uint16_t amount) {
+uint16_t SearchResultWindow::RemoveDuplicateItemsFromTile(Tile* tile, uint32_t itemId, uint16_t amount) {
 	if (!tile || amount == 0) {
 		return 0;
 	}

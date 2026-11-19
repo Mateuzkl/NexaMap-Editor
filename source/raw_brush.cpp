@@ -25,7 +25,7 @@
 //=============================================================================
 // RAW brush
 
-RAWBrush::RAWBrush(uint16_t itemid) :
+RAWBrush::RAWBrush(uint32_t itemid) :
 	Brush() {
 	ItemType& it = g_items[itemid];
 	if (it.id == 0) {
@@ -41,13 +41,13 @@ RAWBrush::~RAWBrush() {
 
 int RAWBrush::getLookID() const {
 	if (itemtype) {
-		return itemtype->clientID;
+		return static_cast<int>(itemtype->clientID);
 	}
 	return 0;
 }
 
-uint16_t RAWBrush::getItemID() const {
-	return itemtype->id;
+uint32_t RAWBrush::getItemID() const {
+	return itemtype ? itemtype->id : 0;
 }
 
 std::string RAWBrush::getName() const {
@@ -55,13 +55,14 @@ std::string RAWBrush::getName() const {
 		return "RAWBrush";
 	}
 
+	const std::string idStr = std::to_string(itemtype->id);
 	if (itemtype->hookSouth) {
-		return i2s(itemtype->id) + " - " + itemtype->name + " (Hook South)";
+		return idStr + " - " + itemtype->name + " (Hook South)";
 	} else if (itemtype->hookEast) {
-		return i2s(itemtype->id) + " - " + itemtype->name + " (Hook East)";
+		return idStr + " - " + itemtype->name + " (Hook East)";
 	}
 
-	return i2s(itemtype->id) + " - " + itemtype->name + itemtype->editorsuffix;
+	return idStr + " - " + itemtype->name + itemtype->editorsuffix;
 }
 
 void RAWBrush::undraw(BaseMap* map, Tile* tile) {

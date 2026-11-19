@@ -90,8 +90,8 @@ BorderLearningSnapshot BorderLearningScanner::capture(const Selection& selection
 			const Item* item = tile->items[stackIndex];
 			const ItemType& itemType = g_items[item->getID()];
 			captured.items.push_back({
-				item->getID(),
-				itemType.clientID,
+				static_cast<uint16_t>(item->getID()),
+				static_cast<uint16_t>(itemType.clientID),
 				static_cast<uint16_t>(std::min<size_t>(stackIndex, std::numeric_limits<uint16_t>::max())),
 				itemType.isBorder,
 				itemType.alwaysOnBottom,

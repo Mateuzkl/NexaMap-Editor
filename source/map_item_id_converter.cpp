@@ -780,7 +780,7 @@ namespace {
 					}
 				}
 				if (const auto* depot = dynamic_cast<const Depot*>(current.item)) {
-					result.depots.push_back({ position.x, position.y, position.z, currentOrdinal, current.item->getID(), storedId, depot->getDepotID(), current.item->getActionID(), current.item->getUniqueID() });
+					result.depots.push_back({ position.x, position.y, position.z, currentOrdinal, static_cast<uint16_t>(current.item->getID()), storedId, depot->getDepotID(), current.item->getActionID(), current.item->getUniqueID() });
 				}
 
 				auto* container = dynamic_cast<Container*>(current.item);

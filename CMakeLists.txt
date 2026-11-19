@@ -321,6 +321,11 @@ if(BUILD_TESTING)
 	add_test(NAME data_safety_tests COMMAND data_safety_tests)
 	set_tests_properties(data_safety_tests PROPERTIES TIMEOUT 60)
 
+	add_executable(find_item_32bit_tests tests/find_item_32bit_tests.cpp)
+	target_link_libraries(find_item_32bit_tests PRIVATE editor_test_objects)
+	add_test(NAME find_item_32bit_tests COMMAND find_item_32bit_tests)
+	set_tests_properties(find_item_32bit_tests PROPERTIES TIMEOUT 30)
+
 	option(ENABLE_MULTIPLAYER_SESSION_TESTS "Build full editor wxSocket session integration tests (no visible windows)" OFF)
 	if(ENABLE_MULTIPLAYER_SESSION_TESTS)
 		add_executable(multiplayer_session_tests tests/multiplayer_session_tests.cpp tests/startup_validation_tests.cpp tests/playtest_integration_tests.cpp tests/collections_palette_tests.cpp tests/resource_session_tab_tests.cpp tests/cross_client_clipboard_tests.cpp)

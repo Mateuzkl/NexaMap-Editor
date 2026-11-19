@@ -213,6 +213,10 @@ GraphicManager::~GraphicManager() {
 		delete iter->second;
 	}
 
+	for (auto iter = creature_sprite_space.begin(); iter != creature_sprite_space.end(); ++iter) {
+		delete iter->second;
+	}
+
 	for (auto iter = moving_creature_space.begin(); iter != moving_creature_space.end(); ++iter) {
 		delete iter->second;
 	}
@@ -232,6 +236,7 @@ void GraphicManager::swap(GraphicManager& other) noexcept {
 	swap(sprite_file_handle, other.sprite_file_handle);
 	swap(sprite_offsets, other.sprite_offsets);
 	sprite_space.swap(other.sprite_space);
+	creature_sprite_space.swap(other.creature_sprite_space);
 	moving_creature_space.swap(other.moving_creature_space);
 	image_space.swap(other.image_space);
 	cleanup_list.swap(other.cleanup_list);
@@ -545,6 +550,12 @@ void GraphicManager::clear(bool clearPreloader) {
 		}
 	}
 
+	for (auto& [id, sprite] : creature_sprite_space) {
+		(void)id;
+		delete sprite;
+	}
+	creature_sprite_space.clear();
+
 	// Moving creature sprites reference images owned by image_space, so they
 	// must never survive a resource clear/reload.
 	for (auto& [id, sprite] : moving_creature_space) {
@@ -597,9 +608,14 @@ void GraphicManager::cleanSoftwareSprites() {
 			iter->second->unloadDC();
 		}
 	}
+	for (auto iter = creature_sprite_space.begin(); iter != creature_sprite_space.end(); ++iter) {
+		if (iter->second) {
+			iter->second->unloadDC();
+		}
+	}
 }
 
-Sprite* GraphicManager::getSprite(int id) {
+Sprite* GraphicManager::getSprite(int64_t id) {
 	auto it = sprite_space.find(id);
 	if (it != sprite_space.end()) {
 		return it->second;
@@ -619,9 +635,9 @@ GameSprite* GraphicManager::getCreatureSprite(int id, FrameGroupType group) {
 		}
 	}
 
-	auto it = sprite_space.find(id + item_count);
-	if (it != sprite_space.end()) {
-		return static_cast<GameSprite*>(it->second);
+	auto it = creature_sprite_space.find(id);
+	if (it != creature_sprite_space.end()) {
+		return it->second;
 	}
 	return nullptr;
 }
@@ -638,7 +654,7 @@ GameSprite* GraphicManager::getEditorSprite(int id) {
 	return nullptr;
 }
 
-uint16_t GraphicManager::getItemSpriteMaxID() const {
+uint32_t GraphicManager::getItemSpriteMaxID() const {
 	return item_count;
 }
 
@@ -851,10 +867,12 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 
 	uint32_t datSignature;
 	// get max id
-	if (!file.getU32(datSignature) || !file.getU16(item_count) || !file.getU16(creature_count) || !file.getU16(effect_count) || !file.getU16(distance_count)) {
+	uint16_t datItemCount = 0;
+	if (!file.getU32(datSignature) || !file.getU16(datItemCount) || !file.getU16(creature_count) || !file.getU16(effect_count) || !file.getU16(distance_count)) {
 		error += datafile.GetFullPath() + " is truncated";
 		return false;
 	}
+	item_count = datItemCount;
 
 	uint32_t minID = 100; // items start with id 100
 	// We don't load distance/effects, if we would, just add effect_count & distance_count here
@@ -1006,12 +1024,24 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		}
 
 		if (idleSprite) {
-			auto existing = sprite_space.find(id);
-			if (existing != sprite_space.end()) {
-				delete existing->second;
-				existing->second = idleSprite.release();
+			if (id > item_count) {
+				const int creatureId = static_cast<int>(id - item_count);
+				auto existing = creature_sprite_space.find(creatureId);
+				if (existing != creature_sprite_space.end()) {
+					delete existing->second;
+					existing->second = idleSprite.release();
+				} else {
+					creature_sprite_space[creatureId] = idleSprite.release();
+				}
 			} else {
-				sprite_space[id] = idleSprite.release();
+				const int64_t spriteKey = static_cast<int64_t>(id);
+				auto existing = sprite_space.find(spriteKey);
+				if (existing != sprite_space.end()) {
+					delete existing->second;
+					existing->second = idleSprite.release();
+				} else {
+					sprite_space[spriteKey] = idleSprite.release();
+				}
 			}
 		}
 		if (movingSprite && id > item_count) {
@@ -1048,7 +1078,7 @@ GameSprite::NormalImage* GraphicManager::getOrCreateAssetImage(uint32_t spriteId
 
 bool GraphicManager::loadAppearanceSprite(
 	const rme::protobuf::appearances::Appearance& appearance,
-	int spriteSpaceId,
+	int64_t spriteSpaceId,
 	wxString& error,
 	wxArrayString& warnings,
 	const rme::protobuf::appearances::FrameGroup* explicitGroup,
@@ -1216,10 +1246,10 @@ bool GraphicManager::loadAppearanceItem(
 	wxArrayString& warnings
 ) {
 	(void)item;
-	if (!loadAppearanceSprite(appearance, static_cast<int>(appearance.id()), error, warnings)) {
+	if (!loadAppearanceSprite(appearance, static_cast<int64_t>(appearance.id()), error, warnings)) {
 		return false;
 	}
-	item_count = std::max<uint16_t>(item_count, static_cast<uint16_t>(appearance.id()));
+	item_count = std::max<uint32_t>(item_count, appearance.id());
 	unloaded = false;
 	has_transparency = true;
 	has_frame_durations = true;
@@ -1267,20 +1297,19 @@ bool GraphicManager::loadAppearanceOutfit(
 		idleGroup = firstDrawable;
 	}
 
-	const int spriteSpaceId = static_cast<int>(appearance.id()) + item_count;
+	const int outfitId = static_cast<int>(appearance.id());
 	GameSprite* idleSpriteRaw = nullptr;
 	if (idleGroup) {
-		if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings, idleGroup, &idleSpriteRaw)) {
+		if (!loadAppearanceSprite(appearance, -1, error, warnings, idleGroup, &idleSpriteRaw)) {
 			return false;
 		}
 	} else {
-		if (!loadAppearanceSprite(appearance, spriteSpaceId, error, warnings, nullptr, &idleSpriteRaw)) {
+		if (!loadAppearanceSprite(appearance, -1, error, warnings, nullptr, &idleSpriteRaw)) {
 			return false;
 		}
 	}
 	std::unique_ptr<GameSprite> idleSprite(idleSpriteRaw);
 
-	const int outfitId = static_cast<int>(appearance.id());
 	std::unique_ptr<GameSprite> movingSprite;
 	if (movingGroup && movingGroup != idleGroup) {
 		GameSprite* movingSpriteRaw = nullptr;
@@ -1291,18 +1320,18 @@ bool GraphicManager::loadAppearanceOutfit(
 	}
 
 	if (idleSprite) {
-		auto existing = sprite_space.find(spriteSpaceId);
-		if (existing != sprite_space.end()) {
+		auto existing = creature_sprite_space.find(outfitId);
+		if (existing != creature_sprite_space.end()) {
 			delete existing->second;
 			existing->second = idleSprite.release();
 		} else {
-			sprite_space[spriteSpaceId] = idleSprite.release();
+			creature_sprite_space[outfitId] = idleSprite.release();
 		}
 	} else {
-		auto existing = sprite_space.find(spriteSpaceId);
-		if (existing != sprite_space.end()) {
+		auto existing = creature_sprite_space.find(outfitId);
+		if (existing != creature_sprite_space.end()) {
 			delete existing->second;
-			sprite_space.erase(existing);
+			creature_sprite_space.erase(existing);
 		}
 	}
 
