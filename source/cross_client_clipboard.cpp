@@ -32,7 +32,7 @@ namespace {
 
 	struct TargetCandidate {
 		uint16_t id = 0;
-		uint16_t clientId = 0;
+		uint32_t clientId = 0;
 		uint16_t group = 0;
 		uint16_t type = 0;
 		uint64_t semanticFlags = 0;
@@ -481,7 +481,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 		return {};
 	}
 	std::unordered_map<SpriteVisualFingerprint, std::vector<TargetCandidate>, FingerprintHash> candidates;
-	std::unordered_map<uint16_t, TargetSpriteCache> spriteCache;
+	std::unordered_map<uint32_t, TargetSpriteCache> spriteCache;
 	const bool needsFingerprints = std::any_of(items.begin(), items.end(), [](const auto& source) { return source.renderedVisualAvailable; });
 	const bool needsPreviews = std::any_of(items.begin(), items.end(), [](const auto& source) { return source.previewAvailable; });
 	std::unordered_set<SpriteVisualFingerprint, FingerprintHash> sourcePreviews;
@@ -517,8 +517,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			cached->second.available = previewMatches && sprite && sprite->getRenderedFingerprint(cached->second.visual, pending, false);
 		}
 		if (cached->second.available) {
-			candidates[cached->second.visual].push_back({ static_cast<uint16_t>(id), static_cast<uint16_t>(item.clientID),
-														  static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name });
+			candidates[cached->second.visual].push_back({ static_cast<uint16_t>(id), item.clientID, static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name });
 		}
 	}
 	analysis.rows.reserve(items.size());
@@ -579,7 +578,7 @@ CrossClientPasteAnalysis CrossClientClipboard::analyze(
 			if (!item.clientID) {
 				continue;
 			}
-			const TargetCandidate candidate { static_cast<uint16_t>(id), static_cast<uint16_t>(item.clientID),
+			const TargetCandidate candidate { static_cast<uint16_t>(id), item.clientID,
 											  static_cast<uint16_t>(item.group), static_cast<uint16_t>(item.type), SemanticFlags(item), item.name };
 			const auto found = missingByRole.find({ candidate.group, candidate.type, candidate.semanticFlags & CrossClientMatchPolicy::RequiredRoleMask });
 			if (found == missingByRole.end()) {

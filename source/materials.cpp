@@ -167,11 +167,7 @@ bool Materials::loadMaterialsInternal(const FileName& identifier, wxString& erro
 		MaterialIdTranslationStats translation;
 		TranslateMaterialNode(node, translation);
 		if (translation.missing > 0) {
-			warnings.push_back(wxString::Format(
-				"%s: %llu material item reference(s) have no Server ID to ClientID mapping and were left unchanged.",
-				normalizedIdentifier.GetFullName(),
-				static_cast<unsigned long long>(translation.missing)
-			));
+			warnings.push_back(wxString::Format("%s: %llu material item reference(s) have no Server ID to ClientID mapping and were left unchanged.", normalizedIdentifier.GetFullName(), static_cast<unsigned long long>(translation.missing)));
 		}
 	}
 	unserializeMaterials(normalizedIdentifier, node, error, warnings, serverIdsToClientIds, visited);
@@ -356,7 +352,7 @@ void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& pr
 	report(0, true);
 	if (tilesets.count("Others") && tilesets.count("NPCs")
 		&& cur_creature_count == other_tileset_creature_count
-		&& static_cast<int64_t>(cur_item_maxid) == static_cast<int64_t>(other_tileset_item_maxid)) {
+		&& static_cast<int64_t>(cur_item_maxid) == other_tileset_item_maxid) {
 		report(total, true);
 		return;
 	}
@@ -431,7 +427,7 @@ void Materials::createOtherTileset(const std::function<void(size_t, size_t)>& pr
 	}
 
 	other_tileset_creature_count = cur_creature_count;
-	other_tileset_item_maxid = cur_item_maxid;
+	other_tileset_item_maxid = static_cast<int64_t>(cur_item_maxid);
 	report(total, true);
 }
 

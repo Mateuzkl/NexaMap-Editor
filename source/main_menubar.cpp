@@ -1640,17 +1640,20 @@ void MainMenuBar::OnRemoveItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
 
 	FindItemDialog dialog(frame, "Remove Item on Selection");
 	if (dialog.ShowModal() == wxID_OK) {
-		g_gui.GetCurrentEditor()->actionQueue->clear();
-		g_gui.CreateLoadBar("Searching item on selection to remove...");
-		OnMapRemoveItems::RemoveItemCondition condition(dialog.getResultID());
-		int64_t count = RemoveItemOnMap(g_gui.GetCurrentMap(), condition, true);
-		g_gui.DestroyLoadBar();
+		const uint32_t itemid = dialog.getResultID();
+		if (itemid != 0) {
+			g_gui.GetCurrentEditor()->actionQueue->clear();
+			g_gui.CreateLoadBar("Searching item on selection to remove...");
+			OnMapRemoveItems::RemoveItemCondition condition(itemid);
+			int64_t count = RemoveItemOnMap(g_gui.GetCurrentMap(), condition, true);
+			g_gui.DestroyLoadBar();
 
-		wxString msg;
-		msg << count << " items removed.";
-		g_gui.PopupDialog("Remove Item", msg, wxOK);
-		g_gui.GetCurrentMap().doChange();
-		g_gui.RefreshView();
+			wxString msg;
+			msg << count << " items removed.";
+			g_gui.PopupDialog("Remove Item", msg, wxOK);
+			g_gui.GetCurrentMap().doChange();
+			g_gui.RefreshView();
+		}
 	}
 	dialog.Destroy();
 }
@@ -1867,24 +1870,25 @@ void MainMenuBar::OnMapRemoveItems(wxCommandEvent& WXUNUSED(event)) {
 
 	FindItemDialog dialog(frame, "Item Type to Remove");
 	if (dialog.ShowModal() == wxID_OK) {
-		uint32_t itemid = dialog.getResultID();
+		const uint32_t itemid = dialog.getResultID();
+		if (itemid != 0) {
+			g_gui.GetCurrentEditor()->selection.clear();
+			g_gui.GetCurrentEditor()->actionQueue->clear();
 
-		g_gui.GetCurrentEditor()->selection.clear();
-		g_gui.GetCurrentEditor()->actionQueue->clear();
+			OnMapRemoveItems::RemoveItemCondition condition(itemid);
+			g_gui.CreateLoadBar("Searching map for items to remove...");
 
-		OnMapRemoveItems::RemoveItemCondition condition(itemid);
-		g_gui.CreateLoadBar("Searching map for items to remove...");
+			int64_t count = RemoveItemOnMap(g_gui.GetCurrentMap(), condition, false);
 
-		int64_t count = RemoveItemOnMap(g_gui.GetCurrentMap(), condition, false);
+			g_gui.DestroyLoadBar();
 
-		g_gui.DestroyLoadBar();
+			wxString msg;
+			msg << count << " items deleted.";
 
-		wxString msg;
-		msg << count << " items deleted.";
-
-		g_gui.PopupDialog("Search completed", msg, wxOK);
-		g_gui.GetCurrentMap().doChange();
-		g_gui.RefreshView();
+			g_gui.PopupDialog("Search completed", msg, wxOK);
+			g_gui.GetCurrentMap().doChange();
+			g_gui.RefreshView();
+		}
 	}
 	dialog.Destroy();
 }
@@ -2670,13 +2674,13 @@ void MainMenuBar::SearchItems(bool unique, bool action, bool container, bool wri
 }
 
 namespace SearchDuplicatedItems {
-	std::vector<std::pair<uint16_t, uint16_t>> findDuplicatedItems(const Tile* tile) {
-		std::vector<std::pair<uint16_t, uint16_t>> duplicatedItems;
+	std::vector<std::pair<uint32_t, uint16_t>> findDuplicatedItems(const Tile* tile) {
+		std::vector<std::pair<uint32_t, uint16_t>> duplicatedItems;
 		if (!tile) {
 			return duplicatedItems;
 		}
 
-		std::unordered_set<uint16_t> itemIDs;
+		std::unordered_set<uint32_t> itemIDs;
 		for (const Item* item : tile->items) {
 			if (!item) {
 				continue;
@@ -2709,7 +2713,7 @@ void MainMenuBar::SearchDuplicatedItems(bool onSelection /* = false */) {
 
 	struct DuplicateSearchResult {
 		Position position;
-		uint16_t itemId;
+		uint32_t itemId;
 		uint16_t count;
 	};
 

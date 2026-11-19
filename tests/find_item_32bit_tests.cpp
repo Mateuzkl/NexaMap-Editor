@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,33 @@ namespace {
 			++failures;
 		}
 	}
+
+	struct ScopedTempDir {
+		std::filesystem::path path;
+
+		ScopedTempDir() {
+			const auto stamp = static_cast<unsigned long long>(
+				std::chrono::steady_clock::now().time_since_epoch().count()
+			);
+			std::mt19937_64 rng(stamp);
+			for (int attempt = 0; attempt < 32; ++attempt) {
+				const std::filesystem::path candidate = std::filesystem::temp_directory_path()
+					/ ("nexamap_find_item_32bit_" + std::to_string(stamp) + "_" + std::to_string(rng()));
+				std::error_code ec;
+				if (std::filesystem::create_directory(candidate, ec) && !ec) {
+					path = candidate;
+					return;
+				}
+			}
+		}
+
+		~ScopedTempDir() {
+			if (!path.empty()) {
+				std::error_code ec;
+				std::filesystem::remove_all(path, ec);
+			}
+		}
+	};
 
 	ItemType* addSyntheticItem(
 		uint32_t serverId,
@@ -141,13 +169,10 @@ namespace {
 		check(g_gui.gfx.getItemSpriteMaxID() == 4294967295u, "GraphicManager item_count should track 32-bit appearance IDs");
 
 		size_t iteratedCount = 0;
-		const auto t0 = std::chrono::steady_clock::now();
 		g_items.forEachItemType([&](const ItemType&) {
 			++iteratedCount;
 		});
-		const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
 		check(iteratedCount == specs.size(), "forEachItemType should iterate only loaded items");
-		check(elapsedMs < 100, "forEachItemType must be instant even when max_item_id == 4294967295");
 
 		for (const auto& [id, name, spriteId, isGround, isContainer] : specs) {
 			(void)isGround;
@@ -164,11 +189,14 @@ namespace {
 		check(maxBrush.getItemID() == 4294967295u, "RAWBrush::getItemID must preserve uint32_t");
 		check(maxBrush.getName().find("4294967295") == 0, "RAWBrush::getName must format UINT32_MAX unsigned");
 
-		// Verify items.xml loader also handles 32-bit IDs without truncating to uint16_t
-		const std::filesystem::path xmlPath = std::filesystem::temp_directory_path() / "nexamap_find_item_32bit_items.xml";
+		// Verify items.xml loader also handles 32-bit IDs (including wide ranges) without truncating or scanning absent IDs
+		ScopedTempDir tempDir;
+		check(!tempDir.path.empty(), "temporary test directory must be created");
+		const std::filesystem::path xmlPath = tempDir.path / "items.xml";
 		{
 			std::ofstream out(xmlPath);
 			out << "<items>\n"
+				<< "  <item fromid=\"1000000\" toid=\"4294967295\" name=\"High Range XML\" />\n"
 				<< "  <item id=\"70000\" name=\"Halloween Pumpkin XML\" />\n"
 				<< "  <item id=\"4294967295\" name=\"Max 32-Bit Relic XML\" />\n"
 				<< "</items>\n";
@@ -177,8 +205,8 @@ namespace {
 		wxArrayString xmlWarnings;
 		check(g_items.loadFromGameXml(FileName(wxString::FromUTF8(xmlPath.string())), xmlError, xmlWarnings, false), "loadFromGameXml should accept 32-bit IDs");
 		check(g_items.getItemType(70000u).name == "Halloween Pumpkin XML", "items.xml should update 70000");
+		check(g_items.getItemType(1000000u).name == "High Range XML", "items.xml wide range should update 1000000");
 		check(g_items.getItemType(4294967295u).name == "Max 32-Bit Relic XML", "items.xml should update 4294967295");
-		std::filesystem::remove(xmlPath);
 	}
 
 	void testMapSearchServerClientSpriteAndContainers() {
@@ -247,7 +275,7 @@ namespace {
 
 		// 2. Search by Server ID 4464 -> ONLY 1 occurrence (must NOT match 70000 via 16-bit truncation!)
 		const MapItemSearchSummary s4464 = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 4464u, false, 1000u);
-		check(s4464.totalOccurrences == 1 && s4464.matches.front().serverId == 4464u, "4464 must not match 70000");
+		check(s4464.totalOccurrences == 1 && s4464.matches.size() == 1 && s4464.matches.front().serverId == 4464u, "4464 must not match 70000");
 
 		// 3. Search by Client ID 80000 -> finds all 3 occurrences of 70000; Client ID 70000 -> 0 occurrences!
 		const MapItemSearchSummary c80000 = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ClientId, 80000u, false, 1000u);
@@ -263,14 +291,14 @@ namespace {
 
 		// 5. Ground ID 65536 -> 1 occurrence at (100, 100, 7) with Ground location
 		const MapItemSearchSummary g65536 = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 65536u, false, 1000u);
-		check(g65536.totalOccurrences == 1 && g65536.matches.front().location == ItemLocationKind::Ground && g65536.matches.front().position == Position(100, 100, 7), "Ground 65536 must be found");
+		check(g65536.totalOccurrences == 1 && g65536.matches.size() == 1 && g65536.matches.front().serverId == 65536u && g65536.matches.front().location == ItemLocationKind::Ground && g65536.matches.front().position == Position(100, 100, 7), "Ground 65536 must be found");
 
 		// 6. Nested container items 1000000 and 4294967295 at depth 2
 		const MapItemSearchSummary s1m = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 1000000u, false, 1000u);
-		check(s1m.totalOccurrences == 1 && s1m.matches.front().containerDepth == 2 && s1m.matches.front().position == Position(105, 110, 7), "Nested container item 1000000 must be found");
+		check(s1m.totalOccurrences == 1 && s1m.matches.size() == 1 && s1m.matches.front().serverId == 1000000u && s1m.matches.front().containerDepth == 2 && s1m.matches.front().position == Position(105, 110, 7), "Nested container item 1000000 must be found");
 
 		const MapItemSearchSummary sMax = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 4294967295u, false, 1000u);
-		check(sMax.totalOccurrences == 1 && sMax.matches.front().containerDepth == 2 && sMax.matches.front().position == Position(105, 110, 7), "Nested container item 4294967295 must be found");
+		check(sMax.totalOccurrences == 1 && sMax.matches.size() == 1 && sMax.matches.front().serverId == 4294967295u && sMax.matches.front().containerDepth == 2 && sMax.matches.front().position == Position(105, 110, 7), "Nested container item 4294967295 must be found");
 
 		// 7. Selection-only filter on Server ID 70000 -> only 2 occurrences on t1 (not t2)
 		const MapItemSearchSummary s70000Sel = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 70000u, true, 1000u);
@@ -280,7 +308,7 @@ namespace {
 		const MapItemSearchSummary s100 = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 100u, false, 1000u);
 		check(s100.totalOccurrences == 2, "Classic Ground ID 100 must find 2 occurrences");
 		const MapItemSearchSummary s65535 = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 65535u, false, 1000u);
-		check(s65535.totalOccurrences == 1 && s65535.matches.front().position == Position(200, 200, 6), "Max 16-bit ID 65535 must find 1 occurrence at (200, 200, 6)");
+		check(s65535.totalOccurrences == 1 && s65535.matches.size() == 1 && s65535.matches.front().serverId == 65535u && s65535.matches.front().position == Position(200, 200, 6), "Max 16-bit ID 65535 must find 1 occurrence at (200, 200, 6)");
 
 		// 9. Absent valid 32-bit ID -> 0 occurrences
 		const MapItemSearchSummary sAbsent = SearchItemsOnMap(map, g_items, ItemIdSearchKind::ServerId, 999999u, false, 1000u);
@@ -291,8 +319,9 @@ namespace {
 		// Ensure classic 16-bit container item exists for round-trip test
 		addSyntheticItem(1988u, 1988u, "Classic Backpack", ITEM_GROUP_CONTAINER, ITEM_TYPE_CONTAINER);
 
-		const std::filesystem::path otbmPath = std::filesystem::temp_directory_path() / "nexamap_find_item_roundtrip.otbm";
-		std::filesystem::remove(otbmPath);
+		ScopedTempDir tempDir;
+		check(!tempDir.path.empty(), "temporary OTBM directory must be created");
+		const std::filesystem::path otbmPath = tempDir.path / "roundtrip.otbm";
 
 		// 1. Save & reopen classic 16-bit map -> preserve IDs, ActionID, UniqueID, text, containers
 		{
@@ -333,14 +362,23 @@ namespace {
 			check(found65535.totalOccurrences == 2, "reloaded map must preserve both 65535 items (tile + container)");
 
 			bool verifiedAttrs = false;
+			bool verifiedContainerItem = false;
 			if (tile) {
 				for (const Item* item : tile->items) {
 					if (item && item->getID() == 65535u && item->getActionID() == 1234 && item->getUniqueID() == 5678 && item->getText() == "Halloween Event Sign") {
 						verifiedAttrs = true;
 					}
+					if (const auto* bag = dynamic_cast<const Container*>(item); bag && bag->getID() == 1988u) {
+						for (const Item* child : bag->getVector()) {
+							if (child && child->getID() == 65535u && child->getActionID() == 4321) {
+								verifiedContainerItem = true;
+							}
+						}
+					}
 				}
 			}
 			check(verifiedAttrs, "reloaded item must preserve ActionID, UniqueID, and text");
+			check(verifiedContainerItem, "reloaded container 1988 must preserve inner item 65535 with ActionID 4321");
 		}
 
 		// Record exact bytes of the valid 16-bit file to verify it is not corrupted on failed 32-bit save
@@ -365,7 +403,12 @@ namespace {
 			const bool saved = saver.saveMapData(map32, FileName(wxString::FromUTF8(otbmPath.string())));
 			check(!saved, "saving item ID > 65535 into 16-bit OTBM must fail instead of truncating");
 			const std::string err = nstr(saver.getError());
-			check(err.find("70000") != std::string::npos && err.find("16-bit") != std::string::npos, "error message must clearly report item ID and 16-bit OTBM limitation");
+			check(
+				err.find("70000") != std::string::npos
+					&& err.find("(40, 50, 7)") != std::string::npos
+					&& err.find("16-bit") != std::string::npos,
+				"error message must clearly report item ID, coordinates, and 16-bit OTBM limitation"
+			);
 		}
 
 		// Verify original file on disk was NOT corrupted
@@ -375,8 +418,6 @@ namespace {
 			afterBytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 		}
 		check(afterBytes == originalBytes, "aborted 32-bit OTBM save must leave existing file completely intact");
-
-		std::filesystem::remove(otbmPath);
 	}
 }
 

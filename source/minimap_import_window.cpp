@@ -319,7 +319,8 @@ namespace {
 			inspector->Add(useCandidateButton_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(7));
 			auto* manualRow = newd wxBoxSizer(wxHORIZONTAL);
 			manualRow->Add(newd wxStaticText(inspector->GetStaticBox(), wxID_ANY, "Server ID:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
-			manualId_ = newd wxSpinCtrl(inspector->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::max<int>(0, g_items.getMaxID()), 0);
+			const int maxManualId = static_cast<int>(std::min<uint32_t>(g_items.getMaxID(), std::numeric_limits<uint16_t>::max()));
+			manualId_ = newd wxSpinCtrl(inspector->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, maxManualId, 0);
 			manualRow->Add(manualId_, 1, wxRIGHT, FromDIP(6));
 			manualButton_ = newd wxButton(inspector->GetStaticBox(), wxID_ANY, "Use ID");
 			manualRow->Add(manualButton_, 0);
@@ -361,11 +362,7 @@ namespace {
 				floorText += wxString::Format("%d", floors[index]);
 			}
 			const auto& bounds = document_->getBounds();
-			summaryLabel_->SetLabel(wxString::Format(
-				"OTMM v%u  |  Floors: %s  |  Bounds: X %d-%d, Y %d-%d  |  Seen tiles: %llu  |  Blocks: %zu",
-				document_->getVersion(), floorText, bounds.minX, bounds.maxX, bounds.minY, bounds.maxY,
-				static_cast<unsigned long long>(document_->getTileCount()), document_->getBlockCount()
-			));
+			summaryLabel_->SetLabel(wxString::Format("OTMM v%u  |  Floors: %s  |  Bounds: X %d-%d, Y %d-%d  |  Seen tiles: %llu  |  Blocks: %zu", document_->getVersion(), floorText, bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, static_cast<unsigned long long>(document_->getTileCount()), document_->getBlockCount()));
 			floorChoice_->Clear();
 			availableFloors_ = floors;
 			for (const int floor : floors) {
@@ -536,8 +533,8 @@ namespace {
 				RefreshColorList();
 				return;
 			}
-			if (!g_items.typeExists(id) || !g_items[id].isGroundTile()) {
-				wxMessageBox("The selected Server ID is not a valid ground item.", "Import Minimap", wxOK | wxICON_WARNING, this);
+			if (id < 0 || id > std::numeric_limits<uint16_t>::max() || !g_items.typeExists(id) || !g_items[id].isGroundTile()) {
+				wxMessageBox("The selected Server ID is not a valid 16-bit ground item.", "Import Minimap", wxOK | wxICON_WARNING, this);
 				return;
 			}
 			mappings_[selectedColor_] = static_cast<uint16_t>(id);

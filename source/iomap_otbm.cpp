@@ -2408,37 +2408,37 @@ bool IOMapOTBM::writeTiles(Map& map, NodeFileWriteHandle& f) {
 			f.addU32(save_tile->getMapFlags());
 		}
 
-	std::function<bool(const Item*, uint32_t&)> findUnsupported16BitItemId = [&](const Item* item, uint32_t& outId) -> bool {
-		if (!item) {
-			return false;
-		}
-		if (item->getID() > std::numeric_limits<uint16_t>::max()) {
-			outId = item->getID();
-			return true;
-		}
-		if (const auto* container = dynamic_cast<const Container*>(item)) {
-			for (const Item* child : container->getVector()) {
-				if (findUnsupported16BitItemId(child, outId)) {
-					return true;
+		std::function<bool(const Item*, uint32_t&)> findUnsupported16BitItemId = [&](const Item* item, uint32_t& outId) -> bool {
+			if (!item) {
+				return false;
+			}
+			if (item->getID() > std::numeric_limits<uint16_t>::max()) {
+				outId = item->getID();
+				return true;
+			}
+			if (const auto* container = dynamic_cast<const Container*>(item)) {
+				for (const Item* child : container->getVector()) {
+					if (findUnsupported16BitItemId(child, outId)) {
+						return true;
+					}
 				}
 			}
-		}
-		return false;
-	};
+			return false;
+		};
 
-	auto reportItemSerializeFailure = [&](const Item* item) {
-		uint32_t unsupportedId = 0;
-		if (findUnsupported16BitItemId(item, unsupportedId)) {
-			error(
-				"Cannot save item ID %u at (%d, %d, %d): this OTBM format only supports 16-bit item IDs (0-65535). "
-				"Save aborted to prevent ID truncation or file corruption.",
-				unsupportedId,
-				pos.x,
-				pos.y,
-				pos.z
-			);
-		}
-	};
+		auto reportItemSerializeFailure = [&](const Item* item) {
+			uint32_t unsupportedId = 0;
+			if (findUnsupported16BitItemId(item, unsupportedId)) {
+				error(
+					"Cannot save item ID %u at (%d, %d, %d): this OTBM format only supports 16-bit item IDs (0-65535). "
+					"Save aborted to prevent ID truncation or file corruption.",
+					unsupportedId,
+					pos.x,
+					pos.y,
+					pos.z
+				);
+			}
+		};
 
 		if (save_tile->ground) {
 			Item* ground = save_tile->ground;

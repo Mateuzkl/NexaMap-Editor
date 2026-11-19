@@ -746,7 +746,7 @@ namespace Multiplayer {
 				return;
 			}
 			out.u16(static_cast<uint16_t>(t.id));
-			out.u16(static_cast<uint16_t>(std::min<uint32_t>(t.clientID, std::numeric_limits<uint16_t>::max())));
+			out.u32(t.clientID);
 			out.u8(t.group);
 			out.u8(t.type);
 			out.u16(t.volume);

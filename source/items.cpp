@@ -1187,22 +1187,32 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 			return false;
 		}
 
-		for (uint64_t sourceId = fromId; sourceId <= toId; ++sourceId) {
-			uint32_t id = static_cast<uint32_t>(sourceId);
-			if (serverIdsToClientIds) {
-				if (sourceId > std::numeric_limits<uint16_t>::max()) {
-					continue;
-				}
+		if (serverIdsToClientIds) {
+			const uint32_t mappedEnd = std::min<uint32_t>(toId, std::numeric_limits<uint16_t>::max());
+			for (uint32_t sourceId = fromId; sourceId <= mappedEnd; ++sourceId) {
 				const ItemIdMapping::Result mapping = ItemIdMapping::serverToClient(static_cast<uint16_t>(sourceId));
-				if (!mapping.found) {
+				if (!mapping.found || !typeExists(mapping.converted)) {
 					continue;
 				}
-				id = mapping.converted;
+				if (!loadItemFromGameXml(itemNode, mapping.converted, serverIdsToClientIds)) {
+					return false;
+				}
 			}
-			if (!typeExists(id)) {
-				continue;
+		} else if (fromId == toId) {
+			if (typeExists(fromId) && !loadItemFromGameXml(itemNode, fromId, false)) {
+				return false;
 			}
-			if (!loadItemFromGameXml(itemNode, id, serverIdsToClientIds)) {
+		} else {
+			bool xmlOk = true;
+			forEachItemType([&](ItemType& existing) {
+				if (!xmlOk || existing.id < fromId || existing.id > toId) {
+					return;
+				}
+				if (!loadItemFromGameXml(itemNode, existing.id, false)) {
+					xmlOk = false;
+				}
+			});
+			if (!xmlOk) {
 				return false;
 			}
 		}

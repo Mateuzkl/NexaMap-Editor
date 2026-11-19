@@ -604,6 +604,7 @@ void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		map_search_target_id = result_id;
 		if (invalid_item->GetValue() && parsed_id_valid && items_list->GetItemCount() == 0) {
 			result_brush = nullptr;
+			result_id = 0;
 			EndModal(wxID_OK);
 			return;
 		}
@@ -612,6 +613,7 @@ void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		map_search_target_id = result_id;
 		if (invalid_item->GetValue() && parsed_id_valid && items_list->GetItemCount() == 0) {
 			result_brush = nullptr;
+			result_id = 0;
 			EndModal(wxID_OK);
 			return;
 		}

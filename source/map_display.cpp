@@ -106,9 +106,9 @@ namespace {
 			}
 		}
 
-		int GetSelectedItemId() const {
+		uint32_t GetSelectedItemId() const {
 			const int selection = GetSelection();
-			return selection == wxNOT_FOUND ? 0 : candidates_[selection].itemId;
+			return selection == wxNOT_FOUND ? 0u : candidates_[selection].itemId;
 		}
 
 	protected:
@@ -153,7 +153,7 @@ namespace {
 			list_->Bind(wxEVT_LISTBOX_DCLICK, [this](wxCommandEvent&) { EndModal(wxID_OK); });
 		}
 
-		int GetSelectedItemId() const {
+		uint32_t GetSelectedItemId() const {
 			return list_->GetSelectedItemId();
 		}
 
@@ -2762,8 +2762,8 @@ void MapCanvas::OnOpenBorderWorkspace(wxCommandEvent& WXUNUSED(event)) {
 				if (dialog.ShowModal() != wxID_OK) {
 					return;
 				}
-				const int itemId = dialog.GetSelectedItemId();
-				if (itemId > 0) {
+				const uint32_t itemId = dialog.GetSelectedItemId();
+				if (itemId != 0) {
 					itemCounts[itemId] = 1;
 				}
 			} else if (Item* item = tile->getTopSelectedItem()) {

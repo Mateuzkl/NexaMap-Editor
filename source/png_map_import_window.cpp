@@ -254,7 +254,8 @@ namespace {
 			rotation_->SetSelection(0);
 			grid->Add(rotation_, 1, wxEXPAND);
 			grid->Add(newd wxStaticText(options->GetStaticBox(), wxID_ANY, "Transparent ground:"), 0, wxALIGN_CENTER_VERTICAL);
-			transparentId_ = newd wxSpinCtrl(options->GetStaticBox(), wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::max<int>(0, g_items.getMaxID()), 0);
+			const int maxGroundId = static_cast<int>(std::min<uint32_t>(g_items.getMaxID(), std::numeric_limits<uint16_t>::max()));
+			transparentId_ = newd wxSpinCtrl(options->GetStaticBox(), wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, maxGroundId, 0);
 			transparentId_->SetToolTip("Server ID 0 skips transparent pixels");
 			grid->Add(transparentId_, 1, wxEXPAND);
 			grid->Add(newd wxStaticText(options->GetStaticBox(), wxID_ANY, "Color palette:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -309,7 +310,7 @@ namespace {
 			inspector->Add(useCandidateButton_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(7));
 			auto* manualRow = newd wxBoxSizer(wxHORIZONTAL);
 			manualRow->Add(newd wxStaticText(inspector->GetStaticBox(), wxID_ANY, "Server ID:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
-			manualId_ = newd wxSpinCtrl(inspector->GetStaticBox(), wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::max<int>(0, g_items.getMaxID()), 0);
+			manualId_ = newd wxSpinCtrl(inspector->GetStaticBox(), wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, maxGroundId, 0);
 			manualRow->Add(manualId_, 1, wxRIGHT, FromDIP(6));
 			manualButton_ = newd wxButton(inspector->GetStaticBox(), wxID_ANY, "Use ID");
 			manualRow->Add(manualButton_, 0);
@@ -385,11 +386,7 @@ namespace {
 
 		void RefreshDocument() {
 			fileLabel_->SetLabel(sourcePath_);
-			summaryLabel_->SetLabel(wxString::Format(
-				"%d x %d pixels  |  %llu opaque colors  |  %llu transparent pixels",
-				document_->getWidth(), document_->getHeight(), static_cast<unsigned long long>(document_->getColors().size()),
-				static_cast<unsigned long long>(document_->getTransparentPixelCount())
-			));
+			summaryLabel_->SetLabel(wxString::Format("%d x %d pixels  |  %llu opaque colors  |  %llu transparent pixels", document_->getWidth(), document_->getHeight(), static_cast<unsigned long long>(document_->getColors().size()), static_cast<unsigned long long>(document_->getTransparentPixelCount())));
 			preview_->SetDocument(*document_);
 			AutoMapAll();
 		}
@@ -443,11 +440,7 @@ namespace {
 				}
 			}
 			colorList_->Thaw();
-			mappingSummary_->SetLabel(wxString::Format(
-				"Mapped: %d/%llu colors, %llu pixels. Alpha pixels: %llu.", mappedColors,
-				static_cast<unsigned long long>(document_->getColors().size()), static_cast<unsigned long long>(mappedPixels),
-				static_cast<unsigned long long>(document_->getTransparentPixelCount())
-			));
+			mappingSummary_->SetLabel(wxString::Format("Mapped: %d/%llu colors, %llu pixels. Alpha pixels: %llu.", mappedColors, static_cast<unsigned long long>(document_->getColors().size()), static_cast<unsigned long long>(mappedPixels), static_cast<unsigned long long>(document_->getTransparentPixelCount())));
 			if (colorList_->GetItemCount() > 0) {
 				if (selectionRow == wxNOT_FOUND) {
 					selectionRow = 0;
@@ -514,8 +507,8 @@ namespace {
 				SkipColor();
 				return;
 			}
-			if (!g_items.typeExists(id) || !g_items[id].isGroundTile()) {
-				wxMessageBox("The selected Server ID is not a valid ground item for the loaded client.", "Import PNG", wxOK | wxICON_WARNING, this);
+			if (id < 0 || id > std::numeric_limits<uint16_t>::max() || !g_items.typeExists(id) || !g_items[id].isGroundTile()) {
+				wxMessageBox("The selected Server ID is not a valid 16-bit ground item for the loaded client.", "Import PNG", wxOK | wxICON_WARNING, this);
 				return;
 			}
 			mappings_[selectedColor_] = static_cast<uint16_t>(id);
@@ -536,7 +529,10 @@ namespace {
 			options.rotation = rotation_->GetSelection() * 90;
 			options.flipHorizontal = flipHorizontal_->GetValue();
 			options.flipVertical = flipVertical_->GetValue();
-			options.transparentGroundId = static_cast<uint16_t>(transparentId_->GetValue());
+			const int rawTransparentId = transparentId_->GetValue();
+			options.transparentGroundId = (rawTransparentId >= 0 && rawTransparentId <= std::numeric_limits<uint16_t>::max())
+				? static_cast<uint16_t>(rawTransparentId)
+				: 0;
 			return options;
 		}
 
